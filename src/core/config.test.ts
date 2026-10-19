@@ -96,6 +96,29 @@ describe('loadConfig', () => {
     expect(config.branchPrefix).toBe('octopus')
   })
 
+  // Stored before the prefix was checked: one slash too many made every new
+  // workspace fail, and the setting is read rather than refused so the app
+  // still opens.
+  it('reads a stored branch prefix as git will take it', async () => {
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...createDefaultConfig('first', NOW, () => UUID),
+        branchPrefix: 'ytsykvas/'
+      }),
+      'utf8'
+    )
+
+    await expect(loadConfig(file)).resolves.toMatchObject({ branchPrefix: 'ytsykvas' })
+  })
+
+  it('falls back to the default prefix when nothing usable is stored', () => {
+    expect(
+      ConfigSchema.parse({ ...createDefaultConfig('x', NOW, () => UUID), branchPrefix: '///' })
+        .branchPrefix
+    ).toBe('octopus')
+  })
+
   it('still loads a config written before a newer field existed', async () => {
     // A config from an older build: neither `language` nor `rightPanelWidth`.
     const legacy = {

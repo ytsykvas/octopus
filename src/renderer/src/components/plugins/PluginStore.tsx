@@ -413,10 +413,7 @@ function Skeleton(): React.JSX.Element {
     <div className="p-4" role="status" aria-label={t('plugins.loading')}>
       <ul className="grid grid-cols-2 gap-3">
         {Array.from({ length: 6 }, (_, index) => (
-          <li
-            key={index}
-            className="panel bg-muted/40 h-32 animate-pulse motion-reduce:animate-none"
-          />
+          <li key={index} className="panel bg-muted/40 h-32 animate-pulse" />
         ))}
       </ul>
     </div>

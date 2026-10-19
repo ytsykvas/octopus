@@ -27,7 +27,8 @@ const NOTHING: SessionUsage = { context: null, autoCompact: null }
  * changes with it — so `asked` is a count the caller moves once the core has
  * finished, and each move is read again on. A count rather than the choice:
  * choosing the same window again also starts a session (to look again for a
- * variable that outranked it), and an unchanged value would read nothing.
+ * variable that outranked it, or one the reading says strayed in), and an
+ * unchanged value would read nothing.
  */
 export function useSessionUsage(chatId: string | null, asked = 0): SessionUsage {
   const [usage, setUsage] = useState<SessionUsage>(NOTHING)

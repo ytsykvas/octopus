@@ -1385,13 +1385,60 @@ describe('a session', () => {
     })
   })
 
-  it('puts a skill back by sending a map that no longer names it', async () => {
+  /*
+   * A key left out does not undo a withhold — the flag layer keeps a skill
+   * withheld at start until it hears `'on'` — so the session says it for
+   * every key the new map dropped. Sending `{}` was the first version, and the
+   * skill stayed withheld while the panel showed it on.
+   */
+  it('puts a skill back by saying it is on when the map no longer names it', async () => {
     const { agent } = fakeAgent()
 
     await agent.session.setSkills({ 'octopus:review': 'off' })
     await agent.session.setSkills({})
 
-    expect(agent.flagSettings()[1]).toMatchObject({ skillOverrides: {} })
+    expect(agent.flagSettings()[1]).toMatchObject({ skillOverrides: { 'octopus:review': 'on' } })
+  })
+
+  it('says a skill is on when the session started withholding it', async () => {
+    const { agent } = fakeAgent({ skillOverrides: { 'octopus:review': 'off' } })
+
+    await agent.session.setSkills({})
+
+    expect(agent.flagSettings()).toEqual([
+      expect.objectContaining({ skillOverrides: { 'octopus:review': 'on' } })
+    ])
+  })
+
+  it('keeps the value a new map gives a key the old one also named', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.setSkills({ 'octopus:review': 'on' })
+    await agent.session.setSkills({ 'octopus:review': 'off' })
+
+    expect(agent.flagSettings()[1]).toMatchObject({ skillOverrides: { 'octopus:review': 'off' } })
+  })
+
+  // The flags carry the effort as well, and a push that moves no skill would
+  // put back an effort the session was told in between.
+  it('sends nothing when the map would not move a skill', async () => {
+    const { agent } = fakeAgent({ skillOverrides: { 'octopus:review': 'off' } })
+
+    await agent.session.setSkills({ 'octopus:review': 'off' })
+
+    expect(agent.flagSettings()).toEqual([])
+  })
+
+  it('sends a map that names a skill the old one did not', async () => {
+    const { agent } = fakeAgent({ skillOverrides: { 'octopus:review': 'off' } })
+
+    await agent.session.setSkills({ 'octopus:review': 'off', 'octopus:ship': 'off' })
+
+    expect(agent.flagSettings()).toEqual([
+      expect.objectContaining({
+        skillOverrides: { 'octopus:review': 'off', 'octopus:ship': 'off' }
+      })
+    ])
   })
 
   it('re-reads the skill directories on request', async () => {

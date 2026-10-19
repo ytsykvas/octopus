@@ -1,36 +1,15 @@
 import { Copy, ExternalLink, MessageSquarePlus, RefreshCw } from 'lucide-react'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { CodeNote } from '../../hooks/useCodeNotes.js'
 import { useFileContent } from '../../hooks/useFileContent.js'
 import { codeReference, lineRange } from '../codeReference.js'
 import { NoteEditor } from '../NoteEditor.js'
-import { highlight, type Token } from '../diff/highlight.js'
-import { languageFor } from '../diff/language.js'
-import { MAX_LINE_LENGTH } from '../diff/useHighlighting.js'
+import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { fileSize } from '../fileSize.js'
 import { IconButton, Notice } from '../paneControls.js'
 import { type CodeSelection, codeSelection } from './codeSelection.js'
-
-/**
- * Past these a file is drawn plain.
- *
- * The highlighter runs in the window's own thread, and a large file freezes it
- * for as long as tokenising takes — longer than it is worth for a file being
- * read rather than edited. Lines are the diff's own limit: a minified bundle is
- * a few enormous lines, and those are the slow ones.
- */
-export const MAX_HIGHLIGHT_CHARS = 256_000
-export const MAX_HIGHLIGHT_LINES = 20_000
-
-function highlightable(text: string, lines: readonly string[]): boolean {
-  return (
-    text.length <= MAX_HIGHLIGHT_CHARS &&
-    lines.length <= MAX_HIGHLIGHT_LINES &&
-    lines.every((line) => line.length <= MAX_LINE_LENGTH)
-  )
-}
 
 /** A conversation a note on the selected lines can be sent to. */
 export interface NoteTarget {
@@ -171,23 +150,7 @@ function Code({
   readonly onNote: (tabKey: string, note: CodeNote) => void
 }): React.JSX.Element {
   const { t } = useTranslation()
-  const lines = text.endsWith('\n') ? text.slice(0, -1).split('\n') : text.split('\n')
-  const language = languageFor(path)
-  const colourable = language !== null && highlightable(text, lines)
-
-  const [coloured, setColoured] = useState<{ text: string; tokens: Token[][] } | null>(null)
-  const tokens = coloured?.text === text ? coloured.tokens : null
-
-  useEffect(() => {
-    if (!colourable) return
-    let current = true
-    void highlight(language, text).then((found) => {
-      if (current && found !== null) setColoured({ text, tokens: found })
-    })
-    return () => {
-      current = false
-    }
-  }, [colourable, language, text])
+  const { lines, tokens, tooLarge } = useColouredText(path, text)
 
   const scroller = useRef<HTMLDivElement>(null)
   const code = useRef<HTMLPreElement>(null)
@@ -260,7 +223,7 @@ function Code({
 
   return (
     <>
-      {language !== null && !colourable && (
+      {tooLarge && (
         <p className="text-ink-faint border-line shrink-0 border-b px-4 py-1.5 text-[11px]">
           {t('viewer.plain')}
         </p>
@@ -286,26 +249,7 @@ function Code({
           }}
           className="diff-code text-ink min-w-0 flex-1 py-3 pr-4 font-mono text-[12px] leading-[18px]"
         >
-          {tokens === null
-            ? lines.join('\n')
-            : tokens.map((line, index) => (
-                <Fragment key={index}>
-                  {index > 0 && '\n'}
-                  {line.map((token, at) => (
-                    <span
-                      key={at}
-                      style={
-                        {
-                          '--shiki-light': token.light,
-                          '--shiki-dark': token.dark
-                        } as React.CSSProperties
-                      }
-                    >
-                      {token.text}
-                    </span>
-                  ))}
-                </Fragment>
-              ))}
+          <ColouredLines lines={lines} tokens={tokens} />
         </pre>
       </div>
 

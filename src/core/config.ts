@@ -8,6 +8,8 @@ import { randomUUID } from 'node:crypto'
 
 import { z } from 'zod'
 
+import { BranchPrefixSchema, DEFAULT_BRANCH_PREFIX } from './branches.js'
+
 import { StandingPermissionSchema } from './standingPermissions.js'
 
 import {
@@ -114,8 +116,8 @@ export const ConfigSchema = z.object({
    */
   version: z.literal(2),
 
-  /** Branch prefix for workspaces, e.g. a GitHub username. */
-  branchPrefix: z.string().min(1),
+  /** Branch prefix for workspaces, e.g. a GitHub username — cleaned, see `BranchPrefixSchema`. */
+  branchPrefix: BranchPrefixSchema,
 
   /**
    * Where repositories cloned from GitHub land.
@@ -401,7 +403,7 @@ export function migrateConfig(config: StoredConfig): Config {
 /** Reads the config, creating and persisting it if the file is missing. */
 export async function loadConfig(
   filePath: string = configFile(),
-  defaults: Config = createDefaultConfig('octopus')
+  defaults: Config = createDefaultConfig(DEFAULT_BRANCH_PREFIX)
 ): Promise<Config> {
   const existing = await readJsonFile<StoredConfig | null>(
     filePath,
