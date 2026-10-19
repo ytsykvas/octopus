@@ -11,6 +11,7 @@ import {
   rm,
   stat,
   symlink,
+  utimes,
   writeFile
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -526,6 +527,60 @@ describe('workspaces', () => {
     const workspace = await service.createWorkspaceIn(projectId)
 
     await expect(service.revertWorkspaceFile(workspace.id, '../escape.txt')).rejects.toThrow()
+  })
+
+  /*
+   * Typed the way a branch reads on GitHub, the prefix used to give
+   * `octo//magda`, and every new workspace failed with git's own refusal.
+   */
+  it('creates a workspace under a prefix typed with a slash too many', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    await service.updateConfig({ branchPrefix: 'octo/' })
+    const project = await service.addProjectFromPath(repo)
+
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    expect(workspace.branch).toMatch(/^octo\/[^/]+$/)
+  })
+
+  /*
+   * A file whose times moved and whose content did not — a binary as well as a
+   * text one. A plain `git diff` against the working tree refreshes the index
+   * for it and writes it back under `index.lock` (`--no-optional-locks` or
+   * not), and a `git add` in the worktree at that moment fails. The pane reads
+   * as a turn ends, which is when those run. Read against a copy of the index,
+   * git refreshes the copy and the worktree's own is never written.
+   */
+  it('reads the changes without writing the worktree\u2019s index', async () => {
+    const { service, projectId } = await withProject()
+    const repo = join(dir, 'planner')
+    await writeFile(join(repo, 'logo.png'), Uint8Array.from([0x89, 0x50, 0x00, 0x01, 0x02]))
+    await run('git', ['add', 'logo.png'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'logo'], { cwd: repo })
+    const workspace = await service.createWorkspaceIn(projectId)
+    await writeFile(join(workspace.path, 'README.md'), '# changed\n', 'utf8')
+    const later = new Date(Date.now() + 60_000)
+    await utimes(join(workspace.path, 'logo.png'), later, later)
+    const { stdout } = await run(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-path', 'index'],
+      { cwd: workspace.path }
+    )
+    const index = stdout.trim()
+    const stamp = async (): Promise<string> => {
+      const info = await stat(index)
+      return `${String(info.ino)}:${String(info.mtimeMs)}`
+    }
+    const before = await stamp()
+
+    const diff = await service.readWorkspaceChanges(workspace.id)
+    const sides = await service.readWorkspaceFileSides(workspace.id)
+
+    expect(await stamp()).toBe(before)
+    expect(diff.files.map((file) => file.path)).toEqual(['README.md'])
+    expect(Object.keys(sides)).toEqual(['README.md'])
   })
 
   it('reads what a workspace changed against the project’s base branch', async () => {
@@ -3860,6 +3915,8 @@ describe('the agent chat', () => {
   /** What the session answers about its context window, and the account's. */
   let contextAnswer: () => Promise<unknown>
   let skillReload: () => Promise<unknown>
+  /** What the session answers when its flags are set. */
+  let flagsAnswer: () => Promise<void>
   let pluginReload: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
   /** What the session answers when asked to put the files back to a message. */
@@ -3992,7 +4049,7 @@ describe('the agent chat', () => {
           skillOverrides?: Record<string, string>
         }) => {
           flagSettings.push(settings)
-          return Promise.resolve()
+          return flagsAnswer()
         },
         reloadSkills: () => skillReload(),
         reloadPlugins: () => {
@@ -4128,6 +4185,7 @@ describe('the agent chat', () => {
     offeredCommands = () => Promise.resolve([])
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
     skillReload = () => Promise.resolve({ skills: [] })
+    flagsAnswer = () => Promise.resolve()
     pluginReload = () =>
       Promise.resolve({ commands: [], agents: [], plugins: [], mcpServers: [], error_count: 0 })
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
@@ -4335,8 +4393,8 @@ describe('the agent chat', () => {
     })
 
     /*
-     * The variable is read once per session, so after it is taken out only a
-     * new session notices. Choosing — the same window included — starts one;
+     * A running session does not drop the variable when it is taken out, so
+     * only a new session notices. Choosing — the same window included — starts one;
      * a message does not, or a variable left in place would restart the
      * session before every one of them.
      */
@@ -4368,6 +4426,112 @@ describe('the agent chat', () => {
       await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
         autoCompact: { override: null }
       })
+    })
+
+    /*
+     * The CLI also takes the variable from a settings file while a session
+     * runs, so a start that saw none can be outranked later. The reading then
+     * names another window in force, and choosing again starts the session
+     * over — the only way to shed a variable it has taken.
+     */
+    it('starts again when a window is chosen while the reading says another is in force', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { chosen: 300_000, effective: 450_000, override: null, pending: false }
+      })
+
+      // Not on a message here either: only a choice asks for the files again.
+      await service.sendToChat(chat.id, 'again')
+      expect(agents).toHaveLength(1)
+      agents[0]?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+    })
+
+    /*
+     * Measured against the window the session was started with, not the one
+     * chosen since: a choice waiting for the turn to end is a reading that
+     * differs for a reason already known, and taking it for a stray started
+     * the session over when the first window was chosen back.
+     */
+    it('takes a choice still waiting for its turn for no stray', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 400_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 400_000 })
+      await service.sessionUsage(chat.id)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await service.setChatAutoCompact(chat.id, 400_000)
+
+      expect(agents).toHaveLength(1)
+    })
+
+    // A reading the old session gave after a new one took its place says
+    // nothing about the new one.
+    it('keeps a reading of a session that has been replaced off the new one', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 400_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      let answer: (value: unknown) => void = () => undefined
+      contextAnswer = () =>
+        new Promise((resolve) => {
+          answer = resolve
+        })
+      const reading = service.sessionUsage(chat.id)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      expect(agents).toHaveLength(2)
+
+      answer({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await reading
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+    })
+
+    // While the reading agrees with the choice, choosing it again is nothing.
+    it('starts nothing again when the reading agrees with the window chosen again', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 400_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 400_000 })
+      await service.sessionUsage(chat.id)
+
+      await service.setChatAutoCompact(chat.id, 400_000)
+
+      expect(agents).toHaveLength(1)
     })
 
     // A reading the agent could not give is no reading, here as for the share.
@@ -7798,6 +7962,98 @@ describe('the agent chat', () => {
       expect(agent().flagSettings().at(-1)).toMatchObject({ effortLevel: 'max' })
     })
 
+    /*
+     * What was in force before a change is read inside its commit. Read before
+     * it, both of two toggles in flight saw the coding model: the first moved
+     * the session onto the plan model and the second, finding the model it
+     * wanted equal to what it had read, sent nothing back.
+     */
+    it('ends on the coding model when planning goes on and off at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.setChatPlanMode(chat.id, false)
+      ])
+
+      // Undefined is the agent's own choice, which this chat's coding model is;
+      // nothing sent at all leaves the session on it too.
+      expect(agent().requestedModels().at(-1)).toBeUndefined()
+    })
+
+    it('ends on the working effort when planning goes on and off at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.setChatPlanMode(chat.id, false)
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    // Approval decides inside its commit too: whether planning was on, which
+    // is what hands the work to acceptEdits, and what it moves the session from.
+    it('hands over to acceptEdits when a plan is approved as planning is turned on', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'do the thing' })
+      const requestId = await waitForRequest(events)
+      // In this order: the approval queues its commit without an await first,
+      // so the toggle's lands before it.
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.answerPermission(requestId, 'allow')
+      ])
+      await decision
+
+      expect(service.listChats(workspaceId)[0]).toMatchObject({
+        planMode: false,
+        workingMode: 'acceptEdits'
+      })
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    it('ends on the effort picked last when two are picked at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatEffort(chat.id, 'high'),
+        service.setChatEffort(chat.id, 'low')
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    it('ends on the effort picked last when two plan efforts are picked at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanEffort(chat.id, 'low')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      await Promise.all([
+        service.setChatPlanEffort(chat.id, 'high'),
+        service.setChatPlanEffort(chat.id, 'low')
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
     /* The guard `pushModel` exists for, in its own words: a conversation whose
        two jobs share an effort runs that one whatever the toggles do, so
        nothing is ever pushed at it. */
@@ -8264,6 +8520,28 @@ describe('the agent chat', () => {
       await service.closeChats()
 
       await expect(asked).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
+    })
+
+    /*
+     * The log is written on a line of its own, behind the events that fill it.
+     * Quitting without waiting for it dropped the tail of a conversation that
+     * was streaming — measured, all of two hundred lines — and the pane then
+     * reopened on less than the agent remembers.
+     */
+    it('waits for the log to be written', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      for (let line = 0; line < 200; line += 1) agent().emit(textMessage(`line ${String(line)}`))
+      // One turn of the loop rather than a poll: the events are handled by then
+      // and their lines queued, and a poll would give the writes time to land.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(events.filter((entry) => entry.event.type === 'text')).toHaveLength(200)
+
+      await service.closeChats()
+
+      const history = await service.chatHistory(chat.id)
+      expect(history.filter((entry) => entry.role === 'agent')).toHaveLength(200)
     })
 
     /*
@@ -11110,6 +11388,143 @@ describe('the agent chat', () => {
       await expect(service.skillsForWorkspace(workspaceId)).resolves.toMatchObject([
         { key: 'reviewer', enabled: false }
       ])
+    })
+
+    /*
+     * A running conversation hears about each of these at once, as it does
+     * about its own switch. The panel reads the record, so a session left on
+     * the map it started with was a switch that looks broken.
+     */
+    it('tells a running conversation when the installation\u2019s defaults change', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
+    })
+
+    it('tells a running conversation when its project\u2019s defaults change', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
+    })
+
+    // The other direction is the one the flag layer does not undo by itself:
+    // a skill withheld at start stays withheld until it is told `'on'`.
+    it('gives a running conversation back a skill the installation stops withholding', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: [] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
+    })
+
+    it('gives a running conversation back a skill its project stops withholding', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: [] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
+    })
+
+    /*
+     * A session still starting is not in the map a push walks, so it is built
+     * from the map as it stands once its awaits are over rather than the one
+     * read before them — otherwise a default changed in that window reached
+     * nothing. Either way the race falls is right, built with it or told it;
+     * the snapshot is not, and with the fix reverted this fails often rather
+     * than always, as the mode's version of it does.
+     */
+    it('starts a conversation on a default changed while it was starting', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      const sent = service.sendToChat(chat.id, 'work')
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      await sent
+
+      const built = agents[0]?.options().settings
+      const told = agents[0]?.flagSettings().at(-1)
+      expect([built, told]).toContainEqual(
+        expect.objectContaining({ skillOverrides: { review: 'off' } })
+      )
+    })
+
+    it('tells a running conversation when a skill it withholds is renamed', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toMatchObject({ reviewer: 'off' })
+    })
+
+    // Nothing reaches a session whose map did not move: its flags carry the
+    // effort as well, and a theme has nothing to say to it.
+    it('tells a running conversation nothing when the change is not about skills', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ theme: 'dark' })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    // Each session is sent its own project's answer: a list of one project is
+    // nothing to a conversation in another.
+    it('tells a conversation in another project nothing when a project\u2019s defaults change', async () => {
+      const { service, projectId } = await withWorkspace()
+      const elsewhere = join(dir, 'elsewhere')
+      await initRepo(elsewhere)
+      const other = await service.addProjectFromPath(elsewhere)
+      const workspace = await service.createWorkspaceIn(other.id)
+      const chat = await service.openChat(workspace.id)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    it('tells a running conversation nothing when the list is written unchanged', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    // The write has landed by then; a session that will not answer keeps what
+    // it had rather than failing the change for every other one.
+    it('keeps a default change that a running session would not take', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      flagsAnswer = () => Promise.reject(new Error('the session has gone'))
+
+      await expect(
+        service.updateConfig({ disabledSkillDefaults: ['review'] })
+      ).resolves.toMatchObject({ disabledSkillDefaults: ['review'] })
+      expect(service.getConfig().disabledSkillDefaults).toEqual(['review'])
     })
 
     // The same for a conversation's own answers, which are a record rather than

@@ -290,6 +290,25 @@ export type AutoCompactWindow = z.infer<typeof AutoCompactWindowSchema>
  */
 export const AUTO_COMPACT_VARIABLE = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW'
 
+/**
+ * Whether a session measures against another window than its choice gives.
+ *
+ * The choice capped by what the model holds is what should be in force, and a
+ * reading that names anything else strays from it — the variable, whether the
+ * start saw it or the CLI took it from a settings file mid-session, or a model
+ * holding less than a window nobody has measured. Here so the menu that says
+ * so and the core that starts the session over decide it alike. Auto chooses
+ * nothing, so there is nothing to stray from.
+ */
+export function windowStrayed(reading: {
+  readonly chosen: AutoCompactWindow | null
+  readonly effective: number
+  readonly modelWindow: number | null
+}): boolean {
+  if (reading.chosen === null) return false
+  return reading.effective !== Math.min(reading.chosen, reading.modelWindow ?? reading.chosen)
+}
+
 /** A chat's choice as it is stored — see `StoredEffortSchema` for the why. */
 export const StoredEffortChoiceSchema = EffortChoiceSchema.nullable()
   .default(DEFAULT_EFFORT)
