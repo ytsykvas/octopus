@@ -258,6 +258,43 @@ function assistant(content: unknown[]): SDKMessage {
 }
 
 describe('mapping SDK messages', () => {
+  /*
+   * The CLI's own frames for a message's place in its queue, as a live session
+   * (SDK 0.3.299) sent them: not in the typed union, so cast through `unknown`
+   * exactly as they arrive.
+   */
+  const lifecycle = (state: string, extra: Record<string, unknown> = {}): SDKMessage =>
+    ({
+      type: 'command_lifecycle',
+      command_uuid: 'msg-1',
+      state,
+      uuid: 'frame-1',
+      session_id: 'sess-1',
+      ...extra
+    }) as unknown as SDKMessage
+
+  it('says a message is waiting while the CLI holds it in its queue', () => {
+    expect(mapMessage(lifecycle('queued'))).toEqual([
+      { type: 'message_waiting', messageId: 'msg-1', waiting: true }
+    ])
+  })
+
+  it.each(['started', 'completed', 'cancelled'])(
+    'says a message %s is waiting no more',
+    (state) => {
+      expect(mapMessage(lifecycle(state))).toEqual([
+        { type: 'message_waiting', messageId: 'msg-1', waiting: false }
+      ])
+    }
+  )
+
+  // A state added upstream, or a frame missing its message, says nothing
+  // rather than something guessed.
+  it('says nothing for a lifecycle frame it cannot read', () => {
+    expect(mapMessage(lifecycle('paused'))).toEqual([])
+    expect(mapMessage(lifecycle('queued', { command_uuid: 7 }))).toEqual([])
+  })
+
   it('reports the session id from the init message', () => {
     const message = {
       type: 'system',

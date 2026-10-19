@@ -161,6 +161,131 @@ describe('a reading that belongs to the account rather than the conversation', (
 })
 
 /*
+ * A message sent while the agent works waits in the CLI's queue until the agent
+ * takes it — measured on a live session, seconds later, folded into the
+ * running turn or run as one of its own after a Stop.
+ */
+describe('a message the agent has not taken yet', () => {
+  const waiting = (messageId: string, held: boolean): AgentEvent => ({
+    type: 'message_waiting',
+    messageId,
+    waiting: held
+  })
+
+  /** Long enough for the grace before a mark to have passed. */
+  const pastGrace = (): Promise<void> =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+
+  async function openHook(): Promise<{ current: ReturnType<typeof useChat> }> {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+    return result
+  }
+
+  it('is held once it has waited, until the agent takes it', async () => {
+    const result = await openHook()
+
+    emitAgentEvent(waiting('m-1', true))
+    emitAgentEvent(waiting('m-2', true))
+    await pastGrace()
+    expect([...result.current.waiting]).toEqual(['m-1', 'm-2'])
+
+    emitAgentEvent(waiting('m-1', false))
+    expect([...result.current.waiting]).toEqual(['m-2'])
+    // Live only: nothing of it in the log.
+    expect(result.current.entries).toEqual([])
+  })
+
+  /*
+   * Every message passes through the queue — one sent to an idle agent is
+   * taken two milliseconds later, measured — and marking it at once would
+   * flash "Queued" under each of them.
+   */
+  it('never marks a message the agent takes straight away', async () => {
+    const result = await openHook()
+
+    emitAgentEvent(waiting('m-1', true))
+    // The two frames arrive apart, as separate messages to the window.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+    expect(result.current.waiting.size).toBe(0)
+
+    emitAgentEvent(waiting('m-1', false))
+    await pastGrace()
+    expect(result.current.waiting.size).toBe(0)
+  })
+
+  /*
+   * A message still held when a turn ends is taken by the very next frame, and
+   * one the CLI never says more about — a session that died holding it — would
+   * otherwise say "queued" for good. A mark still on its way is dropped too.
+   */
+  it.each([
+    {
+      type: 'result',
+      ok: false,
+      costUsd: 0,
+      durationMs: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+      terminalReason: null
+    },
+    { type: 'error', message: 'gone' }
+  ] as AgentEvent[])('is let go when a turn ends: $type', async (ending) => {
+    const result = await openHook()
+
+    emitAgentEvent(waiting('m-1', true))
+    await pastGrace()
+    emitAgentEvent(waiting('m-2', true))
+    emitAgentEvent(ending)
+    await pastGrace()
+
+    expect(result.current.waiting.size).toBe(0)
+  })
+
+  // The same answer twice moves nothing, so nothing re-renders for it.
+  it('keeps the same set when an answer changes nothing', async () => {
+    const result = await openHook()
+    emitAgentEvent(waiting('m-1', true))
+    emitAgentEvent(waiting('m-1', true))
+    await pastGrace()
+    const before = result.current.waiting
+
+    emitAgentEvent(waiting('m-9', false))
+
+    expect(result.current.waiting).toBe(before)
+    expect([...before]).toEqual(['m-1'])
+  })
+
+  // A pane closed with a mark still on its way sets nothing afterwards.
+  it('drops a mark still on its way when the pane goes', async () => {
+    givenChat()
+    const { result, unmount } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+    const started = vi.spyOn(globalThis, 'setTimeout')
+    const cleared = vi.spyOn(globalThis, 'clearTimeout')
+
+    emitAgentEvent(waiting('m-1', true))
+    const index = started.mock.calls.findIndex(([, delay]) => delay === 250)
+    const timer: unknown = started.mock.results[index]?.value
+    unmount()
+
+    expect(timer).toBeDefined()
+    expect(cleared).toHaveBeenCalledWith(timer)
+    started.mockRestore()
+    cleared.mockRestore()
+  })
+})
+
+/*
  * Answering the agent's own question. Not a permission — the user is handing
  * over information rather than saying whether the agent may act — so it has its
  * own way out to the bridge.

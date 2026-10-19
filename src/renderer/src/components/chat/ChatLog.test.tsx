@@ -13,6 +13,9 @@ function fromAgent(event: AgentEvent): ChatEntry {
   return { role: 'agent', at: AT, event }
 }
 
+/** No message held in the agent's queue, which is every log but one. */
+const NOT_WAITING: ReadonlySet<string> = new Set()
+
 /**
  * The turn a footer closes.
  *
@@ -47,6 +50,7 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
       onAnswerQuestions={onAnswerQuestions}
       onExecutePlan={onExecutePlan}
       onRewind={onRewind}
+      waiting={NOT_WAITING}
       {...overrides}
     />
   )
@@ -148,6 +152,7 @@ describe('a subagent’s work', () => {
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
         onRewind={vi.fn()}
+        waiting={NOT_WAITING}
       />
     )
 
@@ -237,6 +242,30 @@ describe('when things were said', () => {
     // Another year than the reader's, so the year is written out.
     expect(screen.getByText('2 March 2025')).toBeInTheDocument()
     expect(screen.getByText('4 March 2025')).toBeInTheDocument()
+  })
+})
+
+describe('a message the agent has not taken yet', () => {
+  const MESSAGE = '22222222-2222-4222-8222-222222222222'
+
+  it('says it is queued beside its hour, and what Stop will not do', () => {
+    renderLog({
+      entries: [{ role: 'user', at: AT, text: 'also rename the test', uuid: MESSAGE }],
+      waiting: new Set([MESSAGE])
+    })
+
+    const mark = screen.getByText('Queued')
+    expect(mark).toBeVisible()
+    expect(mark).toHaveAttribute('title', expect.stringContaining('Stop does not withdraw it'))
+  })
+
+  it('says nothing of a message the agent has taken', () => {
+    renderLog({
+      entries: [{ role: 'user', at: AT, text: 'also rename the test', uuid: MESSAGE }],
+      waiting: new Set(['someone-else'])
+    })
+
+    expect(screen.queryByText('Queued')).not.toBeInTheDocument()
   })
 })
 
@@ -400,6 +429,7 @@ describe('what the log shows', () => {
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
         onRewind={vi.fn()}
+        waiting={NOT_WAITING}
       />
     )
 
@@ -432,6 +462,7 @@ describe('what the log shows', () => {
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
         onRewind={vi.fn()}
+        waiting={NOT_WAITING}
       />
     )
 
@@ -1679,7 +1710,8 @@ describe('a log cut back and written again', () => {
       onAnswerElicitation: vi.fn(),
       onAnswerQuestions: vi.fn(),
       onExecutePlan: vi.fn(),
-      onRewind: vi.fn()
+      onRewind: vi.fn(),
+      waiting: NOT_WAITING
     }
     const { rerender } = render(
       <ChatLog {...props} entries={[said, asked('r-1', 'Which one?')]} pendingRequestId="r-1" />

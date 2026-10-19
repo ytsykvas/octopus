@@ -905,6 +905,12 @@ export const en = {
     today: 'Today',
     yesterday: 'Yesterday',
     dateLocale: 'en-GB',
+    /* Beside the hour of a message sent while the agent worked, until it takes
+       it. The hint says what Stop does not do: a held message is not
+       withdrawn, and runs as a turn of its own once the agent stops. */
+    waiting: 'Queued',
+    waitingHint:
+      'The agent takes this message once it is ready for it. Stop does not withdraw it: it then runs on its own.',
     /* Rewinding to before a message: the conversation, the files, or both. */
     rewind: 'Rewind to before this message',
     rewindTitle: 'Rewind to before this message',

@@ -1,7 +1,8 @@
 import {
-  Check,
   Archive,
+  Check,
   CircleSlash,
+  Clock3,
   Eraser,
   FileCode2,
   Map,
@@ -104,6 +105,8 @@ interface ChatLogProps {
    * there is a dialog in between and a bridge call either side of it.
    */
   readonly onRewind: (messageId: string) => void
+  /** The messages the agent has not taken yet, by id — see `useChat`. */
+  readonly waiting: ReadonlySet<string>
 }
 
 /**
@@ -123,7 +126,8 @@ export function ChatLog({
   onAnswerElicitation,
   onAnswerQuestions,
   onExecutePlan,
-  onRewind
+  onRewind,
+  waiting
 }: ChatLogProps): React.JSX.Element {
   const { t } = useTranslation()
   const streamingAnything = streaming.text !== '' || streaming.thinking !== ''
@@ -173,6 +177,7 @@ export function ChatLog({
           value={{
             plans,
             retracted,
+            waiting,
             steps: subagents.steps,
             busy,
             pendingRequestId,
@@ -294,6 +299,8 @@ interface RowProps extends AnswerProps {
   plans: ReadonlySet<string>
   /** Wire ids the agent has taken back. See `retractedUuids`. */
   retracted: ReadonlySet<string>
+  /** The user's messages the agent has not taken yet, by id. */
+  waiting: ReadonlySet<string>
   /** What each subagent did, by the call that started it. */
   steps: ReadonlyMap<string, readonly AgentEvent[]>
 }
@@ -311,6 +318,7 @@ function EntryRow({
       <UserMessage
         text={entry.text}
         at={entry.at}
+        waiting={messageId !== undefined && answering.waiting.has(messageId)}
         // Offered only for a message that has an id to rewind to — those sent
         // before ids were kept have none — and not while the agent is working,
         // which the core would refuse anyway: a button that can only fail is a
@@ -548,10 +556,13 @@ function AgentRow({
 function UserMessage({
   text,
   at,
+  waiting,
   onRewind
 }: {
   text: string
   at: string
+  /** Sent while the agent worked and not taken yet — see `useChat`. */
+  waiting: boolean
   onRewind: (() => void) | null
 }): React.JSX.Element {
   const { t } = useTranslation()
@@ -578,13 +589,25 @@ function UserMessage({
         )}
         <UserBubble text={text} />
       </div>
-      <time
-        dateTime={at}
-        title={formatFullTime(at, t('chat.dateLocale'))}
-        className="text-ink-faint px-1 text-[11px] tabular-nums"
-      >
-        {formatClock(at)}
-      </time>
+      <div className="text-ink-faint flex items-center gap-2 px-1 text-[11px]">
+        {/* Beside the hour rather than on the bubble: it is a fact about the
+            message's delivery, as the hour is, and it goes once the agent
+            takes it. The tooltip says what Stop will not do, which is the
+            surprise — the message runs as a turn of its own afterwards. */}
+        {waiting && (
+          <span title={t('chat.waitingHint')} className="flex items-center gap-1">
+            <Clock3 aria-hidden size={11} />
+            {t('chat.waiting')}
+          </span>
+        )}
+        <time
+          dateTime={at}
+          title={formatFullTime(at, t('chat.dateLocale'))}
+          className="tabular-nums"
+        >
+          {formatClock(at)}
+        </time>
+      </div>
     </div>
   )
 }
