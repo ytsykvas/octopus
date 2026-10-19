@@ -55,6 +55,7 @@ import {
   newChat,
   sessionMode,
   sessionModel,
+  windowStrayed,
   type WorkingMode
 } from './chats.js'
 import { type AutoCompactView, findWindowOverride, type WindowOverride } from './autoCompact.js'
@@ -1504,7 +1505,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   const compaction = new Map<
     string,
-    { readonly startedWith: AutoCompactWindow | null; readonly override: WindowOverride | null }
+    {
+      readonly startedWith: AutoCompactWindow | null
+      readonly override: WindowOverride | null
+      /** The last reading named another window than the choice gives (`windowStrayed`). */
+      readonly strayed: boolean
+    }
   >()
   /** What each model holds, as any session's turns have said; outlives the sessions. */
   const modelWindows = new Map<string, number>()
@@ -2729,11 +2735,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const started = compaction.get(chatId)
     if (!chat || !started || !sessions.has(chatId)) return
     // Chosen again while a variable outranked it: it may have been taken out
-    // since, and only a new session reads it again. Asked for by a choice in
-    // the menu and never by a message, or a variable left in place would
+    // since, and only a new session reads it again. The same when the last
+    // reading strayed from the choice with no variable seen at the start — the
+    // CLI takes one from a settings file mid-session too. Asked for by a choice
+    // in the menu and never by a message, or a variable left in place would
     // start the session over before every one of them.
-    const recheckOverride = recheck && started.override !== null
-    if (started.startedWith === chat.autoCompactWindow && !recheckOverride) return
+    const recheckStart = recheck && (started.override !== null || started.strayed)
+    if (started.startedWith === chat.autoCompactWindow && !recheckStart) return
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
 
     await closeOneChat(chat)
@@ -3767,7 +3775,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
 
     sessions.set(chat.id, session)
-    compaction.set(chat.id, { startedWith: chat.autoCompactWindow, override })
+    compaction.set(chat.id, { startedWith: chat.autoCompactWindow, override, strayed: false })
 
     // Fire-and-forget, and the two failures go different ways. A list that
     // cannot be *read* is swallowed: it is a convenience for the picker, a
@@ -5796,19 +5804,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
       const chat = requireChat(chatId)
       const started = compaction.get(chatId)
-
-      return {
-        context,
-        autoCompact: {
-          chosen: chat.autoCompactWindow,
-          effective: context.maxTokens,
-          modelWindow:
-            context.modelWindow ??
-            (context.model === null ? null : (modelWindows.get(context.model) ?? null)),
-          override: started?.override ?? null,
-          pending: started !== undefined && started.startedWith !== chat.autoCompactWindow
-        }
+      const autoCompact = {
+        chosen: chat.autoCompactWindow,
+        effective: context.maxTokens,
+        modelWindow:
+          context.modelWindow ??
+          (context.model === null ? null : (modelWindows.get(context.model) ?? null)),
+        override: started?.override ?? null,
+        pending: started !== undefined && started.startedWith !== chat.autoCompactWindow
       }
+
+      // Kept for the next choice in the menu: a reading this one disagrees
+      // with is what makes choosing the same window again worth a new session.
+      if (started) compaction.set(chatId, { ...started, strayed: windowStrayed(autoCompact) })
+
+      return { context, autoCompact }
     },
 
     onAgentEvent(handler) {

@@ -594,7 +594,11 @@ says, most pressing first:
 - that a choice made mid-turn **takes effect with the next message**;
 - **what is in force when it is not what was chosen** — a measurement from
   `getContextUsage`, not a guess, so a disagreement is said rather than hidden
-  behind the tick.
+  behind the tick. The CLI also takes the variable from a settings file while a
+  session runs, which a start cannot see; choosing the same window again then
+  starts the session over too, since only a new one reads the files again. The
+  rule for "not what was chosen" is `windowStrayed` (`chats.ts`), which the menu
+  and the core both ask.
 
 A window above what the model holds is greyed with that figure, since the
 agent would cut it down anyway. _Auto_ says what it amounts to while it is the

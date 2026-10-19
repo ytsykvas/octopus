@@ -2,7 +2,12 @@ import { ChevronDown, Eraser, FoldVertical, Paperclip } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { AutoCompactView } from '@core/autoCompact.js'
-import { AUTO_COMPACT_VARIABLE, AUTO_COMPACT_WINDOWS, type AutoCompactWindow } from '@core/chats.js'
+import {
+  AUTO_COMPACT_VARIABLE,
+  AUTO_COMPACT_WINDOWS,
+  type AutoCompactWindow,
+  windowStrayed
+} from '@core/chats.js'
 import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
@@ -220,9 +225,7 @@ export function ComposerAttic({
 
     if (view.pending) return { title, note: t('chat.autoCompactPending') }
 
-    const expected =
-      view.chosen === null ? null : Math.min(view.chosen, view.modelWindow ?? view.chosen)
-    if (expected !== null && view.chosen !== null && view.effective !== expected) {
+    if (view.chosen !== null && windowStrayed(view)) {
       return {
         title,
         warning: true,

@@ -4280,6 +4280,51 @@ describe('the agent chat', () => {
       })
     })
 
+    /*
+     * The CLI also takes the variable from a settings file while a session
+     * runs, so a start that saw none can be outranked later. The reading then
+     * names another window in force, and choosing again starts the session
+     * over — the only way it reads the files again.
+     */
+    it('starts again when a window is chosen while the reading says another is in force', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { chosen: 300_000, effective: 450_000, override: null, pending: false }
+      })
+
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+    })
+
+    // While the reading agrees with the choice, choosing it again is nothing.
+    it('starts nothing again when the reading agrees with the window chosen again', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 300_000 })
+      await service.sessionUsage(chat.id)
+
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(1)
+    })
+
     // A reading the agent could not give is no reading, here as for the share.
     it('says nothing about the window when the session cannot say how full it is', async () => {
       contextAnswer = () => Promise.reject(new Error('unknown control request'))
