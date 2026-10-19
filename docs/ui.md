@@ -2341,7 +2341,11 @@ read with `--stage` and a mode of `160000` makes the entry a folder. Every
 folder inside it is read from disk in turn — git lists nothing in there — and a
 submodule git reports as changed, by a new commit or an edit inside, carries
 that status on the folder's row. A workspace's submodules are often not checked
-out, and then the folder opens empty.
+out, and then the folder opens empty. A repository cloned or initialised inside
+the worktree without being added as a submodule is the same kind of folder: git
+names it `nested/` among the untracked and never looks inside, and taken as a
+path that drew a folder holding a row with no name. It now opens like a
+submodule, ungreyed, with the untracked mark on its own row.
 
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when

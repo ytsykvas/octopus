@@ -16,6 +16,7 @@ import {
   parseIgnored,
   parseStaged,
   parseStatus,
+  parseUntracked,
   readFileTree,
   type TreeEntry,
   type TreeEntryKind
@@ -57,6 +58,12 @@ describe('parseStatus', () => {
       'staged-link.ts': 'typeChanged',
       'fresh.ts': 'untracked'
     })
+  })
+
+  // git names a repository nested in the worktree as `nested/`, and never
+  // looks inside: the mark belongs on the folder's own row.
+  it('marks a nested repository on its folder', () => {
+    expect(parseStatus('?? nested/\0').statuses).toEqual({ nested: 'untracked' })
   })
 
   it('calls every unmerged code a conflict', () => {
@@ -157,6 +164,15 @@ describe('parseStaged', () => {
   it('keeps a tab inside a path', () => {
     expect(parseStaged('100644 a09ef9334a022405ac5f08b981bdaa1d5c194e8c 0\ta\tb.txt')).toEqual([
       file('a\tb.txt')
+    ])
+  })
+})
+
+describe('parseUntracked', () => {
+  it('reads a nested repository as a folder, beside the untracked files', () => {
+    expect(parseUntracked(['new.ts', 'deep/nested/', ''].join('\0'))).toEqual([
+      file('new.ts'),
+      { path: 'deep/nested', kind: 'directory', ignored: false }
     ])
   })
 })
@@ -502,6 +518,20 @@ describe('readFileTree', () => {
       } finally {
         await rm(inner, { recursive: true, force: true })
       }
+    })
+
+    // Cloned or initialised inside the worktree, not added as a submodule: git
+    // lists it as `nested/`, which drew a folder holding a file with no name.
+    it('reads a repository nested in the worktree as a folder', async () => {
+      await mkdir(join(dir, 'nested'))
+      await run('git', ['init', '-q'], { cwd: join(dir, 'nested') })
+      await writeFile(join(dir, 'nested', 'inside.ts'), 'inside\n', 'utf8')
+
+      const tree = await readFileTree(gitIn(dir))
+
+      expect(tree.entries).toContainEqual({ path: 'nested', kind: 'directory', ignored: false })
+      expect(tree.entries.map((entry) => entry.path)).not.toContain('nested/')
+      expect(tree.statuses).toEqual({ nested: 'untracked' })
     })
 
     it('reads a move announced with `git add -N` as a rename, with no phantom path', async () => {
