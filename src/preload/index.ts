@@ -650,7 +650,7 @@ const api = {
     tree: (workspaceId: string): Promise<Result<FileTreeSnapshot>> =>
       ipcRenderer.invoke('files:tree', workspaceId) as Promise<Result<FileTreeSnapshot>>,
 
-    /** A folder git ignores whole, read from disk when it is opened. */
+    /** A folder git says nothing inside of — ignored whole, or a submodule — read from disk when it is opened. */
     directory: (workspaceId: string, path: string): Promise<Result<DirectoryListing>> =>
       ipcRenderer.invoke('files:directory', workspaceId, path) as Promise<Result<DirectoryListing>>,
 

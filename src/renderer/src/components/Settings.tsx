@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { AttachmentStore } from '@core/attachments.js'
 import type { TerminalSession } from '@core/terminal.js'
+import { cleanBranchPrefix } from '@core/branches.js'
 import { type AgentModel, DEFAULT_MODEL, type Effort, type WorkingMode } from '@core/chats.js'
 import type {
   Config,
@@ -802,6 +803,10 @@ function DirectoryField({
 /**
  * Committed on blur rather than on every keystroke — writing the config on
  * each character would hammer the disk for no benefit.
+ *
+ * What is committed is the prefix as git will take it (`cleanBranchPrefix`),
+ * and the field says what that is while it differs from what was typed —
+ * compared trimmed, so the space typed on the way to `anna k` is not news.
  */
 function BranchPrefixInput({
   value,
@@ -813,8 +818,8 @@ function BranchPrefixInput({
   const { t } = useTranslation()
   const [draft, setDraft] = useState(value)
 
-  const trimmed = draft.trim()
-  const invalid = trimmed.length === 0
+  const cleaned = cleanBranchPrefix(draft)
+  const invalid = cleaned === ''
 
   return (
     <div>
@@ -830,11 +835,17 @@ function BranchPrefixInput({
             setDraft(value)
             return
           }
-          if (trimmed !== value) onCommit(trimmed)
+          setDraft(cleaned)
+          if (cleaned !== value) onCommit(cleaned)
         }}
         className={`input focus-ring w-64 font-mono ${invalid ? 'border-danger' : ''}`}
       />
-      {invalid && <p className="text-danger mt-1.5">{t('settings.branchPrefixEmpty')}</p>}
+      {invalid && <p className="text-danger mt-1.5">{t('settings.branchPrefixUnusable')}</p>}
+      {!invalid && cleaned !== draft.trim() && (
+        <p className="text-ink-faint mt-1.5">
+          {t('settings.branchPrefixBecomes', { prefix: cleaned })}
+        </p>
+      )}
     </div>
   )
 }

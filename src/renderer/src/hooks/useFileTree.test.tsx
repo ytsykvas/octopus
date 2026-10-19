@@ -88,7 +88,13 @@ describe('the tree of a workspace', () => {
     })
     expect(octopus().files.directory).toHaveBeenCalledWith(WORKSPACE, 'node_modules')
     expect(result.current.index?.get('node_modules')).toEqual([
-      { name: 'pkg', path: 'node_modules/pkg', kind: 'directory', ignored: true }
+      {
+        name: 'pkg',
+        path: 'node_modules/pkg',
+        kind: 'directory',
+        ignored: true,
+        childrenFromDisk: true
+      }
     ])
   })
 

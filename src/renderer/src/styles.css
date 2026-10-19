@@ -547,8 +547,7 @@
 }
 
 /* A toast arriving (AttentionToasts.tsx): a short fade and lift, so the eye
-   finds it without the corner flashing. None at all for anybody who has asked
-   the system for less motion. */
+   finds it without the corner flashing. */
 @keyframes notice-in {
   from {
     opacity: 0;
@@ -560,8 +559,14 @@
   animation: notice-in 150ms ease-out;
 }
 
+/* Nothing moves on its own for anybody who has asked the system for less
+   motion: every animation at once, so a spinner written tomorrow needs nothing
+   of its own (docs/ui.md, "Motion"). `!important` because a class such as
+   `.notice-in` outranks `*`. */
 @media (prefers-reduced-motion: reduce) {
-  .notice-in {
-    animation: none;
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
   }
 }
