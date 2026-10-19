@@ -151,6 +151,16 @@ and the two usage readings.
 
 **Never call `query()` from a test.**
 
+**Nor read the machine's ports.** Whether something answers on a port is a
+probe the caller passes — the `listening` option of `createService`, and the
+`answers` option of `createWorkspace`, required there so a test cannot leave it
+out. `service.test.ts` hands every service a probe over a set the test fills
+(`answering`); `ipc.test.ts` and `workspaces.test.ts` pass one that hears
+nothing. The default opens a socket, and the developer's own dev server holding
+3110 once made "gives the next workspace the next block" receive 3120 — a test
+about the pool reading the machine it ran on. Only `isListening`'s own tests and
+one service test, which checks the default is the real probe, open a socket.
+
 A fake earns its keep only if it can fail. `setPermissionMode` on the fake once
 discarded its argument while the test asserted the call merely resolved: deleting
 the line from the service left the suite green. If the promise being made is
