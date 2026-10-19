@@ -88,6 +88,7 @@ export type ChatErrorCode =
   | 'rewindUnavailable'
   | 'rewindInProgress'
   | 'chatClosed'
+  | 'autoModeUnavailable'
 
 /**
  * What putting the files back to a message would do, or did.
@@ -123,8 +124,15 @@ export class ChatError extends CodedError<ChatErrorCode> {
  * `bypassPermissions` is absent on purpose — §4 puts transparency above
  * convenience, and a mode where nothing is ever shown is the one setting that
  * cannot be undone by reading the screen.
+ *
+ * `auto` is not that mode, though it is the nearest one. Its classifier decides
+ * each call, but what it cannot decide still comes to the chat as a question,
+ * and what it refuses is drawn as a line in the log — so the screen still says
+ * what happened. The SDK grants it only to some accounts and models, and says
+ * so either by refusing the switch or by starting the session in `default`;
+ * the service turns both into a visible fall back to `default`.
  */
-export const PERMISSION_MODES = ['default', 'plan', 'acceptEdits'] as const
+export const PERMISSION_MODES = ['default', 'plan', 'acceptEdits', 'auto'] as const
 export const PermissionModeSchema = z.enum(PERMISSION_MODES)
 export type PermissionMode = z.infer<typeof PermissionModeSchema>
 
@@ -140,9 +148,27 @@ export type PermissionMode = z.infer<typeof PermissionModeSchema>
  * `satisfies` ties the list to the SDK's union, so a value renamed there is a
  * compile error here rather than a mode the session quietly never enters.
  */
-export const WORKING_MODES = ['default', 'acceptEdits'] as const satisfies readonly PermissionMode[]
+export const WORKING_MODES = [
+  'default',
+  'acceptEdits',
+  'auto'
+] as const satisfies readonly PermissionMode[]
 export const WorkingModeSchema = z.enum(WORKING_MODES)
 export type WorkingMode = z.infer<typeof WorkingModeSchema>
+
+/**
+ * What an approved plan may be carried out in.
+ *
+ * Only the two that go ahead without asking about edits: a plan read and
+ * approved is the edits agreed in advance, so going back to Manual after it
+ * would ask about every step the user has just said yes to.
+ */
+export const PLAN_EXECUTION_MODES = [
+  'acceptEdits',
+  'auto'
+] as const satisfies readonly WorkingMode[]
+export const PlanExecutionModeSchema = z.enum(PLAN_EXECUTION_MODES)
+export type PlanExecutionMode = z.infer<typeof PlanExecutionModeSchema>
 
 /**
  * The mode a session actually starts in.
@@ -152,6 +178,30 @@ export type WorkingMode = z.infer<typeof WorkingModeSchema>
  */
 export function sessionMode(chat: { planMode: boolean; workingMode: WorkingMode }): PermissionMode {
   return chat.planMode ? 'plan' : chat.workingMode
+}
+
+/**
+ * The working mode a conversation goes on in once its plan is approved.
+ *
+ * `executeIn` out of planning — the setting, `acceptEdits` or `auto`. The
+ * composer holds one control that cycles through the modes, so there is no
+ * second one left to say what should follow a plan, and a plan read and
+ * approved is the edits accepted in advance.
+ *
+ * Only out of planning, though. The agent may call the plan tool from any
+ * mode, and handing over there would let it raise a conversation the user set
+ * to Manual into one that does not ask, by asking once. And never down from
+ * `auto`, which already decides each edit on its own — the CLI makes the same
+ * choice, returning to auto when a plan it entered from auto is approved.
+ *
+ * Here rather than in the service, because the window applies the same rule
+ * to its own copy of the record: nothing tells it the record changed.
+ */
+export function modeAfterPlan(
+  chat: { planMode: boolean; workingMode: WorkingMode },
+  executeIn: PlanExecutionMode
+): WorkingMode {
+  return chat.planMode && chat.workingMode !== 'auto' ? executeIn : chat.workingMode
 }
 
 /**
@@ -557,9 +607,10 @@ function isCommand(text: string, command: string, commands: readonly AgentComman
  * Whether this message is the user asking for the conversation to be forgotten.
  *
  * Asked before the message is sent, and remembered, because the event that
- * comes back cannot answer it: the SDK emits `conversation_reset` for leaving
- * plan mode and for fresh-session flows as well. Clearing the visible log on
- * the event alone would erase the conversation every time a plan was approved.
+ * comes back from an older CLI cannot answer it: the SDK emits
+ * `conversation_reset` for leaving plan mode and for fresh-session flows as
+ * well, and only a newer one says which. Clearing the visible log on such an
+ * event alone would erase the conversation every time a plan was approved.
  */
 export function isClearCommand(text: string, commands: readonly AgentCommand[]): boolean {
   return isCommand(text, CLEAR_COMMAND, commands)

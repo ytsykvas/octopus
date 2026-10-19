@@ -16,6 +16,7 @@ import {
   DEFAULT_EFFORT,
   type Effort,
   EXIT_PLAN_MODE,
+  PlanExecutionModeSchema,
   StoredEffortSchema,
   type WorkingMode,
   WorkingModeSchema
@@ -143,6 +144,16 @@ export const ConfigSchema = z.object({
    * never being asked it.
    */
   workingMode: WorkingModeSchema.default('default'),
+
+  /**
+   * What an approved plan is carried out in.
+   *
+   * Auto by default: the plan is the part a person reads and agrees to, and
+   * auto mode carries it out with a classifier watching each step rather than
+   * a question for each one. Where auto mode is not available the work goes on
+   * in Accept edits instead, which is the other choice here.
+   */
+  planExecutionMode: PlanExecutionModeSchema.default('auto'),
 
   /**
    * How much thinking a new chat asks for; always a level.
@@ -336,6 +347,7 @@ export function createDefaultConfig(
     branchPrefix,
     settingSources: 'all',
     workingMode,
+    planExecutionMode: 'auto',
     effort,
     // Nothing to name: no catalogue has arrived on a first run, and the two
     // nulls are already the right answers — the agent's own choice, and no

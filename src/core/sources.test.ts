@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { carryPath, readCarryList, writeCarryList } from './carry.js'
 import { InstructionKindSchema, instructionTemplate, writeInstruction } from './instructions.js'
 import { ScriptKindSchema, scriptTemplate, writeScript } from './scripts.js'
 import {
@@ -42,11 +43,12 @@ async function put(relative: string, contents: string): Promise<void> {
 
 async function sourceOf(
   id: SourceItemId,
-  preferLocal: readonly SourceItemId[] = []
+  preferLocal: readonly SourceItemId[] = [],
+  trustRepository = true
 ): Promise<SourceView | undefined> {
-  return (await readSources(cwd, { id: 'planner', preferLocal }, FIELDS, root)).find(
-    (view) => view.id === id
-  )
+  return (
+    await readSources(cwd, { id: 'planner', preferLocal, trustRepository }, FIELDS, root)
+  ).find((view) => view.id === id)
 }
 
 /*
@@ -66,10 +68,15 @@ describe('the lists the window imports', () => {
 
 describe('readSources', () => {
   it('lists every script and every instruction, once', async () => {
-    const views = await readSources(cwd, { id: 'planner', preferLocal: [] }, FIELDS, root)
+    const views = await readSources(
+      cwd,
+      { id: 'planner', preferLocal: [], trustRepository: false },
+      FIELDS,
+      root
+    )
 
-    expect(views.map((view) => view.id)).toHaveLength(12)
-    expect(new Set(views.map((view) => view.id)).size).toBe(12)
+    expect(views.map((view) => view.id)).toHaveLength(13)
+    expect(new Set(views.map((view) => view.id)).size).toBe(13)
   })
 
   describe('a script', () => {
@@ -143,7 +150,7 @@ describe('readSources', () => {
 
       const views = await readSources(
         cwd,
-        { id: 'planner', preferLocal: ['project.envFile'] },
+        { id: 'planner', preferLocal: ['project.envFile'], trustRepository: true },
         fields,
         root
       )
@@ -157,6 +164,72 @@ describe('readSources', () => {
         effective: 'project',
         preferLocal: true,
         warning: 'envFileNotIgnored'
+      })
+    })
+  })
+
+  describe('the carry list', () => {
+    // The starting list is what a project that wrote none carries, so it is
+    // the project's layer rather than a template nothing reads.
+    it("is the project's own, starting list and all, when the checkout states none", async () => {
+      await expect(sourceOf('project.carry')).resolves.toEqual({
+        id: 'project.carry',
+        layers: [
+          {
+            layer: 'project',
+            from: carryPath('planner', root),
+            body: await readCarryList('planner', root)
+          }
+        ],
+        effective: 'project',
+        preferLocal: false,
+        warning: null
+      })
+    })
+
+    it("is the repository's when the checkout carries one, with the project's beside it", async () => {
+      await put('.octopus/carry', 'config/master.key\n')
+      await writeCarryList('planner', '.env\n', root)
+
+      await expect(sourceOf('project.carry')).resolves.toEqual({
+        id: 'project.carry',
+        layers: [
+          { layer: 'repository', from: '.octopus/carry', body: 'config/master.key\n' },
+          { layer: 'project', from: carryPath('planner', root), body: '.env\n' }
+        ],
+        effective: 'repository',
+        preferLocal: false,
+        warning: null
+      })
+    })
+
+    it("is the project's once the user chose their own", async () => {
+      await put('.octopus/carry', 'config/master.key\n')
+
+      await expect(sourceOf('project.carry', ['project.carry'])).resolves.toMatchObject({
+        effective: 'project',
+        preferLocal: true,
+        warning: null
+      })
+    })
+
+    // The same gate as the repository's env file, and said the same way.
+    it("is the project's, and says why, until the repository is trusted", async () => {
+      await put('.octopus/carry', 'config/master.key\n')
+
+      await expect(sourceOf('project.carry', [], false)).resolves.toMatchObject({
+        layers: [{ layer: 'repository' }, { layer: 'project' }],
+        effective: 'project',
+        preferLocal: false,
+        warning: 'repositoryNotTrusted'
+      })
+    })
+
+    // Nothing stated is nothing waiting.
+    it('warns of nothing for an untrusted repository that states no list', async () => {
+      await expect(sourceOf('project.carry', [], false)).resolves.toMatchObject({
+        effective: 'project',
+        warning: null
       })
     })
   })

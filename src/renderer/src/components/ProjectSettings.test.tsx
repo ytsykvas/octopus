@@ -1650,10 +1650,76 @@ describe('ProjectSettings', () => {
     expect(screen.getByRole('button', { name: 'Git' })).toHaveAttribute('aria-current')
   })
 
+  /*
+   * The repository's carry list is read live and merged with the project's,
+   * so the editor shows it the way a script's is shown — and says that the
+   * switch takes the repository's lines away rather than replacing a copy.
+   */
+  it('shows the repository\u2019s carry list beside the project\u2019s, and switches it off', async () => {
+    givenSources([
+      {
+        id: 'project.carry',
+        layers: [
+          { layer: 'repository', from: '.octopus/carry', body: 'config/master.key' },
+          { layer: 'project', from: '/data/projects/planner/carry', body: '.env' }
+        ],
+        effective: 'repository',
+        preferLocal: false,
+        warning: null
+      }
+    ])
+    const props = await renderDialog()
+    const user = userEvent.setup()
+
+    await openSection(user, 'Files')
+
+    // On the project's own: it is in effect either way, and it is the one
+    // edited here.
+    const group = await screen.findByRole('group', { name: /Files carried into a workspace/ })
+    expect(within(group).getByRole('button', { name: 'This project' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(await screen.findByLabelText('Files carried into a workspace')).toBeInTheDocument()
+    expect(screen.getByText(/yours wins where both name a file/)).toBeInTheDocument()
+    expect(screen.queryByText(/its copy is what applies/)).toBeNull()
+
+    await user.click(within(group).getByRole('button', { name: 'Repository' }))
+    expect(screen.getByText('config/master.key')).toBeInTheDocument()
+    expect(screen.getByText(/Its lines are added to this project/)).toBeInTheDocument()
+    expect(screen.queryByText(/Change it there, or use your own/)).toBeNull()
+
+    await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['project.carry'] })
+  })
+
+  it('says the repository\u2019s carry list waits until the repository is trusted', async () => {
+    givenSources([
+      {
+        id: 'project.carry',
+        layers: [
+          { layer: 'repository', from: '.octopus/carry', body: 'config/master.key' },
+          { layer: 'project', from: '/data/projects/planner/carry', body: '.env' }
+        ],
+        effective: 'project',
+        preferLocal: false,
+        warning: 'repositoryNotTrusted'
+      }
+    ])
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Files')
+
+    expect(await screen.findByText(/not trusted yet/)).toBeInTheDocument()
+    expect(screen.getByText('In effect: This project')).toBeInTheDocument()
+  })
+
   it.each([
     ['Open Pull request descriptions', 'Instructions'],
     ['Open Build script', 'Scripts'],
-    ['Open Env file', 'Env']
+    ['Open Env file', 'Env'],
+    ['Open Files carried into a workspace', 'Files']
   ])('opens the section that edits it: %s', async (link, section) => {
     const user = userEvent.setup()
     await renderDialog()

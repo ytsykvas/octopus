@@ -15,7 +15,13 @@ import { useTranslation } from 'react-i18next'
 import type { AttachmentStore } from '@core/attachments.js'
 import type { TerminalSession } from '@core/terminal.js'
 import { cleanBranchPrefix } from '@core/branches.js'
-import { type AgentModel, DEFAULT_MODEL, type Effort, type WorkingMode } from '@core/chats.js'
+import {
+  type AgentModel,
+  DEFAULT_MODEL,
+  type Effort,
+  type PlanExecutionMode,
+  type WorkingMode
+} from '@core/chats.js'
 import type {
   Config,
   LanguagePreference,
@@ -332,9 +338,37 @@ function AgentSection({ config, onChange }: SectionProps): React.JSX.Element {
                 value: 'acceptEdits',
                 label: t('settings.permissionAcceptEdits'),
                 hint: t('settings.permissionAcceptEditsHint')
+              },
+              {
+                value: 'auto',
+                label: t('settings.permissionAuto'),
+                hint: t('settings.permissionAutoHint')
               }
             ]}
             onChange={(workingMode) => void onChange({ workingMode })}
+          />
+        </Field>
+
+        {/* Its own question, because it is asked at a different moment: not
+            what a chat starts with, but what follows a plan someone has read
+            and approved. Manual is not offered — it would ask about every step
+            of a plan just agreed to. */}
+        <Field label={t('settings.planExecution')} hint={t('settings.planExecutionHint')}>
+          <RadioList<PlanExecutionMode>
+            value={config.planExecutionMode}
+            options={[
+              {
+                value: 'auto',
+                label: t('settings.permissionAuto'),
+                hint: t('settings.planExecutionAutoHint')
+              },
+              {
+                value: 'acceptEdits',
+                label: t('settings.permissionAcceptEdits'),
+                hint: t('settings.planExecutionAcceptEditsHint')
+              }
+            ]}
+            onChange={(planExecutionMode) => void onChange({ planExecutionMode })}
           />
         </Field>
       </div>

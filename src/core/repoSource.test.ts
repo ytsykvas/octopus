@@ -1,18 +1,25 @@
+import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { writeCarryList } from './carry.js'
+import { type GitExec, GitError, gitIn } from './git.js'
 import {
   octopusInstructionPath,
   octopusScriptPath,
   repoInstruction,
+  resolveCarry,
   resolveScript,
   resolveScripts,
   scriptsDigest
 } from './repoSource.js'
 import { writeScript } from './scripts.js'
+
+const run = promisify(execFile)
 
 let cwd: string
 let root: string
@@ -204,5 +211,257 @@ describe('repoInstruction', () => {
     })
 
     await rm(outside, { recursive: true, force: true })
+  })
+})
+
+describe('resolveCarry', () => {
+  let git: GitExec
+  let checkout: string
+
+  /** A trusted repository, nothing chosen against it — the case where its lines apply. */
+  const TRUSTED = { preferLocal: false, trusted: true }
+
+  // A real repository: whether a line is honoured is git's answer, and the
+  // shape of that answer is what is under test. `checkout` stands for where
+  // the files are copied from.
+  beforeEach(async () => {
+    await run('git', ['init', '-q'], { cwd })
+    await run('git', ['config', 'user.email', 'test@example.com'], { cwd })
+    await run('git', ['config', 'user.name', 'Test'], { cwd })
+    git = gitIn(cwd)
+    checkout = await mkdtemp(join(tmpdir(), 'octopus-checkout-'))
+  })
+  afterEach(async () => {
+    await rm(checkout, { recursive: true, force: true })
+  })
+
+  function resolve(
+    choice: { preferLocal: boolean; trusted: boolean } = TRUSTED,
+    exec: GitExec = git
+  ): ReturnType<typeof resolveCarry> {
+    return resolveCarry(cwd, checkout, 'planner', exec, choice, root)
+  }
+
+  it("carries the project's own list when the worktree states none", async () => {
+    await writeCarryList('planner', '.env\n', root)
+
+    await expect(resolve()).resolves.toEqual([{ path: '.env', from: null }])
+  })
+
+  it('adds the lines the repository states that git ignores in the worktree, in one ask', async () => {
+    await writeCarryList('planner', '.env\n', root)
+    await put('.gitignore', '*.key\nlocal.yml\n')
+    await put('.octopus/carry', 'config/master.key\nnotes.txt\nlocal.yml\n')
+
+    await expect(resolve()).resolves.toEqual([
+      { path: '.env', from: null },
+      { path: 'config/master.key', from: null },
+      { path: 'local.yml', from: null }
+    ])
+  })
+
+  /*
+   * A hostile branch lists `.env` and does not ignore it: the user's real one
+   * would be copied in as a file the next `git add -A` commits.
+   */
+  it('skips a repository line git would commit', async () => {
+    await writeCarryList('planner', '', root)
+    await put('.octopus/carry', '.env\n')
+
+    await expect(resolve()).resolves.toEqual([])
+  })
+
+  /*
+   * `.env = ~/.ssh/id_rsa` from a repository would copy a private key into the
+   * worktree, where the agent reads it. Only where the file lands is taken.
+   */
+  it("takes a repository line's destination and never its source", async () => {
+    await writeCarryList('planner', '', root)
+    await put('.gitignore', '.env\n')
+    await put('.octopus/carry', '.env = ~/.ssh/id_rsa\n')
+
+    await expect(resolve()).resolves.toEqual([{ path: '.env', from: null }])
+  })
+
+  // The user's line says where this machine keeps the file; the repository's
+  // cannot override that.
+  it('lets the local line win on the same path, source and all', async () => {
+    await writeCarryList('planner', '.env = /elsewhere/.env\n', root)
+    await put('.gitignore', '.env\n')
+    await put('.octopus/carry', '.env\n./.env\n')
+
+    await expect(resolve()).resolves.toEqual([{ path: '.env', from: '/elsewhere/.env' }])
+  })
+
+  // macOS is case-insensitive by default: `.ENV` is the same file as `.env`,
+  // and copying it first would beat the user's own source for it.
+  it('lets the local line win over the same path in another case', async () => {
+    await writeCarryList('planner', '.env = /elsewhere/.env\n', root)
+    await put('.gitignore', '.env\n')
+    await put('.octopus/carry', '.ENV\n')
+
+    await expect(resolve()).resolves.toEqual([{ path: '.env', from: '/elsewhere/.env' }])
+  })
+
+  /*
+   * A union, not a replacement: the repository listing `.env` must not drop
+   * the `config/master.key` the user added — the file this list exists for.
+   */
+  it('keeps a line only the project lists', async () => {
+    await writeCarryList('planner', 'config/master.key\n', root)
+    await put('.gitignore', '.env\n')
+    await put('.octopus/carry', '.env\n')
+
+    await expect(resolve()).resolves.toEqual([
+      { path: 'config/master.key', from: null },
+      { path: '.env', from: null }
+    ])
+  })
+
+  it('names a path the repository lists twice once', async () => {
+    await writeCarryList('planner', '', root)
+    await put('.gitignore', '.env\n')
+    await put('.octopus/carry', '.env\n.env\n')
+
+    await expect(resolve()).resolves.toEqual([{ path: '.env', from: null }])
+  })
+
+  /*
+   * Pathspec magic: asked bare, `:(top).env` is answered as `.env` — ignored —
+   * while the file copied would be the literal `:(top).env`, which nothing
+   * ignores.
+   */
+  it('reads a line with pathspec magic as the file it names', async () => {
+    await writeCarryList('planner', '', root)
+    await put('.gitignore', '.env\n')
+    await put('.octopus/carry', ':(top).env\n')
+
+    await expect(resolve()).resolves.toEqual([])
+  })
+
+  /*
+   * A path beyond a tracked symlink is one git refuses to answer for at all,
+   * and in one call that refusal would take every other line with it. Such a
+   * line could only write through the link anyway, so it is dropped first.
+   */
+  it('skips a line through a link in the worktree, and carries the rest', async () => {
+    await writeCarryList('planner', '', root)
+    await put('.gitignore', '*.key\n')
+    await symlink(tmpdir(), join(cwd, 'link'))
+    await run('git', ['add', '.gitignore', 'link'], { cwd })
+    await run('git', ['commit', '-q', '-m', 'link'], { cwd })
+    await put('.octopus/carry', 'link/a.key\nmaster.key\n')
+
+    await expect(resolve()).resolves.toEqual([{ path: 'master.key', from: null }])
+  })
+
+  /*
+   * The file is read from the checkout, and a checkout may track
+   * `leak.txt -> ~/.ssh/id_rsa`. A branch that ignores and lists `leak.txt`
+   * would have the key copied in; a line the user typed is theirs to answer
+   * for, a repository's is not.
+   */
+  it('skips a repository line whose file in the checkout is a link', async () => {
+    await writeCarryList('planner', '', root)
+    const outside = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await writeFile(join(outside, 'id_rsa'), 'KEY\n', 'utf8')
+    await symlink(join(outside, 'id_rsa'), join(checkout, 'leak.txt'))
+    await put('.gitignore', 'leak.txt\n')
+    await put('.octopus/carry', 'leak.txt\n')
+
+    try {
+      await expect(resolve()).resolves.toEqual([])
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  // The same file spelled with a detour, which a raw walk stopped short of.
+  it('skips a repository line that reaches a checkout link through `..`', async () => {
+    await writeCarryList('planner', '', root)
+    const outside = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await writeFile(join(outside, 'id_rsa'), 'KEY\n', 'utf8')
+    await symlink(join(outside, 'id_rsa'), join(checkout, 'leak.txt'))
+    await put('.gitignore', 'leak.txt\n')
+    await put('.octopus/carry', 'x/../leak.txt\n')
+
+    try {
+      await expect(resolve()).resolves.toEqual([])
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  /*
+   * git refuses a whole `check-ignore` over one path inside a submodule. Asked
+   * again line by line, the odd one costs only itself.
+   */
+  it('asks line by line when git refuses the batch, and drops only the line it refuses', async () => {
+    await writeCarryList('planner', '', root)
+    await put('.gitignore', '*.key\n.env\n')
+    await put('sub/f', '')
+    await run('git', ['init', '-q'], { cwd: join(cwd, 'sub') })
+    await run('git', ['add', 'f'], { cwd: join(cwd, 'sub') })
+    await run('git', ['-c', 'user.email=t@e', '-c', 'user.name=T', 'commit', '-qm', 's'], {
+      cwd: join(cwd, 'sub')
+    })
+    await run('git', ['add', 'sub', '.gitignore'], { cwd })
+    // Pathspec magic is read as a name on the second pass too.
+    await put('.octopus/carry', 'sub/a.key\n:(top).env\nmaster.key\n')
+
+    await expect(resolve()).resolves.toEqual([{ path: 'master.key', from: null }])
+  })
+
+  // Any other failure honours no repository line rather than stopping a
+  // workspace from being made or run.
+  it('honours no repository line when git cannot answer', async () => {
+    await writeCarryList('planner', '.env\n', root)
+    await put('.octopus/carry', 'master.key\n')
+    const failing: GitExec = () => Promise.reject(new GitError(['check-ignore'], 'boom', '128'))
+
+    await expect(resolve(TRUSTED, failing)).resolves.toEqual([{ path: '.env', from: null }])
+  })
+
+  /*
+   * A run prepares the worktree's working tree, which the agent writes: it
+   * could add `.octopus/carry` and a `.gitignore` line and have
+   * `.env.production` copied in on the next run. So, like the repository's env
+   * file, its lines wait until the repository is trusted.
+   */
+  it("carries only the project's own list until the repository is trusted", async () => {
+    await writeCarryList('planner', '.env\n', root)
+    await put('.gitignore', '.env.production\n')
+    await put('.octopus/carry', '.env.production\n')
+
+    await expect(resolve({ preferLocal: false, trusted: false })).resolves.toEqual([
+      { path: '.env', from: null }
+    ])
+  })
+
+  // "Use mine instead": the repository's list is not read at all.
+  it("reads only the project's own when the user chose it", async () => {
+    await writeCarryList('planner', '.env\n', root)
+    await put('.gitignore', 'master.key\n')
+    await put('.octopus/carry', 'master.key\n')
+
+    await expect(resolve({ preferLocal: true, trusted: true })).resolves.toEqual([
+      { path: '.env', from: null }
+    ])
+  })
+
+  // Degraded rather than refused, as the live fields are: a bad file in a
+  // branch must not stop the workspace being made.
+  it("falls back to the project's own list through a symlinked .octopus", async () => {
+    await writeCarryList('planner', '.env\n', root)
+    const outside = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await writeFile(join(outside, 'carry'), 'master.key\n', 'utf8')
+    await put('.gitignore', 'master.key\n')
+    await symlink(outside, join(cwd, '.octopus'))
+
+    try {
+      await expect(resolve()).resolves.toEqual([{ path: '.env', from: null }])
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 })

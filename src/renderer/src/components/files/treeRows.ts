@@ -1,7 +1,7 @@
 import type { TreeIndex, TreeNode } from '@core/fileTree.js'
 
 /**
- * Where reading an ignored folder has got to. Absent from the map means it was
+ * Where reading a folder from disk has got to. Absent from the map means it was
  * never asked for, which reads the same as `loading`: an expanded folder asks
  * the moment it is opened.
  */
@@ -30,7 +30,7 @@ export type TreeRow =
       readonly type: 'note'
       readonly key: string
       readonly level: number
-      readonly note: 'loading' | 'failed' | 'truncated'
+      readonly note: 'loading' | 'failed' | 'truncated' | 'empty'
     }
 
 /**
@@ -64,9 +64,9 @@ export function visibleRows(
     })
   }
 
-  // An ignored folder's contents come from disk, and may not be there yet.
+  // A folder read from disk — ignored, or a submodule — may not be read yet.
   const inside = (node: TreeNode, level: number): void => {
-    if (!node.ignored) {
+    if (!node.childrenFromDisk) {
       walk(node.path, level)
       return
     }
@@ -77,7 +77,15 @@ export function visibleRows(
       return
     }
 
+    const before = rows.length
     walk(node.path, level)
+
+    // Most often a submodule never checked out here: with no row under it, the
+    // open folder read as still loading, or as broken.
+    if (rows.length === before) {
+      rows.push({ type: 'note', key: `${node.path}\0note`, level, note: 'empty' })
+      return
+    }
     if (listing.truncated) {
       rows.push({ type: 'note', key: `${node.path}\0note`, level, note: 'truncated' })
     }

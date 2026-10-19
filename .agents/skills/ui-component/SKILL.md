@@ -74,7 +74,8 @@ over its own content.
 ## Check the ready-made classes first
 
 - `.panel` — surface with border and 10px radius;
-- `.composer-ring` — the composer's colour ring and glow;
+- `.composer-ring` — the composer's colour ring and glow, with `.composer-ring-line`
+  as its own first child (the one layer that turns, and only while focused);
 - `.row` / `.row-selected` — list row with hover and selection;
 - `.project-tinted` / `.bubble-sent` / `.tab-selected` — where a project's
   colour turns into a surface;

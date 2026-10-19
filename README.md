@@ -68,8 +68,9 @@ local-only, and is built to one person's taste.
   GitHub — and can add a block of `KEY=value` overrides on top.
 - **Settings that survive the machine.** Scripts, carried files and instructions
   can live in `~/.octopus`, which goes when the disk does, or in the repository
-  itself under `.octopus/`. The repository wins, so a clone works with nothing
-  configured. What it may never carry is a credential: a pull can change what
+  itself under `.octopus/`. The repository wins — for carried files, its list
+  adds to the project's own — so a clone works with nothing configured. What
+  it may never carry is a credential: a pull can change what
   runs and never what it runs against, and a script arriving that way is shown
   before it runs.
 - **The whole pull request, from here.** The right pane shows the diff against
