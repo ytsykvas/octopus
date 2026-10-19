@@ -383,6 +383,12 @@ export type SessionMessagesFn = (
   options: { readonly dir: string }
 ) => Promise<unknown>
 
+/** What a running session is on, as a chat's record answers it. */
+interface InForce {
+  readonly model: string | null
+  readonly effort: EffortChoice
+}
+
 export interface ServiceOptions {
   readonly stateFilePath?: string
   readonly stateTempFilePath?: string
@@ -2685,25 +2691,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     await pushEffort(chatId, before.effort)
   }
 
+  /** The model and effort a chat's record puts in force right now. */
+  function inForce(chat: Chat): InForce {
+    return { model: sessionModel(chat), effort: effortInForce(chat) }
+  }
+
   /**
-   * Commits a change to a chat and answers with the model and effort that were
-   * in force just before it, for `pushModel` and `pushEffort` to compare with.
-   *
-   * Read inside the commit, where the change is decided. Read before it, two
-   * changes in flight both saw the same value: planning switched on and off at
-   * once moved the session onto the plan model, and the second change, finding
-   * the model it wanted equal to what it had read, never sent it back.
+   * Commits a change to a chat and answers with what was in force just before
+   * it, for `pushModel` and `pushEffort` to compare with — read inside the
+   * commit, where the change is decided (`docs/core.md` says what reading it
+   * before did).
    */
   async function changeInForce(
     chatId: string,
     change: (chat: Chat) => Partial<Chat>
-  ): Promise<{ readonly model: string | null; readonly effort: EffortChoice }> {
-    const chat = requireChat(chatId)
-    let before = { model: sessionModel(chat), effort: effortInForce(chat) }
+  ): Promise<InForce> {
+    // A placeholder until the commit runs, which it does before resolving.
+    let before = inForce(requireChat(chatId))
 
     await commit((current) => {
       const latest = requireChat(chatId, current)
-      before = { model: sessionModel(latest), effort: effortInForce(latest) }
+      before = inForce(latest)
       return updateChat(current, chatId, change(latest))
     })
 

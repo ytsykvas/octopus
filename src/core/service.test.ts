@@ -7695,6 +7695,32 @@ describe('the agent chat', () => {
       expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
     })
 
+    // Approval decides inside its commit too: whether planning was on, which
+    // is what hands the work to acceptEdits, and what it moves the session from.
+    it('hands over to acceptEdits when a plan is approved as planning is turned on', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'do the thing' })
+      const requestId = await waitForRequest(events)
+      // In this order: the approval queues its commit without an await first,
+      // so the toggle's lands before it.
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.answerPermission(requestId, 'allow')
+      ])
+      await decision
+
+      expect(service.listChats(workspaceId)[0]).toMatchObject({
+        planMode: false,
+        workingMode: 'acceptEdits'
+      })
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
     it('ends on the effort picked last when two are picked at once', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)

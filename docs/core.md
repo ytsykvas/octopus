@@ -623,7 +623,10 @@ it answers was asked outside the queue.
 
 `createChat` counts against the cap inside its own callback for exactly that
 reason: two presses of the new-tab button landing together would both see room
-against two conversations, and the cap would hold for neither.
+against two conversations, and the cap would hold for neither. And the value a
+change is compared with is a decision too: `changeInForce` reads the model and
+effort in force inside the commit, for the reason the `pushModel` paragraph
+gives.
 
 ### Opening a conversation, and creating another
 
