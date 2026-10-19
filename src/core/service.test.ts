@@ -1235,6 +1235,27 @@ describe('config', () => {
     await expect(accepted).resolves.toMatchObject({ theme: 'dark' })
   })
 
+  // Applied inside the write's turn, so edits made at once all land
+  // (`ConfigEditSchema`).
+  it('keeps every one of several list edits made at once', async () => {
+    await Promise.all([
+      service.editConfig({ kind: 'skillDefault', key: 'review', enabled: false }),
+      service.editConfig({ kind: 'skillDefault', key: 'ship', enabled: false }),
+      service.editConfig({ kind: 'dismissTip', id: 'tabs' })
+    ])
+
+    expect(service.getConfig()).toMatchObject({
+      disabledSkillDefaults: ['review', 'ship'],
+      dismissedTips: ['tabs']
+    })
+  })
+
+  it('answers an edit with the config as it now stands', async () => {
+    await expect(service.editConfig({ kind: 'dismissTip', id: 'tabs' })).resolves.toMatchObject({
+      dismissedTips: ['tabs']
+    })
+  })
+
   // Quitting waits for a write still being made, or the old file survives the
   // last change before Cmd-Q and a temporary file is left beside it.
   it('finishes a config write before it is done shutting down', async () => {
@@ -1249,6 +1270,22 @@ describe('config', () => {
 })
 
 describe('projects', () => {
+  // The config's list edits one layer down, for the same reason.
+  it('keeps both of two list edits made to a project at once', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+
+    // Two switches of the same list: the case a list sent whole got wrong.
+    await Promise.all([
+      service.editProjectById(project.id, { kind: 'skillDefault', key: 'review', enabled: false }),
+      service.editProjectById(project.id, { kind: 'skillDefault', key: 'ship', enabled: false })
+    ])
+
+    // Both, in whichever order the two writes took their turns.
+    expect(service.listProjects()[0]?.disabledSkillDefaults.toSorted()).toEqual(['review', 'ship'])
+  })
+
   it('starts with an empty list', () => {
     expect(service.listProjects()).toHaveLength(0)
   })
@@ -1719,16 +1756,18 @@ describe('env overrides a project adds', () => {
     await service.saveEnvProfile(id, 'default', 'API_KEY=secret\n')
     const workspace = await service.createWorkspaceIn(id)
 
-    await service.updateProjectById(id, { preferLocal: ['project.envFile'] })
-    await service.prepareWorkspace(workspace.id)
+    await service.editProjectById(id, { kind: 'preferLocal', item: 'project.envFile', on: true })
 
+    // Gone at the switch, not at the next preparation — a server already
+    // running goes on reading the old file until then. A file holding nothing
+    // but ours is removed rather than left empty.
+    const left = await readFile(join(workspace.path, '.env.local'), 'utf8').catch(() => '')
+    expect(left).not.toContain('API_KEY')
+
+    await service.prepareWorkspace(workspace.id)
     await expect(readFile(join(workspace.path, '.env'), 'utf8')).resolves.toContain(
       'API_KEY=secret'
     )
-    // Gone, or at least without the block: a file holding nothing but ours is
-    // removed rather than left empty.
-    const left = await readFile(join(workspace.path, '.env.local'), 'utf8').catch(() => '')
-    expect(left).not.toContain('API_KEY')
   })
 
   /*

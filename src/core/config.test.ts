@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   type Config,
   ConfigSchema,
+  ConfigEditSchema,
   createDefaultConfig,
+  editedConfig,
   loadConfig,
   migrateConfig,
   type StoredConfig,
@@ -430,5 +432,63 @@ describe('loading a config from an older version', () => {
     await writeFile(file, JSON.stringify(current), 'utf8')
 
     await expect(loadConfig(file)).resolves.toMatchObject({ settingSources: 'none' })
+  })
+})
+
+// An operation applied to the config as the write finds it — `ConfigEditSchema`.
+describe('editing a list in the config', () => {
+  const config = createDefaultConfig('octo')
+
+  it('switches a skill off by default, and back on', () => {
+    const off = editedConfig(config, { kind: 'skillDefault', key: 'review', enabled: false })
+    expect(off).toEqual({ disabledSkillDefaults: ['review'] })
+
+    const on = editedConfig(
+      { ...config, disabledSkillDefaults: ['review', 'ship'] },
+      { kind: 'skillDefault', key: 'review', enabled: true }
+    )
+    expect(on).toEqual({ disabledSkillDefaults: ['ship'] })
+  })
+
+  it('keeps a tip dismissed once', () => {
+    const once = editedConfig(
+      { ...config, dismissedTips: ['other'] },
+      { kind: 'dismissTip', id: 'tabs' }
+    )
+    expect(once).toEqual({ dismissedTips: ['other', 'tabs'] })
+    expect(
+      editedConfig({ ...config, dismissedTips: ['tabs'] }, { kind: 'dismissTip', id: 'tabs' })
+    ).toEqual({ dismissedTips: ['tabs'] })
+  })
+
+  // By the rule's key, tool and place together: the same tool allowed in two
+  // places is two rows, and removing one must leave the other.
+  it('forgets one standing permission and keeps the rest', () => {
+    const edited = editedConfig(
+      {
+        ...config,
+        alwaysAllowedTools: [
+          { toolName: 'Edit', ruleContent: '/w/docs/**' },
+          { toolName: 'Edit', ruleContent: '/w/src/**' },
+          { toolName: 'WebFetch', ruleContent: null }
+        ]
+      },
+      { kind: 'forgetStanding', rule: { toolName: 'Edit', ruleContent: '/w/docs/**' } }
+    )
+
+    expect(edited).toEqual({
+      alwaysAllowedTools: [
+        { toolName: 'Edit', ruleContent: '/w/src/**' },
+        { toolName: 'WebFetch', ruleContent: null }
+      ]
+    })
+  })
+
+  // Parsed at the boundary: a key and an id end up in a file.
+  it('refuses an edit with an empty name', () => {
+    expect(ConfigEditSchema.safeParse({ kind: 'dismissTip', id: '' }).success).toBe(false)
+    expect(
+      ConfigEditSchema.safeParse({ kind: 'skillDefault', key: '', enabled: true }).success
+    ).toBe(false)
   })
 })

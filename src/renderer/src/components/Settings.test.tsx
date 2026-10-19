@@ -42,6 +42,7 @@ async function renderSettings(overrides: Partial<SettingsProps> = {}): Promise<S
   const props: SettingsProps = {
     config: config(),
     onChange: vi.fn(() => Promise.resolve()),
+    onEdit: vi.fn(() => Promise.resolve()),
     onClose: vi.fn(),
     ...overrides
   }
@@ -412,9 +413,12 @@ describe('Settings', () => {
     if (!first) throw new Error('no way to take an answer back')
     await user.click(first)
 
-    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
-      alwaysAllowedTools: [{ toolName: 'Bash', ruleContent: null }]
+    // The rule to forget, not the list without it (`ConfigEditSchema`).
+    expect(props.onEdit).toHaveBeenCalledExactlyOnceWith({
+      kind: 'forgetStanding',
+      rule: { toolName: 'Edit', ruleContent: null }
     })
+    expect(props.onChange).not.toHaveBeenCalled()
   })
 
   /*
@@ -458,8 +462,9 @@ describe('Settings', () => {
     if (!first) throw new Error('no way to take an answer back')
     await user.click(first)
 
-    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
-      alwaysAllowedTools: [{ toolName: 'Edit', ruleContent: '/w/src/**' }]
+    expect(props.onEdit).toHaveBeenCalledExactlyOnceWith({
+      kind: 'forgetStanding',
+      rule: { toolName: 'Edit', ruleContent: '/w/docs/**' }
     })
   })
 
@@ -790,9 +795,12 @@ describe('the skills section', () => {
     await openSection(user, 'Skills')
     await user.click(await screen.findByRole('switch', { name: 'On by default' }))
 
-    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
-      disabledSkillDefaults: ['review']
+    expect(props.onEdit).toHaveBeenCalledExactlyOnceWith({
+      kind: 'skillDefault',
+      key: 'review',
+      enabled: false
     })
+    expect(props.onChange).not.toHaveBeenCalled()
   })
 })
 

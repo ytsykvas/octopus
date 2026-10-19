@@ -340,9 +340,11 @@ describe('channel table', () => {
     'theme:get',
     'config:get',
     'config:update',
+    'config:edit',
     'projects:list',
     'projects:add',
     'projects:update',
+    'projects:edit',
     'projects:remove',
     'projects:branches',
     'projects:pullRequests',
@@ -499,6 +501,50 @@ describe('theme', () => {
   it('broadcasts the resolved theme when the config changes', async () => {
     await invoke('config:update', { theme: 'dark' })
     expect(bench.broadcasts).toContain('dark')
+  })
+})
+
+describe('editing a list', () => {
+  // The window hears the edited config, as it does an update.
+  it('tells every window the config after an edit', async () => {
+    await invoke('config:edit', { kind: 'dismissTip', id: 'tabs' })
+
+    expect(bench.configBroadcasts.at(-1)).toMatchObject({ dismissedTips: ['tabs'] })
+  })
+
+  it('refuses an edit of a shape it does not know', async () => {
+    await expect(invoke('config:edit', { kind: 'dismissTip', id: '' })).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  // An empty key is one the stored state would take, so only the parse here
+  // can refuse it — which is what this is asserting.
+  it('refuses a project edit the record would have taken', async () => {
+    const projectId = await addProject()
+
+    await expect(
+      invoke('projects:edit', projectId, { kind: 'skillDefault', key: '', enabled: false })
+    ).resolves.toMatchObject({ ok: false })
+    await expect(invoke('projects:list')).resolves.toMatchObject({
+      ok: true,
+      value: [{ disabledSkillDefaults: [] }]
+    })
+  })
+
+  it('applies a project edit', async () => {
+    const projectId = await addProject()
+
+    await invoke('projects:edit', projectId, {
+      kind: 'skillDefault',
+      key: 'review',
+      enabled: false
+    })
+
+    await expect(invoke('projects:list')).resolves.toMatchObject({
+      ok: true,
+      value: [{ disabledSkillDefaults: ['review'] }]
+    })
   })
 })
 

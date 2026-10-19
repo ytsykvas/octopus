@@ -131,6 +131,15 @@ export function standingKey(permission: StandingPermission): string {
     : `${permission.toolName}(${permission.ruleContent})`
 }
 
+/** The answers without one, matched by key: one tool allowed in two places is two rules. */
+export function withoutStanding(
+  permissions: readonly StandingPermission[],
+  removed: StandingPermission
+): StandingPermission[] {
+  const key = standingKey(removed)
+  return permissions.filter((permission) => standingKey(permission) !== key)
+}
+
 /**
  * The directory a rule is certainly about, or null when there is not one.
  *

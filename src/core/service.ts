@@ -107,7 +107,9 @@ import type { ScriptValues } from './scriptEnv.js'
 import { type UsageReport, type UsageWindows, windowsFrom } from './usage.js'
 import {
   type Config,
+  type ConfigEdit,
   ConfigSchema,
+  editedConfig,
   loadConfig,
   saveConfig,
   type SettingSourceName,
@@ -299,6 +301,8 @@ import {
   removeChat,
   removeProject,
   type ProjectPatch,
+  type ProjectEdit,
+  editProject,
   removeWorkspace as removeWorkspaceRecord,
   saveState,
   skillsRemembered,
@@ -677,12 +681,16 @@ export interface OctopusService {
   updateConfig(
     patch: Partial<Omit<Config, 'version' | 'deviceId' | 'installedAt'>>
   ): Promise<Config>
+  /** Changes one list in the config, applied to it as the write finds it (`ConfigEdit`). */
+  editConfig(edit: ConfigEdit): Promise<Config>
   listProjects(): readonly Project[]
   addProjectFromPath(path: string): Promise<Project>
   /** Clones a GitHub repository into `destination`, then adds it as a project. */
   addProjectFromGitHub(repository: RemoteRepository, destination: string): Promise<Project>
   listRemoteRepositories(): Promise<RepositoryList>
   updateProjectById(projectId: string, patch: ProjectPatch): Promise<void>
+  /** Changes one list of a project, applied to it as the write finds it (`ProjectEdit`). */
+  editProjectById(projectId: string, edit: ProjectEdit): Promise<void>
   removeProjectById(projectId: string): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
   listProjectBranches(projectId: string): Promise<string[]>
@@ -1782,6 +1790,35 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return (await resolveBase(makeExec(project.repoPath), baseBranch)).ref
     } catch {
       return baseBranch
+    }
+  }
+
+  /**
+   * Commits a change to a project, and takes the env block out of the file the
+   * project used to name.
+   *
+   * Nothing else would ever revisit that file: `applyEnvOverrides` only touches
+   * the file named now, so every existing workspace kept a second, live block —
+   * credentials and a `$OCTOPUS_PORT` frozen at the moment of the switch — in a
+   * file its stack very likely still reads. Every write that can move the file
+   * in effect comes through here, a patch and an edit alike.
+   */
+  async function commitProject(
+    projectId: string,
+    change: (current: State) => State
+  ): Promise<void> {
+    // The file in effect, before and after: with the repository stating one,
+    // editing the project's own changes nothing on disk until it is chosen.
+    const wasEnvFile = (await liveProject(requireProject(projectId))).envFile
+
+    await commit(change)
+
+    // After the commit, so a rejected change leaves the old file alone.
+    const { envFile } = await liveProject(requireProject(projectId))
+    if (envFile !== wasEnvFile) {
+      for (const workspace of workspacesOfProject(state, projectId)) {
+        await removeEnvBlock(workspace.path, wasEnvFile)
+      }
     }
   }
 
@@ -3906,6 +3943,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return applyConfig(() => patch)
     },
 
+    editConfig(edit) {
+      return applyConfig((current) => editedConfig(current, edit))
+    },
+
     listProjects() {
       return state.projects
     },
@@ -3953,28 +3994,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await assertBranchExists(makeExec(project.repoPath), patch.baseBranch)
       }
 
-      // The file in effect, before and after: with the repository stating one,
-      // editing the project's own changes nothing on disk until it is chosen.
-      const wasEnvFile = (await liveProject(project)).envFile
+      await commitProject(projectId, (current) => updateProject(current, projectId, applied))
+    },
 
-      await commit((current) => updateProject(current, projectId, applied))
-
-      /*
-       * The block in the file the project used to name.
-       *
-       * Nothing else would ever revisit it: `applyEnvOverrides` only touches
-       * the file named now, so every existing workspace kept a second, live
-       * block — credentials and a `$OCTOPUS_PORT` frozen at the moment of the
-       * switch — in a file its stack very likely still reads.
-       *
-       * After the commit, so a rejected patch leaves the old file alone.
-       */
-      const { envFile } = await liveProject(requireProject(projectId))
-      if (envFile !== wasEnvFile) {
-        for (const workspace of workspacesOfProject(state, projectId)) {
-          await removeEnvBlock(workspace.path, wasEnvFile)
-        }
-      }
+    async editProjectById(projectId, edit) {
+      // Through the same path as a patch: "Use mine instead" for the env file
+      // is an edit, and it moves the file in effect just as a patch does.
+      await commitProject(projectId, (current) => editProject(current, projectId, edit))
     },
 
     async listProjectBranches(projectId) {

@@ -40,6 +40,7 @@ async function renderDialog(
   const props: ProjectSettingsProps = {
     project: project(),
     onUpdate: vi.fn(() => Promise.resolve(true)),
+    onEdit: vi.fn(() => Promise.resolve(true)),
     onRemove: vi.fn(),
     onImported: vi.fn(),
     onClose: vi.fn(),
@@ -1247,6 +1248,7 @@ describe('ProjectSettings', () => {
     const props: ProjectSettingsProps = {
       project: project(),
       onUpdate: vi.fn(() => Promise.resolve(true)),
+      onEdit: vi.fn(() => Promise.resolve(true)),
       onRemove: vi.fn(),
       onImported: vi.fn(),
       onClose: vi.fn()
@@ -1333,7 +1335,11 @@ describe('ProjectSettings', () => {
     expect(screen.getByText(/From \.octopus\/scripts\/setup\.sh/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
-    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['script.setup'] })
+    expect(props.onEdit).toHaveBeenCalledWith({
+      kind: 'preferLocal',
+      item: 'script.setup',
+      on: true
+    })
     await waitFor(() => {
       expect(window.octopus.projects.sources).toHaveBeenCalledTimes(2)
     })
@@ -1408,7 +1414,7 @@ describe('ProjectSettings', () => {
       }
     ])
     const props = await renderDialog({
-      project: project({ preferLocal: ['script.run', 'instruction.review'] })
+      project: project({ preferLocal: ['script.run'] })
     })
     const user = userEvent.setup()
 
@@ -1416,7 +1422,11 @@ describe('ProjectSettings', () => {
 
     expect(await screen.findByText('Nothing runs')).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
-    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['instruction.review'] })
+    expect(props.onEdit).toHaveBeenCalledWith({
+      kind: 'preferLocal',
+      item: 'script.run',
+      on: false
+    })
   })
 
   it("offers no switch for a script that is the project's own", async () => {
@@ -1524,7 +1534,11 @@ describe('ProjectSettings', () => {
     await openSection(user, 'Instructions')
     await user.click(await screen.findByRole('switch', { name: /Use mine instead/ }))
 
-    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['instruction.review'] })
+    expect(props.onEdit).toHaveBeenCalledWith({
+      kind: 'preferLocal',
+      item: 'instruction.review',
+      on: true
+    })
   })
 
   /*
@@ -1553,7 +1567,11 @@ describe('ProjectSettings', () => {
     expect(await screen.findByText('The repository sets develop.')).toBeInTheDocument()
     expect(screen.getByText(/not trusted yet/)).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
-    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['project.baseBranch'] })
+    expect(props.onEdit).toHaveBeenCalledWith({
+      kind: 'preferLocal',
+      item: 'project.baseBranch',
+      on: true
+    })
   })
 
   it('says nothing under the env file when the repository sets none', async () => {
@@ -1588,7 +1606,11 @@ describe('ProjectSettings', () => {
 
     expect(await screen.findByText(/git would commit that file/)).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
-    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['project.envFile'] })
+    expect(props.onEdit).toHaveBeenCalledWith({
+      kind: 'preferLocal',
+      item: 'project.envFile',
+      on: true
+    })
   })
 
   it('says when the repository project file could not be read', async () => {
@@ -1644,7 +1666,7 @@ describe('ProjectSettings', () => {
     ).toBeDisabled()
 
     await user.click(screen.getByRole('switch', { name: /: Server script/ }))
-    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['script.run'] })
+    expect(props.onEdit).toHaveBeenCalledWith({ kind: 'preferLocal', item: 'script.run', on: true })
 
     await user.click(screen.getByRole('button', { name: 'Open Base branch' }))
     expect(screen.getByRole('button', { name: 'Git' })).toHaveAttribute('aria-current')
@@ -1751,8 +1773,10 @@ describe('the skills section', () => {
     await openSection(user, 'Skills')
     await user.click(await screen.findByRole('switch', { name: 'On by default' }))
 
-    expect(props.onUpdate).toHaveBeenCalledExactlyOnceWith({
-      disabledSkillDefaults: ['deploy']
+    expect(props.onEdit).toHaveBeenCalledExactlyOnceWith({
+      kind: 'skillDefault',
+      key: 'deploy',
+      enabled: false
     })
   })
 

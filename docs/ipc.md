@@ -28,11 +28,12 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 
 ### Theme and config
 
-| Channel         | Arguments | Notes                                                           |
-| --------------- | --------- | --------------------------------------------------------------- |
-| `theme:get`     | —         | resolves `system` against the OS                                |
-| `config:get`    | —         |                                                                 |
-| `config:update` | `patch`   | broadcasts `theme:changed` and `config:changed` to every window |
+| Channel         | Arguments | Notes                                                                                                                                                                  |
+| --------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `theme:get`     | —         | resolves `system` against the OS                                                                                                                                       |
+| `config:get`    | —         |                                                                                                                                                                        |
+| `config:update` | `patch`   | broadcasts `theme:changed` and `config:changed` to every window                                                                                                        |
+| `config:edit`   | `edit`    | one list changed by an operation (`ConfigEditSchema`): a skill off or on by default, a tip dismissed, a standing permission forgotten. Broadcasts like `config:update` |
 
 ### Projects
 
@@ -41,7 +42,8 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `projects:list`          | —             |                                                                                                                                                                                                                                                                                                                                             |
 | `projects:add`           | —             | opens a directory picker; `null` means cancelled                                                                                                                                                                                                                                                                                            |
 | `projects:addFromGitHub` | `repository`  | asks for a destination the first time, then remembers it                                                                                                                                                                                                                                                                                    |
-| `projects:update`        | `id`, `patch` | patch validated with `ProjectPatchSchema`                                                                                                                                                                                                                                                                                                   |
+| `projects:update`        | `id`, `patch` | patch validated with `ProjectPatchSchema`. Not for the lists below, which have `projects:edit`                                                                                                                                                                                                                                              |
+| `projects:edit`          | `id`, `edit`  | one list changed by an operation (`ProjectEditSchema`): a skill off or on by default, and `preferLocal` — "Use mine instead" for one setting                                                                                                                                                                                                |
 | `projects:remove`        | `id`          | runs each workspace's cleanup script, then deletes the workspaces, their branches, and the project's directory under the data root                                                                                                                                                                                                          |
 | `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                                                                                                                                                                                                                                                                     |
 | `projects:pullRequests`  | `id`          | every branch of the repository that has a request, in one call — the workspace list marks each row, and a read per row would be a network call per row                                                                                                                                                                                      |
@@ -98,9 +100,10 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `skills:forWorkspace` | `workspaceId`              | the same before the first message. `openChat` is lazy, so a fresh workspace has no conversation to ask about — and that is exactly where the panel is opened first                                                                                                                                                                                                                                                                                                        |
 | `skills:setForChat`   | `chatId`, `key`, `enabled` | switches one, and tells a running session at once rather than at its next start                                                                                                                                                                                                                                                                                                                                                                                           |
 
-The default marks need no channel of their own: they are a field on the config
-and a field on the project, so they travel on `config:update` and
-`projects:update` like any other setting.
+The default marks travel on `config:edit` and `projects:edit`, as one switch at
+a time rather than the finished list: a list the window built from its own copy
+was a snapshot, and two switches flipped inside one round trip wrote the first
+one back out.
 
 ### Plugins
 

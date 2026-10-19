@@ -63,3 +63,10 @@ export function isSkillName(value: string): boolean {
 export function skillKey(name: string): string {
   return name
 }
+
+/**
+ * A key as it arrives from the window — an answer about a skill of any source,
+ * so not held to `SkillNameSchema`, whose pattern is about a directory we own.
+ * Bounded because it is written into the config and the state.
+ */
+export const SkillKeySchema = z.string().min(1).max(200)

@@ -10,7 +10,7 @@
 import type { OpenDialogOptions, WebContents } from 'electron'
 import { z } from 'zod'
 
-import type { Config } from '../core/config.js'
+import { type Config, ConfigEditSchema } from '../core/config.js'
 import {
   type AccountKind,
   BUTTON_TIMEOUT_MS,
@@ -49,7 +49,7 @@ import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
-import { SkillNameSchema } from '../core/skillNames.js'
+import { SkillKeySchema, SkillNameSchema } from '../core/skillNames.js'
 import { FormValuesSchema } from '../core/elicitation.js'
 import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
 import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
@@ -63,7 +63,7 @@ import type {
   OctopusService,
   WorkspaceStatusEvent
 } from '../core/service.js'
-import { ProjectPatchSchema } from '../core/store.js'
+import { ProjectEditSchema, ProjectPatchSchema } from '../core/store.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
@@ -189,12 +189,8 @@ const MentionQuerySchema = z.string().max(256)
  * somewhere it had already been told about once and never showed. Any config
  * write added in main from now on gets both by construction.
  */
-async function writeConfig(
-  service: OctopusService,
-  host: IpcHost,
-  patch: Partial<Config>
-): Promise<Config> {
-  const updated = await service.updateConfig(patch)
+async function writeConfig(host: IpcHost, write: () => Promise<Config>): Promise<Config> {
+  const updated = await write()
 
   host.broadcastTheme(resolveTheme(updated.theme, host.prefersDark()))
   host.broadcastConfig(updated)
@@ -233,7 +229,13 @@ export function registerIpc(
   host.handle('config:get', () => attempt(() => service.getConfig()))
 
   host.handle('config:update', (_event, patch: Partial<Config>) =>
-    attempt(() => writeConfig(service, host, patch))
+    attempt(() => writeConfig(host, () => service.updateConfig(patch)))
+  )
+
+  // Validated: the key, the id and the rule end up in the config file, and an
+  // edit of the wrong shape would otherwise reach `editedConfig` unread.
+  host.handle('config:edit', (_event, edit: unknown) =>
+    attempt(() => writeConfig(host, () => service.editConfig(ConfigEditSchema.parse(edit))))
   )
 
   host.handle('projects:list', () => attempt(() => service.listProjects()))
@@ -288,6 +290,10 @@ export function registerIpc(
   // and its base branch reaches a git command.
   host.handle('projects:update', (_event, projectId: string, patch: unknown) =>
     attempt(() => service.updateProjectById(projectId, ProjectPatchSchema.parse(patch)))
+  )
+
+  host.handle('projects:edit', (_event, projectId: string, edit: unknown) =>
+    attempt(() => service.editProjectById(projectId, ProjectEditSchema.parse(edit)))
   )
 
   host.handle('projects:branches', (_event, projectId: string) =>
@@ -664,11 +670,7 @@ export function registerIpc(
 
   host.handle('skills:setForChat', (_event, chatId: string, key: unknown, enabled: unknown) =>
     attempt(() =>
-      service.setChatSkill(
-        chatId,
-        z.string().min(1).max(200).parse(key),
-        z.boolean().parse(enabled)
-      )
+      service.setChatSkill(chatId, SkillKeySchema.parse(key), z.boolean().parse(enabled))
     )
   )
 
@@ -1193,6 +1195,6 @@ async function resolveCloneDirectory(
   const [chosen] = picked.filePaths
   if (picked.canceled || chosen === undefined) return null
 
-  await writeConfig(service, host, { cloneDirectory: chosen })
+  await writeConfig(host, () => service.updateConfig({ cloneDirectory: chosen }))
   return chosen
 }

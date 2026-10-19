@@ -12,10 +12,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DEFAULT_EFFORT } from '@core/chats.js'
-import type { Config } from '@core/config.js'
+import type { Config, ConfigEdit } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
 
-import type { Failure } from '../../preload/index.js'
+import type { Failure, Result } from '../../preload/index.js'
 
 import { Button } from './components/Button.js'
 import { DropdownMenu } from './components/DropdownMenu.js'
@@ -398,9 +398,9 @@ export function App(): React.JSX.Element {
     }
   }, [config, i18n])
 
-  const updateConfig = useCallback(
-    async (patch: Partial<Config>) => {
-      const result = await window.octopus.config.update(patch)
+  /** Takes the config a write answered with, or says why there was none. */
+  const settleConfig = useCallback(
+    (result: Result<Config>) => {
       if (result.ok) {
         setConfig(result.value)
       } else {
@@ -408,6 +408,21 @@ export function App(): React.JSX.Element {
       }
     },
     [describeFailure]
+  )
+
+  const updateConfig = useCallback(
+    async (patch: Partial<Config>) => {
+      settleConfig(await window.octopus.config.update(patch))
+    },
+    [settleConfig]
+  )
+
+  // A list in the config, as an operation (`ConfigEditSchema` says why).
+  const editConfig = useCallback(
+    async (edit: ConfigEdit) => {
+      settleConfig(await window.octopus.config.edit(edit))
+    },
+    [settleConfig]
   )
 
   if (config && config.rightPanelOpen !== storedPanelOpen) {
@@ -1029,9 +1044,7 @@ export function App(): React.JSX.Element {
               }}
               dismissedTips={dismissedTips}
               onDismissTip={(id) => {
-                // No duplicate to guard against: a tip already in the list is
-                // never on screen to be answered twice.
-                void updateConfig({ dismissedTips: [...dismissedTips, id] })
+                void editConfig({ kind: 'dismissTip', id })
               }}
             />
           )}
@@ -1145,6 +1158,7 @@ export function App(): React.JSX.Element {
         <Settings
           config={config}
           onChange={updateConfig}
+          onEdit={editConfig}
           initialSection={settingsSection}
           onClose={() => {
             setSettingsSection(null)
@@ -1175,6 +1189,7 @@ export function App(): React.JSX.Element {
             (workspace) => workspace.projectId === editingProject.id
           )}
           onUpdate={(patch) => projects.update(editingProject.id, patch)}
+          onEdit={(edit) => projects.edit(editingProject.id, edit)}
           onImported={() => {
             void projects.refresh()
           }}
