@@ -73,7 +73,8 @@ async function kindOf(folder: string, name: string, linked: boolean): Promise<Tr
 /**
  * The entries of a folder inside the workspace, read from disk.
  *
- * Asked only of folders git names whole — ignored ones and submodules;
+ * Asked only of folders git names whole — ignored ones, submodules and nested
+ * repositories;
  * everything else the tree already has from git — which is why this walks the
  * disk rather than asking git: git has nothing to say about the inside of
  * `node_modules`, or of a submodule.

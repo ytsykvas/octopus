@@ -29,9 +29,10 @@ export type TreeEntryKind = 'file' | 'directory'
 /**
  * One path the tree knows about.
  *
- * `directory` is only ever a folder git names whole — an ignored one, or a
- * submodule — and its contents are read from disk when it is opened. Every
- * other folder is implied by the files under it, which is how git lists them.
+ * `directory` is only ever a folder git names whole — an ignored one, a
+ * submodule, or a repository nested in the worktree — and its contents are
+ * read from disk when it is opened. Every other folder is implied by the files
+ * under it, which is how git lists them.
  */
 export interface TreeEntry {
   readonly path: string
@@ -72,10 +73,10 @@ export interface TreeNode {
   readonly ignored: boolean
   /**
    * Whether its children come from disk when it is opened, rather than from
-   * git's listings: a folder git ignores whole, a submodule, and every folder
-   * read inside either. Apart from `ignored` because a submodule is read that
-   * way and is not greyed — nothing inside it is the outer repository's to
-   * leave out.
+   * git's listings: a folder git ignores whole, a submodule or a nested
+   * repository, and every folder read inside one. Apart from `ignored` because
+   * a submodule or a nested repository is read that way and is not greyed —
+   * nothing inside it is the outer repository's to leave out.
    */
   readonly childrenFromDisk: boolean
 }
@@ -164,7 +165,9 @@ export function parseStatus(output: string): {
     if (record.length < 4) continue
 
     const code = record.slice(0, 2)
-    statuses[record.slice(3)] = statusOf(code)
+    // A repository nested in the worktree is named `nested/`; its row is the
+    // folder's.
+    statuses[record.slice(3).replace(/\/$/, '')] = statusOf(code)
 
     if (!/[RC]/.test(code)) continue
     const from = records.next()
@@ -201,6 +204,18 @@ export function parseStaged(output: string): TreeEntry[] {
   return [...entries.values()]
 }
 
+/** A `git ls-files --others -z` listing, where a folder comes back as `name/`. */
+function othersIn(output: string, ignored: boolean): TreeEntry[] {
+  return output
+    .split('\0')
+    .filter((path) => path !== '')
+    .map((path) =>
+      path.endsWith('/')
+        ? { path: path.slice(0, -1), kind: 'directory', ignored }
+        : { path, kind: 'file', ignored }
+    )
+}
+
 /**
  * Reads `git ls-files --others --ignored --exclude-standard --directory -z`.
  *
@@ -209,14 +224,20 @@ export function parseStaged(output: string): TreeEntry[] {
  * disk only if somebody opens it.
  */
 export function parseIgnored(output: string): TreeEntry[] {
-  return output
-    .split('\0')
-    .filter((path) => path !== '')
-    .map((path) =>
-      path.endsWith('/')
-        ? { path: path.slice(0, -1), kind: 'directory', ignored: true }
-        : { path, kind: 'file', ignored: true }
-    )
+  return othersIn(output, true)
+}
+
+/**
+ * Reads `git ls-files --others --exclude-standard -z`: the untracked files, and
+ * a repository nested in the worktree as a folder.
+ *
+ * git never looks inside a nested repository — cloned or initialised there,
+ * not added as a submodule — and names it `nested/`. Taken as a file path,
+ * that drew a folder holding a row with no name. It is a folder read from disk,
+ * the way a submodule is.
+ */
+export function parseUntracked(output: string): TreeEntry[] {
+  return othersIn(output, false)
 }
 
 function hidden(path: string): boolean {
@@ -464,12 +485,8 @@ export async function readFileTree(exec: GitExec): Promise<FileTreeSnapshot> {
   ])
 
   const { statuses, movedAway } = parseStatus(status)
-  const untracked = others
-    .split('\0')
-    .filter((path) => path !== '')
-    .map((path): TreeEntry => ({ path, kind: 'file', ignored: false }))
   const { entries, truncated } = collectTreeEntries(
-    [...parseStaged(staged), ...untracked],
+    [...parseStaged(staged), ...parseUntracked(others)],
     parseIgnored(ignored),
     statuses,
     movedAway

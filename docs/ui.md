@@ -2479,7 +2479,11 @@ submodule git reports as changed, by a new commit or an edit inside, carries
 that status on the folder's row. A workspace's submodules are often not checked
 out — `git worktree add` leaves every one an empty folder — and any folder read
 from disk with nothing in it says so on a line of its own, rather than opening
-onto nothing that reads as still loading.
+onto nothing that reads as still loading. A repository cloned or initialised
+inside the worktree without being added as a submodule is the same kind of
+folder: git names it `nested/` among the untracked and never looks inside, and
+taken as a path that drew a folder holding a row with no name. It now opens like
+a submodule, ungreyed, with the untracked mark on its own row.
 
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when
