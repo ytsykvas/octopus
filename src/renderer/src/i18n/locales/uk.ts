@@ -13,6 +13,7 @@ export const uk: Translation = {
 
   sidebar: {
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
+    pick: 'Оберіть проєкт на смузі ліворуч.',
     addProject: 'Додати репозиторій',
     projectDone: 'Агент тут закінчив, поки вас не було',
     addFromDisk: 'З диска…',
@@ -837,9 +838,9 @@ export const uk: Translation = {
 
     modeToggle: 'Дозволи: {{mode}}',
     modeDefault: 'Питати',
-    modeAcceptEdits: 'Auto mode',
+    modeAcceptEdits: 'Accept edits',
     planMode: 'План',
-    modeCycle: 'Змінити режим — Питати, Auto mode, План (Shift+Tab)',
+    modeCycle: 'Змінити режим — Питати, Accept edits, План (Shift+Tab)',
 
     toolSteps_one: '{{count}} дія',
     toolSteps_few: '{{count}} дії',
@@ -860,7 +861,7 @@ export const uk: Translation = {
     planEditDone: 'Назад до плану',
     planEditLabel: 'План у форматі markdown',
     planEdited: 'План у вашій редакції',
-    planExecuteHint: 'Виконується в Auto mode — зміни вносяться без запитів.',
+    planExecuteHint: 'Виконується в режимі Accept edits — зміни у файлах вносяться без запитів.',
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
     questionTitle: 'Агент запитує',
@@ -959,7 +960,7 @@ export const uk: Translation = {
     noProjectsBody:
       'Додайте його з цього комп’ютера або клонуйте з GitHub. Усередині нього створюються воркспейси — кожен з власною гілкою, текою й сесією агента.',
     noSelectionTitle: 'Над яким проєктом сьогодні?',
-    noSelectionBody: 'Оберіть зі списку ліворуч або додайте ще один репозиторій.',
+    noSelectionBody: 'Оберіть проєкт на смузі ліворуч або додайте ще один репозиторій.',
     firstWorkspaceTitle: 'Перший воркспейс — за один клік',
     firstWorkspaceBody:
       'Воркспейс — це копія проєкту на власній гілці, з власною текою та власною сесією агента. Те, що ви робите в одному, не зачіпає інші.',
@@ -1033,9 +1034,9 @@ export const uk: Translation = {
     permissionAsk: 'Питати',
     permissionAskHint:
       'Читання відбувається мовчки; запис файлу чи запуск команди чекає на відповідь.',
-    permissionAcceptEdits: 'Правки без питань',
+    permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
-      'Зміни у файлах проходять без запиту. Команди все одно чекають — вони виходять за межі робочого дерева.',
+      'Зміни у файлах проходять без запиту, прості файлові команди теж (mkdir, mv, rm). Решта команд чекає.',
 
     alwaysAllowed: 'Відповідь «завжди»',
     alwaysAllowedHint:
