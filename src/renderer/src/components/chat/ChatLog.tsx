@@ -32,6 +32,7 @@ import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
 import { DisclosureChevron } from '../Disclosure.js'
+import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
@@ -648,6 +649,10 @@ function NoteCard({
 }: {
   readonly note: Extract<MessageBlock, { kind: 'note' }>
 }): React.JSX.Element {
+  // In its file's colours, as the viewer and the diff draw the same lines: a
+  // few lines out of context are where colour helps most.
+  const { lines, tokens } = useColouredText(note.path, note.quote)
+
   return (
     <div className="border-line bg-canvas text-ink min-w-0 overflow-hidden rounded-[var(--radius-control)] border">
       <p className="text-ink-soft border-line flex min-w-0 items-center gap-1.5 border-b px-2 py-1 font-mono text-[11px]">
@@ -658,8 +663,8 @@ function NoteCard({
         {note.suffix !== null && <span className="text-ink-faint shrink-0">{note.suffix}</span>}
       </p>
       {/* Not wrapped: code read with its lines broken is code misread. */}
-      <pre className="text-ink-soft overflow-x-auto px-2 py-1 font-mono text-[11px] leading-[16px] whitespace-pre">
-        {note.quote}
+      <pre className="diff-code text-ink overflow-x-auto px-2 py-1 font-mono text-[11px] leading-[16px] whitespace-pre">
+        <ColouredLines lines={lines} tokens={tokens} />
       </pre>
       {note.text !== '' && <p className="border-line border-t px-2 py-1">{note.text}</p>}
     </div>
