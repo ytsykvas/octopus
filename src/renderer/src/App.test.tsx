@@ -1001,6 +1001,18 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Changes' })).toBeInTheDocument()
   })
 
+  // The sidebar beside it always names the project, so the bar gives its
+  // room to the directory.
+  it('shows the project directory in the title bar without repeating its name', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    const bar = screen.getByRole('banner')
+
+    expect(await within(bar).findByText(PLANNER.repoPath)).toBeInTheDocument()
+    expect(within(bar).queryByText('planner')).not.toBeInTheDocument()
+  })
+
   describe('Run and Stop in the title bar', () => {
     /** Opens the planner project on anna, with the given scripts for its workspaces. */
     async function onAnna(
