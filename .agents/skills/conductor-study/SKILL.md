@@ -35,8 +35,8 @@ Two practical habits:
 
 ## Conductor is compiled — say what you actually know
 
-`/Applications/Conductor.app/Contents/MacOS/conductor` is a 66 MB Mach-O arm64
-executable. There is no readable source. Anyone who claims to know how a Conductor
+`/Applications/Conductor.app/Contents/MacOS/conductor` is a 73 MB Mach-O arm64
+executable (a Tauri shell). There is no readable source. Anyone who claims to know how a Conductor
 feature is implemented is, in most cases, guessing.
 
 So label every claim by how it is known. Three tiers, and the reader should always be
@@ -59,7 +59,7 @@ suggest they check the behaviour in the running app.
 
 ## Check freshness before answering
 
-The references were written against **Conductor 0.80.0**, docs fetched **2026-08-12**.
+The references were written against **Conductor 0.91.0**, docs fetched **2026-10-19**.
 Conductor ships often. Before answering, confirm the version still matches:
 
 ```bash
@@ -71,7 +71,9 @@ Conductor ships often. Before answering, confirm the version still matches:
 - Newer → still use them, they will mostly hold, but say plainly which version they
   describe and that the answer may have drifted. For anything load-bearing, re-check
   the live source before answering. (This is not hypothetical: 0.79.0 → 0.80.0 moved
-  the checkpointer's scratch index out of `$TMPDIR` and into the git dir.)
+  the checkpointer's scratch index out of `$TMPDIR` and into the git dir, and
+  0.80.0 → 0.91.0 replaced its `reset --hard` restore and changed how a stopped run
+  script is killed.)
 - Not installed → the bundle sources are unavailable. Docs still work. Say which half
   of the evidence you lost.
 
@@ -79,15 +81,15 @@ Conductor ships often. Before answering, confirm the version still matches:
 
 In descending order of authority. Prefer the specific over the general.
 
-| Source                                                    | Holds                                                                    | Access                            |
-| --------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------- |
-| `references/*.md` here                                    | Distilled from everything below                                          | Read first                        |
-| `https://www.conductor.build/llms-full.txt`               | **Every docs page as one markdown file** (~6.4k lines)                   | `curl`, then grep for the section |
-| `/Applications/Conductor.app/Contents/Resources/bin/*.sh` | Real implementation of checkpoints, spotlight sync, git-busy detection   | Read directly                     |
-| `.../Resources/conductor-skill/skills/conductor/SKILL.md` | The skill Conductor injects into agent sessions                          | Read directly                     |
-| `https://conductor.build/schemas/settings.schema.json`    | Full user-settings surface (also `settings.repo.schema.json`)            | `curl`                            |
-| `~/.conductor/settings.toml`, `~/.conductor/projects/`    | This user's own Conductor configuration                                  | Read directly                     |
-| `.../bin/.internal/conductor-runtime`                     | Compiled — but `strings` yields type names, CLI invocations, config keys | `strings -a … \| grep`            |
+| Source                                                    | Holds                                                                  | Access                            |
+| --------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------- |
+| `references/*.md` here                                    | Distilled from everything below                                        | Read first                        |
+| `https://www.conductor.build/llms-full.txt`               | **Every docs page as one markdown file** (~6.7k lines)                 | `curl`, then grep for the section |
+| `/Applications/Conductor.app/Contents/Resources/bin/*.sh` | Real implementation of checkpoints, spotlight sync, git-busy detection | Read directly                     |
+| `.../Resources/conductor-skill/skills/conductor/SKILL.md` | The skill Conductor injects into agent sessions                        | Read directly                     |
+| `https://conductor.build/schemas/settings.schema.json`    | Full user-settings surface (also `settings.repo.schema.json`)          | `curl`                            |
+| `~/.conductor/settings.toml`, `~/.conductor/projects/`    | This user's own Conductor configuration                                | Read directly                     |
+| `.../bin/.internal/conductor-runtime`                     | A Bun-compiled JS bundle — `strings` yields near-source minified code  | `strings -a … \| grep`            |
 
 `llms-full.txt` is the single best source and it is one fetch. When the references
 don't cover a question, go there before anything else — grep it for `^# ` to see every
@@ -95,11 +97,12 @@ page title, then read the section.
 
 ### The binary is not a wall
 
-`conductor-runtime` is compiled, but symbol names survive compilation. Grepping its
-strings is how you learn that the four harnesses are `ClaudeAgentRunner`,
-`CodexAgentRunner`, `CursorAgentRunner` and `AcpAgentRunner` behind an `agentType`
-discriminator, or which flags they pass to the `claude` CLI. That is real evidence and
-it belongs in an answer.
+`conductor-runtime` is compiled, but it is a Bun bundle, so names — and most of the
+minified code — survive. Grepping its strings is how you learn that the four harnesses
+are `ClaudeAgentRunner`, `CodexAgentRunner`, `CursorAgentRunner` and `AcpAgentRunner`
+behind an `agentType` discriminator, or which Agent SDK options the Claude runner
+passes. That is real evidence and it belongs in an answer — described in our own
+words, like everything else under "The boundary".
 
 Read it carefully, though. A symbol name is **observed**; what the type _does_ is
 **inferred**, and a string in a binary may be dead code, a stale experiment, or a
@@ -129,8 +132,9 @@ stops there. Measured against runs with no skill at all, that is the only way th
 makes things _worse_. Two habits keep it from happening.
 
 **Check what we already have before proposing to build it.** Conductor built its
-checkpoints on raw git because it drives four agent CLIs and has no SDK to lean on. We
-have one — and `@anthropic-ai/claude-agent-sdk` already ships `enableFileCheckpointing`,
+file checkpoints on raw git because one snapshot has to serve four harnesses and
+Spotlight; even its Claude runner, which does sit on the Agent SDK, shows no sign of the SDK's
+file checkpointing. We have one harness — and `@anthropic-ai/claude-agent-sdk` already ships `enableFileCheckpointing`,
 `rewindFiles`, `forkSession` and `resumeSessionAt`. Grep `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts`
 before recommending we reimplement anything Conductor had to build from scratch. Their
 constraints are not ours, and copying a workaround for a problem we don't have is the

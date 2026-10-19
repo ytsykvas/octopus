@@ -1,6 +1,6 @@
 # Conductor: the interface
 
-_As of Conductor 0.80.0. **Documented** unless marked. Conductor's docs are text-heavy
+_As of Conductor 0.91.0. **Documented** unless marked. Conductor's docs are text-heavy
 and their screenshots are not in `llms-full.txt`, so parts of the layout are assembled
 from prose — where that gets thin, the user has the app open and can just look._
 
@@ -24,12 +24,22 @@ octopus diverged here on purpose: one tree holding both projects and workspaces
 outgrows the window, so projects moved to a vertical tab strip and the second pane holds
 only the active project's workspaces (§10.8).
 
+The sidebar also flags a session that **needs input** — a question or an approval
+waiting — so a blocked agent is visible without opening its workspace.
+
 **Centre** — the agent chat: event stream plus composer. Replaceable by Big Terminal
 Mode (`⌘⇧T`, experimental) which puts a full terminal there instead, with sessions that
-survive restart and presets that launch an agent CLI directly.
+survive restart and presets that launch an agent CLI directly (full-access flags for
+Claude and Codex only while tool approvals are off).
 
 **Right / tabs** — the diff viewer and the Checks tab; terminals open as tabs via `+`
-in the workspace tab bar.
+in the workspace tab bar. The terminal panel has an **Open** button for the repo's
+`preview_urls` (first is the default, the rest in its menu), and the git panel holds
+"Select working directories" for monorepo sparse-checkout.
+
+**Workspace toolbar** — the Run button (a menu when there are several run scripts) and,
+in repos that enable it, the Spotlight button. `Open In` / `⌘O` opens the workspace in
+Cursor or VS Code, focusing the window if it is already open.
 
 **Top bar** — the workspace name (click for details), a link button for `Copy link`,
 an eye button for `Follow` (Cloud).
@@ -42,7 +52,9 @@ an eye button for `Follow` (Cloud).
   controls sitting alongside it.
 - `@todos` pulls the todo list into the message.
 - `/` opens slash commands, read from `.claude/commands/*.md`.
-- MCP status appears in the composer, with a refresh action.
+- MCP status appears in the composer behind a plug icon, with refresh and per-server
+  sign-in; `/mcp-status` opens the same dialog.
+- `/add-dir` links other workspaces into this one.
 - For Codex, an active goal shows a **goal bar above the composer** carrying the
   objective, its status, its token usage, and pause/resume/edit/clear.
 - Inline diff comments become **composer attachments** — the mechanism that turns
@@ -52,8 +64,9 @@ an eye button for `Follow` (Cloud).
 ## Diff viewer
 
 `⌘⇧D`. A file list for navigation, unified or split view, filtering by commit to review
-one at a time, inline comments anchored to changed lines, and GitHub review comments
-folded into the same surface. Conductor surfaces a **recommended next action** as the
+one at a time, inline comments anchored to changed lines, per-file revert, and GitHub
+review comments folded into the same surface — resolvable there, so the Checks tab
+reflects the current review state. Conductor surfaces a **recommended next action** as the
 workspace moves toward merge — `Create PR` and onward.
 
 ## Checks tab
@@ -95,13 +108,17 @@ equivalent of.
 
 ## Settings
 
-Organised as `Settings → <section>`: per-repository panes (scripts, files to copy,
-preferences, Spotlight, Misc with the root path), plus `Harnesses`, `Environment`,
-`Privacy`, `Experimental`, and — for Cloud — `Organization`.
+Organised as `Settings → <section>`: per-repository panes (`Repo → Scripts`, files to
+copy — read-only while a `.worktreeinclude` exists — preferences, `Use spotlight
+testing`, Misc with the root path), plus `Harnesses` (per-harness auth mode, keys,
+OpenCode providers), `Environment`, `Storage` (the Claude Code / Codex executable
+paths), `Privacy`, `Experimental`, `MCP servers`, `User → General`, and — for Cloud —
+`Organization`. Opened from the File menu or the side nav.
 
 ## Platform integration
 
-Mac-only, no Windows or Linux. Registers the `conductor://` URL scheme. Triggers the
+Mac-only, no Windows or Linux. Registers the `conductor://` URL scheme (through Tauri's
+deep-link plugin — **observed**). Triggers the
 ordinary macOS protected-folder prompts (Downloads, Desktop, Reminders) whenever an
 agent touches those paths — the prompt names Conductor because Conductor launched the
 process, which their FAQ has to explain because it reads alarming.

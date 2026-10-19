@@ -12,7 +12,7 @@ mkdir -p "$OUT"
 echo "== Installed app =="
 if [[ -d "$APP" ]]; then
   version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist" 2>/dev/null)
-  echo "version:   ${version:-unknown}   (references were written against 0.80.0)"
+  echo "version:   ${version:-unknown}   (references were written against 0.91.0)"
   echo "binary:    $(file -b "$APP/Contents/MacOS/conductor" 2>/dev/null)"
 else
   echo "not installed — bundle sources unavailable, docs still work"
@@ -21,7 +21,7 @@ fi
 echo
 echo "== Bundled plain-text artefacts (the readable implementation) =="
 if [[ -d "$APP/Contents/Resources" ]]; then
-  find "$APP/Contents/Resources" -maxdepth 3 \( -name '*.sh' -o -name '*.md' -o -name '*.json' \) \
+  find "$APP/Contents/Resources" -maxdepth 4 \( -name '*.sh' -o -name '*.md' -o -name '*.json' \) \
     -exec sh -c 'printf "%6s  %s\n" "$(wc -l < "$1" | tr -d " ")" "${1#'"$APP"'/Contents/Resources/}"' _ {} \;
   echo
   echo "compiled helpers:"
