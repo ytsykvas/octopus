@@ -868,7 +868,9 @@ can wait at once — a form and a permission, or two permissions. Every answer,
 withdrawal and refusal therefore goes through one function that writes
 `running` only when no other question of that conversation is still open, and
 leaves it waiting otherwise; writing `running` unconditionally put the amber
-mark out over a question still on the screen.
+mark out over a question still on the screen. A message the CLI takes from its
+queue (`message_queue` with `started`) goes through it too: after a turn's
+result, that is a turn of its own starting.
 
 ### The skills panel lists what the session holds, not what we can see
 
