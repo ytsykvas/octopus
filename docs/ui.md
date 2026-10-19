@@ -230,7 +230,10 @@ double-click on the row or on the tab, or Enter in the tree, keeps it. Note that
 a double-click **pins** a file tab where it **renames** a conversation — two
 kinds of tab, two meanings of the gesture each kind already had in an editor and
 here. The strip scrolls sideways once the files outrun the room, and the one in
-front is scrolled into view.
+front is scrolled into view. "Open file" in a file's menu in Changes opens it
+here too, kept, rather than in whatever app the system picks: reading a changed
+file whole is the common case, a file asked for from a menu is not a glance, and
+"Open in editor" in the viewer is still the way out.
 
 A file in front hides every conversation behind it — still mounted, still
 streaming — and only the conversation on screen may raise a dialog, so none can

@@ -2384,6 +2384,33 @@ describe('App', () => {
     })
   })
 
+  // The Changes tab's menu opens the viewer the tree opens, not the system's app.
+  it('opens a changed file in the centre from the Changes tab', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.workspaces.diff).mockResolvedValue({
+      ok: true,
+      value: workspaceDiff([fileDiff('README.md')])
+    })
+    vi.mocked(window.octopus.files.read).mockResolvedValue({
+      ok: true,
+      value: { kind: 'text', text: '# Planner', bytes: 9 }
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for README.md' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Open file' }))
+
+    expect(await screen.findByText('# Planner')).toBeInTheDocument()
+    const files = screen.getByRole('navigation', { name: 'Open files' })
+    const tab = within(files).getByRole('button', { name: 'README.md' })
+    expect(tab).toHaveAttribute('aria-current', 'page')
+    // Kept, not a preview the next file in the tree would replace.
+    expect(tab).not.toHaveClass('italic')
+    expect(window.octopus.files.open).not.toHaveBeenCalled()
+  })
+
   describe('a file opened from the tree', () => {
     async function openReadme(): Promise<ReturnType<typeof userEvent.setup>> {
       givenTwoProjects()

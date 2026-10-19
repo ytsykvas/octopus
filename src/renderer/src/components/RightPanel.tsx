@@ -234,7 +234,7 @@ interface RightPanelProps {
   readonly onRemoveWorkspace: (workspaceId: string) => void
   /** The file tab in front of the centre, which the Files tab marks; null when a chat is. */
   readonly activeFilePath: string | null
-  /** Opens a file from the Files tab in the centre, as a preview or kept open. */
+  /** Opens a file in the centre — from the Files tab as a preview or kept, from a changed file's menu kept. */
   readonly onOpenFile: (path: string, pinned: boolean) => void
   /** Brings the conversation in front of any open file, before a prompt is sent to it. */
   readonly onConversation: () => void
@@ -787,6 +787,7 @@ export function RightPanel({
             comments={comments}
             revert={revert}
             onError={onError}
+            onOpenFile={onOpenFile}
           />
         </div>
 

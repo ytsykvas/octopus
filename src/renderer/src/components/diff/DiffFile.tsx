@@ -1,4 +1,4 @@
-import { CloudAlert, Copy, ExternalLink, MoreHorizontal, TriangleAlert, Undo2 } from 'lucide-react'
+import { CloudAlert, Copy, FileText, MoreHorizontal, TriangleAlert, Undo2 } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -390,7 +390,7 @@ export const DiffFile = memo(function DiffFile({
               {
                 id: 'open',
                 label: t('diff.openFile'),
-                icon: <ExternalLink aria-hidden size={14} />,
+                icon: <FileText aria-hidden size={14} />,
                 onSelect: () => {
                   onOpen(file.path)
                 }
