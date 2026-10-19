@@ -293,11 +293,12 @@ export const AUTO_COMPACT_VARIABLE = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW'
 /**
  * Whether a session measures against another window than its choice gives.
  *
- * The choice capped by what the model holds is what should be in force; a
- * reading that names anything else has been outranked by something the start
- * did not see — the variable, taken from a settings file mid-session. Here so
- * the menu that says so and the core that starts the session over decide it
- * alike. Nothing is chosen, nothing to stray from.
+ * The choice capped by what the model holds is what should be in force, and a
+ * reading that names anything else strays from it — the variable, whether the
+ * start saw it or the CLI took it from a settings file mid-session, or a model
+ * holding less than a window nobody has measured. Here so the menu that says
+ * so and the core that starts the session over decide it alike. Auto chooses
+ * nothing, so there is nothing to stray from.
  */
 export function windowStrayed(reading: {
   readonly chosen: AutoCompactWindow | null

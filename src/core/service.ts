@@ -1496,19 +1496,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
   const sessions = new Map<string, AgentSession>()
   /**
-   * What each running session was started with, as far as compaction goes.
+   * What each running session was started with, as far as compaction goes,
+   * and what its readings have said since.
    *
    * Kept beside the session because the agent fixes the window at start and
-   * never reports which one it was asked for — and the variable that outranks
-   * it is read at start too, so looking again later could name a value the
-   * session never saw.
+   * never reports which one it was asked for. The variable that outranks it is
+   * looked for at start (`override`), since looking again later could name a
+   * value the session never saw; one the CLI takes from a settings file later
+   * shows only in a reading (`strayed`).
    */
   const compaction = new Map<
     string,
     {
       readonly startedWith: AutoCompactWindow | null
       readonly override: WindowOverride | null
-      /** The last reading named another window than the choice gives (`windowStrayed`). */
+      /** The last reading named another window than the one it was started with (`windowStrayed`). */
       readonly strayed: boolean
     }
   >()
@@ -2729,6 +2731,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * `resume` carries it into the new session — and the caller makes sure the
    * agent is not mid-turn, since a turn in progress and a message queued behind
    * it would both go with the process.
+   *
+   * `recheck` is a choice made in the menu, which may start it again on the
+   * same window — see below.
    */
   async function restartForWindow(chatId: string, recheck = false): Promise<void> {
     const chat = findChat(state, chatId)
@@ -2736,10 +2741,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (!chat || !started || !sessions.has(chatId)) return
     // Chosen again while a variable outranked it: it may have been taken out
     // since, and only a new session reads it again. The same when the last
-    // reading strayed from the choice with no variable seen at the start — the
-    // CLI takes one from a settings file mid-session too. Asked for by a choice
-    // in the menu and never by a message, or a variable left in place would
-    // start the session over before every one of them.
+    // reading strayed from the window it started with and no variable was
+    // seen — the CLI takes one from a settings file mid-session too. Asked for
+    // by a choice in the menu and never by a message, or a variable left in
+    // place would start the session over before every one of them.
     const recheckStart = recheck && (started.override !== null || started.strayed)
     if (started.startedWith === chat.autoCompactWindow && !recheckStart) return
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
@@ -3718,8 +3723,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       ])
     ])
 
-    // Asked of the files this session will read, as it starts: the variable is
-    // read once by the agent too.
+    // Asked of the files this session will read, as it starts. The agent can
+    // still take one from a settings file later; a reading that strays from the
+    // window it started with is how that shows (`windowStrayed`).
     const override = await windowOverrideFor(workspace.path, settingSources)
 
     // The record as it is **now**, read after the last await and before the
@@ -5816,7 +5822,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // Kept for the next choice in the menu: a reading this one disagrees
       // with is what makes choosing the same window again worth a new session.
-      if (started) compaction.set(chatId, { ...started, strayed: windowStrayed(autoCompact) })
+      // Against the window the session started with, since a choice waiting
+      // for its turn differs for a reason already known — and only for the
+      // session still registered, or a reading from the one a restart replaced
+      // during the await would be pinned on its successor.
+      if (started && sessions.get(chatId) === session) {
+        compaction.set(chatId, {
+          ...started,
+          strayed: windowStrayed({ ...autoCompact, chosen: started.startedWith })
+        })
+      }
 
       return { context, autoCompact }
     },

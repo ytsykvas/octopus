@@ -4245,8 +4245,8 @@ describe('the agent chat', () => {
     })
 
     /*
-     * The variable is read once per session, so after it is taken out only a
-     * new session notices. Choosing — the same window included — starts one;
+     * A running session does not drop the variable when it is taken out, so
+     * only a new session notices. Choosing — the same window included — starts one;
      * a message does not, or a variable left in place would restart the
      * session before every one of them.
      */
@@ -4284,7 +4284,7 @@ describe('the agent chat', () => {
      * The CLI also takes the variable from a settings file while a session
      * runs, so a start that saw none can be outranked later. The reading then
      * names another window in force, and choosing again starts the session
-     * over — the only way it reads the files again.
+     * over — the only way to shed a variable it has taken.
      */
     it('starts again when a window is chosen while the reading says another is in force', async () => {
       const { service, workspaceId } = await withWorkspace()
@@ -4301,6 +4301,67 @@ describe('the agent chat', () => {
         autoCompact: { chosen: 300_000, effective: 450_000, override: null, pending: false }
       })
 
+      // Not on a message here either: only a choice asks for the files again.
+      await service.sendToChat(chat.id, 'again')
+      expect(agents).toHaveLength(1)
+      agents[0]?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+    })
+
+    /*
+     * Measured against the window the session was started with, not the one
+     * chosen since: a choice waiting for the turn to end is a reading that
+     * differs for a reason already known, and taking it for a stray started
+     * the session over when the first window was chosen back.
+     */
+    it('takes a choice still waiting for its turn for no stray', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 400_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 400_000 })
+      await service.sessionUsage(chat.id)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await service.setChatAutoCompact(chat.id, 400_000)
+
+      expect(agents).toHaveLength(1)
+    })
+
+    // A reading the old session gave after a new one took its place says
+    // nothing about the new one.
+    it('keeps a reading of a session that has been replaced off the new one', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 400_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      let answer: (value: unknown) => void = () => undefined
+      contextAnswer = () =>
+        new Promise((resolve) => {
+          answer = resolve
+        })
+      const reading = service.sessionUsage(chat.id)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      expect(agents).toHaveLength(2)
+
+      answer({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await reading
       await service.setChatAutoCompact(chat.id, 300_000)
 
       expect(agents).toHaveLength(2)
@@ -4310,17 +4371,17 @@ describe('the agent chat', () => {
     it('starts nothing again when the reading agrees with the window chosen again', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.setChatAutoCompact(chat.id, 400_000)
       await service.sendToChat(chat.id, 'work')
       agent().emit(initMessage)
       agent().emit(resultMessage)
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
       })
-      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 300_000 })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 400_000 })
       await service.sessionUsage(chat.id)
 
-      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.setChatAutoCompact(chat.id, 400_000)
 
       expect(agents).toHaveLength(1)
     })

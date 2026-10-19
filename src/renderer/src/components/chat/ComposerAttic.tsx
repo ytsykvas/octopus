@@ -153,9 +153,9 @@ export function ComposerAttic({
    * Where the conversation compacts, as a choice among six.
    *
    * Still choosable while a variable outranks them, with the note saying so.
-   * Greyed, they were a dead end: the variable is read only when a session
-   * starts, so after it was taken out nothing could start one to notice — and
-   * a choice here is what does, the same window included.
+   * Greyed, they were a dead end: a running session keeps the variable after
+   * it is taken out, so nothing could start one that would notice — and a
+   * choice here is what does, the same window included.
    */
   const windowRows = (view: AutoCompactView): MenuAction[] => {
     const tooLarge = (window: number): boolean =>

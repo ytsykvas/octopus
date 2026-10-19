@@ -953,7 +953,7 @@ describe('the compaction windows a conversation may choose', () => {
 })
 
 describe('windowStrayed', () => {
-  it('holds a reading of the choice to the choice', () => {
+  it('finds no stray when the reading names the choice', () => {
     expect(windowStrayed({ chosen: 300_000, effective: 300_000, modelWindow: 1_000_000 })).toBe(
       false
     )

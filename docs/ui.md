@@ -589,16 +589,19 @@ says, most pressing first:
 - that **`CLAUDE_CODE_AUTO_COMPACT_WINDOW` decides instead**, naming the value
   and where it is set — the environment, or the `env` block of a settings file
   the session reads. Measured, it outranks anything a session is told. The rows
-  stay choosable: the variable is read when a session starts, so after it is
-  taken out a choice — the same window included — is what starts one to notice;
+  stay choosable: a running session keeps the variable after it is taken out,
+  so a choice — the same window included — is what starts one that notices;
 - that a choice made mid-turn **takes effect with the next message**;
 - **what is in force when it is not what was chosen** — a measurement from
   `getContextUsage`, not a guess, so a disagreement is said rather than hidden
   behind the tick. The CLI also takes the variable from a settings file while a
-  session runs, which a start cannot see; choosing the same window again then
-  starts the session over too, since only a new one reads the files again. The
-  rule for "not what was chosen" is `windowStrayed` (`chats.ts`), which the menu
-  and the core both ask.
+  session runs, which the start could not see, and keeps it once taken; choosing
+  the same window again then starts the session over too, so a new one looks at
+  the files as they are. The rule for "not what was chosen" is `windowStrayed`
+  (`chats.ts`), which the menu and the core both ask — the core against the
+  window the session was started with, so a choice still waiting for its turn
+  is not taken for one. Auto has nothing to stray from, so a variable taken
+  mid-session under Auto is shed only by choosing a window.
 
 A window above what the model holds is greyed with that figure, since the
 agent would cut it down anyway. _Auto_ says what it amounts to while it is the
