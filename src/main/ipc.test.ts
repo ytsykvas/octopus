@@ -295,6 +295,8 @@ async function createService(options: ServiceOptions = {}): Promise<OctopusServi
   const made = await makeService({
     windowOverride: () => Promise.resolve(null),
     pluginCli: () => Promise.reject(new Error('the plugin CLI is not run in tests')),
+    // Nor the machine's ports, where a dev server can hold the one a test expects.
+    listening: () => Promise.resolve(false),
     ...options
   })
   started.push(made)

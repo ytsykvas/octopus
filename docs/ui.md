@@ -485,6 +485,30 @@ return first, so the Escape that closes a list never also interrupts the agent �
 only while a turn is running, since idle it would be a second way to do nothing,
 and not while an input method is composing, where Escape cancels the candidate.
 
+**The composer wears a colour ring** — the project palette in a conic gradient
+around the frame, with a soft glow outside it that brightens while focus is
+anywhere inside. It is the one deliberate exception to panes taking borders
+rather than shadows (§10.2 of PROJECT.md).
+
+The frame's `::before` is the ring, a gradient border around a fill of the
+frame's own surface; its `::after` is the glow, the same gradient blurred,
+underneath. That fill is what keeps the glow outside — a mask cut the blur off
+in a hard rectangle, since a mask clips at the edge of its own box. The frame
+takes `z-index: 20` to hold those layers: `isolation` would have done it at level
+zero, and the menus that open upwards out of the frame then slid under the log's
+floating day chip.
+
+**The ring does not turn.** A turning version was built and measured: even rotated
+by the compositor rather than repainted, it held 6–8% of the CPU for as long as
+the window was on screen, and a version that animated the gradient's own angle
+held about 29%. A laptop with octopus open all day pays for that in battery, for
+decoration.
+
+While something is dragged over the composer, the ring steps aside for the plain
+accent border: "let go here" reads the same everywhere. The strip around the
+composer has more room above it than below, or the glow ran into the rule along
+its top.
+
 **The composer has an attic**, a strip above the field mirroring the settings
 footer below it: how full this conversation's context window is on the left, and
 on the right the skills it may reach for, the paperclip, and a refusal when the
@@ -1624,7 +1648,14 @@ rewrite twenty files while the row went on saying what it said an hour ago,
 beside a diff pane that re-reads itself on the same event. The list now listens
 for the same turn endings and settles for the same 300ms, and re-reads only the
 project the workspace belongs to: a turn ending is a poor reason to run
-`git status` over every workspace of every project.
+`git status` over every workspace of every project. That status runs with
+`--no-optional-locks`, as the Files tab's does: a plain one holds `index.lock`
+for as long as it scans, and a `git add` or `git commit` running in the same
+worktree at that moment — another conversation, the terminal, a hook — fails
+with "Unable to create index.lock". The Changes pane's diff, read on the same
+event, writes nothing either, though not by that flag: `git diff` writes the
+index back for a file whose times moved with the flag or without it, so it reads against
+a throwaway copy of the index instead (`withIndexCopy` in `git.ts`).
 
 **The right pane carries six tabs.** Terminal, then Files, Changes, Scripts
 and Pull request, then Notes. Build and server were two tabs and are now two halves of one: they
@@ -2882,7 +2913,10 @@ show, a script waiting to be run. The line is
 drawn at the pane: a picker's "Nothing found", a popover or a settings list
 keeps its plain line, because a drawing has no room there and would read as a
 broken image. The sidebar keeps its line too — with no projects, the centre is
-already showing the octopus beside it.
+already showing the octopus beside it. Like the centre, it tells the first two
+cases apart: it asks for a repository only when there is none, and otherwise
+points at the strip, because telling someone with three project tabs beside the
+list to add a repository sends them the wrong way.
 
 `compact` is the right column's variant: no panel around it, since the column is
 already a panel of its own and a box inside it reads as a dialog nobody opened;
@@ -3074,6 +3108,21 @@ removing a workspace offers to delete its branch, already marked, because a
 workspace is one task and the branch behind a finished one is finished too. That
 is the only shape a destructive default may take: on screen, in the dialog the
 user is already reading, and undone with one click before they confirm.
+
+**A dialog's contents mount once it is open.** React's `autoFocus` focuses its
+element as it mounts, and `Modal` used to mount its body with the dialog and
+call `showModal()` afterwards: the dialog was still closed, so the focus went
+nowhere, and `showModal` then gave it to the first thing that takes it — the ×
+in the header. Measured in the window, where Enter in every confirmation pressed
+×. `Modal` now opens the dialog in a layout effect and draws the body and the
+footer in the render that follows, before anything is painted, so a plain
+`autoFocus` works there as it does anywhere else — on opening and for whatever
+mounts later, such as the plugins window's other tab. A confirmation starts on
+its confirm button, and on cancel when it is destructive, which every one today
+is, so Enter alone never removes anything; `useAskText` starts in its field, the
+repository picker and the plugins window in their search. The test stub moves
+the focus as `showModal` does (`focusAsShowModalDoes` in `test/dialog.ts`), so a
+test of where it starts can fail.
 
 `useAskText` is its sibling for one line of text, in the same `{ ask, dialog }`
 shape. It exists because `useConfirm` has no field and the one place that asked

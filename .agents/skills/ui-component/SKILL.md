@@ -64,12 +64,17 @@ The styling has to stay out of its way:
 - panels separated by 1px borders, **not** shadows;
 - shadows only for things floating above the content (menus, modals).
 
+The one exception is the composer's colour ring (`.composer-ring`): the single
+place the user types, made to be found at a glance. It is not a pattern to copy
+onto another pane.
+
 That is exactly why the original neo-brutalist style was dropped — it shouted
 over its own content.
 
 ## Check the ready-made classes first
 
 - `.panel` — surface with border and 10px radius;
+- `.composer-ring` — the composer's colour ring and glow;
 - `.row` / `.row-selected` — list row with hover and selection;
 - `.project-tinted` / `.bubble-sent` / `.tab-selected` — where a project's
   colour turns into a surface;
@@ -131,6 +136,10 @@ is not a plain button (a `Button`, a tree row, a `<summary>`).
 
 `Modal` deliberately leaves its body without padding so a list can span the
 full width — a form inside it brings its own.
+
+`Modal` draws its body and footer one render after the dialog opens, so
+`autoFocus` inside works. The cost: a ref into those contents is still `null` in
+the first effect of the component that opened it.
 
 `DropdownMenu` positions its panel against the **window**, not its trigger.
 An `absolute` panel is clipped by any scrolling ancestor, and the project tab

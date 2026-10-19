@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface ModalProps {
@@ -58,6 +58,13 @@ const HEIGHTS = {
  * Built on the native `<dialog>` element, which brings focus trapping, the
  * Escape key and inertness of the page behind it for free — all of which are
  * easy to get subtly wrong by hand.
+ *
+ * The body and the footer mount once the dialog is open, not with it. React's
+ * `autoFocus` focuses its element as it mounts, and inside a dialog that has
+ * not been shown yet that does nothing — `showModal()` then put the focus on
+ * the × instead, and Enter in every confirmation pressed it. Mounted after,
+ * `autoFocus` works as it does anywhere else, and so does anything that
+ * measures itself on mount, which a closed dialog would have drawn at zero.
  */
 export function Modal({
   title,
@@ -68,8 +75,11 @@ export function Modal({
 }: ModalProps): React.JSX.Element {
   const { t } = useTranslation()
   const dialog = useRef<HTMLDialogElement>(null)
+  const [shown, setShown] = useState(false)
 
-  useEffect(() => {
+  // A layout effect, so the contents are drawn in the same frame as the
+  // dialog and nothing flickers empty in between.
+  useLayoutEffect(() => {
     const element = dialog.current
     // The ref is attached by the time an effect runs; the guard exists because
     // its type says otherwise, and no render can reach the other branch.
@@ -77,6 +87,7 @@ export function Modal({
     if (!element) return
 
     element.showModal()
+    setShown(true)
     return () => {
       element.close()
     }
@@ -116,9 +127,9 @@ export function Modal({
         {/* A flex column, not a plain block: a sectioned dialog's body asks for
             the full height with `flex-1`, and against a block parent that does
             nothing — the rail then ends wherever its last entry does. */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-auto">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">{shown && children}</div>
 
-        {footer !== undefined && (
+        {shown && footer !== undefined && (
           <footer className="border-line flex shrink-0 items-center justify-end gap-2 border-t px-4 py-3">
             {footer}
           </footer>
