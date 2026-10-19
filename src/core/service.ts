@@ -3469,10 +3469,43 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
-  interface SessionSkills {
-    /** Extra roots to hand the session, so it finds the stores' skills. */
-    readonly roots: string[]
-    readonly listing: SkillListing[]
+  /**
+   * Whether a session loads the skills of our stores and the checkout at all:
+   * only with the project layer, under which the SDK reads every root's
+   * `.claude/skills`. One rule for the roots a session is handed and the list
+   * the panel draws, so neither offers what the other cannot reach.
+   */
+  function loadsOurSkills(settingSources: readonly SettingSourceName[]): boolean {
+    return settingSources.includes('project')
+  }
+
+  /**
+   * The extra roots a session is handed, so it finds the stores' skills.
+   *
+   * Both, whether or not either holds anything today.
+   *
+   * An empty store used to be left unmentioned — a root widens what the
+   * session may reach, and one handed over for an empty directory looked like
+   * a cost with nothing bought. It buys the ability to fill it. The roots are
+   * passed **once**, at session start, and `reloadSkills` only re-scans the
+   * directories the session already knows about, so a store that was empty
+   * then stayed invisible for the life of the conversation — every skill later
+   * written into it, not merely the first. That is the state of every fresh
+   * install, and the panel listed the new skill as available the whole time
+   * because it re-reads disk on every call.
+   *
+   * None with no project layer in `settingSources`: the SDK then reads no
+   * `.claude/skills` under any root, so a root there really would buy nothing.
+   *
+   * Kept out of `sessionSkills`, and reads nothing, because a start needs only
+   * the roots: building the panel's listing as well cost three directory reads
+   * per start and lengthened the window in which a change has to be caught by
+   * the re-read after the last await.
+   */
+  function skillRootsFor(project: Project, settingSources: readonly SettingSourceName[]): string[] {
+    return loadsOurSkills(settingSources)
+      ? [globalSkillsRoot(dataRoot), projectSkillsRoot(project.id, dataRoot)]
+      : []
   }
 
   /**
@@ -3513,13 +3546,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      * list exists only once a session does.
      */
     held: readonly AgentSkill[] = []
-  ): Promise<SessionSkills> {
+  ): Promise<SkillListing[]> {
     const globalRoot = globalSkillsRoot(dataRoot)
     const projectRoot = projectSkillsRoot(project.id, dataRoot)
 
     // A switch over something the session would not load is a control with
     // nothing behind it, so the list is empty rather than inert.
-    const loaded = settingSources.includes('project')
+    const loaded = loadsOurSkills(settingSources)
 
     const [ours, theirs, carried] = await Promise.all([
       loaded ? readSkillsIn(skillsDirOf(globalRoot)) : [],
@@ -3605,28 +3638,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
     }
 
-    return {
-      /*
-       * Both, whether or not either holds anything today.
-       *
-       * An empty store used to be left unmentioned — a root widens what the
-       * session may reach, and one handed over for an empty directory looked
-       * like a cost with nothing bought. It buys the ability to fill it. The
-       * roots are passed **once**, at session start, and `reloadSkills` only
-       * re-scans the directories the session already knows about, so a store
-       * that was empty then stayed invisible for the life of the conversation
-       * — every skill later written into it, not merely the first. That is the
-       * state of every fresh install, and the panel listed the new skill as
-       * available the whole time because it re-reads disk on every call.
-       *
-       * The `loaded` gate stays, and it is the one case where the old
-       * reasoning still holds: with no project layer in `settingSources` the
-       * SDK reads no `.claude/skills` under any root, so a root there really
-       * would buy nothing.
-       */
-      roots: loaded ? [globalRoot, projectRoot] : [],
-      listing
-    }
+    return listing
   }
 
   /**
@@ -3759,12 +3771,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     workspace: Workspace,
     settingSources: readonly SettingSourceName[]
   ): Promise<AgentSession> {
-    const skills = await sessionSkills(
-      requireProject(workspace.projectId),
-      workspace,
-      asked,
-      settingSources
-    )
+    const roots = skillRootsFor(requireProject(workspace.projectId), settingSources)
 
     /*
      * Where a pasted image is written, handed over as a root of its own.
@@ -3785,16 +3792,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Before the roots are handed over, because `--add-dir` on a directory that
     // is not there is at best untested — and until the first skill is written
     // neither of ours exists. A write, so it lives here rather than in
-    // `sessionSkills`, which is also the read path behind the skills panel.
+    // `skillRootsFor`, which only names them.
     await Promise.all([
-      ...[...skills.roots, attachments].map((root) => ensureStore(root)),
+      ...[...roots, attachments].map((root) => ensureStore(root)),
       // The commands and subagents beside them, for the same reason: the roots
       // are passed once at session start, and a directory that was not there
       // then stays invisible for the life of the conversation.
-      ...skills.roots.flatMap((root) => [
-        ensureLibrary(root, 'command'),
-        ensureLibrary(root, 'subagent')
-      ])
+      ...roots.flatMap((root) => [ensureLibrary(root, 'command'), ensureLibrary(root, 'subagent')])
     ])
 
     // Asked of the files this session will read, as it starts. The agent can
@@ -3834,7 +3838,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // already doing. `askPermission` consults `alwaysAllowedTools` itself,
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
-        additionalDirectories: [...skills.roots, attachments],
+        additionalDirectories: [...roots, attachments],
         skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow
       },
@@ -4694,7 +4698,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           ?.refreshSkills()
           .catch(() => [])) ?? []
 
-      const { listing } = await sessionSkills(
+      const listing = await sessionSkills(
         requireProject(workspace.projectId),
         workspace,
         chat,
@@ -4718,14 +4722,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async skillsForWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
 
-      const { listing } = await sessionSkills(
+      return sessionSkills(
         requireProject(workspace.projectId),
         workspace,
         { skillOverrides: {} },
         await sourcesFor(workspace)
       )
-
-      return listing
     },
 
     async setChatSkill(chatId, key, enabled) {
