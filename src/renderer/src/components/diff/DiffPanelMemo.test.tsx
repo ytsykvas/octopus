@@ -70,7 +70,8 @@ beforeEach(() => {
   })
 })
 
-function panel(width: number, workspace = anna): React.JSX.Element {
+// Not held still: `App` writes it inline, so each render hands down a new one.
+function panel(width: number, workspace = anna, open = vi.fn()): React.JSX.Element {
   return (
     <DiffPanel
       workspace={workspace}
@@ -81,6 +82,7 @@ function panel(width: number, workspace = anna): React.JSX.Element {
       comments={comments}
       revert={revert}
       onError={onError}
+      onOpenFile={open}
     />
   )
 }
@@ -110,6 +112,22 @@ describe('a pane whose width changed', () => {
 
     rerender(panel(901, attributed))
     rerender(panel(902, attributed))
+
+    expect(fileRenders).toBe(drawn)
+  })
+
+  /*
+   * The one handler that is not this pane's own. `App` writes it inline, so it
+   * is a new function on every render of the window — and handed down as it
+   * came, it would be a new prop on every file.
+   */
+  it('does not redraw them because the window handed it a new opener', async () => {
+    const { rerender } = render(panel(900))
+    await screen.findByTestId('file')
+    const drawn = fileRenders
+
+    rerender(panel(900))
+    rerender(panel(900))
 
     expect(fileRenders).toBe(drawn)
   })

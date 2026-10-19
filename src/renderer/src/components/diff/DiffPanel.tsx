@@ -60,6 +60,8 @@ interface DiffPanelProps {
   readonly revert: FileRevertController
   /** Says what went wrong where the window already says such things. */
   readonly onError: (message: string) => void
+  /** Brings a file to the front of the centre, in the window's own viewer; `pinned` keeps it rather than previewing it. */
+  readonly onOpenFile: (path: string, pinned: boolean) => void
 }
 
 /**
@@ -78,7 +80,8 @@ export function DiffPanel({
   width,
   comments,
   revert,
-  onError
+  onError,
+  onOpenFile
 }: DiffPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -236,7 +239,7 @@ export function DiffPanel({
   }, [diff])
 
   /*
-   * The three things a file row is handed that are not plain data.
+   * The four things a file row is handed that are not plain data.
    *
    * Built here, above the guards, and held steady across renders. `DiffFile` is
    * memoised — see the comment on it — and memoisation compares props by
@@ -250,18 +253,16 @@ export function DiffPanel({
   /*
    * Which workspace the rows belong to, kept where a steady handler can read it.
    *
-   * `openFile` must not close over the workspace: it would then change with it,
-   * which is right, and with everything else that renders this pane, which is
-   * not. The guards below are what decide whether any row is drawn, so by the
-   * time a click arrives this has been set.
+   * `toggleFile` must not close over the workspace: it would then change with
+   * it, which is right, and with everything else that renders this pane, which
+   * is not. The guards below are what decide whether any row is drawn, so by
+   * the time a click arrives this has been set.
    */
   const openIn = useRef('')
   useEffect(() => {
     openIn.current = workspace?.id ?? ''
   }, [workspace])
 
-  // Reads the workspace from the ref for the same reason `openFile` does: a
-  // toggle that closed over it would hand every memoised row a new function.
   const toggleFile = useCallback((path: string, collapsed: boolean) => {
     const workspaceId = openIn.current
     setChoicesIn((all) =>
@@ -269,18 +270,22 @@ export function DiffPanel({
     )
   }, [])
 
-  const openFile = useCallback(
-    (path: string) => {
-      void (async () => {
-        const result = await window.octopus.files.open(openIn.current, path)
-        // The main process goes to the trouble of reporting what the system
-        // said; throwing that away leaves a click that opened nothing looking
-        // like one that worked (§13).
-        if (!result.ok) onError(describeFailure(result))
-      })()
-    },
-    [onError, describeFailure]
-  )
+  /*
+   * The window's opener, kept where a steady handler can read it, for the
+   * reason `openIn` is: `App` writes it inline, so it is a new function on
+   * every render of the window, and handed to the rows as it came it would
+   * redraw every file each time.
+   */
+  const opener = useRef(onOpenFile)
+  useEffect(() => {
+    opener.current = onOpenFile
+  }, [onOpenFile])
+
+  // Kept rather than previewed: a file asked for from a menu is not a glance,
+  // and the next one-click file in the tree must not take its place.
+  const openFile = useCallback((path: string) => {
+    opener.current(path, true)
+  }, [])
 
   /*
    * The note being typed, and the place it belongs to.
