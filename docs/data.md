@@ -732,8 +732,10 @@ It is two rules rather than one, because a string being relative is not the same
 as a file landing inside. `insideWorktree` answers the first and drops the line;
 `unlinkedInside` answers the second, walking every segment of the destination
 before the copy — a checkout may track `config -> ../shared`, and a worktree
-materialises that verbatim. Both live in `paths.ts`, and the env file is held to
-the same pair.
+materialises that verbatim. It walks the path normalised, as `join` will use it:
+spelled `x/../config/master.key`, a raw walk stopped at the missing `x` and
+never reached the link. Both live in `paths.ts`, and the env file is held to the
+same pair.
 
 `resolvesInside` beside them is the third, and the odd one: it **follows** a link
 rather than refusing it, and answers where it landed. Refusing every link is
@@ -747,10 +749,18 @@ redirect a write, and nothing that is not there can be read.
 **Sources do not travel.** `.octopus/carry` is committed and cloned by everybody,
 and `~/work/planner/.env` is a fact about one laptop — so `carryListForExport`
 strips every source on the way out and the repository receives the list it always
-did. The same holds coming in: a project added from a checkout that carries a
-list takes it without sources and keeps only the files git ignores, so a
-repository can neither name a file on this machine to be copied in nor have a
-real `.env` land where a commit would publish it.
+did. The same holds coming in. A trusted repository's list is read live from
+the worktree being prepared and added to this one (`resolveCarry` in
+`repoSource.ts`), but a repository line gives only its path — its file comes
+from the checkout — and counts only with no link along it, in the worktree or
+the checkout, and when git ignores that path **in the worktree**, with the
+branch's own `.gitignore`. So a repository can neither name a file on this
+machine to be copied in nor have a real `.env` land where a commit would publish
+it. Where both lists name a file, this one's line wins,
+source and all; a list replacing it would drop the `config/master.key` somebody
+added. Nothing is copied when a project is added — a copy is what kept a list
+changed upstream from ever arriving — so this file holds only what was written
+here.
 
 It **never overwrites** — `COPYFILE_EXCL`, so a file edited inside the worktree
 survives and there is no window between a check and a write. A path the checkout

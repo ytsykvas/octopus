@@ -15,8 +15,9 @@ before.** This is insurance, not a new way of configuring anything.
 ## The one thing to understand
 
 **The scripts, the instructions, the base branch and the env file are live and
-the repository wins; the rest here is a snapshot.** Each of them can be switched
-back to the project's own — _use mine instead_ — one at a time.
+the repository wins; the carry list is live and merged with the project's own;
+the rest here is a snapshot.** Each of them can be switched back to the
+project's own — _use mine instead_ — one at a time.
 
 Which of the three scripts runs is asked of the **worktree**, in this order:
 `.octopus/scripts/` in it, then the project's own settings under `~/.octopus`.
@@ -47,9 +48,54 @@ instead_ returns to. When the file in effect changes under a workspace — a pul
 or that switch — the next preparation takes the block out of the file it was in,
 because the workspace records where it wrote it.
 
-The carry list and the rest of `project.json` — name, icon, colour, which are how
-one person tells their projects apart — are **not** live: they are taken once,
-when the project is added, and are the user's after that.
+The **carry list** is live as well, read from `.octopus/carry` in the
+**worktree** being prepared — the branch's list is the one that counts — on
+creation and before every run. Obeying it means letting a branch choose which
+of this machine's gitignored files land in a directory the agent reads and
+`git add -A` commits — a real capability, not a harmless one because nothing in
+it executes. So a repository line has to pass all of these (`resolveCarry` in
+`repoSource.ts`):
+
+- **The repository is trusted** (_Trust this repository_), as for its env file.
+  Trust is the user accepting what the worktree holds, whoever wrote it — and a
+  run prepares the worktree's working tree, which the agent writes. A trusted
+  project therefore obeys a list the agent wrote there, with a `.gitignore` line
+  to match, exactly as it runs a script the agent wrote; the gate does not close
+  that route, it is the decision to accept it. Until then the project's own list
+  alone is carried and the Files section says the repository's is waiting.
+- **Only its destination is used.** A `= source` half from the repository is
+  ignored, and the file is copied from the project's checkout as a bare line's
+  is. A committed `.env = ~/.ssh/id_rsa` would otherwise copy a private key into
+  the worktree.
+- **No link along it**, in the worktree (the write would be redirected, and git
+  refuses to answer for a path beyond a tracked symlink) or in the checkout (a
+  checkout tracking `leak.txt -> ~/.ssh/id_rsa` would hand the key over under an
+  innocent name). The path is walked normalised, as it will be read and
+  written, so `x/../leak.txt` is checked as `leak.txt`.
+- **It counts only when git ignores that path in the worktree** — asked there,
+  with the branch's own `.gitignore`, in one `check-ignore` for every line, each
+  passed as `./path` so a name like `:(top).env` is read as the file it names
+  rather than as pathspec magic. A branch listing `.env` without ignoring it
+  would otherwise have the user's real one land as a file the next commit
+  publishes. If git refuses the batch — one path inside a submodule is enough —
+  each line is asked on its own, and a line git still refuses is not carried;
+  the workspace is still made.
+- **It adds to the project's list, and the project's line wins** on the same
+  path — compared case-insensitively, as macOS compares names — `= source` and
+  all. A repository list replacing the local one would silently drop a
+  `config/master.key` the user added — the failure the carry list was written
+  to prevent.
+
+A `.octopus` or `.octopus/carry` that is a symbolic link, or a list longer than
+the editor accepts, is **not followed and counts as no list**: the project's own
+still applies and the workspace is still made, as an unreadable `project.json`
+leaves the live fields to the project. A script behind a link is refused
+outright instead. _Use mine instead_ stops the repository's list being read at
+all.
+
+The rest of `project.json` — name, icon, colour, which are how one person tells
+their projects apart — is **not** live: it is taken once, when the project is
+added, and is the user's after that.
 
 An instruction is not gated the way a script is. It becomes a visible user
 message in the log, where it is read before it does anything, and a dialog in
@@ -164,23 +210,16 @@ minutes. There is no version of "commit it carefully" that undoes that.
 
 ## Taken once, when a project is added
 
-A project added from a checkout that carries `.octopus/` takes two things from
-it at that moment and never again:
+A project added from a checkout that carries `.octopus/` takes **name, icon
+and colour** from `project.json` at that moment and never again — how one person
+tells their projects apart, so after this they are theirs to change.
 
-- **name, icon and colour** from `project.json` — how one person tells their
-  projects apart, so after this they are theirs to change;
-- **the carry list** from `carry`, **without its sources**, and **only the files
-  git ignores**. A source is a path on somebody's machine, and from a repository
-  a way to have this one copy a private key into the worktree, where the agent
-  reads it. And a carry list is a list of what is not committed: a repository
-  naming a file it does not ignore would have this machine's real `.env` land in
-  the worktree as something the next `git add -A` publishes. What is taken is
-  the list of files; they are copied from the checkout, as for a list typed
-  here.
-
-The base branch and env file are not copied: they stay live, and a copy would
-leave a stale value for _use mine instead_ to return to. A `project.json` that
-cannot be read adds the project as though there were none.
+The base branch, the env file and the carry list are not copied: they stay
+live, and a copy would leave a stale value for _use mine instead_ to return to.
+The carry list used to be copied here, which is why a list changed upstream
+never reached a project already added; a project added then keeps the local list
+it was given. A `project.json` that cannot be read adds the project as though
+there were none.
 
 There used to be an **Import** button. Once scripts, instructions and the two
 fields were read live there was nothing left for it to bring in that the app was
@@ -267,5 +306,6 @@ stays out of the repository.
 | File                                                                                          | What it holds                                                    |
 | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | [`src/core/repoConfig.ts`](../src/core/repoConfig.ts)                                         | the layout, the schema, reading and writing, the symlink refusal |
+| [`src/core/repoSource.ts`](../src/core/repoSource.ts)                                         | the live chains: scripts, instructions, and `resolveCarry`       |
 | [`src/core/service.ts`](../src/core/service.ts)                                               | `projectRepoConfig`, `exportRepoConfig`, `seedFromRepository`    |
 | [`src/renderer/src/components/RepoConfig.tsx`](../src/renderer/src/components/RepoConfig.tsx) | the two lists and the review                                     |

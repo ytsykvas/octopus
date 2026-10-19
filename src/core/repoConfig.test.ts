@@ -91,8 +91,12 @@ describe('readStatedCarry', () => {
     await expect(readStatedCarry(repo)).resolves.toBe('.env\n')
   })
 
-  // Taken while a project is added, so an unreadable one adds it without a list
-  // rather than refusing it.
+  /*
+   * Read live from a worktree before files are copied into it, so a link is
+   * never followed: it would hand back a list from outside the branch under a
+   * path inside it. Answered as none rather than refused, so the project's
+   * own list still carries and the workspace is still made.
+   */
   it('answers nothing through a linked directory', async () => {
     const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
     await writeFile(join(elsewhere, 'carry'), '.env\n', 'utf8')
@@ -100,6 +104,22 @@ describe('readStatedCarry', () => {
 
     await expect(readStatedCarry(repo)).resolves.toBeNull()
     await rm(elsewhere, { recursive: true, force: true })
+  })
+
+  it('answers nothing for a list that is itself a link', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'octopus-elsewhere-'))
+    await writeFile(join(elsewhere, 'list'), '.env\n', 'utf8')
+    await mkdir(join(repo, REPO_DIR))
+    await symlink(join(elsewhere, 'list'), join(repo, REPO_DIR, 'carry'))
+
+    await expect(readStatedCarry(repo)).resolves.toBeNull()
+    await rm(elsewhere, { recursive: true, force: true })
+  })
+
+  it('answers nothing for a list longer than the editor accepts', async () => {
+    await put('carry', 'x'.repeat(8_001))
+
+    await expect(readStatedCarry(repo)).resolves.toBeNull()
   })
 })
 

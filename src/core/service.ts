@@ -70,7 +70,7 @@ import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, type PortProbe, settlePort } from './ports.js'
 import {
-  carriedFiles,
+  type CarriedFile,
   carryInto,
   carryListForExport,
   readCarryList,
@@ -255,6 +255,7 @@ import {
   type ResolvedScript,
   type ScriptsInWorkspace,
   repoInstruction,
+  resolveCarry,
   resolveScripts,
   scriptsDigest
 } from './repoSource.js'
@@ -269,7 +270,6 @@ import {
   REPO_ITEM_IDS,
   REPO_README_FILE,
   readRepoConfig,
-  readStatedCarry,
   readStatedProject,
   type RepoConfigItem,
   type RepoConfigView,
@@ -3207,12 +3207,38 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     await discardIfOnlyBlock(workspace.path, envFile)
 
-    const report = await carryInto(project.id, project.repoPath, workspace.path, dataRoot)
+    const report = await carryInto(
+      await carriedIn(project, workspace.path),
+      project.repoPath,
+      workspace.path
+    )
 
     const { values, stored, variables } = await scriptSetFor(project, workspace)
     await applyEnvOverrides(stored, { ...values, path: workspace.path, envFile })
 
     return { report, envFile, profile: values.profile, variables }
+  }
+
+  /**
+   * The files carried into `cwd`: the project's list and what that
+   * directory's `.octopus/carry` adds to it, for a trusted repository.
+   *
+   * git is asked in `cwd` itself, because whether a repository line is
+   * honoured turns on whether git ignores it **there** — a branch's
+   * `.gitignore` is the one its `git add -A` obeys (`resolveCarry`).
+   */
+  async function carriedIn(project: Project, cwd: string): Promise<CarriedFile[]> {
+    return resolveCarry(
+      cwd,
+      project.repoPath,
+      project.id,
+      makeExec(cwd),
+      {
+        preferLocal: project.preferLocal.includes('project.carry'),
+        trusted: project.trustRepository
+      },
+      dataRoot
+    )
   }
 
   /**
@@ -3902,40 +3928,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const project = await seedFromRepository(
       await createProject(path, config.branchPrefix, state, makeExec)
     )
+    // The carry list is not copied: the repository's is read live, from each
+    // worktree as it is prepared (`carriedIn`), so a copy would only go stale.
     await commit((current) => addProject(current, project))
-
-    /*
-     * The carry list too, once, without its sources. A source is a path on
-     * somebody's machine — and from a repository, a way to have this one copy
-     * a private key into the worktree, where the agent reads it. What is taken
-     * is the list of files; where they come from is the checkout, as for a
-     * list typed here.
-     *
-     * And only the files git ignores. A carry list is a list of what is not
-     * committed — `.env`, a master key — and a repository naming one it does
-     * not ignore would have this machine's real copy land in the worktree as a
-     * file the next `git add -A` publishes.
-     */
-    const carried = carryListForExport(await readStatedCarry(project.repoPath))
-    if (carried !== null) {
-      const list = await ignoredOnly(carried, makeExec(project.repoPath))
-      await writeCarryList(project.id, list, dataRoot)
-    }
-
     return project
-  }
-
-  /** A carry list with every file line git would commit dropped; comments stay. */
-  async function ignoredOnly(list: string, exec: GitExec): Promise<string> {
-    const kept = await Promise.all(
-      list.split('\n').map(async (line) => {
-        const path = line.trim()
-        if (path === '' || path.startsWith('#')) return line
-        return (await isIgnored(exec, path)) ? line : null
-      })
-    )
-
-    return kept.filter((line): line is string => line !== null).join('\n')
   }
 
   /**
@@ -4285,7 +4281,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
          * holding rather than where any of it was read from.
          */
         workspace === null
-          ? carriedFiles(await readCarryList(project.id, dataRoot)).map((file) => file.path)
+          ? (await carriedIn(project, project.repoPath)).map((file) => file.path)
           : null
       )
     },

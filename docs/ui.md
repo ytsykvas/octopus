@@ -1347,13 +1347,13 @@ than a switch for scripts here and nothing but a banner in the chat for the rest
 The chat's banner and the Scripts tab's panel stay where the question is asked;
 this is where it is answered for good.
 
-**Every script, instruction and live field says where it comes from.** It used
-to be plain editors: with a repository script present, editing Build saved
-happily and changed nothing that runs, and a repository's pull-request
-instruction overrode the text somebody was editing without a word. A box that
-takes an edit it will not honour is worse than no box. Now each one has, under
-its name — which comes first, because under the tabs it read as the end of the
-editor above and the switch looked like that one's:
+**Every script, instruction, live field and the carry list says where it comes
+from.** It used to be plain editors: with a repository script present, editing
+Build saved happily and changed nothing that runs, and a repository's
+pull-request instruction overrode the text somebody was editing without a word.
+A box that takes an edit it will not honour is worse than no box. Now each one
+has, under its name — which comes first, because under the tabs it read as the
+end of the editor above and the switch looked like that one's:
 
 - **a badge** — _In effect: Repository / This project / Settings / Template_, or
   _Nothing runs_ for a script nobody wrote;
@@ -1369,6 +1369,15 @@ The base branch and env file get the same as a line under their fields
 (`FieldSource`): what the repository sets, which value applies, and — when the
 repository's was refused — why, in words: not trusted yet, no such branch, a
 file git would commit.
+
+The carry list (Files) is a `LayeredEditor` too, with the differences a merge
+makes: the repository's list is **added to** the project's rather than
+replacing it, so the editor opens on _This project_ — in effect either way, and
+the one edited — and its repository tab and switch say "added to" where the rest
+say "instead of" (chosen from `view.id`, as the script template's line is).
+_In effect: Repository_ there means the repository's lines are being added. Its
+lines wait for trust like the env file's, and the editor says so in the same
+words `FieldSource` uses (`SOURCE_WARNINGS`).
 
 **Project settings → Repository opens on the trust switch** — the warnings under
 Git, Env and Scripts send people there to turn it on — **and then the overview**
@@ -1403,7 +1412,8 @@ identical strings collide as keys.
 **One row's answer depends on which directory the section asked about.**
 `.claude/settings.local.json` is gitignored by Claude Code's own convention, so
 seeing it in the **checkout** says nothing about the worktree a session runs in
-— there it arrives only by being carried, and the carry list is the evidence.
+— there it arrives only by being carried, and the carry list is the evidence:
+the one a worktree would get, the repository's lines included.
 Seeing it in the **worktree** is the whole fact: the session is started in that
 directory and the SDK reads what is in it. Since the section asks about the open
 workspace, the carry-list rule ran against a directory it was never written for,

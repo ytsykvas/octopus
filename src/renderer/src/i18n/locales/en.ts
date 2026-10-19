@@ -175,7 +175,7 @@ export const en = {
     sectionDanger: 'Danger zone',
     repoLoading: 'Reading the repository…',
     repoHint:
-      'A project keeps its settings in ~/.octopus, on this machine. Its repository can carry them in .octopus/, where the app reads them while it works: scripts, instructions, and for a trusted repository the base branch and env file \u2014 each unless you chose your own. Name, icon, colour and the carry list are taken once, when the project is added. Export writes what this installation holds into the checkout, as an ordinary uncommitted change.',
+      'A project keeps its settings in ~/.octopus, on this machine. Its repository can carry them in .octopus/, where the app reads them while it works: scripts, instructions, and for a trusted repository the base branch and env file \u2014 each unless you chose your own \u2014 and its carry list adds to this project\u2019s. Name, icon and colour are taken once, when the project is added. Export writes what this installation holds into the checkout, as an ordinary uncommitted change.',
     repoIgnored:
       'git ignores .octopus/, so anything written there stays on this machine. Take it out of .gitignore for the copy to reach anybody else.',
     trustTitle: 'Trust',
@@ -231,7 +231,7 @@ export const en = {
       'Runs in a new workspace: install dependencies, build what has to be built, anything a fresh checkout needs. Saved as setup.sh.',
     files: 'Files carried into a workspace',
     filesHint:
-      'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten. Add “= /somewhere/else/.env” to take one from another checkout instead — which is the answer for a project cloned from GitHub, where the checkout has no gitignored file to give. Those sources stay on this machine and are left out of the copy in the repository.',
+      'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten. Add “= /somewhere/else/.env” to take one from another checkout instead — which is the answer for a project cloned from GitHub, where the checkout has no gitignored file to give. Those sources stay on this machine and are left out of the copy in the repository. A trusted repository\u2019s .octopus/carry adds its own lines: only the path is used, only when git ignores that file in the workspace, and a line here wins over one there.',
     archiveScript: 'Cleanup script',
     archiveScriptHint:
       'Runs when a workspace is removed, in its directory, while it still exists. Use it to take back what the build script gave out — a database or a container named after the workspace. Nothing it does can stop the removal. Saved as archive.sh.',
@@ -498,7 +498,11 @@ export const en = {
     useMine: 'Use mine instead of the repository\u2019s',
     useMineHint:
       'The repository supplies this, and its copy is what applies. On, this project\u2019s own is used instead, and the repository\u2019s is not read for it.',
+    useMineHintCarry:
+      'The repository\u2019s list adds its lines to this project\u2019s, and yours wins where both name a file. On, only this project\u2019s list is carried, and the repository\u2019s is not read.',
     fromRepository: 'From {{path}} in the checkout. Change it there, or use your own.',
+    fromRepositoryCarry:
+      'From {{path}}. Its lines are added to this project\u2019s list \u2014 only the files git ignores in the workspace, never from where a line says, and only once the repository is trusted.',
     fromGlobal: 'From Settings \u2192 Instructions, for every project that writes none of its own.',
     fromTemplate: 'What octopus ships. It applies when nothing else is written.',
     scriptTemplate: 'Where an editor starts. Nothing runs from it.',
@@ -514,7 +518,7 @@ export const en = {
       'The repository\u2019s .octopus/project.json could not be read, so this project\u2019s own applies.',
     tableTitle: 'Where each setting comes from',
     tableHint:
-      'The repository\u2019s .octopus/ is read while the app works and wins by default; switch an item to use this project\u2019s own. The carry list, name, icon and colour are this project\u2019s own \u2014 the repository\u2019s are taken once, when the project is added.',
+      'The repository\u2019s .octopus/ is read while the app works and wins by default; switch an item to use this project\u2019s own. The repository\u2019s carry list adds to this project\u2019s rather than replacing it. Name, icon and colour are this project\u2019s own \u2014 the repository\u2019s are taken once, when the project is added.',
     columnSetting: 'Setting',
     columnInEffect: 'In effect',
     columnUseMine: 'Use mine',

@@ -11,6 +11,7 @@
  * disagree with what actually runs.
  */
 
+import { carryPath, readCarryList } from './carry.js'
 import {
   instructionPath,
   instructionTemplate,
@@ -18,7 +19,7 @@ import {
   storedInstruction
 } from './instructions.js'
 import type { FieldSource, ProjectFields } from './projectFields.js'
-import { REPO_PROJECT_FILE } from './repoConfig.js'
+import { REPO_PROJECT_FILE, readStatedCarry, repoItemFile } from './repoConfig.js'
 import { octopusScript, repoInstruction } from './repoSource.js'
 import { readScript, scriptExists, scriptPath, scriptTemplate, type ScriptKind } from './scripts.js'
 import {
@@ -37,6 +38,8 @@ import type { ProjectId } from './types.js'
 export interface SourcesOf {
   readonly id: ProjectId
   readonly preferLocal: readonly SourceItemId[]
+  /** Whether the repository is trusted — the carry list's lines wait for it. */
+  readonly trustRepository: boolean
 }
 
 /**
@@ -159,6 +162,46 @@ function fieldSource(
 }
 
 /**
+ * The carry list, from the same two reads `resolveCarry` makes.
+ *
+ * The project's layer is always there — the starting list is what a project
+ * that wrote none carries. "In effect" names the repository when its list is
+ * read at all: it states one, the repository is trusted, and the user has not
+ * chosen their own. The two are merged rather than one replacing the other,
+ * and this says nothing about which of the repository's lines survive the
+ * checks — that is a question about each line against each worktree. A line
+ * `resolveCarry` turns away is dropped without a word, and only a file that
+ * passed and still did not arrive is reported by the copy.
+ */
+async function carrySource(cwd: string, project: SourcesOf, root?: string): Promise<SourceView> {
+  const id = 'project.carry'
+  const layers: SourceLayerView[] = []
+
+  const stated = await readStatedCarry(cwd)
+  if (stated !== null) {
+    layers.push({ layer: 'repository', from: repoItemFile('carry'), body: stated })
+  }
+
+  layers.push({
+    layer: 'project',
+    from: carryPath(project.id, root),
+    body: await readCarryList(project.id, root)
+  })
+
+  const preferLocal = project.preferLocal.includes(id)
+  // Chosen against, the repository's trust is beside the point — as for the
+  // live fields, which check the choice first.
+  const waiting = stated !== null && !preferLocal && !project.trustRepository
+  return {
+    id,
+    layers,
+    effective: effectiveOf(layers, preferLocal || waiting, false),
+    preferLocal,
+    warning: waiting ? 'repositoryNotTrusted' : null
+  }
+}
+
+/**
  * Every item that can come from more than one place, for one directory.
  *
  * `cwd` is the worktree when one is open and belongs to the project, the
@@ -180,6 +223,7 @@ export async function readSources(
   return [
     ...files,
     fieldSource('project.baseBranch', fields.baseBranch, project.preferLocal),
-    fieldSource('project.envFile', fields.envFile, project.preferLocal)
+    fieldSource('project.envFile', fields.envFile, project.preferLocal),
+    await carrySource(cwd, project, root)
   ]
 }

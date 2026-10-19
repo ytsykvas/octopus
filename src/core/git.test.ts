@@ -6,7 +6,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -26,6 +26,7 @@ import {
   gitIn,
   type GitOptions,
   hasCommits,
+  ignoredAmong,
   isIgnored,
   OUTPUT_TOO_LARGE,
   repositoryName,
@@ -545,6 +546,61 @@ describe('isIgnored', () => {
   // report "not ignored" about a question that was never asked.
   it('lets a real failure through', async () => {
     await expect(isIgnored(gitIn('/nowhere-at-all'), '.env')).rejects.toThrow(GitError)
+  })
+})
+
+describe('ignoredAmong', () => {
+  it('answers for every path in one call, ignored and not', async () => {
+    await initRepo(dir)
+    await writeFile(join(dir, '.gitignore'), '.env\n*.key\n', 'utf8')
+
+    await expect(ignoredAmong(exec, ['.env', 'notes.txt', 'config/master.key'])).resolves.toEqual(
+      new Set(['.env', 'config/master.key'])
+    )
+  })
+
+  // Exit 1, which is git's way of saying it.
+  it('answers with nothing when none is ignored', async () => {
+    await initRepo(dir)
+
+    await expect(ignoredAmong(exec, ['.env'])).resolves.toEqual(new Set())
+  })
+
+  it('asks git nothing about no paths', async () => {
+    await expect(ignoredAmong(gitIn('/nowhere-at-all'), [])).resolves.toEqual(new Set())
+  })
+
+  /*
+   * Pathspec magic. Asked bare, `:(top).env` is read as `.env` at the top and
+   * answers "ignored" — while the file that would be copied is the literal
+   * `:(top).env`, which nothing ignores. `./` makes git read the name as it is.
+   */
+  it('reads a name with pathspec magic as the file it names', async () => {
+    await initRepo(dir)
+    await writeFile(join(dir, '.gitignore'), '.env\n', 'utf8')
+
+    await expect(ignoredAmong(exec, [':(top).env', ':!x'])).resolves.toEqual(new Set())
+  })
+
+  // Printed quoted, so it cannot be matched back to what was asked; such a
+  // path is answered as not ignored rather than guessed at.
+  it('answers no for a name git would print quoted', async () => {
+    await initRepo(dir)
+    await writeFile(join(dir, '.gitignore'), '*.key\n', 'utf8')
+
+    await expect(ignoredAmong(exec, ['a"b.key', 'ключ.key'])).resolves.toEqual(
+      new Set(['ключ.key'])
+    )
+  })
+
+  // A path beyond a tracked symlink makes git refuse the whole call.
+  it('lets a real failure through', async () => {
+    await initRepo(dir)
+    await symlink(tmpdir(), join(dir, 'link'))
+    await exec(['add', 'link'])
+    await exec(['commit', '-q', '-m', 'link'])
+
+    await expect(ignoredAmong(exec, ['link/a.key'])).rejects.toThrow(GitError)
   })
 })
 
