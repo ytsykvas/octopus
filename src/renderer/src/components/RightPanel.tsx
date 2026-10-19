@@ -1038,7 +1038,6 @@ export function RightPanel({
                 activeId={activeWorkspaceId}
                 kind="setup"
                 scriptFor={(id) => scripts.get(id)?.scripts.setup ?? null}
-                visible={showing === 'scripts'}
                 projectFor={projectFor}
                 onOpenSettings={onEditScripts}
                 tokenFor={(id) => sequence.runOf(id).build}
@@ -1072,7 +1071,6 @@ export function RightPanel({
               activeId={activeWorkspaceId}
               kind="run"
               scriptFor={(id) => scripts.get(id)?.scripts.run ?? null}
-              visible={showing === 'scripts'}
               projectFor={projectFor}
               onOpenSettings={onEditScripts}
               tokenFor={(id) => sequence.runOf(id).server}

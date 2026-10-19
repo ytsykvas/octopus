@@ -1203,6 +1203,13 @@ means a signal killed a process that did run. The reason is drawn in the header
 as well as on the canvas — the build half is folded on every mount, so the
 canvas is the one place a reader is not looking.
 
+**The selected workspace always has a runner**, mounted when it is picked rather
+than when the Scripts tab is first shown for it. The title bar starts a run with
+the tab out of view, and a token is heard only by a runner that exists: one
+mounted on first sight of the tab left a press from the title bar in `Building…`
+with nothing to press, for any workspace picked while the pane was folded or
+another tab was showing.
+
 The constant one is drawn first, ahead of everything that moves. It is the way
 to the scripts themselves — see the fold section below for why the header needs
 one at all — and a control that lands somewhere else because a server came up is

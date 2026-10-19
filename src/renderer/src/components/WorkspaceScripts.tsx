@@ -22,15 +22,6 @@ interface WorkspaceScriptsProps {
    * run ends.
    */
   readonly scriptFor: (workspaceId: string) => ResolvedScript | null
-  /**
-   * Whether this script's tab is the one being shown.
-   *
-   * A runner is mounted for a workspace the first time it is looked at here,
-   * and outlives the tab being hidden. Without the distinction, moving around
-   * the list while reading the diff would mount runners for workspaces nobody
-   * asked about.
-   */
-  readonly visible: boolean
   /** The project's checkout, handed to every script as `$OCTOPUS_ROOT_PATH`. */
   /**
    * The checkout of a workspace's **own** project.
@@ -81,7 +72,6 @@ export function WorkspaceScripts({
   activeId,
   kind,
   scriptFor,
-  visible,
   projectFor,
   onOpenSettings,
   tokenFor,
@@ -92,13 +82,21 @@ export function WorkspaceScripts({
   onRunning,
   onGone
 }: WorkspaceScriptsProps): React.JSX.Element {
+  /*
+   * Every workspace selected so far, whether or not this tab was on screen.
+   *
+   * The title bar starts a run with the tab folded away, and only a mounted
+   * runner hears the token it bumps: one mounted on first sight of the tab left
+   * that press stranded in `Building…` with nothing to press. A runner holds no
+   * process until it is started, so the ones standing cost a line of text each.
+   */
   const [openedIds, setOpenedIds] = useState<readonly string[]>([])
   const [lastActiveId, setLastActiveId] = useState<string | null>(null)
 
   // Adjusted during render rather than in an effect, the way the terminals do
   // it: an effect runs after the paint, so opening a workspace would show an
   // empty pane for one frame before its runner appeared.
-  if (visible && activeId !== lastActiveId) {
+  if (activeId !== lastActiveId) {
     setLastActiveId(activeId)
     if (activeId !== null && !openedIds.includes(activeId)) {
       setOpenedIds([...openedIds, activeId])
