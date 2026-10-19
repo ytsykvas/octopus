@@ -143,7 +143,7 @@ import {
   readPullRequestDetail
 } from './pullRequests.js'
 import type { PullRequestDetail } from './pullRequestShapes.js'
-import { gitIn, isIgnored } from './git.js'
+import { gitIn, isIgnored, withIndexCopy } from './git.js'
 import { FETCH_OPTIONS, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
@@ -1783,6 +1783,23 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     } catch {
       return baseBranch
     }
+  }
+
+  /**
+   * What a workspace changed against its base, read as the pane and the
+   * pull-request draft both read it.
+   *
+   * Against a copy of the worktree's index (`withIndexCopy`), so a re-read as a
+   * turn ends never writes the index under a `git add` running beside it. Run
+   * from the worktree, not the repository: the base branch is a fact about the
+   * project, but everything else — the working tree, the index, the untracked
+   * files — is a fact about this workspace's own directory.
+   */
+  async function readDiffOf(workspace: Workspace, project: Project): Promise<WorkspaceDiff> {
+    const baseBranch = await baseRefOf(project)
+    return withIndexCopy(workspace.path, makeExec, (exec) =>
+      readWorkspaceDiff(exec, { baseBranch, root: workspace.path, branch: workspace.branch })
+    )
   }
 
   /**
@@ -4923,9 +4940,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      const sides = await readWholeFileSides(makeExec(workspace.path), {
-        baseBranch: await baseRefOf(project)
-      })
+      // Against a copy of the index, for the reason `readDiffOf` gives.
+      const baseBranch = await baseRefOf(project)
+      const sides = await withIndexCopy(workspace.path, makeExec, (exec) =>
+        readWholeFileSides(exec, { baseBranch })
+      )
 
       // A record rather than the Map it is built as: this crosses IPC, where
       // structured cloning keeps a Map and the preload's own types would then
@@ -4937,14 +4956,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      // Run from the worktree, not the repository: the base branch is a fact
-      // about the project, but everything else — the working tree, the index,
-      // the untracked files — is a fact about this workspace's own directory.
-      return readWorkspaceDiff(makeExec(workspace.path), {
-        baseBranch: await baseRefOf(project),
-        root: workspace.path,
-        branch: workspace.branch
-      })
+      return readDiffOf(workspace, project)
     },
 
     async revertWorkspaceFile(workspaceId, path, oldPath = null) {
@@ -4991,11 +5003,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const project = requireProject(workspace.projectId)
 
       const [diff, changed, instruction, commitInstruction] = await Promise.all([
-        readWorkspaceDiff(makeExec(workspace.path), {
-          baseBranch: await baseRefOf(project),
-          root: workspace.path,
-          branch: workspace.branch
-        }),
+        readDiffOf(workspace, project),
         changeCount(workspace, makeExec),
         // The same chain the pane reads and the prepared prompts send. These
         // two called `effectiveInstruction` directly and so skipped the
