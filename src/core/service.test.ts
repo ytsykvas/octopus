@@ -4460,6 +4460,69 @@ describe('the agent chat', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
       expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
     })
+
+    /*
+     * Known at the result: a message is still held, so another turn follows at
+     * once. Writing `idle` and then `running` a state write later flashed a
+     * "finished" dot and toast over a tab that was still working.
+     */
+    it('stays running through a turn that ends with a message still held', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(lifecycle('waited', 'queued'))
+      agent().emit(resultMessage)
+      // Long enough for an `idle` write the result started to have landed.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+
+      agent().emit(lifecycle('waited', 'started'))
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+    })
+
+    // A failure is news even with another turn to come.
+    it('still says a turn failed with a message held', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(lifecycle('waited', 'queued'))
+      agent().emit(abortedResultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('error')
+      })
+    })
+
+    // The queue lives in the process: a session ended holding a message
+    // leaves nothing that would keep the next one's chat running.
+    it('forgets what an ended session held', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(lifecycle('lost', 'queued'))
+      agent().emit(abortedResultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('error')
+      })
+      // A window chosen while nothing runs starts the session over.
+      await service.setChatAutoCompact(chat.id, 600_000)
+      expect(agents).toHaveLength(2)
+
+      await service.sendToChat(chat.id, 'more')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+    })
   })
 
   /*

@@ -47,7 +47,14 @@ live status, so it holds until the question is answered — then red for a turn
 that failed and green for one that finished. Those two are news only until it
 is seen: they are recorded only for a workspace that is not on screen, and
 opening the workspace clears them. One notice per conversation, not per
-workspace, or a chat that finished would wipe out another still waiting.
+workspace, or a chat that finished would wipe out another still waiting. A
+green one is withheld while its conversation is running again (`settle`): a
+message left in the agent's queue runs as a turn of its own once the last one
+ended — after a Stop, always — and "finished" over a working tab is the one
+thing the dot must not say. Withheld rather than dropped: the result reaches
+the window before the chat's `idle` does, so an ordinary turn's notice appears
+a state write later. The chime has already rung by then; the dot and the toast
+wait for the turn that is really last. A red one stays.
 
 Kept in the window (`useAttention`, `attention.ts`) rather than in
 `state.json`: "seen" is one person looking at one window, and a field under
@@ -336,9 +343,11 @@ once it has waited a quarter of a second: every message passes through
 would flash the word under each of them. Its tooltip says what
 Stop does not do: an interrupt leaves a queued message in place (the receipt
 lists it under `still_queued`) and it then runs as a turn of its own — which
-the tab shows as running: `started` for a message after the previous turn's
-result sets the chat `running` again (`handleEvent`), where before only a send
-did and the agent worked under an idle tab with no Stop. The
+the tab shows as running. The core counts the messages a session holds
+(`heldMessages`): a successful result with one still held leaves the chat
+`running` instead of writing `idle` and then `running` a state write later,
+and `started` for a message sets it `running` too (`handleEvent`). Before,
+only a send did, and the agent worked under an idle tab with no Stop. The
 protocol can cancel it, but the installed SDK offers no typed call for that, so
 the mark tells the truth rather than Stop pretending to do more.
 
@@ -2462,7 +2471,10 @@ the open folders outlive the switch and the listings do not. A listing is laid
 into the tree only while git still names its folder whole, so `git add -f`, an
 edited `.gitignore` or a first file in an empty folder hands it back to git's
 own children and marks — and the listing is let go on the next read, as it is
-for a folder deleted whole, rather than read again on every turn for nothing.
+for a folder deleted whole, rather than read again on every turn for nothing. A
+folder inside one read from disk goes the same way once that one's listing
+stops naming it — `node_modules/pkg` after a reinstall, which git cannot report,
+since it still names `node_modules` whole.
 
 **A submodule is a folder, read from disk the same way**, and nothing inside it
 is greyed or marked: the outer repository has nothing to say about it, its own
@@ -2506,6 +2518,33 @@ exist in the DOM, and focus kept on the tree cannot be lost when a row is
 recycled. Arrows, Home and End move; Right opens a folder and steps into it, Left
 closes it and steps out; Enter keeps a file open, Space previews it. Collapsing
 a folder that held the focused row leaves focus on the folder, not at the top.
+
+**The filter narrows the tree to a flat list.** Typing in the field over the
+tree swaps it for the files that answer, best first and each beside its folder,
+ranked by `rankFiles` — the `@` list's own order, so the two never disagree
+about what a query means. Flat, because the question was "where is it", and an
+answer folded into folders makes the reader open them to find out. It covers
+every file the tree holds, including those of a folder already read from disk —
+the tree, not the disk, which is what the empty answer says — and stops at 200
+with a line saying so. The field keeps focus — a combobox over its listbox — so
+the arrows move through the matches while typing goes on, the one they reach is
+scrolled into view, Enter keeps it open, a click previews it, and Escape gives
+the tree back. The choice is held by its file, not its place: the tree is read
+again after every turn, and a place held across that pointed at another file.
+The state lives in `useFileFilter`; a match draws its name and mark with the
+tree's own `EntryLabel`.
+
+**Show the open file** opens every folder above the file in the centre, scrolls
+to its row and puts focus on the tree there, as an editor's explorer does on
+request. A folder above it that is read from disk — `node_modules`, a submodule
+— is read along the way, and every folder inside that one too, since the tree
+cannot know them before their parent's listing arrives; the scroll waits for
+the row rather than for the click. It stops waiting once nothing it opened is
+still being read, or when the reader moves on — another file in the centre, a
+key or a scroll in the tree, the tab put away. Left armed, a row turning up in a
+later re-read moved the tree long after the click. The scroll is measured from
+the tree as it is at that moment, which is also why the tree measures itself
+when it comes back from under the filter.
 
 **The icons are Catppuccin Icons**, the VS Code theme, resolved by the rules VS
 Code applies to the same manifest: the whole name, then each extension from the

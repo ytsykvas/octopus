@@ -439,6 +439,14 @@ export const en = {
     tree: 'Files of this workspace',
     refresh: 'Refresh',
     collapseAll: 'Collapse all folders',
+    /* Opens the folders above the file in the centre and scrolls the tree to it. */
+    reveal: 'Show the open file',
+    filter: 'Filter files',
+    /* The list of files the filter found, read aloud. */
+    matches: 'Matching files',
+    noMatchTitle: 'No file matches',
+    noMatchBody: 'No file in the tree is called anything like “{{query}}”.',
+    matchesCapped: 'The first {{limit}} matches. Type more to narrow them.',
     noWorkspaceTitle: 'Nothing to look through yet',
     noWorkspaceBody: 'Select a workspace on the left to browse its files.',
     loading: 'Reading files…',

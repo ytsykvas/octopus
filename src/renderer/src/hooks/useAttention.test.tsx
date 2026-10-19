@@ -64,6 +64,28 @@ describe('useAttention', () => {
     expect(result.current.marks.get('planner')).toBe('done')
   })
 
+  /*
+   * The result reaches the window before the chat's `idle` does, and a message
+   * left in the agent's queue keeps it `running` for a turn more. The notice is
+   * withheld while it runs — not dropped, or it would never come back.
+   */
+  it('withholds a finished turn while its chat runs, and shows it once it stops', () => {
+    const working = (status: 'running' | 'idle'): WorkspaceView => ({
+      ...ANNA,
+      status,
+      chats: [{ id: 'c-1', agent: 'claude', title: null, status, started: true }]
+    })
+    const { result, rerender } = render(BEN.id, [working('running'), BEN])
+
+    emitAgentEvent(DONE, 'c-1', ANNA.id)
+    expect(result.current.notices).toEqual([])
+    expect(result.current.marks.get('planner')).toBeUndefined()
+
+    rerender({ openId: BEN.id, list: [working('idle'), BEN] })
+    expect(result.current.notices).toMatchObject([{ workspaceId: ANNA.id, kind: 'done' }])
+    expect(result.current.marks.get('planner')).toBe('done')
+  })
+
   // A streamed word is not news; only the end of a turn or a question is.
   it('records nothing for an event that is not news', () => {
     const { result } = render(BEN.id)

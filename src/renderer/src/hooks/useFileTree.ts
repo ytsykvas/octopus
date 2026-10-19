@@ -55,6 +55,32 @@ const empty = (id: string | null): TreeState => ({
 })
 
 /**
+ * Whether a listing held above `folder` says it is not there — its parent's,
+ * or that of any folder further up.
+ *
+ * `foldersFromDisk` cannot see this: `node_modules/pkg` removed by a reinstall
+ * is still inside a folder git names whole, so it was read again on every
+ * turn, failing each time, for a row nothing drew. Only a listing that was
+ * read and answered decides — one still loading, or one that failed, says
+ * nothing about what is in it, and a folder opened with its parent must not be
+ * dropped before the parent's listing lands.
+ */
+function unnamed(listings: ReadonlyMap<string, Held>, folder: string): boolean {
+  for (let at = folder; at.includes('/'); at = at.slice(0, at.lastIndexOf('/'))) {
+    const slash = at.lastIndexOf('/')
+    const above = listings.get(at.slice(0, slash))
+    const name = at.slice(slash + 1)
+    if (
+      typeof above === 'object' &&
+      !above.entries.some((entry) => entry.kind === 'directory' && entry.name === name)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * The worktree's files and marks for the Files tab, kept in step with the
  * agent the way the Changes tab is: read when the tab is shown, after a turn
  * ends, and when the window comes back — never while the tab is hidden.
@@ -83,9 +109,11 @@ export function useFileTree(
    */
   const open = useRef(expanded)
   const opened = useRef<readonly string[]>([])
+  const held = useRef(state.listings)
   useEffect(() => {
     open.current = expanded
     opened.current = [...state.listings.keys()].filter((folder) => expanded.has(folder))
+    held.current = state.listings
   }, [state.listings, expanded])
 
   const read = useCallback(
@@ -105,11 +133,16 @@ export function useFileTree(
        * after a switch to another workspace and back. Read now rather than with
        * the tree, which is what says which folders they are. Checked against
        * the listings as they are now, so one opened while the tree was read is
-       * not asked for twice.
+       * not asked for twice — and against what the folders re-read just now
+       * answered, so `node_modules/pkg` back after a reinstall is read on this
+       * turn rather than the next.
        */
+      const known = new Map<string, Held>(held.current)
+      for (const [folder, listing] of again)
+        known.set(folder, listing.ok ? listing.value : 'failed')
       const unheld = tree.ok
         ? foldersFromDisk(tree.value.entries, open.current).filter(
-            (folder) => !opened.current.includes(folder)
+            (folder) => !opened.current.includes(folder) && !unnamed(known, folder)
           )
         : []
       const late = await Promise.all(unheld.map(directory))
@@ -132,6 +165,7 @@ export function useFileTree(
         for (const [folder, listing] of [...again, ...late]) {
           if (fromDisk.has(folder)) kept.set(folder, listing.ok ? listing.value : 'failed')
         }
+        for (const folder of [...kept.keys()]) if (unnamed(kept, folder)) kept.delete(folder)
         return { id, snapshot: tree.value, listings: kept, error: null }
       })
     },

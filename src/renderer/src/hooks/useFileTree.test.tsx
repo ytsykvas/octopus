@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { FileTreeSnapshot } from '@core/fileTree.js'
+import type { DirectoryListing, FileTreeSnapshot } from '@core/fileTree.js'
 
 import { emitAgentEvent } from '../test/chat.js'
 import { held } from '../test/held.js'
@@ -444,6 +444,144 @@ describe('the tree of a workspace', () => {
       await Promise.resolve()
     })
     expect(octopus().files.directory).toHaveBeenCalledTimes(reads)
+  })
+
+  // `node_modules/pkg` removed by a reinstall while `node_modules` stays
+  // ignored: git still names the outer folder whole, so only the outer
+  // listing can say the inner one is gone.
+  it.each([
+    ['gone', []],
+    ['a file now', [{ name: 'pkg', kind: 'file' as const }]]
+  ])('stops reading a folder inside a read one once it is %s', async (_, after) => {
+    answering()
+    let installed = true
+    vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
+      Promise.resolve(
+        path === 'node_modules'
+          ? {
+              ok: true,
+              value: {
+                entries: installed ? [{ name: 'pkg', kind: 'directory' }] : after,
+                truncated: false
+              }
+            }
+          : installed
+            ? {
+                ok: true,
+                value: {
+                  entries: path === 'node_modules/pkg' ? [{ name: 'lib', kind: 'directory' }] : [],
+                  truncated: false
+                }
+              }
+            : { ok: false, error: 'gone' }
+      )
+    )
+    // And a folder inside that one, which goes with it.
+    const open = new Set(['node_modules', 'node_modules/pkg', 'node_modules/pkg/lib'])
+    const { result } = renderHook(() => useFileTree(WORKSPACE, true, open))
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules/pkg/lib')?.status).toBe('ready')
+    })
+
+    installed = false
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(result.current.listings.has('node_modules/pkg')).toBe(false)
+    })
+    expect(result.current.listings.has('node_modules/pkg/lib')).toBe(false)
+    expect(result.current.listings.get('node_modules')?.status).toBe('ready')
+    const reads = vi
+      .mocked(octopus().files.directory)
+      .mock.calls.filter(([, path]) => path.startsWith('node_modules/pkg')).length
+
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(octopus().files.tree).toHaveBeenCalledTimes(3)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(
+      vi
+        .mocked(octopus().files.directory)
+        .mock.calls.filter(([, path]) => path.startsWith('node_modules/pkg'))
+    ).toHaveLength(reads)
+
+    // Installed again: the outer listing read on this turn names it, so it is
+    // read on this turn too, not on the one after.
+    installed = true
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules/pkg/lib')?.status).toBe('ready')
+    })
+    expect(octopus().files.tree).toHaveBeenCalledTimes(4)
+  })
+
+  // Still loading, a listing says nothing about what is inside it yet.
+  it('reads a folder inside one whose listing is still on its way', async () => {
+    const tree = held<{ ok: true; value: FileTreeSnapshot }>()
+    vi.mocked(octopus().files.tree).mockReturnValue(tree.promise)
+    const outer = held<{ ok: true; value: DirectoryListing }>()
+    vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
+      path === 'node_modules'
+        ? outer.promise
+        : Promise.resolve({ ok: true, value: { entries: [], truncated: false } })
+    )
+    const open = new Set(['node_modules', 'node_modules/pkg'])
+    const { result } = renderHook(() => useFileTree(WORKSPACE, true, open))
+    act(() => {
+      result.current.openFolder('node_modules')
+    })
+    expect(result.current.listings.get('node_modules')?.status).toBe('loading')
+
+    await act(async () => {
+      tree.resolve({ ok: true, value: SNAPSHOT })
+      await Promise.resolve()
+    })
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules/pkg')?.status).toBe('ready')
+    })
+    expect(result.current.listings.get('node_modules')?.status).toBe('loading')
+  })
+
+  // A parent that could not be read says nothing about what is inside it.
+  it('keeps a folder inside one that could not be read this time', async () => {
+    answering()
+    let readable = true
+    vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
+      Promise.resolve(
+        path === 'node_modules' && !readable
+          ? { ok: false, error: 'busy' }
+          : {
+              ok: true,
+              value: {
+                entries: path === 'node_modules' ? [{ name: 'pkg', kind: 'directory' }] : [],
+                truncated: false
+              }
+            }
+      )
+    )
+    const open = new Set(['node_modules', 'node_modules/pkg'])
+    const { result } = renderHook(() => useFileTree(WORKSPACE, true, open))
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules/pkg')?.status).toBe('ready')
+    })
+
+    readable = false
+    act(() => {
+      result.current.refresh()
+    })
+
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules')?.status).toBe('failed')
+    })
+    expect(result.current.listings.get('node_modules/pkg')?.status).toBe('ready')
   })
 
   it('lays a folder read inside a read folder into the tree', async () => {

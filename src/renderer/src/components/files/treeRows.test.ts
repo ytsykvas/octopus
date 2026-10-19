@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { buildTree, listingNodes, type TreeEntry } from '@core/fileTree.js'
 
-import { type ListingState, visibleRows } from './treeRows.js'
+import {
+  filterFiles,
+  type ListingState,
+  MAX_FILTER_RESULTS,
+  revealPath,
+  visibleRows
+} from './treeRows.js'
 
 const ENTRIES: TreeEntry[] = [
   { path: 'src/a.ts', kind: 'file', ignored: false },
@@ -143,5 +149,72 @@ describe('visibleRows', () => {
     )
 
     expect(drawn(rows).slice(0, 3)).toEqual(['node_modules/', '  pkg', 'src'])
+  })
+})
+
+describe('filterFiles', () => {
+  it('ranks the files of the tree, folders left out', () => {
+    expect(filterFiles(tree, 'b').matches.map((node) => node.path)).toEqual(['src/core/b.ts'])
+    expect(filterFiles(tree, 'src').matches.map((node) => node.path)).toEqual([
+      'src/a.ts',
+      'src/core/b.ts'
+    ])
+  })
+
+  it('finds the files of a folder read from disk', () => {
+    const merged = new Map(tree)
+    merged.set(
+      'node_modules',
+      listingNodes(
+        { path: 'node_modules', ignored: true },
+        { entries: [{ name: 'pkg.js', kind: 'file' }], truncated: false }
+      )
+    )
+
+    expect(filterFiles(merged, 'pkg').matches).toEqual([
+      {
+        name: 'pkg.js',
+        path: 'node_modules/pkg.js',
+        kind: 'file',
+        ignored: true,
+        childrenFromDisk: false
+      }
+    ])
+  })
+
+  const files = (count: number): ReturnType<typeof buildTree> =>
+    buildTree(
+      Array.from({ length: count }, (_, index) => ({
+        path: `f${String(index)}.ts`,
+        kind: 'file' as const,
+        ignored: false
+      }))
+    )
+
+  it('stops at its cap, and says so', () => {
+    const found = filterFiles(files(MAX_FILTER_RESULTS + 5), 'f')
+
+    expect(found.capped).toBe(true)
+    expect(found.matches).toHaveLength(MAX_FILTER_RESULTS)
+  })
+
+  // Exactly as many as it holds is the whole answer, not a cut one.
+  it('does not call a list of exactly the cap cut short', () => {
+    expect(filterFiles(files(MAX_FILTER_RESULTS), 'f')).toMatchObject({ capped: false })
+  })
+})
+
+describe('revealPath', () => {
+  it('opens the folders above a file, outermost first', () => {
+    expect(revealPath(tree, 'src/core/b.ts')).toEqual({ open: ['src', 'src/core'], fromDisk: [] })
+    expect(revealPath(tree, 'README.md')).toEqual({ open: [], fromDisk: [] })
+  })
+
+  // `node_modules/pkg` is not in the tree until `node_modules` is read.
+  it('reads every folder from the first one read from disk down', () => {
+    expect(revealPath(tree, 'node_modules/pkg/lib/x.js')).toEqual({
+      open: ['node_modules', 'node_modules/pkg', 'node_modules/pkg/lib'],
+      fromDisk: ['node_modules', 'node_modules/pkg', 'node_modules/pkg/lib']
+    })
   })
 })
