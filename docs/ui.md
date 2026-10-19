@@ -3109,6 +3109,21 @@ workspace is one task and the branch behind a finished one is finished too. That
 is the only shape a destructive default may take: on screen, in the dialog the
 user is already reading, and undone with one click before they confirm.
 
+**A dialog's contents mount once it is open.** React's `autoFocus` focuses its
+element as it mounts, and `Modal` used to mount its body with the dialog and
+call `showModal()` afterwards: the dialog was still closed, so the focus went
+nowhere, and `showModal` then gave it to the first thing that takes it — the ×
+in the header. Measured in the window, where Enter in every confirmation pressed
+×. `Modal` now opens the dialog in a layout effect and draws the body and the
+footer in the render that follows, before anything is painted, so a plain
+`autoFocus` works there as it does anywhere else — on opening and for whatever
+mounts later, such as the plugins window's other tab. A confirmation starts on
+its confirm button, and on cancel when it is destructive, which every one today
+is, so Enter alone never removes anything; `useAskText` starts in its field, the
+repository picker and the plugins window in their search. The test stub moves
+the focus as `showModal` does (`focusAsShowModalDoes` in `test/dialog.ts`), so a
+test of where it starts can fail.
+
 `useAskText` is its sibling for one line of text, in the same `{ ask, dialog }`
 shape. It exists because `useConfirm` has no field and the one place that asked
 for a word used `window.prompt`, which Electron replaces with a function that
