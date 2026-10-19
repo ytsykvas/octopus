@@ -3899,6 +3899,8 @@ describe('the agent chat', () => {
   /** What the session answers about its context window, and the account's. */
   let contextAnswer: () => Promise<unknown>
   let skillReload: () => Promise<unknown>
+  /** What the session answers when its flags are set. */
+  let flagsAnswer: () => Promise<void>
   let pluginReload: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
   /** What the session answers when asked to put the files back to a message. */
@@ -4029,7 +4031,7 @@ describe('the agent chat', () => {
           skillOverrides?: Record<string, string>
         }) => {
           flagSettings.push(settings)
-          return Promise.resolve()
+          return flagsAnswer()
         },
         reloadSkills: () => skillReload(),
         reloadPlugins: () => {
@@ -4164,6 +4166,7 @@ describe('the agent chat', () => {
     offeredCommands = () => Promise.resolve([])
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
     skillReload = () => Promise.resolve({ skills: [] })
+    flagsAnswer = () => Promise.resolve()
     pluginReload = () =>
       Promise.resolve({ commands: [], agents: [], plugins: [], mcpServers: [], error_count: 0 })
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
@@ -11071,6 +11074,143 @@ describe('the agent chat', () => {
       await expect(service.skillsForWorkspace(workspaceId)).resolves.toMatchObject([
         { key: 'reviewer', enabled: false }
       ])
+    })
+
+    /*
+     * A running conversation hears about each of these at once, as it does
+     * about its own switch. The panel reads the record, so a session left on
+     * the map it started with was a switch that looks broken.
+     */
+    it('tells a running conversation when the installation\u2019s defaults change', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
+    })
+
+    it('tells a running conversation when its project\u2019s defaults change', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
+    })
+
+    // The other direction is the one the flag layer does not undo by itself:
+    // a skill withheld at start stays withheld until it is told `'on'`.
+    it('gives a running conversation back a skill the installation stops withholding', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: [] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
+    })
+
+    it('gives a running conversation back a skill its project stops withholding', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: [] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
+    })
+
+    /*
+     * A session still starting is not in the map a push walks, so it is built
+     * from the map as it stands once its awaits are over rather than the one
+     * read before them — otherwise a default changed in that window reached
+     * nothing. Either way the race falls is right, built with it or told it;
+     * the snapshot is not, and with the fix reverted this fails often rather
+     * than always, as the mode's version of it does.
+     */
+    it('starts a conversation on a default changed while it was starting', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      const sent = service.sendToChat(chat.id, 'work')
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      await sent
+
+      const built = agents[0]?.options().settings
+      const told = agents[0]?.flagSettings().at(-1)
+      expect([built, told]).toContainEqual(
+        expect.objectContaining({ skillOverrides: { review: 'off' } })
+      )
+    })
+
+    it('tells a running conversation when a skill it withholds is renamed', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toMatchObject({ reviewer: 'off' })
+    })
+
+    // Nothing reaches a session whose map did not move: its flags carry the
+    // effort as well, and a theme has nothing to say to it.
+    it('tells a running conversation nothing when the change is not about skills', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ theme: 'dark' })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    // Each session is sent its own project's answer: a list of one project is
+    // nothing to a conversation in another.
+    it('tells a conversation in another project nothing when a project\u2019s defaults change', async () => {
+      const { service, projectId } = await withWorkspace()
+      const elsewhere = join(dir, 'elsewhere')
+      await initRepo(elsewhere)
+      const other = await service.addProjectFromPath(elsewhere)
+      const workspace = await service.createWorkspaceIn(other.id)
+      const chat = await service.openChat(workspace.id)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    it('tells a running conversation nothing when the list is written unchanged', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    // The write has landed by then; a session that will not answer keeps what
+    // it had rather than failing the change for every other one.
+    it('keeps a default change that a running session would not take', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      flagsAnswer = () => Promise.reject(new Error('the session has gone'))
+
+      await expect(
+        service.updateConfig({ disabledSkillDefaults: ['review'] })
+      ).resolves.toMatchObject({ disabledSkillDefaults: ['review'] })
+      expect(service.getConfig().disabledSkillDefaults).toEqual(['review'])
     })
 
     // The same for a conversation's own answers, which are a record rather than

@@ -3423,10 +3423,42 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return { global: config.disabledSkillDefaults, project: project.disabledSkillDefaults }
   }
 
+  /**
+   * The skills a session of this chat is started with or told, as its record
+   * answers.
+   *
+   * The whole answer, not a change — `setSkills` works out what to say about a
+   * key the record stopped naming — and read off the record rather than off
+   * what the session lists, which leaves out every skill it withholds.
+   */
+  function skillMapOf(chat: Chat): Record<string, SkillOverride> {
+    const { projectId } = requireWorkspace(chat.workspaceId)
+    return skillOverridesFor(skillDefaultsOf(requireProject(projectId)), chat.skillOverrides)
+  }
+
+  /**
+   * Tells every running conversation the skills its record now gives it.
+   *
+   * After every write that can move the answer for all of them — the config,
+   * a project, a rename — as `setChatSkill` does for its one. The panel reads
+   * the record at once, so a session left on the map it started with is a
+   * switch that looks broken. Not narrowed to the writes that name a list:
+   * `setSkills` sends nothing when the map has not moved, which is the one
+   * check that cannot miss a write. Settled rather than awaited whole: the
+   * write has landed, and a session that will not answer must not fail it for
+   * the rest.
+   */
+  async function pushSkillsToRunning(): Promise<void> {
+    await Promise.allSettled(
+      [...sessions].map(async ([chatId, session]) => {
+        await session.setSkills(skillMapOf(requireChat(chatId)))
+      })
+    )
+  }
+
   interface SessionSkills {
     /** Extra roots to hand the session, so it finds the stores' skills. */
     readonly roots: string[]
-    readonly overrides: Record<string, SkillOverride>
     readonly listing: SkillListing[]
   }
 
@@ -3580,7 +3612,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * would buy nothing.
        */
       roots: loaded ? [globalRoot, projectRoot] : [],
-      overrides: skillOverridesFor(defaults, chat.skillOverrides),
       listing
     }
   }
@@ -3759,8 +3790,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     // The record as it is **now**, read after the last await and before the
     // session is registered, with nothing in between. What was asked for is a
-    // snapshot from before all of the above, and a mode, an effort or a model
-    // changed while they ran went to a session that was not registered yet —
+    // snapshot from before all of the above, and a mode, an effort, a model or
+    // a skill list changed while they ran went to a session not registered yet —
     // so it reached nothing, and the conversation started on what it had been.
     // Two things reach here that did not before a rewind could start one: a
     // message joining a start somebody else began.
@@ -3790,7 +3821,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
         additionalDirectories: [...skills.roots, attachments],
-        skillOverrides: skills.overrides,
+        skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow
       },
       {
@@ -3936,8 +3967,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return config
     },
 
-    updateConfig(patch) {
-      return applyConfig(() => patch)
+    async updateConfig(patch) {
+      const next = await applyConfig(() => patch)
+      await pushSkillsToRunning()
+      return next
     },
 
     listProjects() {
@@ -3992,6 +4025,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const wasEnvFile = (await liveProject(project)).envFile
 
       await commit((current) => updateProject(current, projectId, applied))
+      // Straight after the write, so a failure in the clean-up below cannot
+      // leave the running sessions on the old lists.
+      await pushSkillsToRunning()
 
       /*
        * The block in the file the project used to name.
@@ -4538,6 +4574,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }))
 
       await refreshRunningSkills()
+      await pushSkillsToRunning()
 
       return renamed
     },
@@ -4678,7 +4715,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatSkill(chatId, key, enabled) {
-      const workspace = requireWorkspace(requireChat(chatId).workspaceId)
+      requireChat(chatId)
 
       // Built from the record as the write's turn finds it, not as it was read
       // before: two switches flipped together otherwise both started from the
@@ -4688,22 +4725,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           skillOverrides: { ...findChat(current, chatId)?.skillOverrides, [key]: enabled }
         })
       )
-      const { skillOverrides } = requireChat(chatId)
-
-      // A running conversation is told at once rather than on its next start.
-      // A switch whose effect waits for a restart is a switch that looks
-      // broken, and the flag layer takes this the way it takes the effort.
-      //
-      // The record's whole answer, read back after the write — so it includes
-      // a switch that landed while this one waited — and not only this key:
-      // `setSkills` replaces the map, and the map is read off the record rather
-      // than off what the session lists, which leaves out every skill it
-      // withholds.
-      await sessions
-        .get(chatId)
-        ?.setSkills(
-          skillOverridesFor(skillDefaultsOf(requireProject(workspace.projectId)), skillOverrides)
-        )
+      // Read back after the write, so it includes a switch that landed while
+      // this one waited.
+      await sessions.get(chatId)?.setSkills(skillMapOf(requireChat(chatId)))
     },
 
     async removeProjectById(projectId) {

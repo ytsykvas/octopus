@@ -1484,7 +1484,7 @@ export const en = {
        loads it is ours to say, so the note has to offer both. */
     inRepository: 'In this repository',
     inRepositoryNote:
-      'The agent finds these in the checkout by itself. Switch one off to keep it out of new conversations here, or copy it to use in every project.',
+      'The agent finds these in the checkout by itself. Switch one off to keep it out of conversations here, or copy it to use in every project.',
     copyToGlobal: 'Copy to all projects',
     /* Two steps, because the answer to "what am I importing" is not on screen
        until it has been read — and for a link the only thing on screen is an
