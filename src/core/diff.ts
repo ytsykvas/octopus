@@ -6,7 +6,10 @@
  *
  * Nothing here writes: no `--intent-to-add`, no index, no stash. A review pane
  * that modified the repository it is reporting on would change the answer by
- * asking the question.
+ * asking the question. git itself writes the index back when a diff refreshes
+ * it, so the reads of the working tree are handed an executor on a copy of the
+ * index (`withIndexCopy`) — a plain one brings back the `index.lock` a `git
+ * add` beside the pane then trips over.
  */
 
 import { readFile, stat } from 'node:fs/promises'
@@ -30,8 +33,11 @@ export type ReadBytes = (path: string) => Promise<Uint8Array>
 /** A file's size, asked before its contents — the same reason a parameter. */
 export type StatBytes = (path: string) => Promise<number>
 
-/** Failures a user can act on, as opposed to git falling over (§13). */
-export type DiffErrorCode = 'baseUnknown'
+/**
+ * Failures a user can act on, as opposed to git falling over (§13).
+ * `notRemoved` is a revert that could not take an untracked path away.
+ */
+export type DiffErrorCode = 'baseUnknown' | 'notRemoved'
 
 export class DiffError extends CodedError<DiffErrorCode> {
   override readonly name = 'DiffError'
@@ -40,8 +46,12 @@ export class DiffError extends CodedError<DiffErrorCode> {
 export type FileStatus =
   'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'typeChanged' | 'untracked'
 
-/** Why a file carries no lines, when it carries none. */
-export type DiffOmission = 'none' | 'binary' | 'tooLarge'
+/**
+ * Why a file's lines are not drawn. `repository` is a repository cloned or
+ * initialised inside the worktree: git never looks inside one, and records it
+ * as a link rather than its files.
+ */
+export type DiffOmission = 'none' | 'binary' | 'tooLarge' | 'repository'
 
 export type DiffLineKind = 'context' | 'added' | 'removed'
 
@@ -829,7 +839,7 @@ export async function readWorkspaceDiff(
     readPublishStatus(exec, {
       branch: options.branch,
       baseCommit,
-      untracked: untrackedPaths
+      untracked: untrackedPaths.map(withoutRepositorySlash)
     })
   ])
 
@@ -917,6 +927,11 @@ function splitNul(output: string): string[] {
   return output.split('\0').filter((value) => value !== '')
 }
 
+/** A repository nested in the worktree under its own path: git lists it as `nested/`. */
+function withoutRepositorySlash(path: string): string {
+  return path.endsWith('/') ? path.slice(0, -1) : path
+}
+
 /** Joins what `--numstat` counted to what `--name-status` called it. */
 function trackedFiles(
   counts: readonly NumstatEntry[],
@@ -996,6 +1011,18 @@ async function readUntracked(
     mode: null,
     status: 'untracked' as const,
     hunks: []
+  }
+
+  // A repository nested in the worktree, which git never looks inside: one row
+  // saying what it is, spending nothing of the budget.
+  if (path.endsWith('/')) {
+    return {
+      ...base,
+      path: withoutRepositorySlash(path),
+      added: 0,
+      removed: 0,
+      omitted: 'repository'
+    }
   }
 
   const undrawn = { ...base, added: 0, removed: 0, omitted: 'tooLarge' as const }

@@ -108,13 +108,14 @@ export async function within(ms: number, work: Promise<unknown>): Promise<boolea
  *
  * For work whose **choice** has to be serialised, not only its write: anything
  * that reads, decides and then writes, where two overlapping in the middle would
- * both decide from the same picture. A failure does not stop the line — the
- * caller still gets the rejection, and the task behind it still runs.
+ * both decide from the same picture — and for a file whose writes must not
+ * overlap or interleave. A failure does not stop the line: the caller still
+ * gets the rejection, and the task behind it still runs.
  */
-export function oneAtATime(): <T>(task: () => Promise<T>) => Promise<T> {
+export function oneAtATime(): Line {
   let last: Promise<unknown> = Promise.resolve()
 
-  return <T>(task: () => Promise<T>): Promise<T> => {
+  const line = <T>(task: () => Promise<T>): Promise<T> => {
     // Wrapped: handed straight to `then`, a task would be called with the
     // previous one's value or rejection reason.
     const start = (): Promise<T> => task()
@@ -123,4 +124,14 @@ export function oneAtATime(): <T>(task: () => Promise<T>) => Promise<T> {
 
     return next
   }
+
+  // `last` never rejects, so this settles once the tasks queued so far have.
+  return Object.assign(line, { idle: () => last.then(() => undefined) })
+}
+
+/** What `oneAtATime` hands back: the line itself, and a wait for it to empty. */
+export interface Line {
+  <T>(task: () => Promise<T>): Promise<T>
+  /** Settles once every task queued so far has, whatever each one did. */
+  readonly idle: () => Promise<void>
 }

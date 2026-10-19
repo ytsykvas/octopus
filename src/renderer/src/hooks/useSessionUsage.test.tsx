@@ -263,9 +263,43 @@ describe('what the running session says about usage', () => {
 /*
  * A window chosen in the menu starts the session again, and the reading is
  * measured against the window — so it is asked for again each time the caller
- * says a choice has landed, the same window chosen twice included.
+ * says a choice has landed, the same window chosen twice included. A model
+ * chosen in the panel moves the session at once too.
  */
-describe('a compaction window chosen', () => {
+describe('a choice that moves the session', () => {
+  /*
+   * The reading takes most of a second, and the model it named before the
+   * choice is the one the composer would otherwise go on calling "chosen by
+   * /model" — under the reader's own click. Unknown is the honest answer until
+   * the new reading lands; the share of the window is still right.
+   */
+  it('forgets the running model until the new reading lands', async () => {
+    answering(READING)
+    const { result, rerender } = renderHook(
+      ({ asked }: { asked: number }) => useSessionUsage(CHAT, asked),
+      { initialProps: { asked: 0 } }
+    )
+    await waitFor(() => {
+      expect(result.current.context?.model).toBe('claude-opus-5')
+    })
+    const reading = held<Result<SessionUsage>>()
+    vi.mocked(octopus().chats.usage).mockReturnValueOnce(reading.promise)
+
+    rerender({ asked: 1 })
+
+    expect(result.current.context?.model).toBeNull()
+    expect(result.current.context?.percentage).toBe(48)
+
+    await act(async () => {
+      reading.resolve({
+        ok: true,
+        value: { ...READING, context: { ...READING.context!, model: 'claude-sonnet-5' } }
+      })
+      await reading.promise
+    })
+    expect(result.current.context?.model).toBe('claude-sonnet-5')
+  })
+
   it('asks again each time a choice has been applied', async () => {
     answering(READING)
     const { rerender } = renderHook(

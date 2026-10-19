@@ -406,7 +406,7 @@ function Row({
       </span>
       {mark !== null && !directory && (
         <span aria-hidden className={`shrink-0 font-mono text-[11px] ${mark.tone}`}>
-          {t(mark.letter)}
+          {mark.letter}
         </span>
       )}
       {mark !== null && directory && (
