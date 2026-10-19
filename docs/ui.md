@@ -485,6 +485,30 @@ return first, so the Escape that closes a list never also interrupts the agent �
 only while a turn is running, since idle it would be a second way to do nothing,
 and not while an input method is composing, where Escape cancels the candidate.
 
+**The composer wears a colour ring** — the project palette in a conic gradient
+around the frame, with a soft glow outside it that brightens while focus is
+anywhere inside. It is the one deliberate exception to panes taking borders
+rather than shadows (§10.2 of PROJECT.md).
+
+The frame's `::before` is the ring, a gradient border around a fill of the
+frame's own surface; its `::after` is the glow, the same gradient blurred,
+underneath. That fill is what keeps the glow outside — a mask cut the blur off
+in a hard rectangle, since a mask clips at the edge of its own box. The frame
+takes `z-index: 20` to hold those layers: `isolation` would have done it at level
+zero, and the menus that open upwards out of the frame then slid under the log's
+floating day chip.
+
+**The ring does not turn.** A turning version was built and measured: even rotated
+by the compositor rather than repainted, it held 6–8% of the CPU for as long as
+the window was on screen, and a version that animated the gradient's own angle
+held about 29%. A laptop with octopus open all day pays for that in battery, for
+decoration.
+
+While something is dragged over the composer, the ring steps aside for the plain
+accent border: "let go here" reads the same everywhere. The strip around the
+composer has more room above it than below, or the glow ran into the rule along
+its top.
+
 **The composer has an attic**, a strip above the field mirroring the settings
 footer below it: how full this conversation's context window is on the left, and
 on the right the skills it may reach for, the paperclip, and a refusal when the
