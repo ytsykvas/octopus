@@ -1063,6 +1063,17 @@ describe('RightPanel', () => {
     expect(first()).toHaveAccessibleName("Edit this project's scripts")
   })
 
+  // Green, not the blue of the other primary actions: it matches the title-bar
+  // Run, so the same act reads as the same colour in both places.
+  it('draws Run in the success colour', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(runButton()).toHaveClass('bg-success')
+    expect(runButton()).not.toHaveClass('bg-accent')
+  })
+
   /*
    * The whole point of the tab in one control.
    *
