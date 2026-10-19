@@ -2457,7 +2457,9 @@ long read on every turn after. An open folder with no listing yet is read along
 with them: every one of them after a switch to another workspace and back, since
 the open folders outlive the switch and the listings do not. A listing is laid
 into the tree only while git still calls its folder ignored, so `git add -f` or
-an edited `.gitignore` hands the folder back to git's own children and marks.
+an edited `.gitignore` hands the folder back to git's own children and marks —
+and the listing is let go on the next read, as it is for a folder deleted whole,
+rather than read again on every turn for nothing.
 
 **A submodule is a folder, read from disk the same way**, and nothing inside it
 is greyed or marked: the outer repository has nothing to say about it, its own
