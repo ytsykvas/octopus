@@ -365,6 +365,7 @@ export const uk: Translation = {
     loadingFolder: 'Читаю…',
     folderFailed: 'Цю теку не вдалося прочитати.',
     folderTruncated: 'Показано лише перші {{limit}} записів.',
+    folderEmpty: 'У цій теці нічого немає.',
     ignored: 'ігнорується git',
     changesInside: 'має зміни',
     statusConflicted: '!',

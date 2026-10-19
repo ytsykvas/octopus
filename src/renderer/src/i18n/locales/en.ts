@@ -445,6 +445,8 @@ export const en = {
     loadingFolder: 'Reading…',
     folderFailed: 'This folder could not be read.',
     folderTruncated: 'Only the first {{limit}} entries are listed.',
+    /* Under an open folder read from disk with nothing in it — most often a submodule never checked out in this worktree. */
+    folderEmpty: 'Nothing in this folder.',
     /* Said aloud after a greyed row's name; the grey says it to the eye. */
     ignored: 'ignored by git',
     /* Said aloud after a folder's name when its dot is drawn. */
