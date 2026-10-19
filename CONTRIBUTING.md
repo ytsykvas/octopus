@@ -51,6 +51,22 @@ sent back.
 - **External processes go through `execFile`, never `exec`.**
 - **Comments explain why, not what.**
 
+## Running a development copy
+
+Only one copy of the app may use a data directory: two on `~/.octopus` would
+each write `state.json` whole and the last would win. That is why `npm run dev`
+quits without a window when another Octopus is already open. Give the copy a
+directory of its own and the two do not meet:
+
+```bash
+OCTOPUS_DATA_DIR=/some/absolute/dir npm run dev
+```
+
+The copy starts empty — no projects, no settings — and keeps everything there,
+so it is also the safe place to reproduce a bug. The path must be absolute. If
+you run octopus from octopus itself, the Run button does this for you
+(`.octopus/scripts/run.sh`).
+
 ## Where to start reading
 
 [`docs/README.md`](docs/README.md) is the index and says which document answers
