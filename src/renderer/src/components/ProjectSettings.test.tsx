@@ -1712,7 +1712,11 @@ describe('ProjectSettings', () => {
     expect(screen.queryByText(/Change it there, or use your own/)).toBeNull()
 
     await user.click(screen.getByRole('switch', { name: /Use mine instead/ }))
-    expect(props.onUpdate).toHaveBeenCalledWith({ preferLocal: ['project.carry'] })
+    expect(props.onEdit).toHaveBeenCalledWith({
+      kind: 'preferLocal',
+      item: 'project.carry',
+      on: true
+    })
   })
 
   it('says the repository\u2019s carry list waits until the repository is trusted', async () => {
