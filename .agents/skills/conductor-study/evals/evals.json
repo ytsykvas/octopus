@@ -5,14 +5,14 @@
       "id": 0,
       "name": "checkpoints",
       "prompt": "I want to add checkpoints like Conductor's, so that code and chat can be rolled back to an earlier turn. Look at how they did it and tell me how we should implement it.",
-      "expected_output": "Explains Conductor's checkpoint mechanism from the bundled script — a private git ref, non-disruptive save, temp index for untracked files — labels the evidence, states octopus has none, and turns it into an implementation direction rather than an essay.",
+      "expected_output": "Explains Conductor's checkpoint mechanism from the bundled script — a private git ref, non-disruptive save, temp index for untracked files — labels the evidence, says octopus already rewinds through the Agent SDK, and turns the comparison into a direction rather than an essay.",
       "assertions": [
         "Names the private ref refs/conductor-checkpoints/<id> as where a checkpoint is stored",
         "States that saving moves neither HEAD nor any file on disk",
         "Describes the second/temporary index used to capture untracked files",
         "Labels which claims come from the bundled script versus the docs versus inference",
-        "States that octopus has no checkpoints today",
-        "Proposes a concrete direction for octopus rather than only describing Conductor"
+        "States what octopus already has — rewind and fork through the Agent SDK (rewind.ts, agent.ts, service.ts) — rather than proposing to build checkpoints from nothing",
+        "Proposes a concrete direction for octopus — what, if anything, Conductor's git approach would add to the SDK rewind — rather than only describing Conductor"
       ],
       "files": []
     },
@@ -20,13 +20,13 @@
       "id": 1,
       "name": "env-files",
       "prompt": "When a new workspace is created it has no .env and will not start. How does Conductor solve this?",
-      "expected_output": "Identifies Files to copy / .worktreeinclude, gives the resolution order, notes only gitignored files are eligible, separates it from a setup script, and says octopus lacks the feature.",
+      "expected_output": "Identifies Files to copy / .worktreeinclude, gives the resolution order, notes only gitignored files are eligible, separates it from a setup script, and names octopus's carry list as the same intent built differently.",
       "assertions": [
         "Names Files to copy and/or .worktreeinclude",
         "Gives the resolution order: .worktreeinclude, then file_include_globs, then the default .env* pattern",
         "States that only files git already ignores are eligible",
         "Distinguishes copying static files from running a setup script",
-        "States that octopus has no equivalent today"
+        "Names octopus's carry list (carry.ts) as the equivalent, and how it differs: exact paths rather than globs"
       ],
       "files": []
     },
@@ -40,6 +40,22 @@
         "Still answers factually how Conductor runs four harnesses",
         "Names the concrete architectural cost for octopus, such as the direct Agent SDK integration in agent.ts",
         "Puts the decision back to the user rather than either refusing outright or planning as if nothing were at stake"
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "nonconcurrent-run",
+      "prompt": "I want starting a dev server in one octopus workspace to stop the one already running in another first, the way Conductor does. Look at how they do it and how exactly they stop the processes, and plan it for us.",
+      "expected_output": "Names run_mode = \"nonconcurrent\" and what it does, gives the current stop sequence from the docs — SIGTERM to the process group, five fixed seconds, SIGKILL to the group — notes which Conductor version that describes, places it against octopus's own stop in src/main/terminals.ts, and plans the change.",
+      "assertions": [
+        "Names Conductor's run_mode = \"nonconcurrent\" setting and says starting such a run script stops the other run scripts first",
+        "Gives the stop sequence: SIGTERM to the script's process group, a fixed five-second grace period, then SIGKILL to the group",
+        "Says which Conductor version the answer describes, or checks the installed one",
+        "Labels which claims come from the docs, from Conductor's own shipped code, and from inference",
+        "Says, from Conductor's own code, that only the same repository's workspaces are stopped and that the new run does not wait for the old one to exit — and contrasts that with octopus's dispose, which waits",
+        "States octopus has no such mode today and looks at how octopus already stops a run (src/main/terminals.ts) before proposing a stop of its own",
+        "Proposes a concrete direction for octopus rather than only describing Conductor"
       ],
       "files": []
     }
