@@ -257,6 +257,10 @@ enough — the new copy lost the lock and the old build stayed on screen.
 The packaged `/Applications/Octopus.app` holds the same lock: while it is open,
 `npm run dev` builds, prints `DevTools listening` and exits 0 with no window.
 It is the maintainer's working copy, so ask before quitting it.
+Both go away with `OCTOPUS_DATA_DIR=/some/absolute/dir npm run dev`: a copy with
+a data root of its own is not the same app to either lock, and it starts empty.
+The Scripts tab's Run sets it (`.octopus/scripts/run.sh`), so this trap is for a
+bare `npm run dev` only.
 
 **The running app holds the state in memory.** Editing `~/.octopus/state.json`
 from the outside while it runs makes the two disagree, and the app will happily

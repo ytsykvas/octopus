@@ -162,6 +162,17 @@ at a number.
 It is also the layer a CLI or a daemon would get for free, having no Electron
 and therefore no lock at all.
 
+**A copy can be given a root of its own.** With `OCTOPUS_DATA_DIR` set to an
+absolute path, `rootDir()` returns it instead of `~/.octopus`, and `main` moves
+Electron's userData inside it before asking for the lock. Both locks are then
+keyed on a place the real app never uses, so a development copy runs beside it
+and neither can overwrite the other's `state.json`. The copy starts empty — no
+projects, no global skills, default settings — which is also what makes it safe
+to reproduce a bug in. A relative path throws at startup: ignoring it would put
+the copy back on the real data. The packaged app never sets it. The Scripts
+tab's `run.sh` for this repository sets it per workspace, under
+`~/.octopus-dev/<slug>`, and `archive.sh` removes it.
+
 Editing these files from outside while the app runs is the same hazard reached
 another way: the app keeps its own copy in memory and will happily write over
 anything changed underneath it.

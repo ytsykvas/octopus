@@ -8,6 +8,7 @@ import {
   chatsDir,
   chatTranscript,
   configFile,
+  dataRootOverride,
   globalSkillsRoot,
   insideWorktree,
   projectDir,
@@ -34,7 +35,30 @@ describe('rootDir', () => {
   })
 
   it('defaults to the current user home directory', () => {
-    expect(rootDir()).toBe(join(homedir(), '.octopus'))
+    expect(rootDir(undefined, {})).toBe(join(homedir(), '.octopus'))
+  })
+
+  it('moves to OCTOPUS_DATA_DIR when that is set and no home is given', () => {
+    expect(rootDir(undefined, { OCTOPUS_DATA_DIR: '/tmp/octopus-dev' })).toBe('/tmp/octopus-dev')
+  })
+
+  it('lets an explicit home beat the override', () => {
+    expect(rootDir(HOME, { OCTOPUS_DATA_DIR: '/tmp/octopus-dev' })).toBe(ROOT)
+  })
+})
+
+describe('dataRootOverride', () => {
+  it('is null when the variable is unset or empty', () => {
+    expect(dataRootOverride({})).toBeNull()
+    expect(dataRootOverride({ OCTOPUS_DATA_DIR: '' })).toBeNull()
+  })
+
+  it('returns an absolute path as given', () => {
+    expect(dataRootOverride({ OCTOPUS_DATA_DIR: '/tmp/octopus-dev/a' })).toBe('/tmp/octopus-dev/a')
+  })
+
+  it('refuses a relative path instead of falling back to the real data', () => {
+    expect(() => dataRootOverride({ OCTOPUS_DATA_DIR: 'octopus-dev' })).toThrow(/absolute/)
   })
 })
 
