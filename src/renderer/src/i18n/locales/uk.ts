@@ -778,6 +778,8 @@ export const uk: Translation = {
     autoCompactOverriddenEnv:
       'Замість цього діє {{variable}}={{value}} з оточення. Приберіть її там і виберіть тут ще раз.',
     autoCompactMismatch: 'Діє {{effective}}, а не вибране {{chosen}}.',
+    autoCompactMismatchRetry:
+      'Діє {{effective}}, а не вибране {{chosen}}. Виберіть його ще раз, щоб почати сесію заново.',
     clearTitle: 'Очистити цю розмову?',
     clearMessage: 'Агент почне спочатку, не пам’ятаючи нічого зі сказаного тут.',
     clearDetail: 'Запис розмови видаляється разом із нею, і повернути його не вийде.',

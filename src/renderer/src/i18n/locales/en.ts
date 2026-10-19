@@ -1029,6 +1029,8 @@ export const en = {
     autoCompactOverriddenEnv:
       '{{variable}}={{value}} in the environment decides instead. Take it out there, then choose here again.',
     autoCompactMismatch: 'In effect: {{effective}}, not the chosen {{chosen}}.',
+    autoCompactMismatchRetry:
+      'In effect: {{effective}}, not the chosen {{chosen}}. Choose it again to start the session over.',
     clearTitle: 'Clear this conversation?',
     clearMessage: 'The agent starts again with no memory of what was said here.',
     clearDetail: 'The log is deleted with it, and cannot be brought back.',

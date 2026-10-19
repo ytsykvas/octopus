@@ -4411,6 +4411,63 @@ describe('the agent chat', () => {
     })
 
     /*
+     * A stray the new session reads again — a model holding less than the
+     * choice before any turn has said how much, a managed settings file the
+     * start does not read — is one no restart can shed. Started over once to
+     * find that out, then left alone: every further choice of the same window
+     * would otherwise cost a restart and change nothing.
+     */
+    it('starts over only once for a stray the new session reads again', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { effective: 450_000, settled: false }
+      })
+
+      await service.setChatAutoCompact(chat.id, 300_000)
+      expect(agents).toHaveLength(2)
+
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { effective: 450_000, settled: true }
+      })
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+    })
+
+    // The restart did shed it: a later stray is a new one, worth a restart.
+    it('starts over again for a stray that differs from the one shed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await service.sessionUsage(chat.id)
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 500_000 })
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { settled: false }
+      })
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(3)
+    })
+
+    /*
      * Measured against the window the session was started with, not the one
      * chosen since: a choice waiting for the turn to end is a reading that
      * differs for a reason already known, and taking it for a stray started
@@ -4570,7 +4627,8 @@ describe('the agent chat', () => {
           effective: 1_000_000,
           modelWindow: null,
           override: null,
-          pending: false
+          pending: false,
+          settled: false
         }
       })
     })

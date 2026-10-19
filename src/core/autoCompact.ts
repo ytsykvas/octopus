@@ -153,4 +153,10 @@ export interface AutoCompactView {
    * was working, and the session starts again once the turn ends.
    */
   readonly pending: boolean
+  /**
+   * A session started over to shed this very reading has read it again, so
+   * choosing the same window once more would only do the same: the stray is
+   * one no new session can clear.
+   */
+  readonly settled: boolean
 }

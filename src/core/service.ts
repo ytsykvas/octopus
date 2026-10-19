@@ -1525,10 +1525,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     {
       readonly startedWith: AutoCompactWindow | null
       readonly override: WindowOverride | null
-      /** The last reading named another window than the one it was started with (`windowStrayed`). */
-      readonly strayed: boolean
+      /**
+       * The window the last reading named, in tokens, when it was another than
+       * the one the session was started with (`windowStrayed`) and not the one
+       * it was started to shed; null otherwise.
+       */
+      readonly strayed: number | null
+      /**
+       * The stray reading a restart started this session to shed, or null. Read
+       * again, it is one no new session clears, and choosing the same window
+       * once more would only start another for nothing.
+       */
+      readonly shedding: number | null
     }
   >()
+  /** The stray a restart starts a chat's next session to shed — `restartForWindow`. */
+  const shedOnStart = new Map<string, number | null>()
   /** What each model holds, as any session's turns have said; outlives the sessions. */
   const modelWindows = new Map<string, number>()
   /**
@@ -2788,11 +2800,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // seen — the CLI takes one from a settings file mid-session too. Asked for
     // by a choice in the menu and never by a message, or a variable left in
     // place would start the session over before every one of them.
-    const recheckStart = recheck && (started.override !== null || started.strayed)
+    const recheckStart = recheck && (started.override !== null || started.strayed !== null)
     if (started.startedWith === chat.autoCompactWindow && !recheckStart) return
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
 
     await closeOneChat(chat)
+    // Remember the stray the old session read, so the new one reading it again
+    // says no restart could help — whatever this one was started for, a fresh
+    // session reading the same value proves the same thing.
+    shedOnStart.set(chatId, started.strayed)
     await sessionFor(chat, requireWorkspace(chat.workspaceId))
   }
 
@@ -3855,7 +3871,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
 
     sessions.set(chat.id, session)
-    compaction.set(chat.id, { startedWith: chat.autoCompactWindow, override, strayed: false })
+    compaction.set(chat.id, {
+      startedWith: chat.autoCompactWindow,
+      override,
+      strayed: null,
+      shedding: shedOnStart.get(chat.id) ?? null
+    })
+    shedOnStart.delete(chat.id)
 
     // Fire-and-forget, and the two failures go different ways. A list that
     // cannot be *read* is swallowed: it is a convenience for the picker, a
@@ -5879,7 +5901,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           context.modelWindow ??
           (context.model === null ? null : (modelWindows.get(context.model) ?? null)),
         override: started?.override ?? null,
-        pending: started !== undefined && started.startedWith !== chat.autoCompactWindow
+        pending: started !== undefined && started.startedWith !== chat.autoCompactWindow,
+        settled: started?.shedding === context.maxTokens
       }
 
       // Kept for the next choice in the menu: a reading this one disagrees
@@ -5891,7 +5914,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (started && sessions.get(chatId) === session) {
         compaction.set(chatId, {
           ...started,
-          strayed: windowStrayed({ ...autoCompact, chosen: started.startedWith })
+          strayed:
+            !autoCompact.settled && windowStrayed({ ...autoCompact, chosen: started.startedWith })
+              ? context.maxTokens
+              : null
         })
       }
 

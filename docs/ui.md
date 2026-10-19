@@ -625,7 +625,12 @@ says, most pressing first:
   (`chats.ts`), which the menu and the core both ask — the core against the
   window the session was started with, so a choice still waiting for its turn
   is not taken for one. Auto has nothing to stray from, so a variable taken
-  mid-session under Auto is shed only by choosing a window.
+  mid-session under Auto is shed only by choosing a window. The note says
+  choosing again starts the session over, and stops saying it once a session
+  started over for that very reading has read it again: a stray no new session
+  clears — a model holding less before any turn has said how much, a managed
+  settings file the start does not read — costs one restart to find out, and
+  choosing it again after that changes nothing.
 
 A window above what the model holds is greyed with that figure, since the
 agent would cut it down anyway. _Auto_ says what it amounts to while it is the
