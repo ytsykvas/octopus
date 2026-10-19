@@ -7778,6 +7778,98 @@ describe('the agent chat', () => {
       expect(agent().flagSettings().at(-1)).toMatchObject({ effortLevel: 'max' })
     })
 
+    /*
+     * What was in force before a change is read inside its commit. Read before
+     * it, both of two toggles in flight saw the coding model: the first moved
+     * the session onto the plan model and the second, finding the model it
+     * wanted equal to what it had read, sent nothing back.
+     */
+    it('ends on the coding model when planning goes on and off at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.setChatPlanMode(chat.id, false)
+      ])
+
+      // Undefined is the agent's own choice, which this chat's coding model is;
+      // nothing sent at all leaves the session on it too.
+      expect(agent().requestedModels().at(-1)).toBeUndefined()
+    })
+
+    it('ends on the working effort when planning goes on and off at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.setChatPlanMode(chat.id, false)
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    // Approval decides inside its commit too: whether planning was on, which
+    // is what hands the work to acceptEdits, and what it moves the session from.
+    it('hands over to acceptEdits when a plan is approved as planning is turned on', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'do the thing' })
+      const requestId = await waitForRequest(events)
+      // In this order: the approval queues its commit without an await first,
+      // so the toggle's lands before it.
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.answerPermission(requestId, 'allow')
+      ])
+      await decision
+
+      expect(service.listChats(workspaceId)[0]).toMatchObject({
+        planMode: false,
+        workingMode: 'acceptEdits'
+      })
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    it('ends on the effort picked last when two are picked at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatEffort(chat.id, 'high'),
+        service.setChatEffort(chat.id, 'low')
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    it('ends on the effort picked last when two plan efforts are picked at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanEffort(chat.id, 'low')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      await Promise.all([
+        service.setChatPlanEffort(chat.id, 'high'),
+        service.setChatPlanEffort(chat.id, 'low')
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
     /* The guard `pushModel` exists for, in its own words: a conversation whose
        two jobs share an effort runs that one whatever the toggles do, so
        nothing is ever pushed at it. */
