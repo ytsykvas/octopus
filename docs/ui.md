@@ -2331,10 +2331,14 @@ branch deliver". After a commit the tree goes clean while Changes still lists
 the files — both right, and not a bug. The colours and letters come from
 `statusMarks.ts`: green for new, blue for edited, red for deleted and
 conflicted, the conflict marked `!` because a diff against a merge base never
-sees one. Changes no longer draws the letters — its letter column holds the
-rung, and the kind of change is on the name there. A folder with work below it carries a dot in the colour of the
-strongest change inside, so a collapsed folder still says there is something in
-it. Each mark is said aloud after the name; the colour alone says nothing.
+sees one. The letters are the ones editors draw — git's `M A D R C T`, `U` for
+untracked, `!` for a conflict — in every language; only the word said after the
+name is translated. The Ukrainian initial for "changed" was `З`, which before a
+path read as a 3. Changes no longer draws the letters — its letter column holds
+the rung, and the kind of change is on the name there. A folder with work below
+it carries a dot in the colour of the strongest change inside, so a collapsed
+folder still says there is something in it. Each mark is said aloud after the
+name; the colour alone says nothing.
 
 **Deleted files stay in the tree, struck through.** An editor's explorer drops
 them, but a deletion is work as much as an edit is, and the mark is the point of
@@ -2443,9 +2447,7 @@ The first is a ladder of three rungs, filled up to the one reached: **not
 committed** (amber), **committed** (blue), **pushed** (faint). On a row it is the
 dots alone, standing where a status letter used to, and the header stays one
 line. The word on every row was a second line per file saying the same thing
-down the whole column, and the letter it displaced had its own trouble: the
-Ukrainian `З` for "changed" read as the digit 3 in front of a path. What
-happened to the file moves onto its name instead — a new file's name is green, a
+down the whole column. What happened to the file moves onto its name instead — a new file's name is green, a
 deleted one is struck through in red, the rest are plain — and both facts are in
 the path's tooltip and read out after the row in words.
 The furthest-behind rung wins, so a file committed once and edited again reads
