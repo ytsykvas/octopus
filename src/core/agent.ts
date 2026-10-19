@@ -789,9 +789,22 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     async setSkills(skillOverrides) {
       // The whole map every time, never a difference: `applyFlags` sends every
       // flag together, and the map is the record's whole answer. Turning a
-      // skill back on is an explicit `'on'` in it — a key left out does not
-      // undo a withhold the session started with (`skillOverridesFor`).
-      skills = skillOverrides
+      // skill back on is an explicit `'on'` — a key left out does not undo a
+      // withhold the session started with — so every key this session was
+      // told before and the new map no longer names is said `'on'`: a key the
+      // record stopped naming is one it no longer withholds. Without it, taking
+      // a skill off a default list reached the record and not the session.
+      const next: Record<string, SkillOverride> = { ...skillOverrides }
+      for (const key of Object.keys(skills)) next[key] ??= 'on'
+
+      // Nothing moved, nothing sent: `applyFlags` carries the effort too, and
+      // a push that changes no skill would undo an `/effort` given in the
+      // session — which `pushEffort`'s guard exists to keep.
+      // Every key of the old map is in `next` by now, so one comparison covers
+      // a value that moved and a key that is new.
+      if (Object.keys(next).every((key) => next[key] === skills[key])) return
+
+      skills = next
       await applyFlags()
     },
 
