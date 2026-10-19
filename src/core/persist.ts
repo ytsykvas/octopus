@@ -53,7 +53,8 @@ export function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function isNotFound(error: unknown): boolean {
+/** Whether a filesystem failure found nothing at the path — narrowed, never cast. */
+export function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
 }
 

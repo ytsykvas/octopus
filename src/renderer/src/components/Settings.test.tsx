@@ -18,6 +18,7 @@ function config(overrides: Partial<Config> = {}): Config {
     cloneDirectory: '',
     settingSources: 'none',
     workingMode: 'default',
+    planExecutionMode: 'auto',
     effort: 'medium',
     model: null,
     planModel: null,
@@ -257,9 +258,40 @@ describe('Settings', () => {
     const props = await renderSettings()
 
     await openSection(user, 'Agent')
-    await user.click(screen.getByRole('button', { name: /^Accept edits/ }))
+    // The first of the two: what a new chat may do, above what a plan goes on in.
+    const [starting] = screen.getAllByRole('button', { name: /^Accept edits/ })
+    if (!starting) throw new Error('no Accept edits choice')
+    await user.click(starting)
 
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ workingMode: 'acceptEdits' })
+  })
+
+  it('offers auto mode as what a new chat may do', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Agent')
+    const [starting] = screen.getAllByRole('button', { name: /^Auto/ })
+    if (!starting) throw new Error('no Auto choice')
+    await user.click(starting)
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ workingMode: 'auto' })
+  })
+
+  // A separate question from the one above: not what a chat starts in, but
+  // what follows a plan someone approved — and never Manual.
+  it('sets what an approved plan is carried out in', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Agent')
+    const [, afterPlan] = screen.getAllByRole('button', { name: /^Accept edits/ })
+    if (!afterPlan) throw new Error('no plan execution choice')
+    await user.click(afterPlan)
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ planExecutionMode: 'acceptEdits' })
+    expect(screen.getByText('Carrying out an approved plan')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Manual/ })).toHaveLength(1)
   })
 
   // The composer changes one conversation; this is what every new one starts

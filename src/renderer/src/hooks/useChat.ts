@@ -6,6 +6,8 @@ import {
   type ChatStatus,
   type EffortChoice,
   EXIT_PLAN_MODE,
+  modeAfterPlan,
+  type PlanExecutionMode,
   type WorkingMode
 } from '@core/chats.js'
 import { isEphemeral } from '@core/events.js'
@@ -26,18 +28,9 @@ import { onChatEvent } from './chatEvents.js'
  */
 export type ChatMode = WorkingMode | 'plan'
 
-/**
- * The record once a plan is approved — the same rule the core applies.
- *
- * `acceptEdits` only out of planning: the agent may offer a plan from any mode,
- * and one offered unasked does not lift the conversation out of asking first.
- */
-function leavePlanning(chat: Chat): Chat {
-  return {
-    ...chat,
-    planMode: false,
-    ...(chat.planMode && { workingMode: 'acceptEdits' as const })
-  }
+/** The record once a plan is approved — the core's rule, `modeAfterPlan`. */
+function leavePlanning(chat: Chat, executeIn: PlanExecutionMode): Chat {
+  return { ...chat, planMode: false, workingMode: modeAfterPlan(chat, executeIn) }
 }
 
 /**
@@ -225,7 +218,13 @@ export function useChat(
   status: ChatStatus,
   describeFailure: Describe,
   /** Announces the record this pane created, so the tab strip can draw it. */
-  onOpened: (chat: Chat) => void
+  onOpened: (chat: Chat) => void,
+  /**
+   * What an approved plan is carried out in, from the settings. Defaulted to
+   * the setting's own default, which is what a config that has not been read
+   * yet stands for.
+   */
+  planExecutionMode: PlanExecutionMode = 'auto'
 ): ChatController {
   const chatId = initial?.id ?? null
 
@@ -413,6 +412,18 @@ export function useChat(
       setStreaming(NOTHING_STREAMING)
       setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
 
+      // The core gave up auto mode on its own. This line is the only word of
+      // it a window gets, so the chip is moved here — left alone it would go
+      // on saying Auto over a conversation that asks.
+      if (event.type === 'auto_mode_unavailable') {
+        // The null arm cannot be reached: events are heard only for an open
+        // conversation, which has a record. The guard is for the state's type.
+        /* v8 ignore next */
+        setChat((current) =>
+          current === null ? null : { ...current, workingMode: event.fallback }
+        )
+      }
+
       /* Its own state beside the permission, not the same one: the two are
          answered by different calls, and a server's question does not put the
          conversation into `waiting_permission` — the turn is inside a tool
@@ -573,13 +584,13 @@ export function useChat(
         // the chat this hook has open, so there is one by the time it can be
         // answered. The guard exists because the state's type says otherwise.
         /* v8 ignore next */
-        setChat((current) => (current === null ? null : leavePlanning(current)))
+        setChat((current) => (current === null ? null : leavePlanning(current, planExecutionMode)))
       }
 
       const sent = await sendAnswer(requestId, decision, feedback, editedPlan)
       if (!sent.ok) setError(describeFailure(sent))
     },
-    [pending, describeFailure]
+    [pending, describeFailure, planExecutionMode]
   )
 
   const answerElicitation = useCallback(

@@ -229,7 +229,7 @@ export function ComposerAttic({
       return {
         title,
         warning: true,
-        note: t('chat.autoCompactMismatch', {
+        note: t(view.settled ? 'chat.autoCompactMismatch' : 'chat.autoCompactMismatchRetry', {
           effective: formatTokens(view.effective),
           chosen: formatTokens(view.chosen)
         })

@@ -882,6 +882,30 @@ describe('the remembered model list', () => {
     expect(state.chats[0]?.effort).toBe('medium')
   })
 
+  // Auto mode is stored like any other working mode, and a chat left in it
+  // has to come back in it.
+  it('loads a chat left in auto mode', async () => {
+    const chat = {
+      id: 'chat-1',
+      workspaceId: 'planner/kyiv',
+      agent: 'claude',
+      status: 'idle',
+      title: null,
+      sessionId: null,
+      model: null,
+      effort: 'medium',
+      workingMode: 'auto',
+      planMode: false,
+      knownCommands: [],
+      skillOverrides: {},
+      createdAt: '2026-08-11T09:00:00.000Z'
+    }
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [chat] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.workingMode).toBe('auto')
+  })
+
   // Written before a conversation could be rewound: it never was, so there is
   // no cut waiting to be applied — and the file must still open.
   it('loads a chat written before a rewind could leave a cut waiting', async () => {

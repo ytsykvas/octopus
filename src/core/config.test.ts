@@ -444,6 +444,17 @@ describe('loading a config from an older version', () => {
     expect(again.version).toBe(2)
   })
 
+  // Written before an approved plan could be carried out in auto mode: the
+  // setting is missing, and the file must still load — with the default.
+  it('loads a config written before the plan could choose its mode', async () => {
+    const file = join(dir, 'config.json')
+    const older: Record<string, unknown> = { ...createDefaultConfig('ytsykvas', NOW, () => UUID) }
+    delete older.planExecutionMode
+    await writeFile(file, JSON.stringify(older), 'utf8')
+
+    await expect(loadConfig(file)).resolves.toMatchObject({ planExecutionMode: 'auto' })
+  })
+
   it('leaves a current config untouched on disk', async () => {
     const file = join(dir, 'config.json')
     const current = {

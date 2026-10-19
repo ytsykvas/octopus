@@ -1317,6 +1317,53 @@ describe('what the log shows', () => {
   })
 
   /*
+   * A call auto mode's classifier refused. Without the line it shows only as a
+   * tool that failed, and a mode that decides for the user has to leave its
+   * decisions where they can be read.
+   */
+  it('says when auto mode blocked a call, and why', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_denied',
+          toolName: 'Bash',
+          byClassifier: true,
+          reason: 'Downloads and runs a remote script'
+        })
+      ]
+    })
+
+    expect(screen.getByText('Auto mode blocked Bash')).toBeVisible()
+    expect(screen.getByText('Downloads and runs a remote script')).toBeVisible()
+  })
+
+  it('names a rule rather than auto mode when a rule refused the call', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_denied',
+          toolName: 'Write',
+          byClassifier: false,
+          reason: null
+        })
+      ]
+    })
+
+    expect(screen.getByText('Write was refused without asking')).toBeVisible()
+    expect(screen.queryByText(/Auto mode/)).not.toBeInTheDocument()
+  })
+
+  it('says why the chip left auto mode', () => {
+    renderLog({
+      entries: [fromAgent({ type: 'auto_mode_unavailable', reason: null, fallback: 'default' })]
+    })
+
+    expect(
+      screen.getByText('Auto mode is not available here, so this chat is on Manual now')
+    ).toBeVisible()
+  })
+
+  /*
    * A model refused, the CLI retried, and what the first had already said is
    * taken back. Struck through rather than dropped: the work was really done
    * and abandoned, and a log that quietly loses it reads as though the agent

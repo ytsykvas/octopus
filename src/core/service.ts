@@ -52,6 +52,7 @@ import {
   isUsageCommand,
   isOpenChat,
   MAX_CHATS_PER_WORKSPACE,
+  modeAfterPlan,
   newChat,
   sessionMode,
   sessionModel,
@@ -204,10 +205,12 @@ import {
   skillOverridesFor,
   type SkillPreview,
   type SkillSave,
+  type SkillVisibility,
   writeRawSkill,
   writeSkill
 } from './skills.js'
 import { describeSessionSkill, withholdable } from './sessionSkills.js'
+import { skillsInFiles } from './settingsFiles.js'
 import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
@@ -475,6 +478,15 @@ export interface ServiceOptions {
     cwd: string,
     sources: readonly SettingSourceName[]
   ) => Promise<WindowOverride | null>
+  /**
+   * What the settings files a session reads say about each skill
+   * (`skillsInFiles`). Reads the user's own file by default, so a test passes
+   * its own.
+   */
+  readonly skillsInFiles?: (
+    cwd: string,
+    sources: readonly SettingSourceName[]
+  ) => Promise<ReadonlyMap<string, SkillVisibility>>
 }
 
 /**
@@ -1474,6 +1486,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const dataRoot = options.dataRoot ?? rootDir()
   const cliDir = options.cliConfigDir ?? cliConfigDir()
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
+  const fileSkillsFor = options.skillsInFiles ?? skillsInFiles
   const listening = options.listening ?? isListening
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
@@ -1525,10 +1538,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     {
       readonly startedWith: AutoCompactWindow | null
       readonly override: WindowOverride | null
-      /** The last reading named another window than the one it was started with (`windowStrayed`). */
-      readonly strayed: boolean
+      /**
+       * The window the last reading named, in tokens, when it was another than
+       * the one the session was started with (`windowStrayed`) and not the one
+       * it was started to shed; null otherwise.
+       */
+      readonly strayed: number | null
+      /**
+       * The stray reading a restart started this session to shed, or null. Read
+       * again, it is one no new session clears, and choosing the same window
+       * once more would only start another for nothing.
+       */
+      readonly shedding: number | null
     }
   >()
+  /** The stray a restart starts a chat's next session to shed — `restartForWindow`. */
+  const shedOnStart = new Map<string, number | null>()
   /** What each model holds, as any session's turns have said; outlives the sessions. */
   const modelWindows = new Map<string, number>()
   /**
@@ -1553,6 +1578,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * would call a figure from an hour ago fresh.
    */
   const modelHeardAt = new WeakMap<AgentSession, number>()
+
+  /**
+   * Conversations in auto mode because a plan was carried out in it, not
+   * because anybody picked it.
+   *
+   * Only so that losing auto mode there falls back to `acceptEdits` rather than
+   * Manual. In memory: after a restart the chip simply says Auto, and a
+   * fall back then goes to Manual — the cautious end of a rare case.
+   */
+  const autoFromPlan = new Set<string>()
   /** Sessions being started, so a second asker waits for the first. */
   const starts = new Map<string, Promise<AgentSession>>()
   const listeners = new Set<(event: ChatEvent) => void>()
@@ -2303,13 +2338,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * Fills in the half of a reset the SDK layer could not know.
    *
-   * `mapMessage` is a pure function of one message, and one message cannot say
-   * whether the user asked for this: the same reset arrives when the agent
-   * leaves plan mode. The answer was recorded when the message went out, and
-   * this is where the two halves meet. Everything else passes through.
+   * `mapMessage` is a pure function of one message, and a message from an
+   * older CLI cannot say whether the user asked for this: the same reset
+   * arrives when the agent leaves plan mode. The answer was recorded when the
+   * message went out, and this is where the two halves meet. Everything else
+   * passes through.
    */
   function answerReset(chat: Chat, event: AgentEvent): AgentEvent {
     if (event.type !== 'conversation_reset') return event
+
+    // Another flow's reset, named by the CLI: a `/clear` still on its way
+    // belongs to the reset it is about to cause, not to this one.
+    if (event.trigger !== undefined && event.trigger !== 'clear') return event
 
     // Deleted whether or not it was there: the request belongs to the reset it
     // caused, and leaving it behind would clear the log on the next one.
@@ -2393,6 +2433,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
 
     if (event.type === 'commands_changed') rememberCommands(chat, event.commands)
+
+    /*
+     * The session says it is in `default` while the record says auto. Either
+     * the CLI started it there because auto mode is not available — a request
+     * for it at start is turned down silently — or something moved it, such
+     * as leaving a plan that began elsewhere. The report is not taken as the
+     * verdict, since it can be a moment behind a switch that is still on its
+     * way: auto is asked for again, and only a refusal of that falls back.
+     */
+    if (event.type === 'mode_reported' && event.mode === 'default') {
+      const current = findChat(state, chat.id)
+      const session = sessions.get(chat.id)
+      if (session && current?.workingMode === 'auto' && !current.planMode) {
+        background(chat, assertMode(chat.id, session))
+      }
+    }
 
     // An MCP server's form holds the turn exactly as a permission does, so it
     // is the same "come and answer this" — the workspace's amber dot, the
@@ -2695,15 +2751,110 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * what the other half says, not merely "not planning".
    */
   async function applyMode(chatId: string, patch: Partial<Chat>): Promise<void> {
+    const previous = requireChat(chatId).workingMode
+    // Somebody chose a mode, so auto mode is no longer the plan's choice.
+    if (patch.workingMode !== undefined) autoFromPlan.delete(chatId)
     const before = await changeInForce(chatId, () => patch)
 
     // Applied to the running session too, so the choice takes effect on the
     // current turn rather than only on the next one. Read back after the write
     // rather than merged by hand: the session wants both halves, and only one
     // of them is in the patch.
-    await sessions.get(chatId)?.setPermissionMode(sessionMode(requireChat(chatId)))
+    const session = sessions.get(chatId)
+    if (session) {
+      if (patch.workingMode === 'auto' && previous !== 'auto') {
+        await enterAuto(chatId, session, previous)
+      } else {
+        await assertMode(chatId, session)
+      }
+    }
     await pushModel(chatId, before.model)
     await pushEffort(chatId, before.effort)
+  }
+
+  /**
+   * Auto mode, just chosen, handed to the running session.
+   *
+   * The SDK refuses the switch when the account, the model or a setting does
+   * not allow auto mode. Somebody has just asked for it, so the refusal is
+   * theirs to read: the record goes back to what it said before and the
+   * reason comes back as an error, which leaves the chip where it was.
+   */
+  async function enterAuto(
+    chatId: string,
+    session: AgentSession,
+    previous: WorkingMode
+  ): Promise<void> {
+    try {
+      await session.setPermissionMode(sessionMode(requireChat(chatId)))
+    } catch (error) {
+      // Only while the record still says auto: a choice made since is newer
+      // than the one being refused.
+      await commit((current) =>
+        findChat(current, chatId)?.workingMode === 'auto'
+          ? updateChat(current, chatId, { workingMode: previous })
+          : current
+      )
+      const reason = describeError(error)
+      throw new ChatError(
+        'autoModeUnavailable',
+        { chatId, reason },
+        `Chat ${chatId} could not enter auto mode: ${reason}`
+      )
+    }
+  }
+
+  /**
+   * Puts the running session in the mode the record names.
+   *
+   * Auto mode can stop being available under a conversation already set to
+   * it — a different model, a setting, the account — and the SDK then refuses
+   * it. Nobody is choosing at that moment, so there is nobody to hand an error
+   * to: the conversation drops to `default` instead, with a line in the log
+   * saying so, and the session is set to that. Every other mode is the SDK's
+   * own and a refusal of it is a fault, which goes up as before.
+   */
+  async function assertMode(chatId: string, session: AgentSession): Promise<void> {
+    // What was asked for, held across the wait: the user may have moved on by
+    // the time a refusal arrives, and a refusal of auto mode is never a fault
+    // to report — at worst it is one nobody wants any more.
+    const wanted = sessionMode(requireChat(chatId))
+    try {
+      await session.setPermissionMode(wanted)
+    } catch (error) {
+      if (wanted !== 'auto') throw error
+      await fallBackFromAuto(chatId, describeError(error))
+      await session.setPermissionMode(sessionMode(requireChat(chatId)))
+    }
+  }
+
+  /**
+   * Gives up auto mode, and says so in the conversation.
+   *
+   * To `default`, unless auto came from carrying out an approved plan: then to
+   * `acceptEdits`, the other way a plan is carried out, since Manual would ask
+   * about every step the user has just agreed to.
+   *
+   * Only from `auto`: a conversation someone has moved on from in the
+   * meantime keeps what they chose. The line is what tells the window the
+   * record moved — nothing else does — and what tells the reader why the chip
+   * changed by itself.
+   */
+  async function fallBackFromAuto(chatId: string, reason: string | null): Promise<void> {
+    const fallback = autoFromPlan.has(chatId) ? 'acceptEdits' : 'default'
+    autoFromPlan.delete(chatId)
+
+    // An object rather than a `let`: the flag is set inside the commit, and the
+    // compiler cannot see a closure write to a local.
+    const outcome = { moved: false }
+    await commit((current) => {
+      if (findChat(current, chatId)?.workingMode !== 'auto') return current
+      outcome.moved = true
+      return updateChat(current, chatId, { workingMode: fallback })
+    })
+    if (outcome.moved) {
+      handleEvent(requireChat(chatId), { type: 'auto_mode_unavailable', reason, fallback })
+    }
   }
 
   /** The model and effort a chat's record puts in force right now. */
@@ -2789,11 +2940,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // seen — the CLI takes one from a settings file mid-session too. Asked for
     // by a choice in the menu and never by a message, or a variable left in
     // place would start the session over before every one of them.
-    const recheckStart = recheck && (started.override !== null || started.strayed)
+    const recheckStart = recheck && (started.override !== null || started.strayed !== null)
     if (started.startedWith === chat.autoCompactWindow && !recheckStart) return
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
 
     await closeOneChat(chat)
+    // Remember the stray the old session read, so the new one reading it again
+    // says no restart could help — whatever this one was started for, a fresh
+    // session reading the same value proves the same thing.
+    shedOnStart.set(chatId, started.strayed)
     await sessionFor(chat, requireWorkspace(chat.workspaceId))
   }
 
@@ -3470,10 +3625,43 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
-  interface SessionSkills {
-    /** Extra roots to hand the session, so it finds the stores' skills. */
-    readonly roots: string[]
-    readonly listing: SkillListing[]
+  /**
+   * Whether a session loads the skills of our stores and the checkout at all:
+   * only with the project layer, under which the SDK reads every root's
+   * `.claude/skills`. One rule for the roots a session is handed and the list
+   * the panel draws, so neither offers what the other cannot reach.
+   */
+  function loadsOurSkills(settingSources: readonly SettingSourceName[]): boolean {
+    return settingSources.includes('project')
+  }
+
+  /**
+   * The extra roots a session is handed, so it finds the stores' skills.
+   *
+   * Both, whether or not either holds anything today.
+   *
+   * An empty store used to be left unmentioned — a root widens what the
+   * session may reach, and one handed over for an empty directory looked like
+   * a cost with nothing bought. It buys the ability to fill it. The roots are
+   * passed **once**, at session start, and `reloadSkills` only re-scans the
+   * directories the session already knows about, so a store that was empty
+   * then stayed invisible for the life of the conversation — every skill later
+   * written into it, not merely the first. That is the state of every fresh
+   * install, and the panel listed the new skill as available the whole time
+   * because it re-reads disk on every call.
+   *
+   * None with no project layer in `settingSources`: the SDK then reads no
+   * `.claude/skills` under any root, so a root there really would buy nothing.
+   *
+   * Kept out of `sessionSkills`, and reads nothing, because a start needs only
+   * the roots: building the panel's listing as well cost three directory reads
+   * per start and lengthened the window in which a change has to be caught by
+   * the re-read after the last await.
+   */
+  function skillRootsFor(project: Project, settingSources: readonly SettingSourceName[]): string[] {
+    return loadsOurSkills(settingSources)
+      ? [globalSkillsRoot(dataRoot), projectSkillsRoot(project.id, dataRoot)]
+      : []
   }
 
   /**
@@ -3514,13 +3702,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      * list exists only once a session does.
      */
     held: readonly AgentSkill[] = []
-  ): Promise<SessionSkills> {
+  ): Promise<SkillListing[]> {
     const globalRoot = globalSkillsRoot(dataRoot)
     const projectRoot = projectSkillsRoot(project.id, dataRoot)
 
     // A switch over something the session would not load is a control with
     // nothing behind it, so the list is empty rather than inert.
-    const loaded = settingSources.includes('project')
+    const loaded = loadsOurSkills(settingSources)
 
     const [ours, theirs, carried] = await Promise.all([
       loaded ? readSkillsIn(skillsDirOf(globalRoot)) : [],
@@ -3606,28 +3794,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
     }
 
-    return {
-      /*
-       * Both, whether or not either holds anything today.
-       *
-       * An empty store used to be left unmentioned — a root widens what the
-       * session may reach, and one handed over for an empty directory looked
-       * like a cost with nothing bought. It buys the ability to fill it. The
-       * roots are passed **once**, at session start, and `reloadSkills` only
-       * re-scans the directories the session already knows about, so a store
-       * that was empty then stayed invisible for the life of the conversation
-       * — every skill later written into it, not merely the first. That is the
-       * state of every fresh install, and the panel listed the new skill as
-       * available the whole time because it re-reads disk on every call.
-       *
-       * The `loaded` gate stays, and it is the one case where the old
-       * reasoning still holds: with no project layer in `settingSources` the
-       * SDK reads no `.claude/skills` under any root, so a root there really
-       * would buy nothing.
-       */
-      roots: loaded ? [globalRoot, projectRoot] : [],
-      listing
-    }
+    return listing
   }
 
   /**
@@ -3760,12 +3927,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     workspace: Workspace,
     settingSources: readonly SettingSourceName[]
   ): Promise<AgentSession> {
-    const skills = await sessionSkills(
-      requireProject(workspace.projectId),
-      workspace,
-      asked,
-      settingSources
-    )
+    const roots = skillRootsFor(requireProject(workspace.projectId), settingSources)
 
     /*
      * Where a pasted image is written, handed over as a root of its own.
@@ -3786,16 +3948,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Before the roots are handed over, because `--add-dir` on a directory that
     // is not there is at best untested — and until the first skill is written
     // neither of ours exists. A write, so it lives here rather than in
-    // `sessionSkills`, which is also the read path behind the skills panel.
+    // `skillRootsFor`, which only names them.
     await Promise.all([
-      ...[...skills.roots, attachments].map((root) => ensureStore(root)),
+      ...[...roots, attachments].map((root) => ensureStore(root)),
       // The commands and subagents beside them, for the same reason: the roots
       // are passed once at session start, and a directory that was not there
       // then stays invisible for the life of the conversation.
-      ...skills.roots.flatMap((root) => [
-        ensureLibrary(root, 'command'),
-        ensureLibrary(root, 'subagent')
-      ])
+      ...roots.flatMap((root) => [ensureLibrary(root, 'command'), ensureLibrary(root, 'subagent')])
     ])
 
     // Asked of the files this session will read, as it starts. The agent can
@@ -3839,7 +3998,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // already doing. `askPermission` consults `alwaysAllowedTools` itself,
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
-        additionalDirectories: [...skills.roots, attachments],
+        additionalDirectories: [...roots, attachments],
         skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow
       },
@@ -3855,12 +4014,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         askPermission: (ask) => askPermission(chat, ask),
         // The snapshot, as `askPermission` above takes it: this reads only the
         // chat's id and its workspace, and neither of those changes.
-        askElicitation: (ask) => askElicitation(chat, ask)
+        askElicitation: (ask) => askElicitation(chat, ask),
+        // The sources this session started with, not the project's current
+        // ones: those are the files it reads.
+        skillsInFiles: () => fileSkillsFor(workspace.path, settingSources)
       }
     )
 
     sessions.set(chat.id, session)
-    compaction.set(chat.id, { startedWith: chat.autoCompactWindow, override, strayed: false })
+    compaction.set(chat.id, {
+      startedWith: chat.autoCompactWindow,
+      override,
+      strayed: null,
+      shedding: shedOnStart.get(chat.id) ?? null
+    })
+    shedOnStart.delete(chat.id)
 
     // Fire-and-forget, and the two failures go different ways. A list that
     // cannot be *read* is swallowed: it is a convenience for the picker, a
@@ -4699,7 +4867,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           ?.refreshSkills()
           .catch(() => [])) ?? []
 
-      const { listing } = await sessionSkills(
+      const listing = await sessionSkills(
         requireProject(workspace.projectId),
         workspace,
         chat,
@@ -4723,14 +4891,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async skillsForWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
 
-      const { listing } = await sessionSkills(
+      return sessionSkills(
         requireProject(workspace.projectId),
         workspace,
         { skillOverrides: {} },
         await sourcesFor(workspace)
       )
-
-      return listing
     },
 
     async setChatSkill(chatId, key, enabled) {
@@ -5520,7 +5686,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const running = sessions.get(chatId)
       if (running) {
-        await running.setPermissionMode(sessionMode(chat))
+        await assertMode(chatId, running)
         await running.setEffort(effortInForce(chat))
       }
 
@@ -5767,18 +5933,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // session does not start by planning again, and the running session, so
       // the work the plan describes can actually begin.
       if (leaving) {
-        // An approved plan goes on in `acceptEdits`. The composer holds one
-        // control that cycles through asking, accepting and planning, so there
-        // is no second one left to say what should follow a plan — and a plan
-        // read and approved is the edits accepted in advance.
-        //
-        // Only out of planning, though. The agent may call the plan tool from
-        // any mode, and handing over there would let it raise a conversation
-        // the user set to ask first into one that does not, by asking once.
-        const before = await changeInForce(request.chatId, (chat) => ({
-          planMode: false,
-          ...(chat.planMode && { workingMode: 'acceptEdits' as const })
-        }))
+        // Which mode follows is `modeAfterPlan`'s rule, shared with the
+        // window.
+        const before = await changeInForce(request.chatId, (chat) => {
+          const workingMode = modeAfterPlan(chat, config.planExecutionMode)
+          if (workingMode === 'auto' && chat.workingMode !== 'auto') autoFromPlan.add(chat.id)
+          return { planMode: false, workingMode }
+        })
 
         // The model leaves planning with the record. Before the reply, never
         // after it: the reply is what releases the tool call, so a model sent
@@ -5897,7 +6058,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           context.modelWindow ??
           (context.model === null ? null : (modelWindows.get(context.model) ?? null)),
         override: started?.override ?? null,
-        pending: started !== undefined && started.startedWith !== chat.autoCompactWindow
+        pending: started !== undefined && started.startedWith !== chat.autoCompactWindow,
+        settled: started?.shedding === context.maxTokens
       }
 
       // Kept for the next choice in the menu: a reading this one disagrees
@@ -5909,7 +6071,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (started && sessions.get(chatId) === session) {
         compaction.set(chatId, {
           ...started,
-          strayed: windowStrayed({ ...autoCompact, chosen: started.startedWith })
+          strayed:
+            !autoCompact.settled && windowStrayed({ ...autoCompact, chosen: started.startedWith })
+              ? context.maxTokens
+              : null
         })
       }
 

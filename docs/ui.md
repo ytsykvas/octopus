@@ -4,7 +4,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ ●●●   sport   /Users/…/sport                                      ⊞  │  title bar
+│ ●●●   sport   /Users/…/sport                                  ▶ │ ⊞  │  title bar
 ├────┬──────────────┬──────────────────────────┬──────────────────────┤
 │ TG │  sport       │                          │ Changes Terminal …   │
 │ SP │  ⑂ develop   │        agent chat        │                      │
@@ -23,6 +23,17 @@
 draw its own, which pushed the tab strip's fill up behind the traffic lights and
 put the project name under them. Its left padding clears the buttons outright,
 so nothing depends on how wide the tab strip happens to be.
+
+**Its right end runs the selected workspace's server.** A Play icon, a spinner
+while the build goes, and then a globe to the server's port beside a Stop — the
+same sequence as the Scripts tab's `Run`, read from the same state in `App`, so
+a press in either place moves both. Running is the thing done to a workspace
+all day, and with the right pane folded the tab that does it is out of reach.
+Icons only, with the words as tooltips: the bar is one row for the whole
+window. It is absent where the workspace has no server script, disabled while a
+repository's scripts wait to be allowed, and marks a failed build with a red
+dot — with the pane folded, that is the only place the failure can show.
+`Restart` stays on the tab alone.
 
 **Projects are a tab strip**; workspaces are a list of the active one. Putting
 both in one tree outgrows the window and makes a click mean two things — select
@@ -230,7 +241,10 @@ double-click on the row or on the tab, or Enter in the tree, keeps it. Note that
 a double-click **pins** a file tab where it **renames** a conversation — two
 kinds of tab, two meanings of the gesture each kind already had in an editor and
 here. The strip scrolls sideways once the files outrun the room, and the one in
-front is scrolled into view.
+front is scrolled into view. "Open file" in a file's menu in Changes opens it
+here too, kept, rather than in whatever app the system picks: reading a changed
+file whole is the common case, a file asked for from a menu is not a glance, and
+"Open in editor" in the viewer is still the way out.
 
 A file in front hides every conversation behind it — still mounted, still
 streaming — and only the conversation on screen may raise a dialog, so none can
@@ -506,19 +520,31 @@ around the frame, with a soft glow outside it that brightens while focus is
 anywhere inside. It is the one deliberate exception to panes taking borders
 rather than shadows (§10.2 of PROJECT.md).
 
-The frame's `::before` is the ring, a gradient border around a fill of the
-frame's own surface; its `::after` is the glow, the same gradient blurred,
-underneath. That fill is what keeps the glow outside — a mask cut the blur off
-in a hard rectangle, since a mask clips at the edge of its own box. The frame
-takes `z-index: 20` to hold those layers: `isolation` would have done it at level
-zero, and the menus that open upwards out of the frame then slid under the log's
-floating day chip.
+Three layers. The line is a span of its own, `.composer-ring-line`, the
+frame's first child: a conic gradient masked down to its 1.5px edge. Under the
+contents, the frame's `::before` is a fill of its own surface, and its `::after`
+is the glow, the gradient blurred, beneath that. The fill is what keeps the
+glow outside — a mask cut the blur off in a hard rectangle, since a mask clips
+at the edge of its own box. The frame takes `z-index: 20` to hold those layers:
+`isolation` would have done it at level zero, and the menus that open upwards
+out of the frame then slid under the log's floating day chip.
 
-**The ring does not turn.** A turning version was built and measured: even rotated
-by the compositor rather than repainted, it held 6–8% of the CPU for as long as
-the window was on screen, and a version that animated the gradient's own angle
-held about 29%. A laptop with octopus open all day pays for that in battery, for
-decoration.
+**The line turns while focus is inside the composer, and nothing else moves.**
+It turns its gradient's own angle (`--ring-angle`, registered with `@property`
+so it interpolates) once every six seconds; the glow stays still and only
+brightens. The split is the whole reason it is affordable. The first turning
+versions kept the line and the fill in one layer and turned the gradient
+under the glow as well, so every frame re-blurred it: measured in an isolated
+page on the same Electron, that held ~17% of a core while it ran (an earlier
+in-app reading put it at 29%), and a compositor rotation 6–8% for as long as
+the window was on screen. Turning only the line measured ~0.5% while focused —
+no different from the still ring — and no change in memory; unfocused it costs
+nothing at all. So there is no pause for an inactive window either: there is
+nothing measurable to save. Reduced motion stops it with every other animation.
+
+**The field is set in Menlo**, at 13px — `--font-prompt`, falling back to the
+mono stack. A prompt is closer to code than to prose, and the maintainer chose
+the face by eye; the log and the rest of the window stay in the sans.
 
 While something is dragged over the composer, the ring steps aside for the plain
 accent border: "let go here" reads the same everywhere. The strip around the
@@ -642,7 +668,12 @@ says, most pressing first:
   (`chats.ts`), which the menu and the core both ask — the core against the
   window the session was started with, so a choice still waiting for its turn
   is not taken for one. Auto has nothing to stray from, so a variable taken
-  mid-session under Auto is shed only by choosing a window.
+  mid-session under Auto is shed only by choosing a window. The note says
+  choosing again starts the session over, and stops saying it once a session
+  started over for that very reading has read it again: a stray no new session
+  clears — a model holding less before any turn has said how much, a managed
+  settings file the start does not read — costs one restart to find out, and
+  choosing it again after that changes nothing.
 
 A window above what the model holds is greyed with that figure, since the
 agent would cut it down anyway. _Auto_ says what it amounts to while it is the
@@ -877,10 +908,11 @@ way to one; what the agent did next was start editing files.
 
 **One button and a field**, which is what the question actually has:
 
-- **Execute** runs it, in `Accept edits` out of planning — see the footer's mode above for
-  why. A line beside the button says so, because the click widens what the
-  agent may do and that is worth reading before it rather than in the footer
-  after it.
+- **Execute** runs it, out of planning, in the mode Settings names for an
+  approved plan — `Auto` by default, or `Accept edits` — see the footer's mode
+  above for why. A line beside the button says which, because the click widens
+  what the agent may do and that is worth reading before it rather than in the
+  footer after it.
 - **The field is how you carry on planning.** Writing in it _is_ that, so a
   button saying so was the same decision offered twice. `Enter` sends and
   `⇧Enter` breaks the line — the composer's keys, one convention rather than
@@ -1024,7 +1056,16 @@ A `/model` command is what causes it: the CLI scopes it to the session ("for thi
 session only"), so it moves what is running without moving what this chat chose
 — and the record staying put is the truth rather than a compromise. The name
 reaches the footer with the context reading, which is already refreshed on every
-`result`, so the chip moves as soon as the command's turn ends.
+`result`, so the chip moves as soon as the command's turn ends. The panel keeps
+ticking the record and says so in a line above the columns ("This session is
+running Sonnet: /model chose it for this session only"); without it the panel
+read as the model the next message runs on, and the chip contradicted it. Two
+things keep the line from blaming a `/model` nobody typed. A pick in the panel,
+a plan model or a mode moves the session at once, so the reading is taken again
+as soon as the core has applied it, and the model it named before is forgotten
+until then — it waited for the next turn's result, and the panel, open after
+the pick, named the model just left. And with no catalogue yet there is no line:
+the default row has no model behind it to compare with.
 
 **`/model opusplan` is the one command the panel follows.** The alias means Opus
 while planning and Sonnet otherwise, which is precisely a split, and left to the
@@ -1048,40 +1089,61 @@ So the record keeps `planMode` beside `workingMode`, and the composer shows the
 two as one control beside send: `planMode` wins when it is on, and the working
 mode is what shows otherwise.
 
-It **switches in place**, going round ask first → `Accept edits` → plan → ask
-first: the ring Claude Code's own shift+tab goes round, and Shift+Tab in the
-field does the same here. There used to be two controls — the permission chip
-among the pickers and a plan toggle by send — and each said half of what this
-says. The pickers beside it keep their menus, because their lists are
-open-ended. It is tinted for `Accept edits` and for plan, the two states where the
-agent does something other than ask.
+It **switches in place**, going round `Manual` → `Accept edits` → plan →
+`Auto` → `Manual`: the ring Claude Code's own shift+tab goes round, and
+Shift+Tab in the field does the same here. There used to be two controls — the
+permission chip among the pickers and a plan toggle by send — and each said
+half of what this says. The pickers beside it keep their menus, because their
+lists are open-ended. Each mode has its own colour, so it reads without the
+word: `Manual` is untinted, `Accept edits` amber (the `warning` token, the
+app's "goes ahead, take note"), plan in the accent, and `Auto` green with a
+bolt — the one mode where a classifier rather than a rule decides. The tints
+are `MODE_TINTS` in `Composer.tsx`.
 
-Leaving plan for ask first moves the working mode **before** planning ends.
-Planning was holding `acceptEdits` underneath — the ring reaches plan through
-it — so turned the other way round the session would pass through it, and an
-edit landing then would go through unasked. `setMode` in `useChat.ts` owns that
-order so no caller has to know it.
+Leaving plan for the next mode moves the working mode **before** planning ends.
+Planning holds a working mode underneath — `acceptEdits`, when the ring reached
+it the usual way — so turned the other way round the session would pass
+through it, and an edit landing then would go through without what the next
+mode asks for. `setMode` in `useChat.ts` owns that order so no caller has to
+know it.
 
-**A plan approved out of planning goes on in `Accept edits`**, whatever the
-conversation was asking before — the core writes both fields when the plan tool
-is allowed, and executing a plan from the log does the same. With one control
-there is no second one left to say what should follow a plan, and a plan read
-and approved is the edits accepted in advance. Because that widens what the
-agent may do, the plan dialog says so beside its button, before the click.
+**A plan approved out of planning goes on in the mode Settings names** —
+"Carrying out an approved plan", `Auto` by default or `Accept edits` — whatever
+the conversation was asking before. The core writes both fields when the plan
+tool is allowed, and executing a plan from the log does the same; the rule is
+`modeAfterPlan` in `chats.ts`, shared by both. With one control there is no
+second one left to say what should follow a plan, and a plan read and approved
+is the edits accepted in advance — which is why `Manual` is not offered there.
+Because that widens what the agent may do, the plan dialog says so beside its
+button, before the click.
 
-**Only out of planning.** The agent may call the plan tool from any mode, and
-handing over there would let it raise a conversation set to ask first into one
-that does not, by asking once. Outside planning, approving changes no mode and
-the dialog carries no such line.
+**Only out of planning, and never down from `Auto`.** The agent may call the
+plan tool from any mode, and handing over there would let it raise a
+conversation set to `Manual` into one that does not ask, by asking once.
+Outside planning, approving changes no mode and the dialog carries no such
+line. A conversation already in `Auto` goes back to it whatever the setting
+says, as the CLI itself does.
 
-`Accept edits` keeps its English name in every locale — it is what Claude
-Code's own status line calls the mode, and a translated name for a borrowed one
-reads as a second setting rather than the same one — Settings names it the same
-way. It was `Auto mode` until Claude Code gained a mode of that name, a
-classifier approving each call (`auto` in the SDK's `PermissionMode`): someone
-who knows the agent read the chip as that one and expected commands to run
-unasked, where `acceptEdits` accepts file edits and the plain filesystem
-commands (`mkdir`, `touch`, `rm`, `mv`, `cp`, `sed`), not commands in general.
+**`Auto` is the SDK's `auto` mode**: a classifier approves or refuses each call,
+and what it cannot decide still comes to the chat as a question. What it
+refuses is drawn as a line in the log ("Auto mode blocked Bash", with its
+reason), from the SDK's `permission_denied` message — without it a blocked call
+shows only as a tool that failed. Not every account, model or setup has it. A
+switch to it that the SDK refuses comes back as an error and the chip stays
+where it was. A conversation already in it that loses it — the CLI starts a
+session in `default` silently, or refuses it on a later message — falls back
+with a line saying so: to `Accept edits` when auto came from carrying out a
+plan, to `Manual` otherwise. A report of `default` from the session is not
+taken as that verdict on its own; auto is asked for again first, and only a
+refusal falls back.
+
+`Manual`, `Accept edits` and `Auto` keep their English names in every locale —
+they are what Claude Code's own status line calls the modes, and a translated
+name for a borrowed one reads as a second setting rather than the same one —
+Settings names them the same way. `Accept edits` was once labelled `Auto mode`,
+before Claude Code gained a mode of that name; the two are different things:
+`acceptEdits` accepts file edits and the plain filesystem commands (`mkdir`,
+`touch`, `rm`, `mv`, `cp`, `sed`), not commands in general.
 
 **The right pane** holds Changes, Terminal, Scripts and Pull request. The
 Scripts tab runs `setup.sh` on its build half and `run.sh` on its server half,
@@ -1143,7 +1205,7 @@ so `Run` is disabled — the server half already carries that invitation.
 The sequence is **keyed by workspace**, exactly as the runs are: leaving one
 mid-build to look at another must not report the second as building.
 
-**Running is decided on that header, never in the halves.** There were four
+**Running is decided on that header — and on the title bar, which mirrors it from the same state — never in the halves.** There were four
 controls across the two of them — `Build`/`Rebuild` in one, `Start`/`Restart`/
 `Stop` in the other — and beside a `Run` that does both, two of them said the
 same word twice. A half's job is to show what is happening; the pressing belongs
@@ -2347,10 +2409,14 @@ branch deliver". After a commit the tree goes clean while Changes still lists
 the files — both right, and not a bug. The colours and letters come from
 `statusMarks.ts`: green for new, blue for edited, red for deleted and
 conflicted, the conflict marked `!` because a diff against a merge base never
-sees one. Changes no longer draws the letters — its letter column holds the
-rung, and the kind of change is on the name there. A folder with work below it carries a dot in the colour of the
-strongest change inside, so a collapsed folder still says there is something in
-it. Each mark is said aloud after the name; the colour alone says nothing.
+sees one. The letters are the ones editors draw — git's `M A D R C T`, `U` for
+untracked, `!` for a conflict — in every language; only the word said after the
+name is translated. The Ukrainian initial for "changed" was `З`, which before a
+path read as a 3. Changes no longer draws the letters — its letter column holds
+the rung, and the kind of change is on the name there. A folder with work below
+it carries a dot in the colour of the strongest change inside, so a collapsed
+folder still says there is something in it. Each mark is said aloud after the
+name; the colour alone says nothing.
 
 **Deleted files stay in the tree, struck through.** An editor's explorer drops
 them, but a deletion is work as much as an edit is, and the mark is the point of
@@ -2366,6 +2432,16 @@ only the ignored folders still open — one opened once and closed must not cost
 a long read on every turn after — and a listing is laid into the tree only while
 git still calls its folder ignored, so `git add -f` or an edited `.gitignore`
 hands the folder back to git's own children and marks.
+
+**A submodule is a folder, read from disk the same way**, and nothing inside it
+is greyed or marked: the outer repository has nothing to say about it, its own
+ignored folders included. `ls-files --cached` names one like any file, which
+drew it as a file the viewer then found to be a folder, so the tracked files are
+read with `--stage` and a mode of `160000` makes the entry a folder. Every
+folder inside it is read from disk in turn — git lists nothing in there — and a
+submodule git reports as changed, by a new commit or an edit inside, carries
+that status on the folder's row. A workspace's submodules are often not checked
+out, and then the folder opens empty.
 
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when
@@ -2449,6 +2525,13 @@ landed on the base branch after the fork does not. A change staged and then
 reverted in the working tree is invisible, which is the right answer for a pane
 that reports what the workspace now holds.
 
+**A repository nested in the worktree is one row that says so.** Cloned or
+initialised inside it rather than added as a submodule, git lists it as
+`nested/` and never looks inside. The row has nothing to read: git records such
+a folder as a link rather than its files, and only once it has a commit of its
+own. Nor does it offer a revert — git has no record of it to undo, and the
+untracked revert removes a file, which a folder is not.
+
 **How far each change has got, and whether the request is behind it.** One diff
 against the merge base is one comparison, and it folds committed, staged and
 unstaged work into a single pile — which is not the question a reviewer has once
@@ -2459,9 +2542,7 @@ The first is a ladder of three rungs, filled up to the one reached: **not
 committed** (amber), **committed** (blue), **pushed** (faint). On a row it is the
 dots alone, standing where a status letter used to, and the header stays one
 line. The word on every row was a second line per file saying the same thing
-down the whole column, and the letter it displaced had its own trouble: the
-Ukrainian `З` for "changed" read as the digit 3 in front of a path. What
-happened to the file moves onto its name instead — a new file's name is green, a
+down the whole column. What happened to the file moves onto its name instead — a new file's name is green, a
 deleted one is struck through in red, the rest are plain — and both facts are in
 the path's tooltip and read out after the row in words.
 The furthest-behind rung wins, so a file committed once and edited again reads
@@ -2736,6 +2817,9 @@ file back to the state the workspace branched from, which is the pane's own
 scope, so the row leaves the pane. It always asks first, and what the dialog
 says is the asymmetry: committed work survives, undone by a change in the
 working tree, while uncommitted work is gone and nothing in git holds a copy.
+An untracked path already gone counts as reverted; one that could not be
+removed — a folder, a file this user may not delete — says so in the banner
+rather than letting the row come back as though the click had worked.
 
 ## Colour
 
