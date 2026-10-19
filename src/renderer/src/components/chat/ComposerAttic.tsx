@@ -2,7 +2,12 @@ import { ChevronDown, Eraser, FoldVertical, Paperclip } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { AutoCompactView } from '@core/autoCompact.js'
-import { AUTO_COMPACT_VARIABLE, AUTO_COMPACT_WINDOWS, type AutoCompactWindow } from '@core/chats.js'
+import {
+  AUTO_COMPACT_VARIABLE,
+  AUTO_COMPACT_WINDOWS,
+  type AutoCompactWindow,
+  windowStrayed
+} from '@core/chats.js'
 import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
@@ -148,9 +153,9 @@ export function ComposerAttic({
    * Where the conversation compacts, as a choice among six.
    *
    * Still choosable while a variable outranks them, with the note saying so.
-   * Greyed, they were a dead end: the variable is read only when a session
-   * starts, so after it was taken out nothing could start one to notice — and
-   * a choice here is what does, the same window included.
+   * Greyed, they were a dead end: a running session keeps the variable after
+   * it is taken out, so nothing could start one that would notice — and a
+   * choice here is what does, the same window included.
    */
   const windowRows = (view: AutoCompactView): MenuAction[] => {
     const tooLarge = (window: number): boolean =>
@@ -220,9 +225,7 @@ export function ComposerAttic({
 
     if (view.pending) return { title, note: t('chat.autoCompactPending') }
 
-    const expected =
-      view.chosen === null ? null : Math.min(view.chosen, view.modelWindow ?? view.chosen)
-    if (expected !== null && view.chosen !== null && view.effective !== expected) {
+    if (view.chosen !== null && windowStrayed(view)) {
       return {
         title,
         warning: true,

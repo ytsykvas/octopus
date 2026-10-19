@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react'
+import { LoaderCircle, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { MODEL_SCOPED } from '@core/usage.js'
@@ -75,7 +75,14 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
           aria-label={t('limits.refresh')}
           className="focus-ring text-ink-faint hover:text-ink rounded-[var(--radius-control)] transition-colors disabled:opacity-50"
         >
-          <RefreshCw aria-hidden size={11} className={busy ? 'animate-spin' : undefined} />
+          {/* A loader while it reads rather than the arrows turning: standing
+              still for somebody who asked for less motion, arrows that only
+              dim read as a control that is unavailable. */}
+          {busy ? (
+            <LoaderCircle aria-hidden size={11} className="animate-spin" />
+          ) : (
+            <RefreshCw aria-hidden size={11} />
+          )}
         </button>
       </div>
 

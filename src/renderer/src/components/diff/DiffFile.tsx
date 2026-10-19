@@ -276,10 +276,9 @@ export const DiffFile = memo(function DiffFile({
             className="focus-ring row flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5 text-left"
           >
             {/* Where the status letter used to be. The letter is gone from this
-                tab: what happened to the file is on its name below, and the
-                Ukrainian `З` for "changed" read as the digit 3 in front of a
-                path. False when every file is in the same place — the strip
-                at the top says it once instead. */}
+                tab: what happened to the file is on its name below. False when
+                every file is in the same place — the strip at the top says it
+                once instead. */}
             {showPublish && <PublishBadge state={file.publish} />}
             {/* The directory is what gives way. Truncating the whole path cut the
               filename off the end — the one part that identifies the row — so

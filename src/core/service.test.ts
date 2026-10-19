@@ -530,6 +530,22 @@ describe('workspaces', () => {
   })
 
   /*
+   * Typed the way a branch reads on GitHub, the prefix used to give
+   * `octo//magda`, and every new workspace failed with git's own refusal.
+   */
+  it('creates a workspace under a prefix typed with a slash too many', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    await service.updateConfig({ branchPrefix: 'octo/' })
+    const project = await service.addProjectFromPath(repo)
+
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    expect(workspace.branch).toMatch(/^octo\/[^/]+$/)
+  })
+
+  /*
    * A file whose times moved and whose content did not — a binary as well as a
    * text one. A plain `git diff` against the working tree refreshes the index
    * for it and writes it back under `index.lock` (`--no-optional-locks` or
@@ -3899,10 +3915,14 @@ describe('the agent chat', () => {
   /** What the session answers about its context window, and the account's. */
   let contextAnswer: () => Promise<unknown>
   let skillReload: () => Promise<unknown>
+  /** What the session answers when its flags are set. */
+  let flagsAnswer: () => Promise<void>
   let pluginReload: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
   /** What the session answers when asked to put the files back to a message. */
   let rewindAnswer: () => Promise<unknown>
+  /** How setting the session's mode settles — held, to make a send wait on it. */
+  let modeAnswer: () => Promise<void>
 
   function fakeQuery(): QueryFn {
     return (params) => {
@@ -4029,7 +4049,7 @@ describe('the agent chat', () => {
           skillOverrides?: Record<string, string>
         }) => {
           flagSettings.push(settings)
-          return Promise.resolve()
+          return flagsAnswer()
         },
         reloadSkills: () => skillReload(),
         reloadPlugins: () => {
@@ -4054,7 +4074,7 @@ describe('the agent chat', () => {
         },
         setPermissionMode: (mode: string) => {
           modes.push(mode)
-          return Promise.resolve()
+          return modeAnswer()
         },
         close: () => {
           closed++
@@ -4160,10 +4180,12 @@ describe('the agent chat', () => {
 
   beforeEach(() => {
     agents = []
+    modeAnswer = () => Promise.resolve()
     offered = () => Promise.resolve([])
     offeredCommands = () => Promise.resolve([])
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
     skillReload = () => Promise.resolve({ skills: [] })
+    flagsAnswer = () => Promise.resolve()
     pluginReload = () =>
       Promise.resolve({ commands: [], agents: [], plugins: [], mcpServers: [], error_count: 0 })
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
@@ -4285,6 +4307,39 @@ describe('the agent chat', () => {
       expect(agents[1]?.sent).toEqual(['more'])
     })
 
+    // The message that applies the window can be `/clear`. Marked before the
+    // restart, the request went with the old session, and the clear asked for
+    // came back as one nobody asked for.
+    it('honours a /clear that is also the message the window waited for', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+      await service.setChatAutoCompact(chat.id, 600_000)
+      agents[0]?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await service.sendToChat(chat.id, '/clear')
+      expect(agents).toHaveLength(2)
+      agents[1]?.emit({
+        type: 'conversation_reset',
+        new_conversation_id: 'conv-2',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: true
+        })
+      })
+    })
+
     it('says who outranks the choice, asked of the files the session reads', async () => {
       const asked: { cwd: string; sources: readonly string[] }[] = []
       const { service, workspaceId } = await withWorkspace({
@@ -4338,8 +4393,8 @@ describe('the agent chat', () => {
     })
 
     /*
-     * The variable is read once per session, so after it is taken out only a
-     * new session notices. Choosing — the same window included — starts one;
+     * A running session does not drop the variable when it is taken out, so
+     * only a new session notices. Choosing — the same window included — starts one;
      * a message does not, or a variable left in place would restart the
      * session before every one of them.
      */
@@ -4371,6 +4426,112 @@ describe('the agent chat', () => {
       await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
         autoCompact: { override: null }
       })
+    })
+
+    /*
+     * The CLI also takes the variable from a settings file while a session
+     * runs, so a start that saw none can be outranked later. The reading then
+     * names another window in force, and choosing again starts the session
+     * over — the only way to shed a variable it has taken.
+     */
+    it('starts again when a window is chosen while the reading says another is in force', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { chosen: 300_000, effective: 450_000, override: null, pending: false }
+      })
+
+      // Not on a message here either: only a choice asks for the files again.
+      await service.sendToChat(chat.id, 'again')
+      expect(agents).toHaveLength(1)
+      agents[0]?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+    })
+
+    /*
+     * Measured against the window the session was started with, not the one
+     * chosen since: a choice waiting for the turn to end is a reading that
+     * differs for a reason already known, and taking it for a stray started
+     * the session over when the first window was chosen back.
+     */
+    it('takes a choice still waiting for its turn for no stray', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 400_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 400_000 })
+      await service.sessionUsage(chat.id)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await service.setChatAutoCompact(chat.id, 400_000)
+
+      expect(agents).toHaveLength(1)
+    })
+
+    // A reading the old session gave after a new one took its place says
+    // nothing about the new one.
+    it('keeps a reading of a session that has been replaced off the new one', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 400_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      let answer: (value: unknown) => void = () => undefined
+      contextAnswer = () =>
+        new Promise((resolve) => {
+          answer = resolve
+        })
+      const reading = service.sessionUsage(chat.id)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      expect(agents).toHaveLength(2)
+
+      answer({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await reading
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+    })
+
+    // While the reading agrees with the choice, choosing it again is nothing.
+    it('starts nothing again when the reading agrees with the window chosen again', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 400_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 400_000 })
+      await service.sessionUsage(chat.id)
+
+      await service.setChatAutoCompact(chat.id, 400_000)
+
+      expect(agents).toHaveLength(1)
     })
 
     // A reading the agent could not give is no reading, here as for the share.
@@ -5653,6 +5814,29 @@ describe('the agent chat', () => {
       expect(
         history.some((entry) => entry.role === 'agent' && entry.event.type === 'conversation_reset')
       ).toBe(true)
+    })
+
+    // A request with no session to send it to — a start that failed, or one a
+    // close refused — has no reset coming. Kept, it waited for the next one the
+    // agent sent of its own accord, on leaving plan mode, and erased the log.
+    it('keeps no request whose message never reached the agent', async () => {
+      let failing = true
+      const { service, workspaceId, events } = await withWorkspace({
+        windowOverride: () =>
+          failing ? Promise.reject(new Error('settings unreadable')) : Promise.resolve(null)
+      })
+      const chat = await service.openChat(workspaceId)
+      await expect(service.sendToChat(chat.id, '/clear')).rejects.toThrow('settings unreadable')
+
+      failing = false
+      await sendAndReset(service, chat.id, 'get on with it')
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: false
+        })
+      })
     })
 
     // A request belongs to the reset it caused. Left behind, it would clear the
@@ -7778,6 +7962,98 @@ describe('the agent chat', () => {
       expect(agent().flagSettings().at(-1)).toMatchObject({ effortLevel: 'max' })
     })
 
+    /*
+     * What was in force before a change is read inside its commit. Read before
+     * it, both of two toggles in flight saw the coding model: the first moved
+     * the session onto the plan model and the second, finding the model it
+     * wanted equal to what it had read, sent nothing back.
+     */
+    it('ends on the coding model when planning goes on and off at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.setChatPlanMode(chat.id, false)
+      ])
+
+      // Undefined is the agent's own choice, which this chat's coding model is;
+      // nothing sent at all leaves the session on it too.
+      expect(agent().requestedModels().at(-1)).toBeUndefined()
+    })
+
+    it('ends on the working effort when planning goes on and off at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.setChatPlanMode(chat.id, false)
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    // Approval decides inside its commit too: whether planning was on, which
+    // is what hands the work to acceptEdits, and what it moves the session from.
+    it('hands over to acceptEdits when a plan is approved as planning is turned on', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.setChatPlanEffort(chat.id, 'max')
+      await service.sendToChat(chat.id, 'work')
+
+      const decision = agent().ask('ExitPlanMode', { plan: 'do the thing' })
+      const requestId = await waitForRequest(events)
+      // In this order: the approval queues its commit without an await first,
+      // so the toggle's lands before it.
+      await Promise.all([
+        service.setChatPlanMode(chat.id, true),
+        service.answerPermission(requestId, 'allow')
+      ])
+      await decision
+
+      expect(service.listChats(workspaceId)[0]).toMatchObject({
+        planMode: false,
+        workingMode: 'acceptEdits'
+      })
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    it('ends on the effort picked last when two are picked at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatEffort(chat.id, 'low')
+      await service.sendToChat(chat.id, 'work')
+
+      await Promise.all([
+        service.setChatEffort(chat.id, 'high'),
+        service.setChatEffort(chat.id, 'low')
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
+    it('ends on the effort picked last when two plan efforts are picked at once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanEffort(chat.id, 'low')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      await Promise.all([
+        service.setChatPlanEffort(chat.id, 'high'),
+        service.setChatPlanEffort(chat.id, 'low')
+      ])
+
+      expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
+    })
+
     /* The guard `pushModel` exists for, in its own words: a conversation whose
        two jobs share an effort runs that one whatever the toggles do, so
        nothing is ever pushed at it. */
@@ -8244,6 +8520,28 @@ describe('the agent chat', () => {
       await service.closeChats()
 
       await expect(asked).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
+    })
+
+    /*
+     * The log is written on a line of its own, behind the events that fill it.
+     * Quitting without waiting for it dropped the tail of a conversation that
+     * was streaming — measured, all of two hundred lines — and the pane then
+     * reopened on less than the agent remembers.
+     */
+    it('waits for the log to be written', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      for (let line = 0; line < 200; line += 1) agent().emit(textMessage(`line ${String(line)}`))
+      // One turn of the loop rather than a poll: the events are handled by then
+      // and their lines queued, and a poll would give the writes time to land.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(events.filter((entry) => entry.event.type === 'text')).toHaveLength(200)
+
+      await service.closeChats()
+
+      const history = await service.chatHistory(chat.id)
+      expect(history.filter((entry) => entry.role === 'agent')).toHaveLength(200)
     })
 
     /*
@@ -9792,6 +10090,29 @@ describe('the agent chat', () => {
   })
 
   describe('closing a conversation', () => {
+    /** A session start held at its last await until the test lets it go. */
+    function heldStart(): {
+      windowOverride: () => Promise<null>
+      asked: () => boolean
+      release: () => void
+    } {
+      let release: () => void = () => undefined
+      let asked = false
+      const held = new Promise<null>((resolve) => {
+        release = () => {
+          resolve(null)
+        }
+      })
+      return {
+        windowOverride: () => {
+          asked = true
+          return held
+        },
+        asked: () => asked,
+        release
+      }
+    }
+
     // A click that was a slip used to cost the whole conversation. Closing a
     // tab ends its session and takes it out of the strip, and keeps the rest.
     it('ends the session, keeps the history and takes the tab out of the strip', async () => {
@@ -9842,6 +10163,116 @@ describe('the agent chat', () => {
         service.rewindChat(first.id, '00000000-0000-4000-8000-000000000000', 'both')
       ).rejects.toMatchObject({ code: 'chatClosed' })
       expect(agents).toHaveLength(0)
+    })
+
+    /*
+     * A message sent and the tab closed at once: the send's session was still
+     * starting, so the close found nothing to end, and the start then
+     * registered a session on a closed conversation — one nothing would ever
+     * end, since removing the workspace walks the open ones only. Held until
+     * the close has been written, the start reads it and refuses.
+     */
+    it('refuses to start a session on a conversation closed while it started', async () => {
+      const start = heldStart()
+      const { service, workspaceId } = await withWorkspace({
+        windowOverride: start.windowOverride
+      })
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      const sent = service.sendToChat(first.id, 'go')
+      await vi.waitFor(() => {
+        expect(start.asked()).toBe(true)
+      })
+
+      await service.closeChat(first.id)
+      start.release()
+
+      await expect(sent).rejects.toMatchObject({ code: 'chatClosed' })
+      expect(agents).toHaveLength(0)
+    })
+
+    /*
+     * The other way the race falls: let go as the close begins, the start reads
+     * the record before the close is written and registers. The close is
+     * written before the session is ended, so that session is there to be
+     * ended — and the send's `running`, queued behind the close, must not
+     * land on the closed record.
+     */
+    it('ends a session that registered while the close was being written', async () => {
+      const start = heldStart()
+      const { service, workspaceId } = await withWorkspace({
+        windowOverride: start.windowOverride
+      })
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      const sent = service.sendToChat(first.id, 'go')
+      await vi.waitFor(() => {
+        expect(start.asked()).toBe(true)
+      })
+
+      const closing = service.closeChat(first.id)
+      start.release()
+      await closing
+
+      await expect(sent).resolves.toEqual(expect.any(String))
+      expect(agents).toHaveLength(1)
+      expect(agent().closed()).toBe(1)
+      const [closed] = await service.listClosedChats(workspaceId)
+      expect(closed?.chat.status).toBe('idle')
+      await expect(service.sessionUsage(first.id)).resolves.toEqual({
+        context: null,
+        autoCompact: null
+      })
+    })
+
+    /*
+     * A `/clear` to a live session, and the tab closed while its mode was being
+     * set: the close emptied the clear requests, and one marked after it waited
+     * for a reset that would never come — so on the reopened tab the next reset
+     * the agent sent of its own accord was read as the clear.
+     */
+    it('strands no clear request when the tab closes while the message waits', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(first.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      let release: () => void = () => undefined
+      let asked = false
+      modeAnswer = () => {
+        asked = true
+        return new Promise<void>((resolve) => {
+          release = resolve
+        })
+      }
+      const sent = service.sendToChat(first.id, '/clear')
+      await vi.waitFor(() => {
+        expect(asked).toBe(true)
+      })
+      await service.closeChat(first.id)
+      modeAnswer = () => Promise.resolve()
+      release()
+      await sent
+
+      await service.reopenChat(first.id)
+      await service.sendToChat(first.id, 'carry on')
+      agents.at(-1)?.emit({
+        type: 'conversation_reset',
+        new_conversation_id: 'conv-2',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+
+      await vi.waitFor(() => {
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: false
+        })
+      })
     })
 
     // The session that has just ended may still say something. It must not
@@ -10957,6 +11388,143 @@ describe('the agent chat', () => {
       await expect(service.skillsForWorkspace(workspaceId)).resolves.toMatchObject([
         { key: 'reviewer', enabled: false }
       ])
+    })
+
+    /*
+     * A running conversation hears about each of these at once, as it does
+     * about its own switch. The panel reads the record, so a session left on
+     * the map it started with was a switch that looks broken.
+     */
+    it('tells a running conversation when the installation\u2019s defaults change', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
+    })
+
+    it('tells a running conversation when its project\u2019s defaults change', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'off' })
+    })
+
+    // The other direction is the one the flag layer does not undo by itself:
+    // a skill withheld at start stays withheld until it is told `'on'`.
+    it('gives a running conversation back a skill the installation stops withholding', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: [] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
+    })
+
+    it('gives a running conversation back a skill its project stops withholding', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: [] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
+    })
+
+    /*
+     * A session still starting is not in the map a push walks, so it is built
+     * from the map as it stands once its awaits are over rather than the one
+     * read before them — otherwise a default changed in that window reached
+     * nothing. Either way the race falls is right, built with it or told it;
+     * the snapshot is not, and with the fix reverted this fails often rather
+     * than always, as the mode's version of it does.
+     */
+    it('starts a conversation on a default changed while it was starting', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      const sent = service.sendToChat(chat.id, 'work')
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      await sent
+
+      const built = agents[0]?.options().settings
+      const told = agents[0]?.flagSettings().at(-1)
+      expect([built, told]).toContainEqual(
+        expect.objectContaining({ skillOverrides: { review: 'off' } })
+      )
+    })
+
+    it('tells a running conversation when a skill it withholds is renamed', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      await service.saveStoredSkill({ kind: 'global' }, 'review', { kind: 'raw', text: DOCUMENT })
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.renameStoredSkill({ kind: 'global' }, 'review', 'reviewer')
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toMatchObject({ reviewer: 'off' })
+    })
+
+    // Nothing reaches a session whose map did not move: its flags carry the
+    // effort as well, and a theme has nothing to say to it.
+    it('tells a running conversation nothing when the change is not about skills', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ theme: 'dark' })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    // Each session is sent its own project's answer: a list of one project is
+    // nothing to a conversation in another.
+    it('tells a conversation in another project nothing when a project\u2019s defaults change', async () => {
+      const { service, projectId } = await withWorkspace()
+      const elsewhere = join(dir, 'elsewhere')
+      await initRepo(elsewhere)
+      const other = await service.addProjectFromPath(elsewhere)
+      const workspace = await service.createWorkspaceIn(other.id)
+      const chat = await service.openChat(workspace.id)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateProjectById(projectId, { disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    it('tells a running conversation nothing when the list is written unchanged', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+
+      expect(agent().flagSettings()).toEqual([])
+    })
+
+    // The write has landed by then; a session that will not answer keeps what
+    // it had rather than failing the change for every other one.
+    it('keeps a default change that a running session would not take', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      flagsAnswer = () => Promise.reject(new Error('the session has gone'))
+
+      await expect(
+        service.updateConfig({ disabledSkillDefaults: ['review'] })
+      ).resolves.toMatchObject({ disabledSkillDefaults: ['review'] })
+      expect(service.getConfig().disabledSkillDefaults).toEqual(['review'])
     })
 
     // The same for a conversation's own answers, which are a record rather than
