@@ -586,6 +586,69 @@
     display: none;
   }
 
+  /* The Help button at the foot of the workspace list (Sidebar.tsx), wearing the
+     composer's colour ring (`.composer-ring` above): a faint line and a faint glow
+     at rest; under the pointer or keyboard focus the line turns and the glow
+     brightens. Only the line's angle animates — never the blurred glow — which is
+     what keeps the composer's ring cheap. The animation is paused rather than
+     removed at rest, so the colours stop where they are instead of jumping back
+     to 0deg. Its own rules rather than selectors shared with `.composer-ring`,
+     whose rest state differs. */
+  .help-button {
+    isolation: isolate;
+    --ring-colours:
+      var(--project-blue), var(--project-red), var(--project-amber), var(--project-green),
+      var(--project-blue);
+  }
+
+  .help-button::before,
+  .help-button::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  .help-button::before {
+    z-index: -1;
+    background: var(--surface);
+  }
+
+  .help-button::after {
+    z-index: -2;
+    background: conic-gradient(var(--ring-colours));
+    filter: blur(8px);
+    opacity: 0.15;
+    transition: opacity 0.2s ease;
+  }
+
+  .help-button:hover::after,
+  .help-button:focus-visible::after {
+    opacity: 0.4;
+  }
+
+  .help-button-line {
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: conic-gradient(from var(--ring-angle), var(--ring-colours));
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    opacity: 0.55;
+    transition: opacity 0.2s ease;
+    animation: ring-turn 4s linear infinite paused;
+  }
+
+  .help-button:hover .help-button-line,
+  .help-button:focus-visible .help-button-line {
+    opacity: 1;
+    animation-play-state: running;
+  }
+
   .focus-ring:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;

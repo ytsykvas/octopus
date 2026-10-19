@@ -66,7 +66,8 @@ The styling has to stay out of its way:
 
 The one exception is the composer's colour ring (`.composer-ring`): the single
 place the user types, made to be found at a glance. It is not a pattern to copy
-onto another pane.
+onto another pane — the one sanctioned second use is the Help button at the foot
+of the workspace list (`.help-button`), in rules of its own.
 
 That is exactly why the original neo-brutalist style was dropped — it shouted
 over its own content.
@@ -76,6 +77,8 @@ over its own content.
 - `.panel` — surface with border and 10px radius;
 - `.composer-ring` — the composer's colour ring and glow, with `.composer-ring-line`
   as its own first child (the one layer that turns, and only while focused);
+- `.help-button` — the Help button's quieter copy of that ring, with
+  `.help-button-line` as its own first child (turns only under the pointer or focus);
 - `.row` / `.row-selected` — list row with hover and selection;
 - `.project-tinted` / `.bubble-sent` / `.tab-selected` — where a project's
   colour turns into a surface;

@@ -40,7 +40,8 @@ export const en = {
     collapse: 'Hide workspaces',
     expand: 'Show workspaces',
     settings: 'Settings',
-    plugins: 'Plugins'
+    plugins: 'Plugins',
+    help: 'Help'
   },
 
   repositories: {
