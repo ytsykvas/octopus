@@ -86,6 +86,47 @@ function isToolRow(event: ToolUse): boolean {
   )
 }
 
+/**
+ * The call each `tool_use` was last built into.
+ *
+ * The blocks are rebuilt every time the log grows, and a row is memoised on its
+ * call: a fresh object for every call on every append re-rendered the whole log
+ * to add one line to it. A call whose parts are all the same objects as last
+ * time is handed back as it was, so only the rows that changed draw again.
+ */
+const built = new WeakMap<ToolUse, ToolCall>()
+
+function sameSteps(a: readonly LogBlock[] | null, b: readonly LogBlock[] | null): boolean {
+  if (a === null || b === null) return a === b
+  return (
+    a.length === b.length &&
+    a.every((block, index) => {
+      const other = b[index]
+      if (other?.kind !== block.kind || other.at !== block.at) return false
+      return block.kind === 'tool'
+        ? other.kind === 'tool' && other.call === block.call
+        : other.kind === 'entry' && other.entry === block.entry
+    })
+  )
+}
+
+/** The call as last built when nothing about it moved; the fresh one otherwise. */
+function reuse(event: ToolUse, fresh: ToolCall): ToolCall {
+  const last = built.get(event)
+  if (
+    // A result is never undefined, so this also says `last` is there.
+    last?.result === fresh.result &&
+    last.context === fresh.context &&
+    last.settled === fresh.settled &&
+    sameSteps(last.steps, fresh.steps)
+  ) {
+    return last
+  }
+
+  built.set(event, fresh)
+  return fresh
+}
+
 /** The id an entry hangs under, when it is a subagent's. */
 function parentOf(entry: ChatEntry): string | undefined {
   return entry.role === 'agent' && 'parentToolUseId' in entry.event
@@ -142,23 +183,18 @@ export function buildBlocks(entries: readonly ChatEntry[]): LogBlock[] {
 
       if (event.type === 'tool_use' && rows.has(event.toolUseId)) {
         const nested = children.get(event.toolUseId)
-        return [
-          {
-            kind: 'tool',
-            at: index,
-            call: {
-              toolUseId: event.toolUseId,
-              name: event.name,
-              input: event.input,
-              uuid: event.uuid,
-              result: results.get(event.toolUseId) ?? null,
-              change: changeOf(event),
-              context: contexts.get(event.toolUseId) ?? null,
-              settled: index < lastResult,
-              steps: nested === undefined ? null : blocksFor(nested)
-            }
-          }
-        ]
+        const call = reuse(event, {
+          toolUseId: event.toolUseId,
+          name: event.name,
+          input: event.input,
+          uuid: event.uuid,
+          result: results.get(event.toolUseId) ?? null,
+          change: changeOf(event),
+          context: contexts.get(event.toolUseId) ?? null,
+          settled: index < lastResult,
+          steps: nested === undefined ? null : blocksFor(nested)
+        })
+        return [{ kind: 'tool', at: index, call }]
       }
 
       // Drawn inside the row of the call they answer.

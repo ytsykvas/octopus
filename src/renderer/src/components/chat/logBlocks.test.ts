@@ -151,6 +151,61 @@ describe('one row per tool call', () => {
   })
 })
 
+describe('a call the log has already built', () => {
+  // A row is memoised on its call: a fresh object on every append re-rendered
+  // the whole log to add one line to it.
+  it('is handed back as it was when nothing about it moved', () => {
+    const entries = [call('c-1'), answer('c-1'), call('c-2')]
+
+    const before = buildBlocks(entries)
+    const after = buildBlocks([...entries, said('more')])
+
+    expect(toolAt(after, 0)).toBe(toolAt(before, 0))
+    expect(toolAt(after, 1)).toBe(toolAt(before, 1))
+  })
+
+  it('is built again once its answer arrives, or its turn closes', () => {
+    const asked = call('c-1')
+    const running = toolAt(buildBlocks([asked]), 0)
+    const answered = toolAt(buildBlocks([asked, answer('c-1')]), 0)
+    const closed = toolAt(buildBlocks([asked, answer('c-1'), footer]), 0)
+
+    expect(answered).not.toBe(running)
+    expect(answered.result).not.toBeNull()
+    expect(closed).not.toBe(answered)
+  })
+
+  it('is built again when its subagent took another step', () => {
+    const task = call('t', 'Task')
+    const step = call('s-1', 'Grep', 't')
+    const one = toolAt(buildBlocks([task, step]), 0)
+
+    expect(toolAt(buildBlocks([task, step]), 0)).toBe(one)
+    expect(toolAt(buildBlocks([task, step, call('s-2', 'Read', 't')]), 0)).not.toBe(one)
+    expect(
+      toolAt(
+        buildBlocks([task, step, agent({ type: 'text', text: 'hm', parentToolUseId: 't' })]),
+        0
+      )
+    ).not.toBe(one)
+    // The same step, answered: the nested call is new, so the parent is too.
+    expect(toolAt(buildBlocks([task, step, answer('s-1', true, 't')]), 0)).not.toBe(one)
+  })
+
+  it('compares a subagent’s remarks by the entries they are', () => {
+    const task = call('t', 'Task')
+    const remark = agent({ type: 'text', text: 'hm', parentToolUseId: 't' })
+    const first = toolAt(buildBlocks([task, remark]), 0)
+
+    expect(toolAt(buildBlocks([task, remark]), 0)).toBe(first)
+    expect(
+      toolAt(buildBlocks([task, agent({ type: 'text', text: 'hm', parentToolUseId: 't' })]), 0)
+    ).not.toBe(first)
+    // A step that was a remark becoming a call, at the same place.
+    expect(toolAt(buildBlocks([task, call('s-1', 'Grep', 't')]), 0)).not.toBe(first)
+  })
+})
+
 describe('a call the turn left behind', () => {
   // Without this a call cut off by an interrupt would spin for ever.
   it('is settled once a later turn has closed', () => {

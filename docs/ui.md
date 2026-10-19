@@ -506,7 +506,11 @@ to an exact version: it is 0.x and its minors have broken things.
 The rows' own props travel in a context rebuilt on every render, so every row
 re-renders with the log. `ToolRow` is memoised on its call and the turn's
 state, and reads what it needs to open a file from a context held still, so a
-streamed token leaves the tool rows alone. Whether the log is expanded is a
+streamed token leaves the tool rows alone. The blocks are rebuilt each time the
+log grows, but a call none of whose parts moved is handed back as the same
+object, so an append redraws the rows that changed rather than all of them.
+Measured under jsdom at 500 calls against the log before this shape: a streamed
+token 27 → 8 ms, an append 72 → 50 ms. Whether the log is expanded is a
 context of its own for the same reason: it changes on a press, not per render.
 
 **Not moved: the composer.** The slash list and the `@` list were built here, on
