@@ -41,7 +41,8 @@ export const uk: Translation = {
     collapse: 'Сховати воркспейси',
     expand: 'Показати воркспейси',
     settings: 'Налаштування',
-    plugins: 'Плагіни'
+    plugins: 'Плагіни',
+    help: 'Допомога'
   },
 
   repositories: {

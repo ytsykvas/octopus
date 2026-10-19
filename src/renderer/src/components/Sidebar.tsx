@@ -1,4 +1,4 @@
-import { GitBranch, LoaderCircle, Plus } from 'lucide-react'
+import { GitBranch, LifeBuoy, LoaderCircle, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -74,6 +74,11 @@ export function Sidebar({
   // The pane follows the cursor from local state; the config only hears about
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
+  // Help is about the work in front of the user, so it is offered only from
+  // inside a workspace of the project on show. A selection left over from
+  // another project names no row here and does not count.
+  const inWorkspace =
+    project !== null && workspaces.some((workspace) => workspace.id === selectedWorkspaceId)
 
   return (
     <aside
@@ -145,6 +150,8 @@ export function Sidebar({
           {t(hasProjects ? 'sidebar.pick' : 'sidebar.empty')}
         </p>
       )}
+
+      {inWorkspace && <HelpButton />}
     </aside>
   )
 }
@@ -204,6 +211,35 @@ function ProjectHeader({
         ) : (
           <Plus aria-hidden size={14} />
         )}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * The way to help, at the foot of the list and just above the limits — and only
+ * while a workspace is open.
+ *
+ * Borrows the composer's colour ring on purpose — the one other control meant
+ * to be found at a glance: a faint ring at rest that turns only under the
+ * pointer or keyboard focus, so idle it costs nothing. A stub until help exists.
+ */
+function HelpButton(): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="shrink-0 px-2 pt-1 pb-3">
+      <button
+        type="button"
+        className="help-button group focus-ring text-ink-soft hover:text-ink relative flex h-8 w-full items-center gap-2.5 rounded-[var(--radius-control)] border border-transparent px-3 font-medium transition-colors"
+      >
+        <span aria-hidden className="help-button-line" />
+        <LifeBuoy
+          aria-hidden
+          size={15}
+          className="shrink-0 transition-transform duration-500 group-hover:rotate-90 motion-reduce:transition-none motion-reduce:group-hover:rotate-0"
+        />
+        <span className="min-w-0 flex-1 truncate">{t('sidebar.help')}</span>
       </button>
     </div>
   )

@@ -103,6 +103,16 @@ the fold stack instead of sitting side by side. The label on Settings went with
 the move — beside an icon it was a word restating the icon, and the name is
 still there as a tooltip and for assistive technology.
 
+**Help sits at the foot of the workspace list**, just above the limits, and only
+while a workspace of the project on show is selected — with none chosen, or a
+selection left over from another project, it is not there. A
+LifeBuoy and the word, as wide as the list so it follows the column as it is
+dragged, and gone with the list when it is folded. It wears the composer's
+colour ring in rules of its own (`.help-button`) — a faint line and glow at
+rest, the line turning and the glow brightening only under the pointer or
+keyboard focus, paused rather than reset when they leave, so nothing moves while
+nobody is near it. It is a stub for now: pressing it does nothing.
+
 **The rail ends in a tile of its own**: a puzzle piece the size of a project
 tab, in a **foot** under the list rather than at the end of it. The list
 scrolls, and a tile at its end would ride up and down with the number of
@@ -3356,8 +3366,8 @@ which reads as unavailable, and it shows a loader while it reads now, like the
 new-workspace button.
 
 Transitions are left alone — they answer the pointer rather than moving on
-their own — though the plugin tile's turn and a folding chevron drop theirs
-with `motion-reduce:transition-none`.
+their own — though the plugin tile's turn, the Help button's buoy and a
+folding chevron drop theirs with `motion-reduce:transition-none`.
 
 ## Ready-made classes
 

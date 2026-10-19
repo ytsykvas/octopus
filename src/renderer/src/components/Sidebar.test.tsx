@@ -239,4 +239,69 @@ describe('Sidebar', () => {
 
     expect(props.onRemoveWorkspace).toHaveBeenCalledWith('planner/bob')
   })
+
+  describe('the help button', () => {
+    const inWorkspace = { workspaces: [workspaceView('anna')], selectedWorkspaceId: 'planner/anna' }
+
+    it('wears the colour ring, drawn as one line inside it', () => {
+      renderSidebar(inWorkspace)
+
+      const button = screen.getByRole('button', { name: 'Help' })
+      expect(button).toHaveClass('help-button')
+      expect(button.querySelectorAll('.help-button-line')).toHaveLength(1)
+    })
+
+    // The column is resizable, so the button follows its width rather than
+    // holding one of its own.
+    it('spans the width of the list', () => {
+      renderSidebar(inWorkspace)
+
+      expect(screen.getByRole('button', { name: 'Help' })).toHaveClass('w-full')
+    })
+
+    it('is not offered while no workspace is selected', () => {
+      renderSidebar({ workspaces: [workspaceView('anna')], selectedWorkspaceId: null })
+
+      expect(screen.queryByRole('button', { name: 'Help' })).toBeNull()
+    })
+
+    it('is not offered when the selection belongs to another project', () => {
+      renderSidebar({ workspaces: [workspaceView('anna')], selectedWorkspaceId: 'other/bob' })
+
+      expect(screen.queryByRole('button', { name: 'Help' })).toBeNull()
+    })
+
+    it('is not offered before any project is picked', () => {
+      renderSidebar({ ...inWorkspace, project: null })
+
+      expect(screen.queryByRole('button', { name: 'Help' })).toBeNull()
+    })
+
+    // At the foot rather than the end of the list: forty workspaces must not
+    // scroll it out of reach.
+    it('sits outside the list that scrolls', () => {
+      renderSidebar(inWorkspace)
+
+      expect(screen.getByRole('button', { name: 'Help' }).closest('nav')).toBeNull()
+    })
+
+    it('does nothing yet when pressed', async () => {
+      const user = userEvent.setup()
+      const props = renderSidebar(inWorkspace)
+
+      await user.click(screen.getByRole('button', { name: 'Help' }))
+
+      expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
+      for (const handler of [
+        props.onSelectWorkspace,
+        props.onCreateWorkspace,
+        props.onWidthChange,
+        props.onRenameWorkspace,
+        props.onRemoveWorkspace,
+        props.onEditingWorkspaceChange
+      ]) {
+        expect(handler).not.toHaveBeenCalled()
+      }
+    })
+  })
 })
