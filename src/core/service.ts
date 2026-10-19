@@ -149,6 +149,7 @@ import { gitIn, isIgnored, withIndexCopy } from './git.js'
 import { FETCH_OPTIONS, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
+import { narrowCarried } from './carriedTrust.js'
 import {
   effectiveInstruction,
   type InstructionKind,
@@ -3421,9 +3422,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * Three copies of this used to compute the digest each for itself, and an
    * approval that recorded one digest while the gate checked another would
    * have asked forever.
+   *
+   * The allow rules of a `settings.local.json` the user's carry list put
+   * there are not the repository's, and are left out (`carriedTrust.ts`) —
+   * otherwise every worktree carrying a file the CLI keeps rewriting asked
+   * again.
    */
   async function settingsTrustIn(cwd: string, project: Project): Promise<RepositoryTrust> {
-    const files = await capabilityFiles(cwd)
+    const files = await narrowCarried(await capabilityFiles(cwd), {
+      cwd,
+      repoPath: project.repoPath,
+      carried: await carriedIn(project, cwd),
+      execIn: makeExec
+    })
     const digest = trustDigest(files)
 
     // Nothing to grant is nothing to approve, which is most repositories.

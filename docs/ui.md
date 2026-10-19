@@ -3122,8 +3122,9 @@ committed `.claude/settings.json`, and the user's own file carries a
 file it came from, which is where the change has to be made.
 
 **Shown, never edited.** `.claude/settings.local.json` is one of the files the
-worktree's trust digest is taken over, so writing to it would put the project
-back to unapproved and empty the skill listing with it. A refusal is drawn
+worktree's trust digest is taken over — all of it, or all but its allow rules
+when the carry list brought it — so writing to it could put the project back to
+unapproved and empty the skill listing with it. A refusal is drawn
 first and in the danger tone: a reader looking for why something will not run
 needs it before a list of what will.
 

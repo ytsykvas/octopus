@@ -28,9 +28,9 @@
  */
 
 import { readFile } from 'node:fs/promises'
-import { join, normalize } from 'node:path'
+import { join } from 'node:path'
 
-import { type CarriedFile, carriedFiles, readCarryList } from './carry.js'
+import { type CarriedFile, carriedFiles, readCarryList, sameFile } from './carry.js'
 import { type GitExec, ignoredAmong, isIgnored } from './git.js'
 import { INSTRUCTION_FILES, type InstructionKind } from './instructions.js'
 import { unlinkedInside } from './paths.js'
@@ -257,11 +257,6 @@ async function ignoredBy(exec: GitExec, candidates: readonly string[]): Promise<
     }
     return ignored
   }
-}
-
-/** The key two lines are the same file by: normalised, and case-folded for macOS. */
-function sameFile(path: string): string {
-  return normalize(path).toLowerCase()
 }
 
 /**

@@ -2201,6 +2201,36 @@ describe('env overrides a project adds', () => {
     expect(service.listProjects()[0]?.approvedSettings).toEqual([])
   })
 
+  /*
+   * The CLI adds to the allow rules in `settings.local.json` on every "always
+   * allow", so a carried copy differs in each new worktree — and every one of
+   * them asked again, for a file that is the user's own. Once no carry line names it, the same file
+   * is asked about again.
+   */
+  it("asks nothing of the local settings the user's carry list brings", async () => {
+    const { id, repo } = await withProject()
+    await mkdir(join(repo, '.claude'), { recursive: true })
+    await writeFile(
+      join(repo, '.claude', 'settings.local.json'),
+      '{"permissions":{"allow":["Bash(ls)"]}}',
+      'utf8'
+    )
+    await service.saveProjectCarryList(id, '.claude/settings.local.json\n')
+
+    const carried = await service.createWorkspaceIn(id)
+    await expect(service.workspaceTrust(carried.id)).resolves.toEqual({
+      approved: true,
+      digest: '',
+      files: []
+    })
+
+    await service.saveProjectCarryList(id, '.env\n')
+    await expect(service.workspaceTrust(carried.id)).resolves.toMatchObject({
+      approved: false,
+      files: [{ path: '.claude/settings.local.json' }]
+    })
+  })
+
   it('asks again once the settings change', async () => {
     const { id } = await withProject()
     const workspace = await service.createWorkspaceIn(id)
