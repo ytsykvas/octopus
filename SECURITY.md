@@ -57,6 +57,21 @@ service of its own — so most of the usual surface does not exist. What does:
   commit would publish; read from the checkout rather than a worktree, so a
   branch cannot either. A way around that check is as serious as the items above.
 
+- **A repository can choose which gitignored files are carried into a
+  worktree.** A branch's `.octopus/carry` adds lines to the project's own list,
+  and a carried file sits where the agent reads it and `git add -A` commits it.
+  Those lines apply only for a trusted repository — and since the worktree is
+  the agent's to write, trust accepts a list the agent wrote there just as it
+  accepts a script the agent wrote: the gate is the user's decision to accept
+  the repository's and the worktree's content, not a wall against the agent.
+  Trusted or not, a line gives only a path — any `= source` half is ignored and
+  the file comes from the project's checkout — and counts only when there is no
+  link along it, walked normalised, in the worktree or the checkout, and git
+  ignores it in the worktree, asked as `./path` so pathspec magic cannot answer
+  for another file (`resolveCarry` in `src/core/repoSource.ts`). A way to have a
+  repository copy in a file from elsewhere on the machine, one a commit would
+  publish, or any file without trust, is as serious as the items above.
+
 - **Anything reaching a process argument.** External commands go through
   `execFile` with an argument array, and values crossing IPC are parsed with zod
   at the boundary. A path that reaches an argument unvalidated — branch names

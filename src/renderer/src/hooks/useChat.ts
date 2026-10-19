@@ -6,6 +6,8 @@ import {
   type ChatStatus,
   type EffortChoice,
   EXIT_PLAN_MODE,
+  modeAfterPlan,
+  type PlanExecutionMode,
   type WorkingMode
 } from '@core/chats.js'
 import { isEphemeral } from '@core/events.js'
@@ -26,18 +28,9 @@ import { onChatEvent } from './chatEvents.js'
  */
 export type ChatMode = WorkingMode | 'plan'
 
-/**
- * The record once a plan is approved — the same rule the core applies.
- *
- * `acceptEdits` only out of planning: the agent may offer a plan from any mode,
- * and one offered unasked does not lift the conversation out of asking first.
- */
-function leavePlanning(chat: Chat): Chat {
-  return {
-    ...chat,
-    planMode: false,
-    ...(chat.planMode && { workingMode: 'acceptEdits' as const })
-  }
+/** The record once a plan is approved — the core's rule, `modeAfterPlan`. */
+function leavePlanning(chat: Chat, executeIn: PlanExecutionMode): Chat {
+  return { ...chat, planMode: false, workingMode: modeAfterPlan(chat, executeIn) }
 }
 
 /**
@@ -72,12 +65,50 @@ export interface Streaming {
 
 const NOTHING_STREAMING: Streaming = { text: '', thinking: '' }
 
+const NOTHING_WAITING: ReadonlySet<string> = new Set()
+
+/**
+ * How long a message has to sit in the queue before it is marked.
+ *
+ * Every message passes through `queued`, one sent to an idle agent included —
+ * measured, it is `started` two milliseconds later — and the two frames reach
+ * the window as separate messages, so marking at once could flash "Queued"
+ * under every message sent. A message the agent is really holding waits
+ * seconds, so a quarter of one costs nothing.
+ */
+const QUEUED_AFTER_MS = 250
+
+/** Drops every mark still waiting to be drawn. */
+function forgetQueuing(timers: Map<string, ReturnType<typeof setTimeout>>): void {
+  for (const timer of timers.values()) clearTimeout(timer)
+  timers.clear()
+}
+
+/** The set with one message added or taken away, the same set when nothing moved. */
+function withWaiting(
+  current: ReadonlySet<string>,
+  messageId: string,
+  waiting: boolean
+): ReadonlySet<string> {
+  if (current.has(messageId) === waiting) return current
+
+  const next = new Set(current)
+  if (waiting) next.add(messageId)
+  else next.delete(messageId)
+  return next
+}
+
 export interface ChatController {
   readonly chat: Chat | null
   readonly entries: readonly ChatEntry[]
   readonly streaming: Streaming
   /** A turn is in flight: the agent is working, or waiting on an answer. */
   readonly busy: boolean
+  /**
+   * The messages the agent has not taken yet, by id: sent while it worked, and
+   * waiting in the CLI's queue until it folds them in or starts a turn for them.
+   */
+  readonly waiting: ReadonlySet<string>
   /** The request the agent is blocked on, or null when it is not blocked. */
   readonly pending: PendingPermission | null
   /**
@@ -187,7 +218,13 @@ export function useChat(
   status: ChatStatus,
   describeFailure: Describe,
   /** Announces the record this pane created, so the tab strip can draw it. */
-  onOpened: (chat: Chat) => void
+  onOpened: (chat: Chat) => void,
+  /**
+   * What an approved plan is carried out in, from the settings. Defaulted to
+   * the setting's own default, which is what a config that has not been read
+   * yet stands for.
+   */
+  planExecutionMode: PlanExecutionMode = 'auto'
 ): ChatController {
   const chatId = initial?.id ?? null
 
@@ -195,6 +232,9 @@ export function useChat(
   const [entries, setEntries] = useState<readonly ChatEntry[]>([])
   const [streaming, setStreaming] = useState<Streaming>(NOTHING_STREAMING)
   const [busy, setBusy] = useState(false)
+  const [waiting, setWaiting] = useState<ReadonlySet<string>>(NOTHING_WAITING)
+  /** Messages queued too recently to mark yet, each with the timer that will. */
+  const queuing = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const [pending, setPending] = useState<PendingPermission | null>(null)
   /** The one MCP question a server is holding open, by its request id. */
   const [pendingElicitation, setPendingElicitation] = useState<string | null>(null)
@@ -327,9 +367,31 @@ export function useChat(
         return
       }
 
-      // What is left of `isEphemeral` after the two deltas above is the rate
-      // limit, which describes the account rather than the conversation and
-      // is drawn in the attic by `useRateLimit`. Falling through cost twice:
+      if (event.type === 'message_queue') {
+        const { messageId } = event
+        const timer = queuing.current.get(messageId)
+        if (event.state === 'queued') {
+          if (timer !== undefined) return
+          queuing.current.set(
+            messageId,
+            setTimeout(() => {
+              queuing.current.delete(messageId)
+              setWaiting((current) => withWaiting(current, messageId, true))
+            }, QUEUED_AFTER_MS)
+          )
+          return
+        }
+
+        clearTimeout(timer)
+        queuing.current.delete(messageId)
+        setWaiting((current) => withWaiting(current, messageId, false))
+        return
+      }
+
+      // What else `isEphemeral` names — the rate limit, the command list —
+      // describes the account or the session rather than the conversation,
+      // and is drawn elsewhere (`useRateLimit`, `useCommands`). Falling
+      // through cost twice:
       // it wiped the answer being written, and left an entry that draws
       // nothing in the middle of a run of tool calls, splitting the fold in
       // two around a break the reader cannot see.
@@ -349,6 +411,18 @@ export function useChat(
       // complete form is in the event now arriving.
       setStreaming(NOTHING_STREAMING)
       setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
+
+      // The core gave up auto mode on its own. This line is the only word of
+      // it a window gets, so the chip is moved here — left alone it would go
+      // on saying Auto over a conversation that asks.
+      if (event.type === 'auto_mode_unavailable') {
+        // The null arm cannot be reached: events are heard only for an open
+        // conversation, which has a record. The guard is for the state's type.
+        /* v8 ignore next */
+        setChat((current) =>
+          current === null ? null : { ...current, workingMode: event.fallback }
+        )
+      }
 
       /* Its own state beside the permission, not the same one: the two are
          answered by different calls, and a server's question does not put the
@@ -379,12 +453,20 @@ export function useChat(
         setBusy(false)
         setPending(null)
         setPendingElicitation(null)
+        // A mark must never outlive the reason for it. A message still queued
+        // here is taken by the very next frame, which starts its turn — and one
+        // the CLI never says more about, a session that died holding it, would
+        // otherwise say "queued" for good.
+        forgetQueuing(queuing.current)
+        setWaiting(NOTHING_WAITING)
       }
     }, openChatId)
 
+    const pendingMarks = queuing.current
     return () => {
       listening = false
       release()
+      forgetQueuing(pendingMarks)
     }
   }, [openChatId, describeFailure])
 
@@ -502,13 +584,13 @@ export function useChat(
         // the chat this hook has open, so there is one by the time it can be
         // answered. The guard exists because the state's type says otherwise.
         /* v8 ignore next */
-        setChat((current) => (current === null ? null : leavePlanning(current)))
+        setChat((current) => (current === null ? null : leavePlanning(current, planExecutionMode)))
       }
 
       const sent = await sendAnswer(requestId, decision, feedback, editedPlan)
       if (!sent.ok) setError(describeFailure(sent))
     },
-    [pending, describeFailure]
+    [pending, describeFailure, planExecutionMode]
   )
 
   const answerElicitation = useCallback(
@@ -676,6 +758,7 @@ export function useChat(
     entries,
     streaming,
     busy: working,
+    waiting,
     pending,
     loading,
     error,

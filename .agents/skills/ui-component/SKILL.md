@@ -74,7 +74,8 @@ over its own content.
 ## Check the ready-made classes first
 
 - `.panel` — surface with border and 10px radius;
-- `.composer-ring` — the composer's colour ring and glow;
+- `.composer-ring` — the composer's colour ring and glow, with `.composer-ring-line`
+  as its own first child (the one layer that turns, and only while focused);
 - `.row` / `.row-selected` — list row with hover and selection;
 - `.project-tinted` / `.bubble-sent` / `.tab-selected` — where a project's
   colour turns into a surface;
@@ -136,6 +137,10 @@ is not a plain button (a `Button`, a tree row, a `<summary>`).
 
 `Modal` deliberately leaves its body without padding so a list can span the
 full width — a form inside it brings its own.
+
+`Modal` draws its body and footer one render after the dialog opens, so
+`autoFocus` inside works. The cost: a ref into those contents is still `null` in
+the first effect of the component that opened it.
 
 `DropdownMenu` positions its panel against the **window**, not its trigger.
 An `absolute` panel is clipped by any scrolling ancestor, and the project tab

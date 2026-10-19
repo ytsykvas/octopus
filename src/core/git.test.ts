@@ -6,9 +6,9 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -24,13 +24,16 @@ import {
   GitError,
   type GitExec,
   gitIn,
+  type GitOptions,
   hasCommits,
+  ignoredAmong,
   isIgnored,
   OUTPUT_TOO_LARGE,
   repositoryName,
   resolveRef,
   toSlug,
-  reasonFrom
+  reasonFrom,
+  withIndexCopy
 } from './git.js'
 
 const run = promisify(execFile)
@@ -543,5 +546,165 @@ describe('isIgnored', () => {
   // report "not ignored" about a question that was never asked.
   it('lets a real failure through', async () => {
     await expect(isIgnored(gitIn('/nowhere-at-all'), '.env')).rejects.toThrow(GitError)
+  })
+})
+
+describe('ignoredAmong', () => {
+  it('answers for every path in one call, ignored and not', async () => {
+    await initRepo(dir)
+    await writeFile(join(dir, '.gitignore'), '.env\n*.key\n', 'utf8')
+
+    await expect(ignoredAmong(exec, ['.env', 'notes.txt', 'config/master.key'])).resolves.toEqual(
+      new Set(['.env', 'config/master.key'])
+    )
+  })
+
+  // Exit 1, which is git's way of saying it.
+  it('answers with nothing when none is ignored', async () => {
+    await initRepo(dir)
+
+    await expect(ignoredAmong(exec, ['.env'])).resolves.toEqual(new Set())
+  })
+
+  it('asks git nothing about no paths', async () => {
+    await expect(ignoredAmong(gitIn('/nowhere-at-all'), [])).resolves.toEqual(new Set())
+  })
+
+  /*
+   * Pathspec magic. Asked bare, `:(top).env` is read as `.env` at the top and
+   * answers "ignored" — while the file that would be copied is the literal
+   * `:(top).env`, which nothing ignores. `./` makes git read the name as it is.
+   */
+  it('reads a name with pathspec magic as the file it names', async () => {
+    await initRepo(dir)
+    await writeFile(join(dir, '.gitignore'), '.env\n', 'utf8')
+
+    await expect(ignoredAmong(exec, [':(top).env', ':!x'])).resolves.toEqual(new Set())
+  })
+
+  // Printed quoted, so it cannot be matched back to what was asked; such a
+  // path is answered as not ignored rather than guessed at.
+  it('answers no for a name git would print quoted', async () => {
+    await initRepo(dir)
+    await writeFile(join(dir, '.gitignore'), '*.key\n', 'utf8')
+
+    await expect(ignoredAmong(exec, ['a"b.key', 'ключ.key'])).resolves.toEqual(
+      new Set(['ключ.key'])
+    )
+  })
+
+  // A path beyond a tracked symlink makes git refuse the whole call.
+  it('lets a real failure through', async () => {
+    await initRepo(dir)
+    await symlink(tmpdir(), join(dir, 'link'))
+    await exec(['add', 'link'])
+    await exec(['commit', '-q', '-m', 'link'])
+
+    await expect(ignoredAmong(exec, ['link/a.key'])).rejects.toThrow(GitError)
+  })
+})
+
+/*
+ * A `git diff` against the working tree refreshes the index for a file whose
+ * times moved and whose content did not, and writes it back under
+ * `index.lock` — `--no-optional-locks` or not. A `git add` beside it then
+ * fails. Reads given a copy refresh the copy instead.
+ */
+describe('withIndexCopy', () => {
+  async function indexStamp(): Promise<string> {
+    const info = await stat(join(dir, '.git', 'index'))
+    return `${String(info.ino)}:${String(info.mtimeMs)}`
+  }
+
+  /** `gitIn`, noting the index file each executor was pointed at. */
+  function noting(): { make: typeof gitIn; copies: (string | undefined)[] } {
+    const copies: (string | undefined)[] = []
+    const make = (cwd: string, options: GitOptions = {}): GitExec => {
+      copies.push(options.env?.GIT_INDEX_FILE)
+      return gitIn(cwd, options)
+    }
+    return { make, copies }
+  }
+
+  beforeEach(async () => {
+    await initRepo(dir)
+  })
+
+  it('reads the index as it stands, staged changes included', async () => {
+    await writeFile(join(dir, 'staged.txt'), 'staged\n', 'utf8')
+    await run('git', ['add', 'staged.txt'], { cwd: dir })
+
+    const staged = await withIndexCopy(dir, gitIn, (copy) =>
+      copy(['diff', '--cached', '--name-only'])
+    )
+
+    expect(staged.trim()).toBe('staged.txt')
+  })
+
+  it('leaves the real index alone while git refreshes', async () => {
+    const later = new Date(Date.now() + 60_000)
+    await utimes(join(dir, 'README.md'), later, later)
+    const before = await indexStamp()
+
+    const changed = await withIndexCopy(dir, gitIn, (copy) => copy(['diff', '--name-only', 'HEAD']))
+
+    expect(changed).toBe('')
+    expect(await indexStamp()).toBe(before)
+  })
+
+  it('leaves no copy behind', async () => {
+    const { make, copies } = noting()
+
+    await withIndexCopy(dir, make, (copy) => copy(['diff', '--name-only', 'HEAD']))
+
+    const copy = copies.find((path) => path !== undefined)
+    if (copy === undefined) throw new Error('the read was not given a copy')
+    // The directory, not only the file: removing the copy alone would leave
+    // a directory behind on every read.
+    await expect(access(dirname(copy))).rejects.toThrow()
+  })
+
+  // The read's own failure is the one reported, and the copy still goes.
+  it('leaves no copy behind when the read fails', async () => {
+    const { make, copies } = noting()
+    const failure = new Error('the read gave up')
+
+    await expect(withIndexCopy(dir, make, () => Promise.reject(failure))).rejects.toBe(failure)
+
+    const copy = copies.find((path) => path !== undefined)
+    if (copy === undefined) throw new Error('the read was not given a copy')
+    await expect(access(dirname(copy))).rejects.toThrow()
+  })
+
+  // Read against a copy that is not there, git would call every tracked file
+  // deleted — a wrong answer that looks like a right one.
+  it('fails rather than read a worktree with no index', async () => {
+    await rm(join(dir, '.git', 'index'))
+
+    await expect(withIndexCopy(dir, gitIn, (copy) => copy(['ls-files']))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
+  /*
+   * git trusts an entry by its stat only when it is older than the index file.
+   * A copy stamped with the time it was made trusted an edit of the same size
+   * made in the same second as the last index write, and the edit never
+   * showed — in the pane or in the pull request's draft.
+   */
+  it('sees an edit made in the same second as the last index write', async () => {
+    await run('git', ['config', 'core.trustctime', 'false'], { cwd: dir })
+    const file = join(dir, 'README.md')
+    const index = join(dir, '.git', 'index')
+    const then = new Date('2020-01-01T00:00:00Z')
+    await utimes(file, then, then)
+    await run('git', ['update-index', '--refresh'], { cwd: dir })
+    await writeFile(file, '# best\n', 'utf8')
+    await utimes(file, then, then)
+    await utimes(index, then, then)
+
+    const changed = await withIndexCopy(dir, gitIn, (copy) => copy(['diff', '--name-only', 'HEAD']))
+
+    expect(changed.trim()).toBe('README.md')
   })
 })

@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { FileTreeSnapshot, TreeEntry } from '@core/fileTree.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import i18n, { DEFAULT_LANGUAGE } from '../../i18n/index.js'
 import { octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { FilesPanel, ROW_HEIGHT } from './FilesPanel.js'
@@ -156,6 +157,33 @@ describe('FilesPanel', () => {
     expect(names()).toEqual(['node_modules', 'src', '.env', 'README.md'])
   })
 
+  /*
+   * The letters editors draw, in every language. The initial of the translated
+   * word was the mark at first, and in Ukrainian "changed" is `З` — which
+   * before a path reads as the digit 3.
+   */
+  describe('in another language', () => {
+    // Unmounted first: switching back under a mounted panel re-renders it
+    // outside act, after the test has ended.
+    afterEach(async () => {
+      cleanup()
+      await i18n.changeLanguage(DEFAULT_LANGUAGE)
+    })
+
+    it("marks a row with the editor's letter, and says the word aloud", async () => {
+      answering()
+      renderPanel()
+      await shown()
+      await act(async () => {
+        await i18n.changeLanguage('uk')
+      })
+
+      await userEvent.click(row('src'))
+      expect(within(row('b.ts')).getByText('M')).toHaveClass('text-info')
+      expect(row('b.ts')).toHaveAccessibleName(/Змінено/)
+    })
+  })
+
   // Two toggles before React renders again must both count.
   it('opens two folders clicked within one frame', async () => {
     answering()
@@ -275,6 +303,26 @@ describe('FilesPanel', () => {
       expect(octopus().files.directory).toHaveBeenCalledTimes(1)
     })
 
+    // The panel keeps it open across a switch; the listing has to come back with it.
+    it('is read again when its workspace comes back with it still open', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue({
+        ok: true,
+        value: { entries: [{ name: 'pkg', kind: 'directory' }], truncated: false }
+      })
+      const { rerender } = renderPanel()
+      await shown()
+      await userEvent.click(row('node_modules'))
+      await screen.findByRole('treeitem', { name: /^pkg/ })
+
+      rerender({ workspace: BOB })
+      await shown()
+      rerender({ workspace: ANNA })
+
+      expect(await screen.findByRole('treeitem', { name: /^pkg/ })).toBeInTheDocument()
+      expect(screen.queryByText('Reading…')).not.toBeInTheDocument()
+    })
+
     it('says it is reading, then that it could not', async () => {
       answering()
       let finish: (value: { ok: false; error: string }) => void = () => undefined
@@ -300,7 +348,7 @@ describe('FilesPanel', () => {
       answering()
       vi.mocked(octopus().files.directory).mockResolvedValue({
         ok: true,
-        value: { entries: [], truncated: true }
+        value: { entries: [{ name: 'pkg', kind: 'file' }], truncated: true }
       })
       renderPanel()
       await shown()
@@ -308,6 +356,22 @@ describe('FilesPanel', () => {
       await userEvent.click(row('node_modules'))
 
       expect(await screen.findByText(/Only the first 5,000 entries are listed/)).toBeInTheDocument()
+    })
+
+    // A submodule never checked out here is the usual one; with no row under
+    // it, the open folder looked like it was still being read.
+    it('says when there is nothing in it', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue({
+        ok: true,
+        value: { entries: [], truncated: false }
+      })
+      renderPanel()
+      await shown()
+
+      await userEvent.click(row('node_modules'))
+
+      expect(await screen.findByText('Nothing in this folder.')).toHaveClass('text-ink-faint')
     })
   })
 

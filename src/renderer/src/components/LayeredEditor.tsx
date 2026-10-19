@@ -5,6 +5,7 @@ import type { SourceLayer, SourceLayerView, SourceView } from '@core/sourceItems
 
 import type { Result } from '../../../preload/index.js'
 
+import { SOURCE_WARNINGS } from './FieldSource.js'
 import { FileEditor } from './FileEditor.js'
 import { Segmented } from './Segmented.js'
 import { LAYER_LABELS, SourceBadge } from './SourceBadge.js'
@@ -27,7 +28,8 @@ interface LayeredEditorProps {
 }
 
 /**
- * A script or an instruction, with every place it can come from.
+ * A script, an instruction or the carry list, with every place it can come
+ * from.
  *
  * The editor alone answered the wrong question. It showed this project's copy
  * — and, for a project that wrote none, the template — while what applied
@@ -60,10 +62,20 @@ export function LayeredEditor({
     (a, b) => ORDER.indexOf(a.layer) - ORDER.indexOf(b.layer)
   )
   const supplied = layers.some((layer) => layer.layer === 'repository')
+  const isScript = view?.id.startsWith('script.') === true
+  /*
+   * The carry list is merged rather than replaced: the repository's lines are
+   * added to the project's, so the project's list is in effect either way and
+   * is the one somebody came here to edit. It opens on that, and its other
+   * sentences say "added to" where the rest say "instead of".
+   */
+  const isCarry = view?.id === 'project.carry'
   // What was picked, else what is in effect, else the project's own — a script
   // nobody wrote has nothing in effect to show.
-  const showing = layers.find((layer) => layer.layer === (chosen ?? view?.effective)) ?? own
-  const isScript = view?.id.startsWith('script.') === true
+  const opening = isCarry ? 'project' : view?.effective
+  const showing = layers.find((layer) => layer.layer === (chosen ?? opening)) ?? own
+  // Why the repository's is not in effect; only the carry list has one today.
+  const warning = view?.warning ?? null
 
   return (
     <div className="flex flex-col gap-2">
@@ -83,6 +95,10 @@ export function LayeredEditor({
         {view !== undefined && <SourceBadge effective={view.effective} />}
       </div>
 
+      {warning !== null && (
+        <p className="text-warning max-w-lg leading-relaxed">{t(SOURCE_WARNINGS[warning])}</p>
+      )}
+
       {supplied && view !== undefined && (
         <div className="flex max-w-lg items-start gap-3">
           <Switch
@@ -92,7 +108,9 @@ export function LayeredEditor({
           />
           <div className="space-y-0.5">
             <p>{t('sources.useMine')}</p>
-            <p className="text-ink-faint leading-relaxed">{t('sources.useMineHint')}</p>
+            <p className="text-ink-faint leading-relaxed">
+              {t(isCarry ? 'sources.useMineHintCarry' : 'sources.useMineHint')}
+            </p>
           </div>
         </div>
       )}
@@ -115,7 +133,9 @@ export function LayeredEditor({
         <div className="flex flex-col gap-1.5">
           <p className="text-ink-faint leading-relaxed">
             {showing.layer === 'repository'
-              ? t('sources.fromRepository', { path: showing.from })
+              ? t(isCarry ? 'sources.fromRepositoryCarry' : 'sources.fromRepository', {
+                  path: showing.from
+                })
               : showing.layer === 'global'
                 ? t('sources.fromGlobal')
                 : t(isScript ? 'sources.scriptTemplate' : 'sources.fromTemplate')}

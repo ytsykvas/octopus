@@ -84,6 +84,12 @@ describe('what gets stored', () => {
     expect(isEphemeral({ type: 'commands_changed', commands: [] })).toBe(true)
   })
 
+  // Where a message waits is news only while it waits: read back, every one of
+  // them was taken long ago.
+  it('treats a message waiting in the queue as live only', () => {
+    expect(isEphemeral({ type: 'message_queue', messageId: 'm-1', state: 'queued' })).toBe(true)
+  })
+
   it('treats completed blocks and everything else as worth keeping', () => {
     const kept: AgentEvent[] = [
       { type: 'text', text: 'Looking at auth.rb' },
@@ -330,6 +336,12 @@ describe('the event schema', () => {
 
     expect(parsed.success).toBe(true)
     expect(parsed.data).toEqual({ type: 'conversation_reset', cleared: false })
+  })
+
+  it('stores and reads back what caused a reset', () => {
+    const reset = { type: 'conversation_reset', cleared: false, trigger: 'fresh_session' }
+
+    expect(AgentEventSchema.safeParse(JSON.parse(JSON.stringify(reset))).data).toEqual(reset)
   })
 
   // `cleared` has no default on purpose: it is the difference between wiping a

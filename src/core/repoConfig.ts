@@ -11,7 +11,9 @@
  * **Most of it is read while the app works.** Scripts and instructions come
  * from here first (`repoSource.ts`), and so do the base branch and env file of
  * a trusted repository (`projectFields.ts`) — each unless the project chose its
- * own. Name, icon, colour and the carry list are taken once, when a project is
+ * own. A trusted repository's carry list is read live too, from the worktree
+ * being prepared, and adds to the project's own rather than replacing it
+ * (`resolveCarry`). Name, icon and colour are taken once, when a project is
  * added. What this module still does on demand is the export, and reading both
  * sides for the list that writes it.
  *
@@ -399,13 +401,20 @@ export async function readStatedProject(
 }
 
 /**
- * The carry list a checkout states, or null where it states none or cannot be
- * read. Taken once, when a project is added; see `seedFromRepository`.
+ * The carry list a worktree states, or null where it states none or cannot be
+ * read.
+ *
+ * Read live, before files are copied into the worktree. A link anywhere along
+ * `.octopus/carry` is never followed — the list would come from outside the
+ * branch under a path inside it — and neither is a list longer than the
+ * editor accepts. Both answer "none" rather than refusing, as an unreadable
+ * `project.json` does for the live fields: the project's own list still
+ * applies, and a bad file in a branch should not stop a workspace being made
+ * or run. A script behind a link is refused outright; nothing here executes.
  */
-export async function readStatedCarry(repoPath: string): Promise<string | null> {
+export async function readStatedCarry(cwd: string): Promise<string | null> {
   try {
-    await assertNotLink(join(repoPath, REPO_DIR), REPO_DIR)
-    return (await readItem(repoPath, 'carry'))?.contents ?? null
+    return (await readItem(cwd, 'carry'))?.contents ?? null
   } catch {
     return null
   }
@@ -450,9 +459,14 @@ allowed, unless they trust this repository in Project Settings. The base
 branch and env file in \`project.json\` apply once the repository is trusted;
 any of these can be switched back to the person's own, item by item.
 
-The name, icon and colour, and the carry list, are taken once, when a project
-is added. Export in Project Settings writes this directory from the settings
-in the app.
+\`carry\` adds to each person's own list as a worktree is prepared, once they
+trust this repository. Only the path of a line is used — a \`= source\` here
+is ignored, and the file comes from their own checkout — and only when git
+ignores that path in the worktree, so a listed file can never be committed by
+accident. Their own line wins where both name a file.
+
+The name, icon and colour are taken once, when a project is added. Export in
+Project Settings writes this directory from the settings in the app.
 
 **No credentials.** The env overrides a project applies to each workspace are
 never written here. They stay in \`~/.octopus\`, readable by their owner alone,

@@ -175,7 +175,7 @@ export const en = {
     sectionDanger: 'Danger zone',
     repoLoading: 'Reading the repository…',
     repoHint:
-      'A project keeps its settings in ~/.octopus, on this machine. Its repository can carry them in .octopus/, where the app reads them while it works: scripts, instructions, and for a trusted repository the base branch and env file \u2014 each unless you chose your own. Name, icon, colour and the carry list are taken once, when the project is added. Export writes what this installation holds into the checkout, as an ordinary uncommitted change.',
+      'A project keeps its settings in ~/.octopus, on this machine. Its repository can carry them in .octopus/, where the app reads them while it works: scripts, instructions, and for a trusted repository the base branch and env file \u2014 each unless you chose your own \u2014 and its carry list adds to this project\u2019s. Name, icon and colour are taken once, when the project is added. Export writes what this installation holds into the checkout, as an ordinary uncommitted change.',
     repoIgnored:
       'git ignores .octopus/, so anything written there stays on this machine. Take it out of .gitignore for the copy to reach anybody else.',
     trustTitle: 'Trust',
@@ -231,7 +231,7 @@ export const en = {
       'Runs in a new workspace: install dependencies, build what has to be built, anything a fresh checkout needs. Saved as setup.sh.',
     files: 'Files carried into a workspace',
     filesHint:
-      'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten. Add “= /somewhere/else/.env” to take one from another checkout instead — which is the answer for a project cloned from GitHub, where the checkout has no gitignored file to give. Those sources stay on this machine and are left out of the copy in the repository.',
+      'One path per line, relative to the repository. A worktree holds what git tracks and nothing else, so gitignored files — an .env, a config/master.key — have to be brought. Copied at creation and again before a run; a file already there is never overwritten. Add “= /somewhere/else/.env” to take one from another checkout instead — which is the answer for a project cloned from GitHub, where the checkout has no gitignored file to give. Those sources stay on this machine and are left out of the copy in the repository. A trusted repository\u2019s .octopus/carry adds its own lines: only the path is used, only when git ignores that file in the workspace, and a line here wins over one there.',
     archiveScript: 'Cleanup script',
     archiveScriptHint:
       'Runs when a workspace is removed, in its directory, while it still exists. Use it to take back what the build script gave out — a database or a container named after the workspace. Nothing it does can stop the removal. Saved as archive.sh.',
@@ -393,6 +393,9 @@ export const en = {
     runBuilding: 'Building. The server starts when this finishes.',
     runServing: 'Serving.',
     buildFailed: 'The build failed, so the server was not started.',
+    /* The title bar's Run, held while the repository's scripts wait to be read
+       on the Scripts tab — the button has no room to say why on its own. */
+    awaitingApproval: 'Allow this repository\u2019s scripts on the Scripts tab first.',
     /* Said rather than enforced: the script belongs to whoever wrote it, and
        being wrong about it must not take the link or the controls away. */
     portSilent: 'Running, but nothing is listening on {{port}}. Does the script use $OCTOPUS_PORT?',
@@ -445,12 +448,13 @@ export const en = {
     loadingFolder: 'Reading…',
     folderFailed: 'This folder could not be read.',
     folderTruncated: 'Only the first {{limit}} entries are listed.',
+    /* Under an open folder read from disk with nothing in it — most often a submodule never checked out in this worktree. */
+    folderEmpty: 'Nothing in this folder.',
     /* Said aloud after a greyed row's name; the grey says it to the eye. */
     ignored: 'ignored by git',
     /* Said aloud after a folder's name when its dot is drawn. */
     changesInside: 'has changes',
-    /* The letter for a conflict, beside the diff's own A, M, D, U. */
-    statusConflicted: '!',
+    /* Said aloud after a conflicted file's name; the `!` says it to the eye. */
     statusConflictedLabel: 'Conflicted',
     tabs: 'Open files',
     preview: '{{name}} — preview. Opening another file replaces it; double-click to keep it open.',
@@ -498,7 +502,11 @@ export const en = {
     useMine: 'Use mine instead of the repository\u2019s',
     useMineHint:
       'The repository supplies this, and its copy is what applies. On, this project\u2019s own is used instead, and the repository\u2019s is not read for it.',
+    useMineHintCarry:
+      'The repository\u2019s list adds its lines to this project\u2019s, and yours wins where both name a file. On, only this project\u2019s list is carried, and the repository\u2019s is not read.',
     fromRepository: 'From {{path}} in the checkout. Change it there, or use your own.',
+    fromRepositoryCarry:
+      'From {{path}}. Its lines are added to this project\u2019s list \u2014 only the files git ignores in the workspace, never from where a line says, and only once the repository is trusted.',
     fromGlobal: 'From Settings \u2192 Instructions, for every project that writes none of its own.',
     fromTemplate: 'What octopus ships. It applies when nothing else is written.',
     scriptTemplate: 'Where an editor starts. Nothing runs from it.',
@@ -514,7 +522,7 @@ export const en = {
       'The repository\u2019s .octopus/project.json could not be read, so this project\u2019s own applies.',
     tableTitle: 'Where each setting comes from',
     tableHint:
-      'The repository\u2019s .octopus/ is read while the app works and wins by default; switch an item to use this project\u2019s own. The carry list, name, icon and colour are this project\u2019s own \u2014 the repository\u2019s are taken once, when the project is added.',
+      'The repository\u2019s .octopus/ is read while the app works and wins by default; switch an item to use this project\u2019s own. The repository\u2019s carry list adds to this project\u2019s rather than replacing it. Name, icon and colour are this project\u2019s own \u2014 the repository\u2019s are taken once, when the project is added.',
     columnSetting: 'Setting',
     columnInEffect: 'In effect',
     columnUseMine: 'Use mine',
@@ -766,6 +774,8 @@ export const en = {
     modeChanged: 'mode {{from}} \u2192 {{to}}',
     binary: 'Binary file — nothing to show.',
     tooLarge: 'Too large to draw here. Open the file to read it.',
+    nestedRepository:
+      'A repository of its own. Git records it as a link rather than its files, once it has a commit of its own.',
     revert: 'Revert',
     revertFile: 'Revert {{path}}',
     revertTitle: 'Revert this file?',
@@ -830,15 +840,6 @@ export const en = {
     copyFailed: 'Could not copy',
     openFile: 'Open file',
     fileActions: 'Actions for {{path}}',
-    // The one-letter marks in a file's header. Each is the initial of the word
-    // beside it, so a translation changes both together or neither.
-    statusAdded: 'A',
-    statusModified: 'M',
-    statusDeleted: 'D',
-    statusRenamed: 'R',
-    statusCopied: 'C',
-    statusTypeChanged: 'T',
-    statusUntracked: 'U',
     statusAddedLabel: 'Added',
     statusModifiedLabel: 'Modified',
     statusDeletedLabel: 'Deleted',
@@ -905,6 +906,12 @@ export const en = {
     today: 'Today',
     yesterday: 'Yesterday',
     dateLocale: 'en-GB',
+    /* Beside the hour of a message sent while the agent worked, until it takes
+       it. The hint says what Stop does not do: a held message is not
+       withdrawn, and runs as a turn of its own once the agent stops. */
+    waiting: 'Queued',
+    waitingHint:
+      'The agent takes this message once it is ready for it. Stop does not withdraw it: it then runs on its own.',
     /* Rewinding to before a message: the conversation, the files, or both. */
     rewind: 'Rewind to before this message',
     rewindTitle: 'Rewind to before this message',
@@ -962,6 +969,13 @@ export const en = {
     thinking: 'Thinking',
     memoryReset: 'The agent’s memory of this conversation starts again here',
     compacted: 'The agent summarised everything above to make room',
+    /* Said from the call, before its answer: the CLI may still ask for leave or refuse, and its refusal is the red line below. */
+    worktreeEntered:
+      'The agent is moving into another worktree, {{target}}. Changes, Files, the terminal and the scripts here stay on this workspace.',
+    worktreeEnteredNew:
+      'The agent is moving into a new worktree. Changes, Files, the terminal and the scripts here stay on this workspace.',
+    worktreeLeft: 'The agent is leaving the other worktree and keeping it.',
+    worktreeRemoved: 'The agent is leaving the other worktree and removing it, with its branch.',
     /* An exit code past 128 is a signal: something outside ended the process. */
     processStopped:
       'Claude Code was stopped from outside — by the system or another program. Send a message to carry on; the conversation is kept.',
@@ -980,6 +994,13 @@ export const en = {
        than silence: after a fallback the reader has an answer, and here the
        turn just ends — which reads as the app having dropped something. */
     refusalDeclined: '{{from}} declined this turn, and no other model took it',
+    /* A call refused without anyone being asked. Auto mode's classifier is the
+       usual source, and named, because a mode that decides for the user has
+       to leave its decisions on the screen; a deny rule is the other. */
+    deniedByAuto: 'Auto mode blocked {{tool}}',
+    deniedByRule: '{{tool}} was refused without asking',
+    /* The chip moved by itself, and this is the line that says why. */
+    autoFellBack: 'Auto mode is not available here, so this chat is on {{mode}} now',
     /* Struck through rather than dropped: the work was really done and then
        abandoned, and a log that quietly loses it reads as though the agent
        never started down that road. */
@@ -995,15 +1016,18 @@ export const en = {
     /* Names the control and the mode in force together: the button switches
        rather than opening a list, so the value is all it shows. */
     modeToggle: 'Permissions: {{mode}}',
-    modeDefault: 'Ask first',
-    /* Left in English in every locale: it is what the agent's own interfaces
-       call this, and a translated name for a borrowed one reads as a second
-       setting rather than the same one. */
-    modeAcceptEdits: 'Auto mode',
+    /* Manual, Accept edits and Auto are left in English in every locale: they
+       are what Claude Code's own status line calls these, and a translated
+       name for a borrowed one reads as a second setting rather than the same
+       one. Accept edits is not Auto: that one is a classifier approving each
+       call, this one accepts file edits and nothing else. */
+    modeDefault: 'Manual',
+    modeAcceptEdits: 'Accept edits',
+    modeAuto: 'Auto',
     planMode: 'Plan',
     /* Names the keys rather than the states: the label beside it already
        says which one is in force, and the ring's order is learned by using it. */
-    modeCycle: 'Switch mode — Ask first, Auto mode, Plan (Shift+Tab)',
+    modeCycle: 'Switch mode — Manual, Accept edits, Plan, Auto (Shift+Tab)',
 
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
@@ -1028,6 +1052,8 @@ export const en = {
     autoCompactOverriddenEnv:
       '{{variable}}={{value}} in the environment decides instead. Take it out there, then choose here again.',
     autoCompactMismatch: 'In effect: {{effective}}, not the chosen {{chosen}}.',
+    autoCompactMismatchRetry:
+      'In effect: {{effective}}, not the chosen {{chosen}}. Choose it again to start the session over.',
     clearTitle: 'Clear this conversation?',
     clearMessage: 'The agent starts again with no memory of what was said here.',
     clearDetail: 'The log is deleted with it, and cannot be brought back.',
@@ -1103,6 +1129,10 @@ export const en = {
        as well. The model that resolves to is named underneath, because that is
        the fact the reader came for. */
     modelsSame: 'Same as writing code',
+    /* Above the columns while a `/model` command has the session on a model
+       they do not tick: the command lasts for the session, the columns are
+       what this conversation chose. */
+    modelsSessionOnly: 'This session is running {{model}}: /model chose it for this session only.',
 
     effort: 'Effort',
     effortLow: 'Low',
@@ -1157,8 +1187,12 @@ export const en = {
     planEditLabel: 'The plan, as markdown',
     planEdited: 'Plan, as you edited it',
     /* Said before the click, because the click widens what the agent may do:
-       an approved plan always goes on in Auto mode. */
-    planExecuteHint: 'Runs in Auto mode — edits go ahead without asking.',
+       an approved plan always goes on in Accept edits. */
+    planExecuteHint: 'Runs with Accept edits on — file changes go ahead without asking.',
+    /* The exception: a chat in Auto goes back to Auto, which already decides
+       each step on its own. */
+    planExecuteHintAuto:
+      'Runs in Auto — each step is approved or refused for you, and anything unclear is asked.',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     questionTitle: 'The agent is asking',
@@ -1316,7 +1350,8 @@ export const en = {
     branchPrefix: 'Branch prefix',
     branchPrefixHint:
       'Workspace branches are named <prefix>/<workspace>. A GitHub username is a common choice.',
-    branchPrefixEmpty: 'The prefix cannot be empty.',
+    branchPrefixUnusable: 'The prefix needs at least one character git can use.',
+    branchPrefixBecomes: 'Will be saved as {{prefix}}',
 
     cloneDirectory: 'Clone destination',
     cloneDirectoryHint:
@@ -1350,12 +1385,21 @@ export const en = {
     permissionMode: 'What a new chat may do',
     permissionModeHint:
       'The starting point for every workspace, so the question is not asked again on each new branch. A chat can still be switched on its own.',
-    permissionAsk: 'Ask first',
+    permissionAsk: 'Manual',
     permissionAskHint:
       'Reading is silent; writing a file or running a command waits for an answer.',
     permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
-      'File changes go through without asking. Commands still wait — they leave the worktree.',
+      'File changes go through without asking, the plain file commands too (mkdir, mv, rm). Other commands still wait.',
+    permissionAuto: 'Auto',
+    permissionAutoHint:
+      'A classifier approves or refuses each step, and asks when it cannot tell. Refusals show in the chat. Not every account and model has it; a chat falls back to Manual when it is not there.',
+    planExecution: 'Carrying out an approved plan',
+    planExecutionHint: 'What a chat switches to when you press Execute on a plan.',
+    planExecutionAutoHint:
+      'Each step is approved or refused by the classifier. Where Auto is not available, Accept edits is used instead.',
+    planExecutionAcceptEditsHint:
+      'File changes go through without asking; other commands still wait.',
 
     alwaysAllowed: 'Answered "always"',
     alwaysAllowedHint:
@@ -1483,7 +1527,7 @@ export const en = {
        loads it is ours to say, so the note has to offer both. */
     inRepository: 'In this repository',
     inRepositoryNote:
-      'The agent finds these in the checkout by itself. Switch one off to keep it out of new conversations here, or copy it to use in every project.',
+      'The agent finds these in the checkout by itself. Switch one off to keep it out of conversations here, or copy it to use in every project.',
     copyToGlobal: 'Copy to all projects',
     /* Two steps, because the answer to "what am I importing" is not on screen
        until it has been read — and for a link the only thing on screen is an
@@ -1851,6 +1895,7 @@ export const en = {
       'Could not determine a base branch in {{path}}. Check out the branch you want and try again.',
     baseUnknown:
       'Could not find where this workspace branched off {{branch}}. The branch may have been renamed or deleted — check the project settings.',
+    notRemoved: '{{path}} is still there: it could not be removed.',
     duplicateProject: 'This repository is already added as project "{{name}}".',
     notConnected: 'Could not reach GitHub. Check the account in Settings.',
     listFailed: 'GitHub returned something unexpected.',
@@ -1908,6 +1953,7 @@ export const en = {
     rewindUnavailableReason: 'This conversation cannot be rewound to that message: {{reason}}',
     rewindInProgress: 'This conversation is being rewound. Wait for it to finish.',
     chatClosed: 'That conversation was closed. Reopen it from the history first.',
+    autoModeUnavailable: 'Auto mode is not available here: {{reason}}',
     repoConfigSymlink:
       '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',
     repoConfigTooLarge: '{{path}} is larger than this kind of file is allowed to be.',

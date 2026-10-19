@@ -1,17 +1,25 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
+import { highlight } from '../diff/highlight.js'
 import { ChatLog } from './ChatLog.js'
+
+// Stood in for, as every pane that colours code is tested: the real one loads a
+// grammar, and its answer would land after the test that drew the card.
+vi.mock('../diff/highlight.js', () => ({ highlight: vi.fn(() => Promise.resolve(null)) }))
 
 const AT = '2026-08-11T09:00:00.000Z'
 
 function fromAgent(event: AgentEvent): ChatEntry {
   return { role: 'agent', at: AT, event }
 }
+
+/** No message held in the agent's queue, which is every log but one. */
+const NOT_WAITING: ReadonlySet<string> = new Set()
 
 /**
  * The turn a footer closes.
@@ -47,6 +55,7 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
       onAnswerQuestions={onAnswerQuestions}
       onExecutePlan={onExecutePlan}
       onRewind={onRewind}
+      waiting={NOT_WAITING}
       {...overrides}
     />
   )
@@ -148,6 +157,7 @@ describe('a subagent’s work', () => {
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
         onRewind={vi.fn()}
+        waiting={NOT_WAITING}
       />
     )
 
@@ -240,6 +250,30 @@ describe('when things were said', () => {
   })
 })
 
+describe('a message the agent has not taken yet', () => {
+  const MESSAGE = '22222222-2222-4222-8222-222222222222'
+
+  it('says it is queued beside its hour, and what Stop will not do', () => {
+    renderLog({
+      entries: [{ role: 'user', at: AT, text: 'also rename the test', uuid: MESSAGE }],
+      waiting: new Set([MESSAGE])
+    })
+
+    const mark = screen.getByText('Queued')
+    expect(mark).toBeVisible()
+    expect(mark).toHaveAttribute('title', expect.stringContaining('Stop does not withdraw it'))
+  })
+
+  it('says nothing of a message the agent has taken', () => {
+    renderLog({
+      entries: [{ role: 'user', at: AT, text: 'also rename the test', uuid: MESSAGE }],
+      waiting: new Set(['someone-else'])
+    })
+
+    expect(screen.queryByText('Queued')).not.toBeInTheDocument()
+  })
+})
+
 describe('rewinding from a message', () => {
   const MESSAGE = '11111111-1111-4111-8111-111111111111'
 
@@ -324,7 +358,11 @@ describe('rewinding from a message', () => {
 describe('a message carrying notes on code', () => {
   const user = (text: string): ChatEntry => ({ role: 'user', at: AT, text })
 
-  it('draws each note as a card: where, the lines, and what was said', () => {
+  it('draws each note as a card: where, the lines, and what was said', async () => {
+    vi.mocked(highlight).mockResolvedValueOnce([
+      [{ text: 'const a = 1', light: '#111', dark: '#eee' }],
+      [{ text: 'const b = 2', light: '#222', dark: '#ddd' }]
+    ])
     renderLog({
       entries: [
         user(
@@ -344,6 +382,17 @@ describe('a message carrying notes on code', () => {
     expect(second).toHaveTextContent('(as it was)')
     expect(second?.querySelectorAll('p')).toHaveLength(1)
     expect(screen.getByText('Look.')).toBeInTheDocument()
+
+    // The lines in their file's colours, as the viewer and the diff draw them:
+    // a few lines out of context are where colour helps most.
+    await waitFor(() => {
+      expect(
+        card?.querySelector<HTMLElement>('pre span')?.style.getPropertyValue('--shiki-light')
+      ).toBe('#111')
+    })
+    expect(highlight).toHaveBeenCalledWith('typescript', 'const a = 1\nconst b = 2')
+    expect(card?.querySelector('pre')).toHaveClass('diff-code')
+    expect(card?.querySelector('pre')?.textContent).toBe('const a = 1\nconst b = 2')
   })
 
   it('draws a reference in running text as a chip', () => {
@@ -400,6 +449,7 @@ describe('what the log shows', () => {
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
         onRewind={vi.fn()}
+        waiting={NOT_WAITING}
       />
     )
 
@@ -432,6 +482,7 @@ describe('what the log shows', () => {
         onAnswerQuestions={vi.fn()}
         onExecutePlan={vi.fn()}
         onRewind={vi.fn()}
+        waiting={NOT_WAITING}
       />
     )
 
@@ -1125,6 +1176,53 @@ describe('what the log shows', () => {
     expect(screen.getByText(/74k/)).toBeVisible()
   })
 
+  /*
+   * The agent's working directory moved, and the window's did not: Changes,
+   * Files and the terminal still show the workspace. Drawn as a tool name with
+   * nothing beside it, the one call that makes the rest of the window stale
+   * read like a `Glob`.
+   */
+  it('says when the agent moves into another worktree, and when it comes back', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'enter',
+          name: 'EnterWorktree',
+          input: { name: 'spike' }
+        }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'exit',
+          name: 'ExitWorktree',
+          input: { action: 'remove' }
+        })
+      ]
+    })
+
+    expect(screen.getByText(/moving into another worktree, spike/)).toBeVisible()
+    expect(screen.getByText(/stay on this workspace/)).toBeVisible()
+    expect(screen.getByText(/leaving the other worktree and removing it/)).toBeVisible()
+  })
+
+  // Without a name the CLI makes one up, which only its result says.
+  it('says a move into a new worktree, and leaving one that is kept', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'tool_use', toolUseId: 'enter', name: 'EnterWorktree', input: {} }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'exit',
+          name: 'ExitWorktree',
+          input: { action: 'keep' }
+        })
+      ]
+    })
+
+    expect(screen.getByText(/moving into a new worktree/)).toBeVisible()
+    expect(screen.getByText(/leaving the other worktree and keeping it/)).toBeVisible()
+  })
+
   // The boundary is worth drawing on its own: metadata in a shape nothing here
   // recognises degrades the row rather than losing it.
   it('marks it even when the agent said nothing about the size', () => {
@@ -1263,6 +1361,53 @@ describe('what the log shows', () => {
     })
 
     expect(screen.getByText(/no other model took it/).parentElement?.children).toHaveLength(1)
+  })
+
+  /*
+   * A call auto mode's classifier refused. Without the line it shows only as a
+   * tool that failed, and a mode that decides for the user has to leave its
+   * decisions where they can be read.
+   */
+  it('says when auto mode blocked a call, and why', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_denied',
+          toolName: 'Bash',
+          byClassifier: true,
+          reason: 'Downloads and runs a remote script'
+        })
+      ]
+    })
+
+    expect(screen.getByText('Auto mode blocked Bash')).toBeVisible()
+    expect(screen.getByText('Downloads and runs a remote script')).toBeVisible()
+  })
+
+  it('names a rule rather than auto mode when a rule refused the call', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_denied',
+          toolName: 'Write',
+          byClassifier: false,
+          reason: null
+        })
+      ]
+    })
+
+    expect(screen.getByText('Write was refused without asking')).toBeVisible()
+    expect(screen.queryByText(/Auto mode/)).not.toBeInTheDocument()
+  })
+
+  it('says why the chip left auto mode', () => {
+    renderLog({
+      entries: [fromAgent({ type: 'auto_mode_unavailable', reason: null, fallback: 'default' })]
+    })
+
+    expect(
+      screen.getByText('Auto mode is not available here, so this chat is on Manual now')
+    ).toBeVisible()
   })
 
   /*
@@ -1679,7 +1824,8 @@ describe('a log cut back and written again', () => {
       onAnswerElicitation: vi.fn(),
       onAnswerQuestions: vi.fn(),
       onExecutePlan: vi.fn(),
-      onRewind: vi.fn()
+      onRewind: vi.fn(),
+      waiting: NOT_WAITING
     }
     const { rerender } = render(
       <ChatLog {...props} entries={[said, asked('r-1', 'Which one?')]} pendingRequestId="r-1" />

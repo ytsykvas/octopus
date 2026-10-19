@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { type Chat, type Effort, opusPlanSplit, type WorkingMode } from '@core/chats.js'
+import {
+  type Chat,
+  type Effort,
+  modeAfterPlan,
+  opusPlanSplit,
+  type PlanExecutionMode,
+  type WorkingMode
+} from '@core/chats.js'
 import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -77,6 +84,8 @@ interface ChatSessionProps {
    * for exactly one message: the first.
    */
   readonly defaultWorkingMode: WorkingMode
+  /** What an approved plan is carried out in, from the settings. */
+  readonly planExecutionMode: PlanExecutionMode
   readonly defaultEffort: Effort
   /** The settings' model pair, for the same reason as the two above. */
   readonly defaultModel: string | null
@@ -114,6 +123,7 @@ export function ChatSession({
   quotes,
   codeNotes,
   defaultWorkingMode,
+  planExecutionMode,
   defaultEffort,
   defaultModel,
   defaultPlanModel,
@@ -161,7 +171,14 @@ export function ChatSession({
     },
     onWorkspacesChanged
   )
-  const chat = useChat(tab.record, workspace.id, tab.status, describeFailure, onOpened)
+  const chat = useChat(
+    tab.record,
+    workspace.id,
+    tab.status,
+    describeFailure,
+    onOpened,
+    planExecutionMode
+  )
 
   // Held against the entries, like the log's own walks: this reads the whole
   // transcript, and it is asked on every render of a pane that re-renders on
@@ -194,10 +211,13 @@ export function ChatSession({
   const rateLimit = useRateLimit()
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)
-  // Moved once a window chosen in the context menu has been applied, which
-  // starts the session again — see `useSessionUsage`.
-  const [compactChoices, setCompactChoices] = useState(0)
-  const usage = useSessionUsage(chat.chat?.id ?? null, compactChoices)
+  // Moved once a choice that moves the session has been applied — a window, a
+  // model, a mode — so the reading is taken again; see `useSessionUsage`.
+  const [sessionMoves, setSessionMoves] = useState(0)
+  const moved = (): void => {
+    setSessionMoves((count) => count + 1)
+  }
+  const usage = useSessionUsage(chat.chat?.id ?? null, sessionMoves)
   const skills = useSkills(chat.chat?.id ?? null, workspace.id, chat.ensure)
 
   /*
@@ -289,7 +309,7 @@ export function ChatSession({
     // context gauge read from has been closed.
     setSeed((current) => ({ text, id: (current?.id ?? 0) + 1 }))
     pinnedToBottom.current = true
-    setCompactChoices((count) => count + 1)
+    moved()
   }
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
@@ -389,6 +409,7 @@ export function ChatSession({
             entries={chat.entries}
             streaming={chat.streaming}
             busy={chat.busy}
+            waiting={chat.waiting}
             pendingRequestId={pending?.requestId ?? null}
             pendingElicitationId={chat.pendingElicitation}
             onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
@@ -408,14 +429,16 @@ export function ChatSession({
             // sake: that is what hands the session the mode the footer names.
             // Without it the message went out while the conversation was still
             // recorded as planning, and the agent worked in whatever mode it
-            // happened to fall back to. `acceptEdits`, as an approved plan
-            // gets in the core — this is the same plan, approved later — and,
-            // as there, only out of planning: a plan the agent offered unasked
-            // does not lift a conversation out of asking first.
+            // happened to fall back to. The mode an approved plan gets in the
+            // core — this is the same plan, approved later — and, as there,
+            // only out of planning: a plan the agent offered unasked does not
+            // lift a conversation out of Manual.
             onRewind={(messageId) => void rewind(messageId)}
             onExecutePlan={(plan) => {
               void (async () => {
-                if (record?.planMode === true) await chat.setMode('acceptEdits')
+                if (record?.planMode === true) {
+                  await chat.setMode(modeAfterPlan(record, planExecutionMode))
+                }
                 await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
               })()
             }}
@@ -441,7 +464,7 @@ export function ChatSession({
           onText={(next) => {
             setPlanEdit({ requestId: pending.requestId, text: next })
           }}
-          accepting={record?.planMode === true}
+          goesOnIn={record?.planMode === true ? modeAfterPlan(record, planExecutionMode) : null}
           onExecute={(edited) => {
             // The `undefined` where feedback goes: an approval has none, and
             // the plan the user rewrote is the fourth argument.
@@ -502,20 +525,18 @@ export function ChatSession({
         busy={chat.busy}
         workingMode={workingMode}
         planMode={record?.planMode ?? false}
-        onMode={(mode) => void chat.setMode(mode)}
+        onMode={(mode) => void chat.setMode(mode).then(moved)}
         effort={effort}
         onEffort={(level) => void chat.setEffort(level)}
         planEffort={planEffort}
         onPlanEffort={(level) => void chat.setPlanEffort(level)}
         onAutoCompact={(window) => {
-          void chat.setAutoCompact(window).then(() => {
-            setCompactChoices((count) => count + 1)
-          })
+          void chat.setAutoCompact(window).then(moved)
         }}
         model={model}
-        onModel={(chosen) => void chat.setModel(chosen)}
+        onModel={(chosen) => void chat.setModel(chosen).then(moved)}
         planModel={planModel}
-        onPlanModel={(chosen) => void chat.setPlanModel(chosen)}
+        onPlanModel={(chosen) => void chat.setPlanModel(chosen).then(moved)}
         models={models}
         // What the session reports it is running, which the chip shows when it
         // differs from what was chosen here. It rides in with the context

@@ -57,6 +57,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.noBaseBranch', { path: failure.params?.path ?? '' })
         case 'baseUnknown':
           return t('errors.baseUnknown', { branch: failure.params?.branch ?? '' })
+        case 'notRemoved':
+          return t('errors.notRemoved', { path: failure.params?.path ?? '' })
         case 'duplicateProject':
           return t('errors.duplicateProject', { name: failure.params?.name ?? '' })
         case 'notConnected':
@@ -152,6 +154,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.rewindInProgress')
         case 'chatClosed':
           return t('errors.chatClosed')
+        case 'autoModeUnavailable':
+          return t('errors.autoModeUnavailable', { reason: failure.params?.reason ?? '' })
         case 'rewindUnavailable':
           // The agent's own reason, when it gave one: "no checkpoint for that
           // message" is the answer to *why*, and the generic line is not.

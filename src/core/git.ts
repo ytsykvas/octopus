@@ -7,7 +7,9 @@
  */
 
 import { execFile } from 'node:child_process'
-import { basename } from 'node:path'
+import { copyFile, mkdtemp, rm, stat, utimes } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 import { describeError } from './persist.js'
@@ -147,6 +149,59 @@ export function gitIn(cwd: string, options: GitOptions = {}): GitExec {
 }
 
 /**
+ * Runs reads of a worktree against a throwaway copy of its index.
+ *
+ * A `git diff` against the working tree refreshes the index for a tracked file
+ * whose times moved and whose content did not — a formatter that rewrote it
+ * unchanged, a checkout, a `touch` — and writes it back under `index.lock`.
+ * `--no-optional-locks` does not stop that, nor does `GIT_OPTIONAL_LOCKS=0`,
+ * both measured. A `git add` or `git commit` in the same worktree at that
+ * moment — another conversation, the terminal, a hook — then fails with
+ * "index.lock: File exists", and the Changes pane reads as a turn ends, which
+ * is exactly when those run.
+ *
+ * Pointed at a copy (`GIT_INDEX_FILE`), git refreshes the copy by its own rules
+ * and the worktree's index is never opened for writing. Turning the refresh off
+ * (`diff.autoRefreshIndex=false`) was tried first and is not the same: every
+ * listing that does not read contents, and `--numstat` for a binary file, then
+ * calls such a file changed without looking.
+ *
+ * The price is that the refresh is thrown away with the copy, so a file whose
+ * times moved is hashed again on the next read — what `status
+ * --no-optional-locks` already pays — until something else refreshes the
+ * index. A worktree always has an index, so one that cannot be copied is a
+ * failure rather than an empty answer: read against a copy that is not there,
+ * git would call every tracked file deleted.
+ */
+export async function withIndexCopy<T>(
+  cwd: string,
+  makeExec: (cwd: string, options?: GitOptions) => GitExec,
+  read: (exec: GitExec) => Promise<T>
+): Promise<T> {
+  // Relative in the main worktree (`.git/index`), absolute in a linked one, so
+  // resolved here: `--path-format=absolute` would ask for git 2.31, and an
+  // older git echoes the flag back as if it were the path.
+  const answer = await makeExec(cwd)(['rev-parse', '--git-path', 'index'])
+  const index = resolve(cwd, answer.trim())
+  const scratch = await mkdtemp(join(tmpdir(), 'octopus-index-'))
+  const copy = join(scratch, 'index')
+
+  try {
+    await copyFile(index, copy)
+    // The index's own time, which a copy would otherwise lose. git trusts an
+    // entry by its stat only when the entry is older than the index file, and
+    // a copy stamped now would trust an edit of the same size made in the same
+    // second as the last write — so it would never show. Floored to the second,
+    // since rounding up into the next one is the unsafe direction.
+    const { atime, mtimeMs } = await stat(index)
+    await utimes(copy, atime, Math.floor(mtimeMs / 1000))
+    return await read(makeExec(cwd, { env: { GIT_INDEX_FILE: copy } }))
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
+}
+
+/**
  * The working tree root, or null when the directory is not in a repository.
  *
  * Returns the root rather than the given path: the user may pick a
@@ -182,6 +237,44 @@ export async function isIgnored(exec: GitExec, path: string): Promise<boolean> {
     if (error instanceof GitError && error.code === '1') return false
     throw error
   }
+}
+
+/**
+ * Which of `paths` git ignores, asked in one process.
+ *
+ * Each is passed as `./path`, because a bare name starting with `:` is
+ * pathspec magic: `:(top).env` is answered as `.env` at the top — ignored —
+ * while the file it names is the literal `:(top).env`, which nothing ignores.
+ *
+ * git prints back each ignored path as it was given, unless it has to quote
+ * it; `core.quotePath=false` keeps non-ASCII names verbatim, and a name that is
+ * still quoted (a `"` or a `\` in it) matches nothing and is answered as not
+ * ignored. Failing closed is the right way round for a caller deciding whether
+ * a file may be copied somewhere a commit would publish it.
+ *
+ * Exit 1 means none is ignored. Anything else is git failing — a path beyond a
+ * tracked symlink refuses the whole call — and is let through, as `isIgnored`
+ * does.
+ */
+export async function ignoredAmong(exec: GitExec, paths: readonly string[]): Promise<Set<string>> {
+  if (paths.length === 0) return new Set()
+
+  let printed: string
+  try {
+    printed = await exec([
+      '-c',
+      'core.quotePath=false',
+      'check-ignore',
+      '--',
+      ...paths.map((path) => `./${path}`)
+    ])
+  } catch (error) {
+    if (error instanceof GitError && error.code === '1') return new Set()
+    throw error
+  }
+
+  const lines = new Set(printed.split('\n'))
+  return new Set(paths.filter((path) => lines.has(`./${path}`)))
 }
 
 /** Whether the repository has at least one commit — an empty one cannot host a worktree. */

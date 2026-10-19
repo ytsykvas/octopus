@@ -3,7 +3,7 @@ import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { type Change, readChange } from './changeSummary.js'
-import { readPlan } from './toolSummary.js'
+import { readPlan, readWorktreeMove } from './toolSummary.js'
 
 /** A stretch of the log, either one entry as it is or a run of tool calls. */
 export type LogBlock =
@@ -113,7 +113,8 @@ export function elicitationsByRequest(
  * Neither are the two tools that exist to put something in front of the user: a
  * plan is the substance of the whole turn, and a question is drawn by the card
  * that answers it. Counting either as a step would put a number on the fold
- * that no row inside it accounts for.
+ * that no row inside it accounts for. Nor is a move into another worktree:
+ * the line saying the rest of the window stayed behind belongs in plain sight.
  */
 function isToolRow(entry: ChatEntry, change: Change | null = changeIn(entry)): boolean {
   return (
@@ -121,6 +122,7 @@ function isToolRow(entry: ChatEntry, change: Change | null = changeIn(entry)): b
     entry.event.type === 'tool_use' &&
     readPlan(entry.event.name, entry.event.input) === null &&
     readQuestions(entry.event.name, entry.event.input) === null &&
+    readWorktreeMove(entry.event.name, entry.event.input) === null &&
     change === null
   )
 }

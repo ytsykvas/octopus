@@ -8,6 +8,7 @@ import {
   carriedFiles,
   carryInto,
   carryListForExport,
+  type CarryReport,
   carryPath,
   readCarryList,
   writeCarryList
@@ -128,11 +129,16 @@ describe('carryListForExport', () => {
 })
 
 describe('carryInto', () => {
+  /** Carries what the project's own list names, as a worktree with no `.octopus/carry` does. */
+  async function carryWritten(): Promise<CarryReport> {
+    return carryInto(carriedFiles(await readCarryList('planner', root)), repo, workspace)
+  }
+
   it('copies what the list names', async () => {
     await writeFile(join(repo, '.env'), 'API_KEY=secret\n', 'utf8')
     await writeCarryList('planner', '.env\n', root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+    await expect(carryWritten()).resolves.toEqual({
       written: ['.env'],
       missing: []
     })
@@ -146,7 +152,7 @@ describe('carryInto', () => {
     await writeFile(join(repo, 'config', 'master.key'), 'abc123\n', 'utf8')
     await writeCarryList('planner', 'config/master.key\n', root)
 
-    await carryInto('planner', repo, workspace, root)
+    await carryWritten()
 
     await expect(readFile(join(workspace, 'config', 'master.key'), 'utf8')).resolves.toBe(
       'abc123\n'
@@ -171,7 +177,7 @@ describe('carryInto', () => {
     await writeFile(join(repo, '.env'), 'FROM=checkout\n', 'utf8')
     await writeCarryList('planner', 'config/master.key\n.env\n', root)
 
-    const report = await carryInto('planner', repo, workspace, root)
+    const report = await carryWritten()
 
     // Named rather than dropped in silence. The reason differs from a source
     // that is not there, but the sentence the reader needs is the same one.
@@ -191,7 +197,7 @@ describe('carryInto', () => {
     await writeFile(join(workspace, '.env'), 'FROM=hand\n', 'utf8')
     await writeCarryList('planner', '.env\n', root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+    await expect(carryWritten()).resolves.toEqual({
       written: [],
       missing: []
     })
@@ -208,7 +214,7 @@ describe('carryInto', () => {
     await writeFile(join(repo, '.env'), 'A=1\n', 'utf8')
     await writeCarryList('planner', 'gone.txt\n.env\n', root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+    await expect(carryWritten()).resolves.toEqual({
       written: ['.env'],
       missing: ['gone.txt']
     })
@@ -219,7 +225,7 @@ describe('carryInto', () => {
   it('names a source that is not where the line says it is', async () => {
     await writeCarryList('planner', `.env = ${join(repo, 'nowhere', '.env')}\n`, root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+    await expect(carryWritten()).resolves.toEqual({
       written: [],
       missing: ['.env']
     })
@@ -239,7 +245,7 @@ describe('carryInto', () => {
       await writeCarryList('planner', `.env = ${join(elsewhere, '.env')}\n`, root)
 
       // Nothing is written into `repo`: it stands for the fresh clone.
-      await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+      await expect(carryWritten()).resolves.toEqual({
         written: ['.env'],
         missing: []
       })
@@ -261,7 +267,7 @@ describe('carryInto', () => {
       await writeFile(join(elsewhere, '.env'), 'API_KEY=wanted\n', 'utf8')
       await writeCarryList('planner', `.env = ${join(elsewhere, '.env')}\n`, root)
 
-      await carryInto('planner', repo, workspace, root)
+      await carryWritten()
 
       await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe('API_KEY=wanted\n')
     } finally {
@@ -276,7 +282,7 @@ describe('carryInto', () => {
     await writeFile(join(repo, 'secrets', 'env.local'), 'API_KEY=nested\n', 'utf8')
     await writeCarryList('planner', '.env = secrets/env.local\n', root)
 
-    await carryInto('planner', repo, workspace, root)
+    await carryWritten()
 
     await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe('API_KEY=nested\n')
   })
@@ -291,7 +297,7 @@ describe('carryInto', () => {
     try {
       await writeCarryList('planner', '.env = ~/carried.env\n', root)
 
-      await carryInto('planner', repo, workspace, root)
+      await carryWritten()
 
       await expect(readFile(join(workspace, '.env'), 'utf8')).resolves.toBe('API_KEY=from-home\n')
     } finally {
@@ -299,10 +305,28 @@ describe('carryInto', () => {
     }
   })
 
+  /*
+   * The list arrives built, and `carriedFiles` is what keeps `..` out of it —
+   * so the function that writes checks again rather than trusting every caller
+   * to have used it.
+   */
+  it('writes nothing outside the worktree, whoever built the list', async () => {
+    await writeFile(join(repo, 'secret'), 'KEY\n', 'utf8')
+    // One level down, so the escape would land inside a directory this test
+    // owns rather than in the shared temp directory.
+    const inner = join(workspace, 'inner')
+    await mkdir(inner)
+
+    await expect(
+      carryInto([{ path: '../escaped', from: join(repo, 'secret') }], repo, inner)
+    ).resolves.toEqual({ written: [], missing: ['../escaped'] })
+    await expect(readFile(join(workspace, 'escaped'), 'utf8')).rejects.toThrow()
+  })
+
   it('carries nothing for a list that names nothing', async () => {
     await writeCarryList('planner', '# only a comment\n', root)
 
-    await expect(carryInto('planner', repo, workspace, root)).resolves.toEqual({
+    await expect(carryWritten()).resolves.toEqual({
       written: [],
       missing: []
     })

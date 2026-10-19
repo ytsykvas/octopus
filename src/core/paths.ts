@@ -279,11 +279,16 @@ export function insideWorktree(path: string): boolean {
  *
  * An absent segment answers true. The destination is usually a file that does
  * not exist yet, and nothing that is not there can redirect anything.
+ *
+ * Walked as `join` will use it — normalised — rather than as it was spelled.
+ * `x/../cfg/id_rsa` is `cfg/id_rsa` to every read and write that follows, and
+ * walked raw it stopped at the missing `x` and answered "no link" while `cfg`
+ * was one. A leading `..` is `insideWorktree`'s to refuse.
  */
 export async function unlinkedInside(root: string, path: string): Promise<boolean> {
   let walked = root
 
-  for (const segment of path.split(sep)) {
+  for (const segment of normalize(path).split(sep)) {
     walked = join(walked, segment)
 
     try {

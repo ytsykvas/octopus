@@ -336,7 +336,8 @@ function rowId(path: string): string {
 const NOTES = {
   loading: 'files.loadingFolder',
   failed: 'files.folderFailed',
-  truncated: 'files.folderTruncated'
+  truncated: 'files.folderTruncated',
+  empty: 'files.folderEmpty'
 } as const
 
 function Note({ row }: { readonly row: Extract<TreeRow, { type: 'note' }> }): React.JSX.Element {
@@ -407,7 +408,7 @@ function Row({
       </span>
       {mark !== null && !directory && (
         <span aria-hidden className={`shrink-0 font-mono text-[11px] ${mark.tone}`}>
-          {t(mark.letter)}
+          {mark.letter}
         </span>
       )}
       {mark !== null && directory && (
