@@ -14,14 +14,11 @@
  * show a choice the agent is ignoring.
  */
 
-import { readFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-
 import { z } from 'zod'
 
 import { AUTO_COMPACT_VARIABLE, type AutoCompactWindow } from './chats.js'
 import type { SettingSourceName } from './config.js'
+import { readSettingsFile, settingsFilesFor } from './settingsFiles.js'
 
 /** Who set the variable, so the reader knows where to take it out. */
 export interface WindowOverride {
@@ -31,78 +28,28 @@ export interface WindowOverride {
   readonly from: string | null
 }
 
-/**
- * The files that can carry an `env` block, most authoritative first.
- *
- * The CLI applies a file's `env` over the environment it was started with —
- * measured: 450k in an `env` block beat 400k in the environment — and the
- * narrower file over the wider one. So the first that names the variable is
- * the one in force, and the environment speaks only when none does.
- */
-const FILES: readonly { readonly source: SettingSourceName; readonly relative: string }[] = [
-  { source: 'local', relative: join('.claude', 'settings.local.json') },
-  { source: 'project', relative: join('.claude', 'settings.json') },
-  { source: 'user', relative: join('.claude', 'settings.json') }
-]
-
-/**
- * Where the user's own file is, and how to name it to its reader.
- *
- * `CLAUDE_CONFIG_DIR` moves the whole of `~/.claude`, settings included, so a
- * file looked for under the home directory would be the wrong one — and the
- * reader is told the path they have to open.
- */
-function userFile(
-  environment: NodeJS.ProcessEnv,
-  home: string
-): { readonly path: string; readonly name: string } {
-  const configured = environment.CLAUDE_CONFIG_DIR
-  if (configured !== undefined && configured !== '') {
-    const path = join(configured, 'settings.json')
-    return { path, name: path }
-  }
-
-  const relative = join('.claude', 'settings.json')
-  return { path: join(home, relative), name: `~/${relative}` }
-}
-
-/**
- * Only the part that sets variables.
- *
- * `looseObject` because these files are somebody else's and carry many keys
- * octopus has no business with; one added upstream must not stop this read.
- */
-const SettingsSchema = z.looseObject({
+/** Only the part that sets variables. */
+const EnvSchema = z.looseObject({
   env: z.record(z.string(), z.unknown()).optional()
 })
-
-/** How much of one file is read, so a large one cannot hold the menu up. */
-const MAX_BYTES = 256 * 1024
 
 /**
  * Who forces the window on a session started with these sources, or null.
  *
- * Only the files the session actually reads are asked: a checkout that is not
- * trusted contributes nothing to the session, so its `env` cannot be what is
- * overriding anything. A file that is missing, unreadable, too large or not
- * JSON says nothing — half-written JSON in a checkout is ordinary.
+ * The CLI applies a file's `env` over the environment it was started with —
+ * measured: 450k in an `env` block beat 400k in the environment — and the
+ * narrower file over the wider one. So the first file that names the variable
+ * is the one in force, and the environment speaks only when none does.
  */
 export async function findWindowOverride(
   cwd: string,
   sources: readonly SettingSourceName[],
   environment: NodeJS.ProcessEnv = process.env,
-  home: string = homedir()
+  home?: string
 ): Promise<WindowOverride | null> {
-  for (const file of FILES) {
-    if (!sources.includes(file.source)) continue
-
-    // Relative to the checkout, or as the user's own is named, because that is
-    // where the reader has to go to take it out.
-    const { path, name } =
-      file.source === 'user'
-        ? userFile(environment, home)
-        : { path: join(cwd, file.relative), name: file.relative }
-    const value = await variableIn(path)
+  for (const { path, name } of settingsFilesFor(cwd, sources, environment, home)) {
+    const settings = EnvSchema.safeParse(await readSettingsFile(path))
+    const value = settings.success ? variableIn(settings.data.env?.[AUTO_COMPACT_VARIABLE]) : null
     if (value !== null) return { value, from: name }
   }
 
@@ -110,30 +57,13 @@ export async function findWindowOverride(
   return value === undefined || value === '' ? null : { value, from: null }
 }
 
-/** The variable as one file's `env` block sets it, or null. */
-async function variableIn(path: string): Promise<string | null> {
-  let raw: string
-  try {
-    raw = await readFile(path, 'utf8')
-  } catch {
-    return null
-  }
-
-  if (raw.length > MAX_BYTES) return null
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return null
-  }
-
-  const settings = SettingsSchema.safeParse(parsed)
-  if (!settings.success) return null
-
-  const value = settings.data.env?.[AUTO_COMPACT_VARIABLE]
-  // A number is accepted as the CLI would take it; anything else is not a
-  // setting the agent would act on.
+/**
+ * The variable as one `env` block sets it, or null.
+ *
+ * A number is accepted as the CLI would take it; anything else is not a
+ * setting the agent would act on.
+ */
+function variableIn(value: unknown): string | null {
   if (typeof value === 'number') return String(value)
   return typeof value === 'string' && value !== '' ? value : null
 }
