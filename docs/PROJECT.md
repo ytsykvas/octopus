@@ -289,7 +289,8 @@ Every status has a paired `*-bg` background for badges and notices.
 `styles.css` provides the base patterns — check them before writing new styles:
 
 - `.panel` — surface with border and radius;
-- `.composer-ring` — the composer's colour ring and glow;
+- `.composer-ring` — the composer's colour ring and glow, with `.composer-ring-line`
+  as its own first child (the one layer that turns, and only while focused);
 - `.row` / `.row-selected` — list row with hover and selection;
 - `.section-label` — section heading;
 - `.focus-ring` — visible keyboard focus;
@@ -333,7 +334,7 @@ The layout of the existing tools is the model — proven by daily use and free o
 
 **Tab strip — projects.** A colour each, and either two initials or an icon chosen in the project's settings. The colour is stored on the project rather than derived from its name: a hash would repaint the project the moment it was renamed, and constancy is what makes it recognisable. Fifteen colours, each measured for contrast in both themes. The initials are the fallback rather than the goal — two letters collide as soon as two repositories start alike, and 40px hold a picture or a pair of letters, not both. A dot in the tile's corner says what the project's agents want of you: amber while one waits on an answer, red for a turn that failed and green for one that finished, both of the last two only until you open the workspace.
 
-**Title bar — where you are.** The project's name, its directory, and the branch of the selected workspace. The branch used to sit in the chat's own header, which spent a whole row on one short string while answering a question about the window rather than about any conversation in it — the row it left belongs to the tab strip now.
+**Title bar — where you are.** The project's name, its directory, and the branch of the selected workspace. At its right end, beside the fold toggle, the selected workspace's server: Play, then a link to its port and Stop while it serves — the Scripts tab's own controls, from the same state. The branch used to sit in the chat's own header, which spent a whole row on one short string while answering a question about the window rather than about any conversation in it — the row it left belongs to the tab strip now.
 
 **Second pane — workspaces of the active project.** Carries a gradient wash of that project's colour, strongest at the project name and fading down the list, so "where am I" reads peripherally rather than by reading names. A workspace is recognised primarily **by its branch name**; the directory name is the secondary identifier.
 
@@ -364,7 +365,7 @@ Files opened from the right pane's tree, or from a changed file's menu, take tab
 | `⌘C`        | in a file: copy the lines' reference |
 | `⇧⇥`        | next mode                            |
 
-`⇧⇥` works in the composer's field only, and goes round ask first → `Accept edits` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
+`⇧⇥` works in the composer's field only, and goes round `Manual` → `Accept edits` → plan → `Auto`, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 
 `⌘W` closes a file tab and nothing else: with a conversation in front the key is left alone, because closing a conversation is a menu item on purpose.
 
@@ -499,7 +500,7 @@ Further rules:
 - `setup.sh` — prepares a workspace: installing dependencies, building what a fresh checkout needs. Runs on a button, not on workspace creation — no step is mandatory (§4).
 - `run.sh` — the dev server; receives `$OCTOPUS_PORT`.
 - `archive.sh` — runs when a workspace is removed, in its directory, while it still exists. It takes back what setup gave out — a database or a container named after the workspace. Nothing it does can stop the removal: a workspace that cannot be deleted because a cleanup script is broken is the worse problem of the two.
-- One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Once a server is up, Run gives way to a link to its port, **Restart** and **Stop**. Running is decided on that header and never in the halves, which is why there is one Run rather than a button in each.
+- One **Run** on the Scripts tab does both in order: build, then serve when the build succeeds. A failed build stops there; a missing build script is skipped rather than waited on. Once a server is up, Run gives way to a link to its port, **Restart** and **Stop**. Running is decided on that header and never in the halves, which is why there is one Run rather than a button in each. The title bar mirrors Run, the link and Stop as icons, read from the same state, so the server can be run with the pane folded.
 - Beside it, and unchanging as all of that turns over, **the way to the scripts themselves** — it opens the project's Scripts section. The offer to write one appears where a script is missing and therefore disappears the moment it exists, which left the tab that runs `setup.sh` with no way to open it.
 - **Ports come from a pool, ten at a time.** A workspace owns `$OCTOPUS_PORT` and the nine after it, named `$OCTOPUS_PORT_1`…`_9`: one port is not enough for a stack that is more than one process. Twenty blocks live at 3100–3299 — small enough to reason about and firewall, and far past what anybody runs at once. 3000 is deliberately outside it, being what an unconfigured framework binds.
 - A block is free when no workspace holds it **and nothing answers on it**. The old scheme checked only our own records, so a port another application held was handed out anyway and the server failed as it bound, blaming itself.
@@ -753,7 +754,7 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 ## 16. Open questions
 
 - **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text.
-- **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. The mode a new chat starts in is a global setting, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
+- **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. In `Auto` the SDK's classifier decides instead, prompting only when it cannot, and every refusal it makes is drawn in the log; `bypassPermissions` stays out. The mode a new chat starts in, and the one an approved plan is carried out in, are global settings, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
 - **Task sources** — creating a workspace from a GitHub issue or a Linear ticket.
 - **Code review** — answered twice over. A note against a line rides out inside

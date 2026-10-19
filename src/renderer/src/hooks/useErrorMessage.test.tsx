@@ -115,6 +115,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   rewindBusy: null,
   rewindInProgress: null,
   chatClosed: null,
+  autoModeUnavailable: { reason: 'auto mode is unavailable for your plan' },
   rewindUnavailable: { reason: 'No checkpoint for that message' },
   noCommits: { base: 'main' },
   nothingToCommit: null,

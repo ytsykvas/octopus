@@ -58,6 +58,7 @@ function config(overrides: Partial<Config> = {}): Config {
     cloneDirectory: '',
     settingSources: 'none',
     workingMode: 'default',
+    planExecutionMode: 'auto',
     effort: 'medium',
     model: null,
     planModel: null,
@@ -993,6 +994,93 @@ describe('App', () => {
 
     await user.click(within(bar).getByRole('button', { name: 'Show panel' }))
     expect(screen.getByRole('button', { name: 'Changes' })).toBeInTheDocument()
+  })
+
+  describe('Run and Stop in the title bar', () => {
+    /** Opens the planner project on anna, with the given scripts for its workspaces. */
+    async function onAnna(
+      scripts: Partial<Record<ScriptKind, string>>
+    ): Promise<ReturnType<typeof userEvent.setup>> {
+      givenTwoProjects()
+      givenScriptsOf({ planner: scripts })
+      const user = await openApp()
+      await user.click(await findTab('PL'))
+      await user.click(await screen.findByText('anna'))
+      return user
+    }
+
+    const SERVER_ONLY = { run: '/tmp/planner/run.sh' }
+
+    /*
+     * The window's own bar. The conversation draws a header too once a
+     * workspace is open, so the role alone matches twice; the fold toggle is
+     * what only the window's bar carries.
+     */
+    function titleBar(): HTMLElement {
+      const bar = screen.getByRole('button', { name: /^(Collapse|Show) panel$/ }).closest('header')
+      if (!bar) throw new Error('the title bar is not in the window')
+      return bar
+    }
+
+    it('offers nothing to start where the workspace has no server script', async () => {
+      await onAnna({ setup: '/tmp/planner/setup.sh' })
+      const bar = titleBar()
+
+      await waitFor(() => {
+        expect(window.octopus.workspaces.scripts).toHaveBeenCalledWith('planner/anna')
+      })
+      expect(within(bar).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+    })
+
+    // One state behind both buttons: a press in the title bar moves the
+    // Scripts tab with it, and the other way round.
+    it('serves from the title bar and keeps the Scripts tab in step', async () => {
+      const user = await onAnna(SERVER_ONLY)
+      await user.click(screen.getByRole('button', { name: 'Scripts' }))
+      const bar = titleBar()
+
+      await user.click(await within(bar).findByRole('button', { name: 'Run' }))
+
+      expect(await within(bar).findByRole('button', { name: 'Stop' })).toBeInTheDocument()
+      expect(window.octopus.workspaces.port).toHaveBeenCalledWith('planner/anna')
+      // Waited for: the server half settles its port after the press, and the
+      // link follows it from the workspace's stored 3100 to where it landed.
+      expect(await within(bar).findByRole('link', { name: 'Open localhost:3111' })).toHaveAttribute(
+        'href',
+        'http://localhost:3111'
+      )
+      expect(within(rightPane()).getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+
+      await user.click(within(rightPane()).getByRole('button', { name: 'Stop' }))
+
+      expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
+      expect(within(bar).queryByRole('link')).not.toBeInTheDocument()
+    })
+
+    it('shows the build going in the title bar and the pane alike', async () => {
+      const user = await onAnna({ setup: '/tmp/planner/setup.sh', ...SERVER_ONLY })
+      await user.click(screen.getByRole('button', { name: 'Scripts' }))
+      const bar = titleBar()
+
+      await user.click(await within(bar).findByRole('button', { name: 'Run' }))
+
+      expect(await within(bar).findByRole('button', { name: 'Building\u2026' })).toBeDisabled()
+      expect(within(rightPane()).getByRole('button', { name: 'Building\u2026' })).toBeDisabled()
+    })
+
+    // The pane is hidden rather than unmounted when folded, so the runner a
+    // press reaches is still there — which is what makes the title bar the
+    // place to run from with the pane out of the way.
+    it('starts and stops the server with the pane folded away', async () => {
+      const user = await onAnna(SERVER_ONLY)
+      const bar = titleBar()
+      await user.click(within(bar).getByRole('button', { name: 'Collapse panel' }))
+
+      await user.click(await within(bar).findByRole('button', { name: 'Run' }))
+      await user.click(await within(bar).findByRole('button', { name: 'Stop' }))
+
+      expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
+    })
   })
 
   it('reports a failure to read the list of projects', async () => {

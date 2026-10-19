@@ -4,7 +4,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ ●●●   sport   /Users/…/sport                                      ⊞  │  title bar
+│ ●●●   sport   /Users/…/sport                                  ▶ │ ⊞  │  title bar
 ├────┬──────────────┬──────────────────────────┬──────────────────────┤
 │ TG │  sport       │                          │ Changes Terminal …   │
 │ SP │  ⑂ develop   │        agent chat        │                      │
@@ -23,6 +23,17 @@
 draw its own, which pushed the tab strip's fill up behind the traffic lights and
 put the project name under them. Its left padding clears the buttons outright,
 so nothing depends on how wide the tab strip happens to be.
+
+**Its right end runs the selected workspace's server.** A Play icon, a spinner
+while the build goes, and then a globe to the server's port beside a Stop — the
+same sequence as the Scripts tab's `Run`, read from the same state in `App`, so
+a press in either place moves both. Running is the thing done to a workspace
+all day, and with the right pane folded the tab that does it is out of reach.
+Icons only, with the words as tooltips: the bar is one row for the whole
+window. It is absent where the workspace has no server script, disabled while a
+repository's scripts wait to be allowed, and marks a failed build with a red
+dot — with the pane folded, that is the only place the failure can show.
+`Restart` stays on the tab alone.
 
 **Projects are a tab strip**; workspaces are a list of the active one. Putting
 both in one tree outgrows the window and makes a click mean two things — select
@@ -494,19 +505,31 @@ around the frame, with a soft glow outside it that brightens while focus is
 anywhere inside. It is the one deliberate exception to panes taking borders
 rather than shadows (§10.2 of PROJECT.md).
 
-The frame's `::before` is the ring, a gradient border around a fill of the
-frame's own surface; its `::after` is the glow, the same gradient blurred,
-underneath. That fill is what keeps the glow outside — a mask cut the blur off
-in a hard rectangle, since a mask clips at the edge of its own box. The frame
-takes `z-index: 20` to hold those layers: `isolation` would have done it at level
-zero, and the menus that open upwards out of the frame then slid under the log's
-floating day chip.
+Three layers. The line is a span of its own, `.composer-ring-line`, the
+frame's first child: a conic gradient masked down to its 1.5px edge. Under the
+contents, the frame's `::before` is a fill of its own surface, and its `::after`
+is the glow, the gradient blurred, beneath that. The fill is what keeps the
+glow outside — a mask cut the blur off in a hard rectangle, since a mask clips
+at the edge of its own box. The frame takes `z-index: 20` to hold those layers:
+`isolation` would have done it at level zero, and the menus that open upwards
+out of the frame then slid under the log's floating day chip.
 
-**The ring does not turn.** A turning version was built and measured: even rotated
-by the compositor rather than repainted, it held 6–8% of the CPU for as long as
-the window was on screen, and a version that animated the gradient's own angle
-held about 29%. A laptop with octopus open all day pays for that in battery, for
-decoration.
+**The line turns while focus is inside the composer, and nothing else moves.**
+It turns its gradient's own angle (`--ring-angle`, registered with `@property`
+so it interpolates) once every six seconds; the glow stays still and only
+brightens. The split is the whole reason it is affordable. The first turning
+versions kept the line and the fill in one layer and turned the gradient
+under the glow as well, so every frame re-blurred it: measured in an isolated
+page on the same Electron, that held ~17% of a core while it ran (an earlier
+in-app reading put it at 29%), and a compositor rotation 6–8% for as long as
+the window was on screen. Turning only the line measured ~0.5% while focused —
+no different from the still ring — and no change in memory; unfocused it costs
+nothing at all. So there is no pause for an inactive window either: there is
+nothing measurable to save. Reduced motion stops it with every other animation.
+
+**The field is set in Menlo**, at 13px — `--font-prompt`, falling back to the
+mono stack. A prompt is closer to code than to prose, and the maintainer chose
+the face by eye; the log and the rest of the window stay in the sans.
 
 While something is dragged over the composer, the ring steps aside for the plain
 accent border: "let go here" reads the same everywhere. The strip around the
@@ -864,10 +887,11 @@ way to one; what the agent did next was start editing files.
 
 **One button and a field**, which is what the question actually has:
 
-- **Execute** runs it, in `Accept edits` out of planning — see the footer's mode above for
-  why. A line beside the button says so, because the click widens what the
-  agent may do and that is worth reading before it rather than in the footer
-  after it.
+- **Execute** runs it, out of planning, in the mode Settings names for an
+  approved plan — `Auto` by default, or `Accept edits` — see the footer's mode
+  above for why. A line beside the button says which, because the click widens
+  what the agent may do and that is worth reading before it rather than in the
+  footer after it.
 - **The field is how you carry on planning.** Writing in it _is_ that, so a
   button saying so was the same decision offered twice. `Enter` sends and
   `⇧Enter` breaks the line — the composer's keys, one convention rather than
@@ -1035,40 +1059,61 @@ So the record keeps `planMode` beside `workingMode`, and the composer shows the
 two as one control beside send: `planMode` wins when it is on, and the working
 mode is what shows otherwise.
 
-It **switches in place**, going round ask first → `Accept edits` → plan → ask
-first: the ring Claude Code's own shift+tab goes round, and Shift+Tab in the
-field does the same here. There used to be two controls — the permission chip
-among the pickers and a plan toggle by send — and each said half of what this
-says. The pickers beside it keep their menus, because their lists are
-open-ended. It is tinted for `Accept edits` and for plan, the two states where the
-agent does something other than ask.
+It **switches in place**, going round `Manual` → `Accept edits` → plan →
+`Auto` → `Manual`: the ring Claude Code's own shift+tab goes round, and
+Shift+Tab in the field does the same here. There used to be two controls — the
+permission chip among the pickers and a plan toggle by send — and each said
+half of what this says. The pickers beside it keep their menus, because their
+lists are open-ended. Each mode has its own colour, so it reads without the
+word: `Manual` is untinted, `Accept edits` amber (the `warning` token, the
+app's "goes ahead, take note"), plan in the accent, and `Auto` green with a
+bolt — the one mode where a classifier rather than a rule decides. The tints
+are `MODE_TINTS` in `Composer.tsx`.
 
-Leaving plan for ask first moves the working mode **before** planning ends.
-Planning was holding `acceptEdits` underneath — the ring reaches plan through
-it — so turned the other way round the session would pass through it, and an
-edit landing then would go through unasked. `setMode` in `useChat.ts` owns that
-order so no caller has to know it.
+Leaving plan for the next mode moves the working mode **before** planning ends.
+Planning holds a working mode underneath — `acceptEdits`, when the ring reached
+it the usual way — so turned the other way round the session would pass
+through it, and an edit landing then would go through without what the next
+mode asks for. `setMode` in `useChat.ts` owns that order so no caller has to
+know it.
 
-**A plan approved out of planning goes on in `Accept edits`**, whatever the
-conversation was asking before — the core writes both fields when the plan tool
-is allowed, and executing a plan from the log does the same. With one control
-there is no second one left to say what should follow a plan, and a plan read
-and approved is the edits accepted in advance. Because that widens what the
-agent may do, the plan dialog says so beside its button, before the click.
+**A plan approved out of planning goes on in the mode Settings names** —
+"Carrying out an approved plan", `Auto` by default or `Accept edits` — whatever
+the conversation was asking before. The core writes both fields when the plan
+tool is allowed, and executing a plan from the log does the same; the rule is
+`modeAfterPlan` in `chats.ts`, shared by both. With one control there is no
+second one left to say what should follow a plan, and a plan read and approved
+is the edits accepted in advance — which is why `Manual` is not offered there.
+Because that widens what the agent may do, the plan dialog says so beside its
+button, before the click.
 
-**Only out of planning.** The agent may call the plan tool from any mode, and
-handing over there would let it raise a conversation set to ask first into one
-that does not, by asking once. Outside planning, approving changes no mode and
-the dialog carries no such line.
+**Only out of planning, and never down from `Auto`.** The agent may call the
+plan tool from any mode, and handing over there would let it raise a
+conversation set to `Manual` into one that does not ask, by asking once.
+Outside planning, approving changes no mode and the dialog carries no such
+line. A conversation already in `Auto` goes back to it whatever the setting
+says, as the CLI itself does.
 
-`Accept edits` keeps its English name in every locale — it is what Claude
-Code's own status line calls the mode, and a translated name for a borrowed one
-reads as a second setting rather than the same one — Settings names it the same
-way. It was `Auto mode` until Claude Code gained a mode of that name, a
-classifier approving each call (`auto` in the SDK's `PermissionMode`): someone
-who knows the agent read the chip as that one and expected commands to run
-unasked, where `acceptEdits` accepts file edits and the plain filesystem
-commands (`mkdir`, `touch`, `rm`, `mv`, `cp`, `sed`), not commands in general.
+**`Auto` is the SDK's `auto` mode**: a classifier approves or refuses each call,
+and what it cannot decide still comes to the chat as a question. What it
+refuses is drawn as a line in the log ("Auto mode blocked Bash", with its
+reason), from the SDK's `permission_denied` message — without it a blocked call
+shows only as a tool that failed. Not every account, model or setup has it. A
+switch to it that the SDK refuses comes back as an error and the chip stays
+where it was. A conversation already in it that loses it — the CLI starts a
+session in `default` silently, or refuses it on a later message — falls back
+with a line saying so: to `Accept edits` when auto came from carrying out a
+plan, to `Manual` otherwise. A report of `default` from the session is not
+taken as that verdict on its own; auto is asked for again first, and only a
+refusal falls back.
+
+`Manual`, `Accept edits` and `Auto` keep their English names in every locale —
+they are what Claude Code's own status line calls the modes, and a translated
+name for a borrowed one reads as a second setting rather than the same one —
+Settings names them the same way. `Accept edits` was once labelled `Auto mode`,
+before Claude Code gained a mode of that name; the two are different things:
+`acceptEdits` accepts file edits and the plain filesystem commands (`mkdir`,
+`touch`, `rm`, `mv`, `cp`, `sed`), not commands in general.
 
 **The right pane** holds Changes, Terminal, Scripts and Pull request. The
 Scripts tab runs `setup.sh` on its build half and `run.sh` on its server half,
@@ -1130,7 +1175,7 @@ so `Run` is disabled — the server half already carries that invitation.
 The sequence is **keyed by workspace**, exactly as the runs are: leaving one
 mid-build to look at another must not report the second as building.
 
-**Running is decided on that header, never in the halves.** There were four
+**Running is decided on that header — and on the title bar, which mirrors it from the same state — never in the halves.** There were four
 controls across the two of them — `Build`/`Rebuild` in one, `Start`/`Restart`/
 `Stop` in the other — and beside a `Run` that does both, two of them said the
 same word twice. A half's job is to show what is happening; the pressing belongs

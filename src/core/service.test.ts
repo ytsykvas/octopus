@@ -3922,7 +3922,7 @@ describe('the agent chat', () => {
   /** What the session answers when asked to put the files back to a message. */
   let rewindAnswer: () => Promise<unknown>
   /** How setting the session's mode settles — held, to make a send wait on it. */
-  let modeAnswer: () => Promise<void>
+  let modeAnswer: (mode: string) => Promise<void>
 
   function fakeQuery(): QueryFn {
     return (params) => {
@@ -4074,7 +4074,7 @@ describe('the agent chat', () => {
         },
         setPermissionMode: (mode: string) => {
           modes.push(mode)
-          return modeAnswer()
+          return modeAnswer(mode)
         },
         close: () => {
           closed++
@@ -4132,8 +4132,14 @@ describe('the agent chat', () => {
   const initMessage = {
     type: 'system',
     subtype: 'init',
-    session_id: 'sess-1'
+    session_id: 'sess-1',
+    permissionMode: 'default'
   } as unknown as SDKMessage
+
+  /** A session that will not take auto mode, and takes every other one. */
+  function refuseAuto(reason: string): (mode: string) => Promise<void> {
+    return (mode) => (mode === 'auto' ? Promise.reject(new Error(reason)) : Promise.resolve())
+  }
 
   const resultMessage = {
     type: 'result',
@@ -6857,8 +6863,9 @@ describe('the agent chat', () => {
      * planning, so nothing is left to say what should follow a plan — and a
      * plan read and approved is the edits accepted in advance.
      */
-    it('leaves planning for acceptEdits when a plan is approved', async () => {
+    it('leaves planning for acceptEdits when a plan is approved and that is the setting', async () => {
       const { service, workspaceId, events } = await withWorkspace()
+      await service.updateConfig({ planExecutionMode: 'acceptEdits' })
       const chat = await service.openChat(workspaceId)
       await service.setChatPlanMode(chat.id, true)
       await service.sendToChat(chat.id, 'plan it')
@@ -6876,6 +6883,69 @@ describe('the agent chat', () => {
       // Stored as well as sent, so the composer names the mode that is
       // actually running and the next session starts in it.
       expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+    })
+
+    // Auto is the setting's default: the plan is what a person reads, and the
+    // classifier watches each step of carrying it out.
+    it('leaves planning for auto mode when a plan is approved, by default', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: '# Do the thing' })
+      await service.answerPermission(await waitForRequest(events), 'allow')
+
+      await expect(decision).resolves.toMatchObject({
+        updatedPermissions: [{ type: 'setMode', mode: 'auto', destination: 'session' }]
+      })
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
+    })
+
+    // Already in auto mode, a plan goes back to it whatever the setting says:
+    // Accept edits would be a step down nobody asked for.
+    it('goes back to auto mode after a plan begun from it', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      await service.updateConfig({ planExecutionMode: 'acceptEdits' })
+      const chat = await service.openChat(workspaceId)
+      await service.setChatWorkingMode(chat.id, 'auto')
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+
+      const decision = agent().ask('ExitPlanMode', { plan: '# Do the thing' })
+      await service.answerPermission(await waitForRequest(events), 'allow')
+
+      await expect(decision).resolves.toMatchObject({
+        updatedPermissions: [{ type: 'setMode', mode: 'auto', destination: 'session' }]
+      })
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
+    })
+
+    // Auto came from the plan, so losing it goes to the plan's other way of
+    // being carried out rather than to Manual, which would ask about every
+    // step the user has just approved.
+    it('falls back to acceptEdits when auto mode reached through a plan is refused', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatPlanMode(chat.id, true)
+      await service.sendToChat(chat.id, 'plan it')
+      const decision = agent().ask('ExitPlanMode', { plan: '# Do the thing' })
+      await service.answerPermission(await waitForRequest(events), 'allow')
+      await decision
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      modeAnswer = refuseAuto('auto mode is unavailable for your plan')
+      await service.sendToChat(chat.id, 'carry on')
+
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+      expect(events.map((announced) => announced.event)).toContainEqual({
+        type: 'auto_mode_unavailable',
+        reason: 'auto mode is unavailable for your plan',
+        fallback: 'acceptEdits'
+      })
     })
 
     /*
@@ -7706,6 +7776,241 @@ describe('the agent chat', () => {
   })
 
   describe('the mode', () => {
+    describe('auto', () => {
+      it('reaches a session that is already running', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        await service.setChatWorkingMode(chat.id, 'auto')
+
+        expect(agent().modes()).toContain('auto')
+        expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
+      })
+
+      // Somebody has just asked for it, so the refusal is theirs to read, and
+      // the record goes back to what it said rather than claiming auto.
+      it('is refused with the reason, and the chat keeps its mode, when the session will not take it', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.setChatWorkingMode(chat.id, 'acceptEdits')
+        await service.sendToChat(chat.id, 'work')
+        modeAnswer = refuseAuto('auto mode unavailable for this model')
+
+        await expect(service.setChatWorkingMode(chat.id, 'auto')).rejects.toMatchObject({
+          code: 'autoModeUnavailable',
+          params: { chatId: chat.id, reason: 'auto mode unavailable for this model' }
+        })
+        expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+      })
+
+      // A choice made while the refusal was on its way is newer than the one
+      // refused, so the record keeps it rather than going back.
+      it('keeps a mode chosen while auto mode was being refused', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        let refuse: (error: Error) => void = () => undefined
+        modeAnswer = (mode) =>
+          mode === 'auto'
+            ? new Promise<void>((_resolve, reject) => {
+                refuse = reject
+              })
+            : Promise.resolve()
+        const choosing = service.setChatWorkingMode(chat.id, 'auto')
+        await vi.waitFor(() => {
+          expect(agent().modes()).toEqual(['auto'])
+        })
+        await service.setChatWorkingMode(chat.id, 'acceptEdits')
+        refuse(new Error('auto mode unavailable for this model'))
+
+        await expect(choosing).rejects.toMatchObject({ code: 'autoModeUnavailable' })
+        expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+      })
+
+      // Nobody is choosing at the moment a message goes, so there is nobody to
+      // hand an error to: the chat drops to Manual, says so, and the message
+      // still goes.
+      it('falls back to Manual on a message when the session no longer takes it', async () => {
+        const { service, workspaceId, events } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+        await service.setChatWorkingMode(chat.id, 'auto')
+        agent().emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+        })
+
+        modeAnswer = refuseAuto('auto mode disabled by settings')
+        await service.sendToChat(chat.id, 'carry on')
+
+        expect(service.listChats(workspaceId)[0]?.workingMode).toBe('default')
+        expect(agent().sent).toContain('carry on')
+        expect(agent().modes().at(-1)).toBe('default')
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'auto_mode_unavailable',
+          reason: 'auto mode disabled by settings',
+          fallback: 'default'
+        })
+      })
+
+      // Any other mode is the SDK's own, so a refusal of it is a fault rather
+      // than something to fall back from.
+      it('lets a refusal of any other mode go up as before', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+        agent().emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+        })
+        modeAnswer = () => Promise.reject(new Error('control channel closed'))
+
+        await expect(service.sendToChat(chat.id, 'carry on')).rejects.toThrow(
+          'control channel closed'
+        )
+        expect(service.listChats(workspaceId)[0]?.workingMode).toBe('default')
+      })
+
+      // Leaving a plan with the record already in auto is no one's fresh
+      // choice of it either, so a refusal there falls back rather than fails.
+      it('falls back when planning is turned off over a chat whose auto mode is refused', async () => {
+        const { service, workspaceId, events } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.setChatWorkingMode(chat.id, 'auto')
+        await service.setChatPlanMode(chat.id, true)
+        await service.sendToChat(chat.id, 'plan')
+        modeAnswer = refuseAuto('auto mode is unavailable for your plan')
+
+        await service.setChatPlanMode(chat.id, false)
+
+        expect(service.listChats(workspaceId)[0]?.workingMode).toBe('default')
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'auto_mode_unavailable',
+          reason: 'auto mode is unavailable for your plan',
+          fallback: 'default'
+        })
+      })
+
+      // A session asked to start in auto mode that the CLI started in
+      // default instead: the report is taken as a cue to ask again, not as the
+      // verdict, and only the refusal of that falls back.
+      it('asks again when the session reports default, and falls back only if refused', async () => {
+        const { service, workspaceId, events } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.setChatWorkingMode(chat.id, 'auto')
+        await service.sendToChat(chat.id, 'work')
+        expect(agent().options().permissionMode).toBe('auto')
+
+        modeAnswer = refuseAuto('auto mode is unavailable for your plan')
+        agent().emit({
+          type: 'system',
+          subtype: 'status',
+          status: null,
+          permissionMode: 'default'
+        } as unknown as SDKMessage)
+
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.workingMode).toBe('default')
+        })
+        expect(agent().modes()).toEqual(['auto', 'default'])
+        expect(events.map((announced) => announced.event)).toContainEqual({
+          type: 'auto_mode_unavailable',
+          reason: 'auto mode is unavailable for your plan',
+          fallback: 'default'
+        })
+      })
+
+      it('stays in auto mode when asking again after a report succeeds', async () => {
+        const { service, workspaceId, events } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.setChatWorkingMode(chat.id, 'auto')
+        await service.sendToChat(chat.id, 'work')
+
+        agent().emit({
+          type: 'system',
+          subtype: 'status',
+          status: null,
+          permissionMode: 'default'
+        } as unknown as SDKMessage)
+
+        await vi.waitFor(() => {
+          expect(agent().modes()).toEqual(['auto'])
+        })
+        expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
+        expect(events.map((announced) => announced.event.type)).not.toContain(
+          'auto_mode_unavailable'
+        )
+      })
+
+      // A report of the mode the record already names, or one while planning,
+      // is nothing to act on.
+      it('ignores a report that agrees with the record, or one made while planning', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.setChatWorkingMode(chat.id, 'auto')
+        await service.setChatPlanMode(chat.id, true)
+        await service.sendToChat(chat.id, 'plan')
+
+        for (const permissionMode of ['default', 'auto']) {
+          agent().emit({
+            type: 'system',
+            subtype: 'status',
+            status: null,
+            permissionMode
+          } as unknown as SDKMessage)
+        }
+        agent().emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+        })
+
+        expect(agent().modes()).toEqual([])
+      })
+
+      // The user moved on in the meantime: a refusal arriving after that
+      // leaves their choice alone and says nothing.
+      it('does not fall back from a mode the chat has already left', async () => {
+        const { service, workspaceId, events } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.setChatWorkingMode(chat.id, 'auto')
+        await service.sendToChat(chat.id, 'work')
+
+        let refuse: (error: Error) => void = () => undefined
+        modeAnswer = () =>
+          new Promise<void>((_resolve, reject) => {
+            refuse = reject
+          })
+        agent().emit({
+          type: 'system',
+          subtype: 'status',
+          status: null,
+          permissionMode: 'default'
+        } as unknown as SDKMessage)
+        await vi.waitFor(() => {
+          expect(agent().modes()).toEqual(['auto'])
+        })
+
+        modeAnswer = () => Promise.resolve()
+        await service.setChatWorkingMode(chat.id, 'acceptEdits')
+        refuse(new Error('auto mode is unavailable for your plan'))
+        // The session is put back in the mode now in force once the refusal
+        // has been dealt with — the last thing that happens, so it is the
+        // moment to look.
+        await vi.waitFor(() => {
+          expect(agent().modes()).toEqual(['auto', 'acceptEdits', 'acceptEdits'])
+        })
+
+        expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+        // Nor reported as a fault: a refusal of a mode nobody wants any more
+        // is nothing to tell anyone about.
+        const said = events.map((announced) => announced.event.type)
+        expect(said).not.toContain('auto_mode_unavailable')
+        expect(said).not.toContain('error')
+      })
+    })
+
     it('is remembered on the chat', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
@@ -8003,6 +8308,7 @@ describe('the agent chat', () => {
     // is what hands the work to acceptEdits, and what it moves the session from.
     it('hands over to acceptEdits when a plan is approved as planning is turned on', async () => {
       const { service, workspaceId, events } = await withWorkspace()
+      await service.updateConfig({ planExecutionMode: 'acceptEdits' })
       const chat = await service.openChat(workspaceId)
       await service.setChatEffort(chat.id, 'low')
       await service.setChatPlanEffort(chat.id, 'max')

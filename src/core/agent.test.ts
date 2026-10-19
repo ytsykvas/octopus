@@ -258,14 +258,80 @@ function assistant(content: unknown[]): SDKMessage {
 }
 
 describe('mapping SDK messages', () => {
-  it('reports the session id from the init message', () => {
+  // And the mode it actually started in, which is the only sign that a
+  // request for auto mode was quietly turned down.
+  it('reports the session id and the mode from the init message', () => {
     const message = {
       type: 'system',
       subtype: 'init',
-      session_id: 'sess-42'
+      session_id: 'sess-42',
+      permissionMode: 'default'
     } as unknown as SDKMessage
 
-    expect(mapMessage(message)).toEqual([{ type: 'session_started', sessionId: 'sess-42' }])
+    expect(mapMessage(message)).toEqual([
+      { type: 'session_started', sessionId: 'sess-42' },
+      { type: 'mode_reported', mode: 'default' }
+    ])
+  })
+
+  it('reports the mode a status message carries', () => {
+    const message = {
+      type: 'system',
+      subtype: 'status',
+      status: null,
+      permissionMode: 'default'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([{ type: 'mode_reported', mode: 'default' }])
+  })
+
+  // Most status messages are about compacting or a request, not the mode.
+  it('says nothing for a status message without a mode', () => {
+    const message = {
+      type: 'system',
+      subtype: 'status',
+      status: 'requesting'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([])
+  })
+
+  // A call blocked by auto mode's classifier would otherwise show only as a
+  // tool that failed.
+  it('reports a call the classifier refused, with its reason', () => {
+    const message = {
+      type: 'system',
+      subtype: 'permission_denied',
+      tool_name: 'Bash',
+      tool_use_id: 'tool-1',
+      decision_reason_type: 'classifier',
+      decision_reason: 'Downloads and runs a remote script',
+      message: 'Permission for this action was denied'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'permission_denied',
+        toolName: 'Bash',
+        byClassifier: true,
+        reason: 'Downloads and runs a remote script'
+      }
+    ])
+  })
+
+  it('reports a call a rule refused, with no reason when it gave none', () => {
+    const message = {
+      type: 'system',
+      subtype: 'permission_denied',
+      tool_name: 'Write',
+      tool_use_id: 'tool-2',
+      decision_reason_type: 'rule',
+      message: 'Denied by a rule'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'permission_denied', toolName: 'Write', byClassifier: false, reason: null }
+    ])
   })
 
   /*
@@ -486,7 +552,7 @@ describe('mapping SDK messages', () => {
   it('ignores system messages it has no use for', () => {
     const message = {
       type: 'system',
-      subtype: 'permission_denied',
+      subtype: 'hook_started',
       session_id: 'sess-42'
     } as unknown as SDKMessage
 

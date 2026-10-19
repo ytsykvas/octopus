@@ -52,6 +52,7 @@ import {
   isUsageCommand,
   isOpenChat,
   MAX_CHATS_PER_WORKSPACE,
+  modeAfterPlan,
   newChat,
   sessionMode,
   sessionModel,
@@ -1553,6 +1554,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * would call a figure from an hour ago fresh.
    */
   const modelHeardAt = new WeakMap<AgentSession, number>()
+
+  /**
+   * Conversations in auto mode because a plan was carried out in it, not
+   * because anybody picked it.
+   *
+   * Only so that losing auto mode there falls back to `acceptEdits` rather than
+   * Manual. In memory: after a restart the chip simply says Auto, and a
+   * fall back then goes to Manual — the cautious end of a rare case.
+   */
+  const autoFromPlan = new Set<string>()
   /** Sessions being started, so a second asker waits for the first. */
   const starts = new Map<string, Promise<AgentSession>>()
   const listeners = new Set<(event: ChatEvent) => void>()
@@ -2394,6 +2405,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     if (event.type === 'commands_changed') rememberCommands(chat, event.commands)
 
+    /*
+     * The session says it is in `default` while the record says auto. Either
+     * the CLI started it there because auto mode is not available — a request
+     * for it at start is turned down silently — or something moved it, such
+     * as leaving a plan that began elsewhere. The report is not taken as the
+     * verdict, since it can be a moment behind a switch that is still on its
+     * way: auto is asked for again, and only a refusal of that falls back.
+     */
+    if (event.type === 'mode_reported' && event.mode === 'default') {
+      const current = findChat(state, chat.id)
+      const session = sessions.get(chat.id)
+      if (session && current?.workingMode === 'auto' && !current.planMode) {
+        background(chat, assertMode(chat.id, session))
+      }
+    }
+
     // An MCP server's form holds the turn exactly as a permission does, so it
     // is the same "come and answer this" — the workspace's amber dot, the
     // project's mark and the notice all read this status.
@@ -2695,15 +2722,110 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * what the other half says, not merely "not planning".
    */
   async function applyMode(chatId: string, patch: Partial<Chat>): Promise<void> {
+    const previous = requireChat(chatId).workingMode
+    // Somebody chose a mode, so auto mode is no longer the plan's choice.
+    if (patch.workingMode !== undefined) autoFromPlan.delete(chatId)
     const before = await changeInForce(chatId, () => patch)
 
     // Applied to the running session too, so the choice takes effect on the
     // current turn rather than only on the next one. Read back after the write
     // rather than merged by hand: the session wants both halves, and only one
     // of them is in the patch.
-    await sessions.get(chatId)?.setPermissionMode(sessionMode(requireChat(chatId)))
+    const session = sessions.get(chatId)
+    if (session) {
+      if (patch.workingMode === 'auto' && previous !== 'auto') {
+        await enterAuto(chatId, session, previous)
+      } else {
+        await assertMode(chatId, session)
+      }
+    }
     await pushModel(chatId, before.model)
     await pushEffort(chatId, before.effort)
+  }
+
+  /**
+   * Auto mode, just chosen, handed to the running session.
+   *
+   * The SDK refuses the switch when the account, the model or a setting does
+   * not allow auto mode. Somebody has just asked for it, so the refusal is
+   * theirs to read: the record goes back to what it said before and the
+   * reason comes back as an error, which leaves the chip where it was.
+   */
+  async function enterAuto(
+    chatId: string,
+    session: AgentSession,
+    previous: WorkingMode
+  ): Promise<void> {
+    try {
+      await session.setPermissionMode(sessionMode(requireChat(chatId)))
+    } catch (error) {
+      // Only while the record still says auto: a choice made since is newer
+      // than the one being refused.
+      await commit((current) =>
+        findChat(current, chatId)?.workingMode === 'auto'
+          ? updateChat(current, chatId, { workingMode: previous })
+          : current
+      )
+      const reason = describeError(error)
+      throw new ChatError(
+        'autoModeUnavailable',
+        { chatId, reason },
+        `Chat ${chatId} could not enter auto mode: ${reason}`
+      )
+    }
+  }
+
+  /**
+   * Puts the running session in the mode the record names.
+   *
+   * Auto mode can stop being available under a conversation already set to
+   * it — a different model, a setting, the account — and the SDK then refuses
+   * it. Nobody is choosing at that moment, so there is nobody to hand an error
+   * to: the conversation drops to `default` instead, with a line in the log
+   * saying so, and the session is set to that. Every other mode is the SDK's
+   * own and a refusal of it is a fault, which goes up as before.
+   */
+  async function assertMode(chatId: string, session: AgentSession): Promise<void> {
+    // What was asked for, held across the wait: the user may have moved on by
+    // the time a refusal arrives, and a refusal of auto mode is never a fault
+    // to report — at worst it is one nobody wants any more.
+    const wanted = sessionMode(requireChat(chatId))
+    try {
+      await session.setPermissionMode(wanted)
+    } catch (error) {
+      if (wanted !== 'auto') throw error
+      await fallBackFromAuto(chatId, describeError(error))
+      await session.setPermissionMode(sessionMode(requireChat(chatId)))
+    }
+  }
+
+  /**
+   * Gives up auto mode, and says so in the conversation.
+   *
+   * To `default`, unless auto came from carrying out an approved plan: then to
+   * `acceptEdits`, the other way a plan is carried out, since Manual would ask
+   * about every step the user has just agreed to.
+   *
+   * Only from `auto`: a conversation someone has moved on from in the
+   * meantime keeps what they chose. The line is what tells the window the
+   * record moved — nothing else does — and what tells the reader why the chip
+   * changed by itself.
+   */
+  async function fallBackFromAuto(chatId: string, reason: string | null): Promise<void> {
+    const fallback = autoFromPlan.has(chatId) ? 'acceptEdits' : 'default'
+    autoFromPlan.delete(chatId)
+
+    // An object rather than a `let`: the flag is set inside the commit, and the
+    // compiler cannot see a closure write to a local.
+    const outcome = { moved: false }
+    await commit((current) => {
+      if (findChat(current, chatId)?.workingMode !== 'auto') return current
+      outcome.moved = true
+      return updateChat(current, chatId, { workingMode: fallback })
+    })
+    if (outcome.moved) {
+      handleEvent(requireChat(chatId), { type: 'auto_mode_unavailable', reason, fallback })
+    }
   }
 
   /** The model and effort a chat's record puts in force right now. */
@@ -5520,7 +5642,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const running = sessions.get(chatId)
       if (running) {
-        await running.setPermissionMode(sessionMode(chat))
+        await assertMode(chatId, running)
         await running.setEffort(effortInForce(chat))
       }
 
@@ -5767,18 +5889,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // session does not start by planning again, and the running session, so
       // the work the plan describes can actually begin.
       if (leaving) {
-        // An approved plan goes on in `acceptEdits`. The composer holds one
-        // control that cycles through asking, accepting and planning, so there
-        // is no second one left to say what should follow a plan — and a plan
-        // read and approved is the edits accepted in advance.
-        //
-        // Only out of planning, though. The agent may call the plan tool from
-        // any mode, and handing over there would let it raise a conversation
-        // the user set to ask first into one that does not, by asking once.
-        const before = await changeInForce(request.chatId, (chat) => ({
-          planMode: false,
-          ...(chat.planMode && { workingMode: 'acceptEdits' as const })
-        }))
+        // Which mode follows is `modeAfterPlan`'s rule, shared with the
+        // window.
+        const before = await changeInForce(request.chatId, (chat) => {
+          const workingMode = modeAfterPlan(chat, config.planExecutionMode)
+          if (workingMode === 'auto' && chat.workingMode !== 'auto') autoFromPlan.add(chat.id)
+          return { planMode: false, workingMode }
+        })
 
         // The model leaves planning with the record. Before the reply, never
         // after it: the reply is what releases the tool call, so a model sent

@@ -324,6 +324,7 @@ export const uk: Translation = {
     runBuilding: 'Збирається. Сервер запуститься, коли це завершиться.',
     runServing: 'Сервер працює.',
     buildFailed: 'Збірка впала, тож сервер не запускався.',
+    awaitingApproval: 'Спершу дозвольте скрипти цього репозиторію на вкладці Scripts.',
     portSilent: 'Працює, але на {{port}} ніхто не слухає. Чи використовує скрипт $OCTOPUS_PORT?',
     noWorkspaceTitle: 'Ще немає що запускати',
     noWorkspaceBody: 'Виберіть воркспейс ліворуч, щоб запускати тут його скрипти.',
@@ -745,6 +746,9 @@ export const uk: Translation = {
     refusalSwappedLocally:
       '{{from}} відмовилася від частини цього ходу, тож ту частину відповіла {{to}}',
     refusalDeclined: '{{from}} відмовилася від цього ходу, і жодна інша модель його не взяла',
+    deniedByAuto: 'Auto заблокував {{tool}}',
+    deniedByRule: '{{tool}} відхилено без запиту',
+    autoFellBack: 'Auto тут недоступний, тож цей чат тепер у режимі {{mode}}',
     retracted: 'Агент забрав це назад після того, як модель відмовилася від ходу.',
 
     emptyTitle: 'Почніть розмову',
@@ -827,10 +831,11 @@ export const uk: Translation = {
     effortSmarter: 'Розумніше',
 
     modeToggle: 'Дозволи: {{mode}}',
-    modeDefault: 'Питати',
+    modeDefault: 'Manual',
     modeAcceptEdits: 'Accept edits',
+    modeAuto: 'Auto',
     planMode: 'План',
-    modeCycle: 'Змінити режим — Питати, Accept edits, План (Shift+Tab)',
+    modeCycle: 'Змінити режим — Manual, Accept edits, План, Auto (Shift+Tab)',
 
     toolSteps_one: '{{count}} дія',
     toolSteps_few: '{{count}} дії',
@@ -852,6 +857,8 @@ export const uk: Translation = {
     planEditLabel: 'План у форматі markdown',
     planEdited: 'План у вашій редакції',
     planExecuteHint: 'Виконується в режимі Accept edits — зміни у файлах вносяться без запитів.',
+    planExecuteHintAuto:
+      'Виконується в режимі Auto — кожен крок схвалюється або відхиляється за вас, а незрозуміле питають.',
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
     questionTitle: 'Агент запитує',
@@ -1022,12 +1029,20 @@ export const uk: Translation = {
     permissionMode: 'Що дозволено новому чату',
     permissionModeHint:
       'Початковий стан для кожного воркспейсу, щоб питання не поставало на кожній новій гілці. Окремий чат усе одно можна перемкнути.',
-    permissionAsk: 'Питати',
+    permissionAsk: 'Manual',
     permissionAskHint:
       'Читання відбувається мовчки; запис файлу чи запуск команди чекає на відповідь.',
     permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
       'Зміни у файлах проходять без запиту, прості файлові команди теж (mkdir, mv, rm). Решта команд чекає.',
+    permissionAuto: 'Auto',
+    permissionAutoHint:
+      'Класифікатор схвалює або відхиляє кожен крок і питає, коли не певен. Відмови видно в чаті. Є не на кожному акаунті й моделі; там, де його немає, чат повертається до Manual.',
+    planExecution: 'Виконання схваленого плану',
+    planExecutionHint: 'Режим, у який перемикається чат, коли ви натискаєте «Виконати» на плані.',
+    planExecutionAutoHint:
+      'Кожен крок схвалює або відхиляє класифікатор. Там, де Auto недоступний, використовується Accept edits.',
+    planExecutionAcceptEditsHint: 'Зміни у файлах проходять без запиту; решта команд чекає.',
 
     alwaysAllowed: 'Відповідь «завжди»',
     alwaysAllowedHint:
@@ -1484,6 +1499,7 @@ export const uk: Translation = {
     rewindUnavailableReason: 'Повернути цю розмову до того повідомлення не вийде: {{reason}}',
     rewindInProgress: 'Розмова саме повертається назад. Зачекайте, доки це завершиться.',
     chatClosed: 'Цю розмову закрито. Спершу відкрийте її з історії.',
+    autoModeUnavailable: 'Auto тут недоступний: {{reason}}',
     repoConfigSymlink:
       '{{path}} — символічне посилання. octopus не читає й не пише через нього, бо воно може вести куди завгодно поза репозиторієм.',
     repoConfigTooLarge: '{{path}} більший, ніж дозволено файлу такого роду.',
