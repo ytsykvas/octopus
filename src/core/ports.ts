@@ -39,6 +39,9 @@ const TIMEOUT_MS = 1_000
 /** How a connection is opened, injected so a test never touches the network. */
 export type Connect = (port: number, host: string) => Socket
 
+/** Whether something answers on a port; `isListening` is the real one. */
+export type PortProbe = (port: number) => Promise<boolean>
+
 export async function isListening(
   port: number,
   connect: Connect = (target, host) => createConnection({ port: target, host })
@@ -86,8 +89,8 @@ export async function isListening(
  * test never opens a socket.
  */
 export async function firstFreeBlock(
-  claimed: readonly number[] = [],
-  answers: (port: number) => Promise<boolean> = (port) => isListening(port)
+  claimed: readonly number[],
+  answers: PortProbe
 ): Promise<number | null> {
   const taken = new Set(claimed)
 
@@ -115,7 +118,7 @@ export async function firstFreeBlock(
 export async function settlePort(
   current: number,
   claimedByOthers: readonly number[],
-  answers: (port: number) => Promise<boolean> = (port) => isListening(port)
+  answers: PortProbe
 ): Promise<number> {
   if (!(await answers(current))) return current
 

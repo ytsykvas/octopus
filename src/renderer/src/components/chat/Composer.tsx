@@ -57,8 +57,7 @@ interface ComposerProps {
   readonly busy: boolean
   /**
    * Takes the caret on mount — for a workspace just made, whose task is the
-   * next thing typed. An effect rather than `autoFocus`, which the linter
-   * refuses for every field because it is wrong for most.
+   * next thing typed.
    */
   readonly focusOnMount?: boolean
   /** What the agent may do without asking, once it is doing anything. */
@@ -469,7 +468,9 @@ export function Composer({
   }
 
   return (
-    <div className="border-line bg-canvas border-t px-6 py-3">
+    // More room above than below: the ring's glow spreads past the frame, and
+    // at an even 12px it ran up against the rule along the top.
+    <div className="border-line bg-canvas border-t px-6 pt-5 pb-3">
       {/* No padding on the frame: the settings sit in a footer of their own,
           and its rule has to run the whole width. Padding here would inset the
           line and leave it looking like an underline for the field rather than
@@ -501,8 +502,10 @@ export function Composer({
           setDragging(false)
           onDropFiles([...event.dataTransfer.files])
         }}
-        className={`bg-surface focus-within:border-line-strong relative mx-auto flex w-full max-w-6xl flex-col rounded-[var(--radius-panel)] border transition-colors ${
-          dragging ? 'border-accent' : 'border-line'
+        // A drop target says so in the plain accent: the ring is decoration,
+        // and "let go here" has to read the same everywhere.
+        className={`bg-surface relative mx-auto flex w-full max-w-6xl flex-col rounded-[var(--radius-panel)] border transition-colors ${
+          dragging ? 'border-accent' : 'composer-ring border-transparent'
         }`}
       >
         {suggesting && (
