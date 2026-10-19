@@ -3397,7 +3397,8 @@ describe('settings a repository carries', () => {
     await commitAll(repo, 'carry the key')
     await mkdir(join(repo, 'config'), { recursive: true })
     await writeFile(join(repo, 'config', 'master.key'), 'abc123\n', 'utf8')
-    await service.updateProjectById(id, { preferLocal: ['project.carry'], trustRepository: true })
+    await service.updateProjectById(id, { trustRepository: true })
+    await service.editProjectById(id, { kind: 'preferLocal', item: 'project.carry', on: true })
 
     const workspace = await service.createWorkspaceIn(id)
 
