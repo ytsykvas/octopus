@@ -29,7 +29,7 @@ import type {
 import type { AgentCommand, AgentModel, EffortChoice, FileRewind, PermissionMode } from './chats.js'
 import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
-import type { AgentEvent } from './events.js'
+import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
 import type { SkillOverride } from './skills.js'
 import type { UsageReport } from './usage.js'
@@ -978,12 +978,17 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
           return []
       }
 
-    // The conversation was replaced by an empty one. Whether the user asked for
-    // that is not knowable here — the SDK sends the same message for leaving
-    // plan mode — so it maps to the "nobody asked" form and the service, which
-    // knows what was sent, decides.
-    case 'conversation_reset':
-      return [{ type: 'conversation_reset', cleared: false }]
+    // The conversation was replaced by an empty one. A newer CLI says what did
+    // it, and only `/clear` is the user asking. An older one, or a cause this
+    // build does not know, maps to the "nobody asked" form, and the service,
+    // which knows what was sent, decides.
+    case 'conversation_reset': {
+      const trigger = ResetTriggerSchema.safeParse(message.trigger)
+      if (!trigger.success) return [{ type: 'conversation_reset', cleared: false }]
+      return [
+        { type: 'conversation_reset', cleared: trigger.data === 'clear', trigger: trigger.data }
+      ]
+    }
 
     case 'assistant':
       return fromAssistant(message)

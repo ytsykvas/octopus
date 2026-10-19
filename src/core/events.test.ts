@@ -332,6 +332,12 @@ describe('the event schema', () => {
     expect(parsed.data).toEqual({ type: 'conversation_reset', cleared: false })
   })
 
+  it('stores and reads back what caused a reset', () => {
+    const reset = { type: 'conversation_reset', cleared: false, trigger: 'fresh_session' }
+
+    expect(AgentEventSchema.safeParse(JSON.parse(JSON.stringify(reset))).data).toEqual(reset)
+  })
+
   // `cleared` has no default on purpose: it is the difference between wiping a
   // conversation and drawing a line under it, and a shape missing it is a bug
   // rather than an older record.

@@ -5866,6 +5866,48 @@ describe('the agent chat', () => {
       })
     })
 
+    /*
+     * A newer CLI says what caused the reset, and that outranks the guess made
+     * from what was sent: a /clear the chat did not recognise still clears,
+     * and a request still waiting is not spent on another flow's reset.
+     */
+    it('clears when the agent says the reset came from /clear', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'remember this')
+      agent().emit(textMessage('noted'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+      })
+
+      agent().emit({ ...resetMessage, trigger: 'clear' } as unknown as SDKMessage)
+
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).toEqual([])
+      })
+    })
+
+    it('keeps a waiting /clear for its own reset when another flow resets first', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, '/clear')
+      agent().emit({ ...resetMessage, trigger: 'plan_mode_exit' } as unknown as SDKMessage)
+      agent().emit(resetMessage)
+
+      await vi.waitFor(() => {
+        expect(
+          events
+            .map((announced) => announced.event)
+            .filter((event) => event.type === 'conversation_reset')
+        ).toEqual([
+          { type: 'conversation_reset', cleared: false, trigger: 'plan_mode_exit' },
+          { type: 'conversation_reset', cleared: true }
+        ])
+      })
+    })
+
     // Discarding happens in the background, so a failure has nowhere to be
     // thrown. Reported into the chat instead — the same treatment a failed
     // append gets, and the alternative is an uncaught rejection in the main

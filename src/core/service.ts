@@ -2314,13 +2314,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * Fills in the half of a reset the SDK layer could not know.
    *
-   * `mapMessage` is a pure function of one message, and one message cannot say
-   * whether the user asked for this: the same reset arrives when the agent
-   * leaves plan mode. The answer was recorded when the message went out, and
-   * this is where the two halves meet. Everything else passes through.
+   * `mapMessage` is a pure function of one message, and a message from an
+   * older CLI cannot say whether the user asked for this: the same reset
+   * arrives when the agent leaves plan mode. The answer was recorded when the
+   * message went out, and this is where the two halves meet. Everything else
+   * passes through.
    */
   function answerReset(chat: Chat, event: AgentEvent): AgentEvent {
     if (event.type !== 'conversation_reset') return event
+
+    // Another flow's reset, named by the CLI: a `/clear` still on its way
+    // belongs to the reset it is about to cause, not to this one.
+    if (event.trigger !== undefined && event.trigger !== 'clear') return event
 
     // Deleted whether or not it was there: the request belongs to the reset it
     // caused, and leaving it behind would clear the log on the next one.
