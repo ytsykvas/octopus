@@ -11,10 +11,13 @@ import {
   collectTreeEntries,
   compareNodes,
   folderStatuses,
+  foldersFromDisk,
   listingNodes,
   MAX_TREE_ENTRIES,
   parseIgnored,
+  parseStaged,
   parseStatus,
+  parseUntracked,
   readFileTree,
   type TreeEntry,
   type TreeEntryKind
@@ -24,6 +27,7 @@ import { gitIn } from './git.js'
 const run = promisify(execFile)
 
 const file = (path: string, ignored = false): TreeEntry => ({ path, kind: 'file', ignored })
+const files = (...paths: string[]): TreeEntry[] => paths.map((path) => file(path))
 
 describe('parseStatus', () => {
   it('reads one state per path from the two-letter code', () => {
@@ -55,6 +59,12 @@ describe('parseStatus', () => {
       'staged-link.ts': 'typeChanged',
       'fresh.ts': 'untracked'
     })
+  })
+
+  // git names a repository nested in the worktree as `nested/`, and never
+  // looks inside: the mark belongs on the folder's own row.
+  it('marks a nested repository on its folder', () => {
+    expect(parseStatus('?? nested/\0').statuses).toEqual({ nested: 'untracked' })
   })
 
   it('calls every unmerged code a conflict', () => {
@@ -120,9 +130,67 @@ describe('parseIgnored', () => {
   })
 })
 
+/*
+ * A submodule is one entry in the index, a commit rather than a blob, and
+ * `--cached` names it like any file — which drew it as a file the viewer then
+ * found to be a folder, and its contents could not be opened at all.
+ */
+describe('parseStaged', () => {
+  it('tells a submodule from a file by its mode', () => {
+    expect(
+      parseStaged(
+        [
+          '100644 a09ef9334a022405ac5f08b981bdaa1d5c194e8c 0\t.gitmodules',
+          '160000 a16a57ce22daca2d5424b4ba00748ef1f06fb2fe 0\tlib/inner',
+          '100755 975fbec8256d3e8a3797e7a3611380f27c49f4ac 0\tbin/run',
+          ''
+        ].join('\0')
+      )
+    ).toEqual([
+      file('.gitmodules'),
+      { path: 'lib/inner', kind: 'directory', ignored: false },
+      file('bin/run')
+    ])
+  })
+
+  // An unmerged path is in the index once per stage.
+  it('lists a conflicted path once', () => {
+    const staged = ['1', '2', '3']
+      .map((stage) => `100644 a09ef9334a022405ac5f08b981bdaa1d5c194e8c ${stage}\tclash.ts`)
+      .join('\0')
+
+    expect(parseStaged(staged)).toEqual([file('clash.ts')])
+  })
+
+  it('keeps a tab inside a path', () => {
+    expect(parseStaged('100644 a09ef9334a022405ac5f08b981bdaa1d5c194e8c 0\ta\tb.txt')).toEqual([
+      file('a\tb.txt')
+    ])
+  })
+})
+
+describe('parseUntracked', () => {
+  it('reads a nested repository as a folder, beside the untracked files', () => {
+    expect(parseUntracked(['new.ts', 'deep/nested/', ''].join('\0'))).toEqual([
+      file('new.ts'),
+      { path: 'deep/nested', kind: 'directory', ignored: false }
+    ])
+  })
+})
+
 describe('collectTreeEntries', () => {
+  // A submodule git reports as changed is in the status too, which on its own
+  // would add it back as a file.
+  it('keeps a listed folder a folder when the status names it too', () => {
+    const inner: TreeEntry = { path: 'lib/inner', kind: 'directory', ignored: false }
+
+    const { entries } = collectTreeEntries([inner, file('a.ts')], [], { 'lib/inner': 'modified' })
+
+    expect(entries).toEqual([inner, file('a.ts')])
+  })
+
   it('leaves out a path renamed away though the index still lists it', () => {
-    const { entries } = collectTreeEntries(['old.ts', 'new.ts'], [], { 'new.ts': 'renamed' }, [
+    const { entries } = collectTreeEntries(files('old.ts', 'new.ts'), [], { 'new.ts': 'renamed' }, [
       'old.ts'
     ])
 
@@ -130,13 +198,13 @@ describe('collectTreeEntries', () => {
   })
 
   it('adds a deletion that only the status knows about', () => {
-    const { entries } = collectTreeEntries(['kept.ts'], [], { 'removed.ts': 'deleted' })
+    const { entries } = collectTreeEntries(files('kept.ts'), [], { 'removed.ts': 'deleted' })
 
     expect(entries.map((entry) => entry.path)).toEqual(['kept.ts', 'removed.ts'])
   })
 
   it('lists a path once however many listings name it', () => {
-    const { entries } = collectTreeEntries(['a.ts', 'a.ts'], [file('a.ts', true)], {
+    const { entries } = collectTreeEntries(files('a.ts', 'a.ts'), [file('a.ts', true)], {
       'a.ts': 'modified'
     })
 
@@ -145,7 +213,7 @@ describe('collectTreeEntries', () => {
 
   it('hides .git, .DS_Store and Thumbs.db at any depth', () => {
     const { entries } = collectTreeEntries(
-      ['.git', 'src/.DS_Store', 'deep/er/Thumbs.db', 'kept.ts', 'a.git'],
+      files('.git', 'src/.DS_Store', 'deep/er/Thumbs.db', 'kept.ts', 'a.git'),
       [{ path: 'nested/.git', kind: 'directory', ignored: true }],
       {}
     )
@@ -154,7 +222,9 @@ describe('collectTreeEntries', () => {
   })
 
   it('stops at the cap and says so', () => {
-    const many = Array.from({ length: MAX_TREE_ENTRIES + 1 }, (_, index) => `f${String(index)}`)
+    const many = Array.from({ length: MAX_TREE_ENTRIES + 1 }, (_, index) =>
+      file(`f${String(index)}`)
+    )
 
     const result = collectTreeEntries(many, [], {})
 
@@ -163,7 +233,7 @@ describe('collectTreeEntries', () => {
   })
 
   it('says nothing was cut when nothing was', () => {
-    expect(collectTreeEntries(['a'], [], {}).truncated).toBe(false)
+    expect(collectTreeEntries(files('a'), [], {}).truncated).toBe(false)
   })
 })
 
@@ -206,8 +276,14 @@ describe('buildTree', () => {
     const tree = buildTree([file('src/z.ts'), file('README.md'), file('src/core/a.ts')])
 
     expect(tree.get('')).toEqual([
-      { name: 'src', path: 'src', kind: 'directory', ignored: false },
-      { name: 'README.md', path: 'README.md', kind: 'file', ignored: false }
+      { name: 'src', path: 'src', kind: 'directory', ignored: false, childrenFromDisk: false },
+      {
+        name: 'README.md',
+        path: 'README.md',
+        kind: 'file',
+        ignored: false,
+        childrenFromDisk: false
+      }
     ])
     expect(tree.get('src')?.map((node) => node.name)).toEqual(['core', 'z.ts'])
     expect(tree.get('src/core')?.map((node) => node.path)).toEqual(['src/core/a.ts'])
@@ -217,9 +293,30 @@ describe('buildTree', () => {
     const tree = buildTree([{ path: 'node_modules', kind: 'directory', ignored: true }])
 
     expect(tree.get('')).toEqual([
-      { name: 'node_modules', path: 'node_modules', kind: 'directory', ignored: true }
+      {
+        name: 'node_modules',
+        path: 'node_modules',
+        kind: 'directory',
+        ignored: true,
+        childrenFromDisk: true
+      }
     ])
     expect(tree.has('node_modules')).toBe(false)
+  })
+
+  // Not greyed: its files are the submodule's own, not ones git leaves out.
+  it('reads a submodule from disk without greying it', () => {
+    const tree = buildTree([{ path: 'lib/inner', kind: 'directory', ignored: false }])
+
+    expect(tree.get('lib')).toEqual([
+      {
+        name: 'inner',
+        path: 'lib/inner',
+        kind: 'directory',
+        ignored: false,
+        childrenFromDisk: true
+      }
+    ])
   })
 
   // A folder holding tracked files is not ignored, whichever listing named it
@@ -234,8 +331,8 @@ describe('buildTree', () => {
       { path: 'build', kind: 'directory', ignored: true }
     ])
 
-    expect(ignoredFirst.get('')?.[0]?.ignored).toBe(false)
-    expect(trackedFirst.get('')?.[0]?.ignored).toBe(false)
+    expect(ignoredFirst.get('')?.[0]).toMatchObject({ ignored: false, childrenFromDisk: false })
+    expect(trackedFirst.get('')?.[0]).toMatchObject({ ignored: false, childrenFromDisk: false })
   })
 
   it('answers an empty root for an empty tree', () => {
@@ -243,26 +340,78 @@ describe('buildTree', () => {
   })
 })
 
-describe('listingNodes', () => {
-  it('turns a folder read from disk into ignored rows under it, sorted', () => {
-    const nodes = listingNodes('node_modules', {
-      entries: [
-        { name: 'z.js', kind: 'file' },
-        { name: 'pkg', kind: 'directory' }
-      ],
-      truncated: false
-    })
+describe('foldersFromDisk', () => {
+  const entries: TreeEntry[] = [
+    file('src/a.ts'),
+    { path: 'node_modules', kind: 'directory', ignored: true },
+    { path: 'vendor/lib', kind: 'directory', ignored: false }
+  ]
 
-    expect(nodes).toEqual([
-      { name: 'pkg', path: 'node_modules/pkg', kind: 'directory', ignored: true },
-      { name: 'z.js', path: 'node_modules/z.js', kind: 'file', ignored: true }
+  it('names a folder git lists whole, and every folder inside one', () => {
+    expect(
+      foldersFromDisk(entries, [
+        'node_modules',
+        'node_modules/pkg/dist',
+        'vendor/lib',
+        'vendor/lib/src'
+      ])
+    ).toEqual(['node_modules', 'node_modules/pkg/dist', 'vendor/lib', 'vendor/lib/src'])
+  })
+
+  // `vendor` holds a submodule and is git's own; `node_modules2` only shares a
+  // prefix with an ignored folder.
+  it('leaves out a folder git lists the inside of', () => {
+    expect(foldersFromDisk(entries, ['src', 'vendor', 'node_modules2'])).toEqual([])
+  })
+})
+
+describe('listingNodes', () => {
+  const listing = {
+    entries: [
+      { name: 'z.js', kind: 'file' },
+      { name: 'pkg', kind: 'directory' }
+    ],
+    truncated: false
+  } as const
+
+  it('turns an ignored folder read from disk into ignored rows under it, sorted', () => {
+    expect(listingNodes({ path: 'node_modules', ignored: true }, listing)).toEqual([
+      {
+        name: 'pkg',
+        path: 'node_modules/pkg',
+        kind: 'directory',
+        ignored: true,
+        childrenFromDisk: true
+      },
+      {
+        name: 'z.js',
+        path: 'node_modules/z.js',
+        kind: 'file',
+        ignored: true,
+        childrenFromDisk: false
+      }
     ])
   })
 
-  it('reads a listing of the root without a leading slash', () => {
-    const nodes = listingNodes('', { entries: [{ name: 'a', kind: 'file' }], truncated: false })
-
-    expect(nodes[0]?.path).toBe('a')
+  // What is inside a submodule is its own files, and a folder in there is read
+  // from disk in turn: git has nothing to say about the inside of one.
+  it('keeps the rows of a submodule ungreyed, its folders read from disk', () => {
+    expect(listingNodes({ path: 'lib/inner', ignored: false }, listing)).toEqual([
+      {
+        name: 'pkg',
+        path: 'lib/inner/pkg',
+        kind: 'directory',
+        ignored: false,
+        childrenFromDisk: true
+      },
+      {
+        name: 'z.js',
+        path: 'lib/inner/z.js',
+        kind: 'file',
+        ignored: false,
+        childrenFromDisk: false
+      }
+    ])
   })
 })
 
@@ -303,7 +452,8 @@ describe('readFileTree', () => {
 
     expect(calls).toEqual([
       ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-uall'],
-      ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      ['ls-files', '-z', '--stage'],
+      ['ls-files', '-z', '--others', '--exclude-standard'],
       ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory']
     ])
   })
@@ -365,6 +515,49 @@ describe('readFileTree', () => {
       // The old side of the rename is not on disk and not in the tree.
       expect(tree.entries.map((entry) => entry.path)).not.toContain('a.txt')
       expect(tree.truncated).toBe(false)
+    })
+
+    it('reads a submodule as a folder, and an edit inside it as a change to it', async () => {
+      const inner = await mkdtemp(join(tmpdir(), 'octopus-inner-'))
+      try {
+        await run('git', ['init', '-q', '--initial-branch=main'], { cwd: inner })
+        await writeFile(join(inner, 'lib.ts'), 'lib\n', 'utf8')
+        await run('git', ['add', '-A'], { cwd: inner })
+        await run(
+          'git',
+          ['-c', 'user.email=t@example.com', '-c', 'user.name=T', 'commit', '-q', '-m', 'lib'],
+          { cwd: inner }
+        )
+        await git('-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', inner, 'vendor/lib')
+        await git('commit', '-q', '-m', 'submodule')
+        await writeFile(join(dir, 'vendor', 'lib', 'lib.ts'), 'changed\n', 'utf8')
+
+        const tree = await readFileTree(gitIn(dir))
+
+        expect(tree.entries).toContainEqual({
+          path: 'vendor/lib',
+          kind: 'directory',
+          ignored: false
+        })
+        expect(tree.entries.map((entry) => entry.path)).not.toContain('vendor/lib/lib.ts')
+        expect(tree.statuses['vendor/lib']).toBe('modified')
+      } finally {
+        await rm(inner, { recursive: true, force: true })
+      }
+    })
+
+    // Cloned or initialised inside the worktree, not added as a submodule: git
+    // lists it as `nested/`, which drew a folder holding a file with no name.
+    it('reads a repository nested in the worktree as a folder', async () => {
+      await mkdir(join(dir, 'nested'))
+      await run('git', ['init', '-q'], { cwd: join(dir, 'nested') })
+      await writeFile(join(dir, 'nested', 'inside.ts'), 'inside\n', 'utf8')
+
+      const tree = await readFileTree(gitIn(dir))
+
+      expect(tree.entries).toContainEqual({ path: 'nested', kind: 'directory', ignored: false })
+      expect(tree.entries.map((entry) => entry.path)).not.toContain('nested/')
+      expect(tree.statuses).toEqual({ nested: 'untracked' })
     })
 
     it('reads a move announced with `git add -N` as a rename, with no phantom path', async () => {

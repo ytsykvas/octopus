@@ -1,5 +1,4 @@
 import type { FileStatus } from './diff.js'
-import { listFiles } from './fileSearch.js'
 import type { GitExec } from './git.js'
 
 /**
@@ -30,8 +29,10 @@ export type TreeEntryKind = 'file' | 'directory'
 /**
  * One path the tree knows about.
  *
- * `directory` is only ever an ignored folder git reported whole — every other
- * folder is implied by the files under it, which is how git lists them.
+ * `directory` is only ever a folder git names whole — an ignored one, a
+ * submodule, or a repository nested in the worktree — and its contents are
+ * read from disk when it is opened. Every other folder is implied by the files
+ * under it, which is how git lists them.
  */
 export interface TreeEntry {
   readonly path: string
@@ -42,8 +43,8 @@ export interface TreeEntry {
 /**
  * Everything the tree needs from one read, kept flat.
  *
- * Flat rather than nested because folders read later — an ignored one being
- * expanded — have to merge into it, and a map from folder to children is
+ * Flat rather than nested because folders read later — an ignored one or a
+ * submodule being opened — have to merge into it, and a map from folder to children is
  * where that merge is one `set`.
  */
 export interface FileTreeSnapshot {
@@ -53,7 +54,7 @@ export interface FileTreeSnapshot {
   readonly truncated: boolean
 }
 
-/** One entry of a folder read from disk, for an ignored folder being opened. */
+/** One entry of a folder read from disk, for a folder git says nothing inside of. */
 export interface DirectoryEntry {
   readonly name: string
   readonly kind: TreeEntryKind
@@ -70,13 +71,21 @@ export interface TreeNode {
   readonly path: string
   readonly kind: TreeEntryKind
   readonly ignored: boolean
+  /**
+   * Whether its children come from disk when it is opened, rather than from
+   * git's listings: a folder git ignores whole, a submodule or a nested
+   * repository, and every folder read inside one. Apart from `ignored` because
+   * a submodule or a nested repository is read that way and is not greyed —
+   * nothing inside it is the outer repository's to leave out.
+   */
+  readonly childrenFromDisk: boolean
 }
 
 /**
  * Children by the path of their folder; the root is `''`.
  *
  * Folder-keyed so that drawing only the open folders never walks a closed one,
- * and an ignored folder read later is one more key.
+ * and a folder read from disk later is one more key.
  */
 export type TreeIndex = ReadonlyMap<string, readonly TreeNode[]>
 
@@ -156,7 +165,9 @@ export function parseStatus(output: string): {
     if (record.length < 4) continue
 
     const code = record.slice(0, 2)
-    statuses[record.slice(3)] = statusOf(code)
+    // A repository nested in the worktree is named `nested/`; its row is the
+    // folder's.
+    statuses[record.slice(3).replace(/\/$/, '')] = statusOf(code)
 
     if (!/[RC]/.test(code)) continue
     const from = records.next()
@@ -167,6 +178,44 @@ export function parseStatus(output: string): {
   return { statuses, movedAway }
 }
 
+/** The mode of a submodule's entry in the index: a commit, where a file's is a blob. */
+const GITLINK = '160000'
+
+/**
+ * Reads `git ls-files --stage -z`: the tracked files, and each submodule as a
+ * folder.
+ *
+ * `--cached` names a submodule like any file, and the tree drew it as one: a
+ * row the viewer then found to be a folder, with nothing in it reachable. Each
+ * record is `<mode> <object> <stage>\t<path>`; an unmerged path comes once per
+ * stage, and its path may hold a tab of its own.
+ */
+export function parseStaged(output: string): TreeEntry[] {
+  const entries = new Map<string, TreeEntry>()
+
+  for (const record of output.split('\0')) {
+    const tab = record.indexOf('\t')
+    if (tab === -1) continue
+    const path = record.slice(tab + 1)
+    const kind = record.startsWith(`${GITLINK} `) ? 'directory' : 'file'
+    entries.set(path, { path, kind, ignored: false })
+  }
+
+  return [...entries.values()]
+}
+
+/** A `git ls-files --others -z` listing, where a folder comes back as `name/`. */
+function othersIn(output: string, ignored: boolean): TreeEntry[] {
+  return output
+    .split('\0')
+    .filter((path) => path !== '')
+    .map((path) =>
+      path.endsWith('/')
+        ? { path: path.slice(0, -1), kind: 'directory', ignored }
+        : { path, kind: 'file', ignored }
+    )
+}
+
 /**
  * Reads `git ls-files --others --ignored --exclude-standard --directory -z`.
  *
@@ -175,14 +224,20 @@ export function parseStatus(output: string): {
  * disk only if somebody opens it.
  */
 export function parseIgnored(output: string): TreeEntry[] {
-  return output
-    .split('\0')
-    .filter((path) => path !== '')
-    .map((path) =>
-      path.endsWith('/')
-        ? { path: path.slice(0, -1), kind: 'directory', ignored: true }
-        : { path, kind: 'file', ignored: true }
-    )
+  return othersIn(output, true)
+}
+
+/**
+ * Reads `git ls-files --others --exclude-standard -z`: the untracked files, and
+ * a repository nested in the worktree as a folder.
+ *
+ * git never looks inside a nested repository — cloned or initialised there,
+ * not added as a submodule — and names it `nested/`. Taken as a file path,
+ * that drew a folder holding a row with no name. It is a folder read from disk,
+ * the way a submodule is.
+ */
+export function parseUntracked(output: string): TreeEntry[] {
+  return othersIn(output, false)
 }
 
 function hidden(path: string): boolean {
@@ -190,16 +245,20 @@ function hidden(path: string): boolean {
 }
 
 /**
- * The paths the tree shows, from the three listings.
+ * The paths the tree shows, from git's listings and the status.
  *
  * Deleted files are kept, to be drawn struck through: a deletion is work as
  * much as an edit is. Git lists them unevenly — a file removed from disk is
- * still in the index and so in `ls-files --cached`, while one removed with
- * `git rm` is in neither listing and appears only in the status — so every
- * path the status names is added if the listings missed it.
+ * still in the index and so in `ls-files`, while one removed with `git rm` is
+ * in neither listing and appears only in the status — so every path the status
+ * names is added if the listings missed it.
+ *
+ * The listings first, because they know what a path is: a submodule git
+ * reports as changed is in the status too, and named there first it would come
+ * back as a file.
  */
 export function collectTreeEntries(
-  listed: readonly string[],
+  listed: readonly TreeEntry[],
   ignored: readonly TreeEntry[],
   statuses: Readonly<Record<string, TreeStatus>>,
   movedAway: readonly string[] = []
@@ -215,7 +274,7 @@ export function collectTreeEntries(
     entries.push(entry)
   }
 
-  for (const path of listed) add({ path, kind: 'file', ignored: false })
+  for (const entry of listed) add(entry)
   for (const path of Object.keys(statuses)) add({ path, kind: 'file', ignored: false })
   for (const entry of ignored) add(entry)
 
@@ -275,21 +334,38 @@ export function buildTree(entries: readonly TreeEntry[]): Map<string, TreeNode[]
     const siblings = folder(parentOf(node.path))
     const existing = siblings.get(node.name)
     // Met twice only as a folder — the listings never name one file twice. A
-    // folder that holds tracked files is not ignored, whichever listing named
-    // it first.
+    // folder that holds tracked files is not ignored, and its rows come from
+    // git, whichever listing named it first.
     if (existing === undefined) siblings.set(node.name, node)
-    else siblings.set(node.name, { ...existing, ignored: existing.ignored && node.ignored })
+    else
+      siblings.set(node.name, {
+        ...existing,
+        ignored: existing.ignored && node.ignored,
+        childrenFromDisk: existing.childrenFromDisk && node.childrenFromDisk
+      })
   }
 
   for (const entry of entries) {
     const segments = entry.path.split('/')
     for (let depth = 1; depth < segments.length; depth++) {
       const path = segments.slice(0, depth).join('/')
-      place({ name: nameOf(path), path, kind: 'directory', ignored: false })
+      place({
+        name: nameOf(path),
+        path,
+        kind: 'directory',
+        ignored: false,
+        childrenFromDisk: false
+      })
       folder(path)
     }
 
-    place({ name: nameOf(entry.path), path: entry.path, kind: entry.kind, ignored: entry.ignored })
+    place({
+      name: nameOf(entry.path),
+      path: entry.path,
+      kind: entry.kind,
+      ignored: entry.ignored,
+      childrenFromDisk: entry.kind === 'directory'
+    })
   }
 
   return new Map(
@@ -298,19 +374,46 @@ export function buildTree(entries: readonly TreeEntry[]): Map<string, TreeNode[]
 }
 
 /**
+ * Which of these folders have their children read from disk: one git names
+ * whole — ignored, or a submodule — and any folder inside one.
+ *
+ * Told from the entries alone, so a folder open inside another is found
+ * without waiting for the outer one's listing.
+ */
+export function foldersFromDisk(
+  entries: readonly TreeEntry[],
+  folders: Iterable<string>
+): string[] {
+  const whole = new Set(
+    entries.filter((entry) => entry.kind === 'directory').map((entry) => entry.path)
+  )
+  return [...folders].filter((folder) => {
+    for (let at = folder; at !== ''; at = parentOf(at)) {
+      if (whole.has(at)) return true
+    }
+    return false
+  })
+}
+
+/**
  * A folder read from disk, as rows of the tree.
  *
- * Everything in it is ignored: the only folders read this way are ones git
- * reported ignored whole, and what lies inside an ignored folder is ignored
- * with it.
+ * Each row is ignored when the folder is: what lies inside an ignored folder
+ * is ignored with it, and what lies inside a submodule is the submodule's own.
+ * A folder among them is read from disk in turn, git having nothing to say
+ * about the inside of either.
  */
-export function listingNodes(folder: string, listing: DirectoryListing): TreeNode[] {
+export function listingNodes(
+  folder: Pick<TreeNode, 'path' | 'ignored'>,
+  listing: DirectoryListing
+): TreeNode[] {
   return listing.entries
     .map((entry) => ({
       name: entry.name,
-      path: folder === '' ? entry.name : `${folder}/${entry.name}`,
+      path: `${folder.path}/${entry.name}`,
       kind: entry.kind,
-      ignored: true
+      ignored: folder.ignored,
+      childrenFromDisk: entry.kind === 'directory'
     }))
     .sort(compareNodes)
 }
@@ -361,20 +464,29 @@ export function folderStatuses(
  * index and takes `index.lock` to write it back, and the agent runs its own git
  * in this same worktree — the two would trip over each other's lock.
  *
+ * The tracked files and the untracked ones in two reads: a submodule is told
+ * from a file only by its mode, and `--stage` with `--others` prints the second
+ * kind without one, in a listing that cannot be read apart reliably. The mode
+ * costs about fifty bytes a file, which halves how large a repository fits in
+ * git's `MAX_OUTPUT_BYTES` — some 300,000 files rather than 600,000, both past
+ * what the tree lists. `--format` could print the mode alone, and would make
+ * git 2.38 the floor for a tab that has none.
+ *
  * `Promise.all` rather than `allOf`: `parallel.ts` reaches `node:util`, and
- * this module is one the window imports values from. Which of three git reads
+ * this module is one the window imports values from. Which of the git reads
  * failed first is not something anybody acts on here.
  */
 export async function readFileTree(exec: GitExec): Promise<FileTreeSnapshot> {
-  const [status, listed, ignored] = await Promise.all([
+  const [status, staged, others, ignored] = await Promise.all([
     exec(['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-uall']),
-    listFiles(exec),
+    exec(['ls-files', '-z', '--stage']),
+    exec(['ls-files', '-z', '--others', '--exclude-standard']),
     exec(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'])
   ])
 
   const { statuses, movedAway } = parseStatus(status)
   const { entries, truncated } = collectTreeEntries(
-    listed,
+    [...parseStaged(staged), ...parseUntracked(others)],
     parseIgnored(ignored),
     statuses,
     movedAway

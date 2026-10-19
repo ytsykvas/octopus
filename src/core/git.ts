@@ -239,6 +239,44 @@ export async function isIgnored(exec: GitExec, path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Which of `paths` git ignores, asked in one process.
+ *
+ * Each is passed as `./path`, because a bare name starting with `:` is
+ * pathspec magic: `:(top).env` is answered as `.env` at the top — ignored —
+ * while the file it names is the literal `:(top).env`, which nothing ignores.
+ *
+ * git prints back each ignored path as it was given, unless it has to quote
+ * it; `core.quotePath=false` keeps non-ASCII names verbatim, and a name that is
+ * still quoted (a `"` or a `\` in it) matches nothing and is answered as not
+ * ignored. Failing closed is the right way round for a caller deciding whether
+ * a file may be copied somewhere a commit would publish it.
+ *
+ * Exit 1 means none is ignored. Anything else is git failing — a path beyond a
+ * tracked symlink refuses the whole call — and is let through, as `isIgnored`
+ * does.
+ */
+export async function ignoredAmong(exec: GitExec, paths: readonly string[]): Promise<Set<string>> {
+  if (paths.length === 0) return new Set()
+
+  let printed: string
+  try {
+    printed = await exec([
+      '-c',
+      'core.quotePath=false',
+      'check-ignore',
+      '--',
+      ...paths.map((path) => `./${path}`)
+    ])
+  } catch (error) {
+    if (error instanceof GitError && error.code === '1') return new Set()
+    throw error
+  }
+
+  const lines = new Set(printed.split('\n'))
+  return new Set(paths.filter((path) => lines.has(`./${path}`)))
+}
+
 /** Whether the repository has at least one commit — an empty one cannot host a worktree. */
 export async function hasCommits(exec: GitExec): Promise<boolean> {
   try {

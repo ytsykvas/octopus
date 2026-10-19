@@ -24,6 +24,15 @@ interface ModelPickerProps {
    * `/model` command moved the running session to behind the record's back.
    */
   readonly display: string
+  /**
+   * The model a `/model` command moved this session to, when the columns do
+   * not tick it; null otherwise.
+   *
+   * The CLI scopes the command to the session, so the record — what the
+   * columns tick — rightly stays put. Without a line saying so the panel read
+   * as the model the next message would run on, contradicting the chip.
+   */
+  readonly sessionMovedTo: string | null
 }
 
 /**
@@ -40,6 +49,12 @@ const PANEL_WIDTH = 420
 const ROW_HEIGHT = 30
 const HEADING_HEIGHT = 26
 const TITLE_HEIGHT = 30
+/**
+ * The `/model` line, counted as three lines: two in English at this width, and
+ * a longer translation or a raw model id can take a third. Erring high only
+ * flips the panel a little sooner.
+ */
+const MOVED_LINE_HEIGHT = 64
 
 /** What the columns sit inside, counted so the estimate errs high. */
 const PANEL_PADDING = 12
@@ -78,7 +93,8 @@ export function ModelPicker({
   onModel,
   planModel,
   onPlanModel,
-  display
+  display,
+  sessionMovedTo
 }: ModelPickerProps): React.JSX.Element {
   const { t } = useTranslation()
   const { open, position, container, toggle } = useAnchoredPanel()
@@ -143,7 +159,12 @@ export function ModelPicker({
 
   // The taller column decides how much room to ask for.
   const rows = Math.max(codeChoices.length, planChoices.length)
-  const height = TITLE_HEIGHT + HEADING_HEIGHT + rows * ROW_HEIGHT + PANEL_PADDING
+  const height =
+    TITLE_HEIGHT +
+    (sessionMovedTo === null ? 0 : MOVED_LINE_HEIGHT) +
+    HEADING_HEIGHT +
+    rows * ROW_HEIGHT +
+    PANEL_PADDING
 
   return (
     <div ref={container} className="contents">
@@ -167,6 +188,11 @@ export function ModelPicker({
           className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border shadow-[var(--shadow-pop)]"
         >
           <p className="border-line text-ink-faint border-b px-3 py-2">{t('chat.modelsTitle')}</p>
+          {sessionMovedTo !== null && (
+            <p className="border-line text-ink-soft border-b px-3 py-2">
+              {t('chat.modelsSessionOnly', { model: sessionMovedTo })}
+            </p>
+          )}
 
           <div className="flex">
             <Column

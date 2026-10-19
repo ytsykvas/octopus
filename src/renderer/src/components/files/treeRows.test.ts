@@ -65,6 +65,16 @@ describe('visibleRows', () => {
     ).toEqual(['node_modules/', '  (loading)'])
   })
 
+  // Read from disk like an ignored folder, though nothing about it is ignored.
+  it('stands the same note in for a submodule not read yet', () => {
+    const withSubmodule = buildTree([{ path: 'vendor', kind: 'directory', ignored: false }])
+
+    expect(drawn(visibleRows(withSubmodule, new Set(['vendor']), NO_LISTINGS))).toEqual([
+      'vendor/',
+      '  (loading)'
+    ])
+  })
+
   it('says when an ignored folder could not be read', () => {
     const rows = visibleRows(
       tree,
@@ -79,10 +89,10 @@ describe('visibleRows', () => {
     const merged = new Map(tree)
     merged.set(
       'node_modules',
-      listingNodes('node_modules', {
-        entries: [{ name: 'pkg', kind: 'directory' }],
-        truncated: true
-      })
+      listingNodes(
+        { path: 'node_modules', ignored: true },
+        { entries: [{ name: 'pkg', kind: 'directory' }], truncated: true }
+      )
     )
 
     const rows = visibleRows(
@@ -94,21 +104,37 @@ describe('visibleRows', () => {
     expect(drawn(rows).slice(0, 3)).toEqual(['node_modules/', '  pkg', '  (truncated)'])
   })
 
-  // The two arguments are independent: a listing marked ready whose rows the
-  // index does not carry draws as an empty folder rather than throwing.
-  it('draws a folder the index has no children for as empty', () => {
-    const rows = visibleRows(
-      tree,
-      new Set(['node_modules']),
-      new Map([['node_modules', { status: 'ready', truncated: false }]])
-    )
+  /*
+   * A submodule never checked out in this worktree — which `git worktree add`
+   * leaves every one of — is an empty folder, and it opened onto nothing: no
+   * row and no note, which reads as still loading or as broken. The two
+   * arguments are independent, so a listing marked ready whose rows the index
+   * does not carry says the same rather than throwing.
+   */
+  it('says so under a read folder with nothing in it', () => {
+    const merged = new Map(tree)
+    merged.set('node_modules', [])
 
-    expect(drawn(rows).slice(0, 2)).toEqual(['node_modules/', 'src'])
+    for (const index of [tree, merged]) {
+      const rows = visibleRows(
+        index,
+        new Set(['node_modules']),
+        new Map([['node_modules', { status: 'ready', truncated: false }]])
+      )
+
+      expect(drawn(rows).slice(0, 3)).toEqual(['node_modules/', '  (empty)', 'src'])
+    }
   })
 
   it('adds no note under a read folder that was listed whole', () => {
     const merged = new Map(tree)
-    merged.set('node_modules', [])
+    merged.set(
+      'node_modules',
+      listingNodes(
+        { path: 'node_modules', ignored: true },
+        { entries: [{ name: 'pkg', kind: 'file' }], truncated: false }
+      )
+    )
 
     const rows = visibleRows(
       merged,
@@ -116,6 +142,6 @@ describe('visibleRows', () => {
       new Map([['node_modules', { status: 'ready', truncated: false }]])
     )
 
-    expect(drawn(rows).slice(0, 2)).toEqual(['node_modules/', 'src'])
+    expect(drawn(rows).slice(0, 3)).toEqual(['node_modules/', '  pkg', 'src'])
   })
 })

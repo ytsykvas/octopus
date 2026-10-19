@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FileTreeSnapshot } from '@core/fileTree.js'
 
 import { emitAgentEvent } from '../test/chat.js'
+import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useFileTree } from './useFileTree.js'
 import { SETTLE_MS } from './useWorkspaceSettled.js'
@@ -88,8 +89,109 @@ describe('the tree of a workspace', () => {
     })
     expect(octopus().files.directory).toHaveBeenCalledWith(WORKSPACE, 'node_modules')
     expect(result.current.index?.get('node_modules')).toEqual([
-      { name: 'pkg', path: 'node_modules/pkg', kind: 'directory', ignored: true }
+      {
+        name: 'pkg',
+        path: 'node_modules/pkg',
+        kind: 'directory',
+        ignored: true,
+        childrenFromDisk: true
+      }
     ])
+  })
+
+  /*
+   * The open folders are the panel's and outlive this hook — kept per
+   * workspace, across a switch and back — while the listings are this hook's
+   * and start empty. A folder already open when the tree is first read is
+   * read with it, or its row says "Reading…" for good.
+   */
+  describe('a folder already open when the tree is read', () => {
+    const listing = (name: string) =>
+      ({
+        ok: true,
+        value: { entries: [{ name, kind: 'directory' }], truncated: false }
+      }) as const
+
+    it('is read from disk with the tree, and one open inside it too', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
+        Promise.resolve(listing(path === 'node_modules' ? 'pkg' : 'lib'))
+      )
+
+      const { result } = renderHook(() =>
+        useFileTree(WORKSPACE, true, new Set(['node_modules', 'node_modules/pkg']))
+      )
+
+      await waitFor(() => {
+        expect(result.current.index?.get('node_modules/pkg')?.map((node) => node.name)).toEqual([
+          'lib'
+        ])
+      })
+      expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual(['pkg'])
+    })
+
+    it('is read again after a switch to another workspace and back', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue(listing('pkg'))
+      const { result, rerender } = renderHook(({ id }) => useFileTree(id, true, OPEN), {
+        initialProps: { id: WORKSPACE }
+      })
+      await waitFor(() => {
+        expect(result.current.listings.get('node_modules')?.status).toBe('ready')
+      })
+
+      rerender({ id: 'planner/bob' })
+      await waitFor(() => {
+        expect(octopus().files.directory).toHaveBeenCalledWith('planner/bob', 'node_modules')
+      })
+      rerender({ id: WORKSPACE })
+
+      await waitFor(() => {
+        expect(result.current.listings.get('node_modules')?.status).toBe('ready')
+      })
+      expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual(['pkg'])
+    })
+
+    // Its read starts only once the tree is in, so a newer read can overtake it.
+    it('keeps what a newer read found when an older one finishes late', async () => {
+      answering()
+      const slow = held<ReturnType<typeof listing>>()
+      vi.mocked(octopus().files.directory)
+        .mockReturnValueOnce(slow.promise)
+        .mockResolvedValue(listing('newer'))
+      const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
+      await waitFor(() => {
+        expect(octopus().files.directory).toHaveBeenCalledOnce()
+      })
+
+      act(() => {
+        result.current.refresh()
+      })
+      await waitFor(() => {
+        expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual([
+          'newer'
+        ])
+      })
+      await act(async () => {
+        slow.resolve(listing('older'))
+        await slow.promise
+      })
+
+      expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual(['newer'])
+    })
+
+    // A folder git lists has its children from git; reading it from disk too
+    // would be a wasted read on every turn.
+    it('is left to git when git lists what is inside it', async () => {
+      answering()
+
+      const { result } = renderHook(() => useFileTree(WORKSPACE, true, new Set(['src'])))
+
+      await waitFor(() => {
+        expect(result.current.index).not.toBeNull()
+      })
+      expect(octopus().files.directory).not.toHaveBeenCalled()
+    })
   })
 
   // Opened before the first read of the tree came back; that read must not
@@ -106,6 +208,8 @@ describe('the tree of a workspace', () => {
     await waitFor(() => {
       expect(result.current.listings.get('node_modules')).toEqual({ status: 'failed' })
     })
+    // Asked for by the click; the read that was under way does not ask again.
+    expect(octopus().files.directory).toHaveBeenCalledOnce()
   })
 
   it('reads the tree again after a turn ends, and the folders opened with it', async () => {
@@ -305,6 +409,41 @@ describe('the tree of a workspace', () => {
         'kept.js'
       ])
     })
+  })
+
+  // Deleted whole, or taken back into git: the listing is let go with the row,
+  // or every turn would read a folder nobody is shown again, and fail on one
+  // that is gone.
+  it('stops reading an open folder git no longer names whole', async () => {
+    answering()
+    vi.mocked(octopus().files.directory).mockResolvedValue({
+      ok: true,
+      value: { entries: [], truncated: false }
+    })
+    const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules')?.status).toBe('ready')
+    })
+
+    answering({ entries: [], statuses: {}, truncated: false })
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(result.current.listings.has('node_modules')).toBe(false)
+    })
+    const reads = vi.mocked(octopus().files.directory).mock.calls.length
+
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(octopus().files.tree).toHaveBeenCalledTimes(3)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(octopus().files.directory).toHaveBeenCalledTimes(reads)
   })
 
   it('lays a folder read inside a read folder into the tree', async () => {

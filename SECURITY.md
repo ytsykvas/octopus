@@ -34,6 +34,24 @@ service of its own — so most of the usual surface does not exist. What does:
   saying, so a hook nobody had read ran when somebody asked for a description.
   A way to get settings or a hook honoured without that prompt is the most
   serious bug this project can have.
+- **One part of one file is left out of that digest on purpose.** The allow
+  rules of a `.claude/settings.local.json` the user's own carry list copied
+  into a worktree. The CLI adds to them on every "always allow", so the carried
+  file differed in every new worktree and asked again, for settings that are
+  the user's, not the repository's. `src/core/carriedTrust.ts` does this only
+  when the file is reached through no link, named by a carry line, and
+  untracked — compared without case, as macOS reads paths — both in the
+  worktree and where it was carried from. Its hooks, MCP servers, `defaultMode`,
+  `deny`, `additionalDirectories` and every other key stay in the digest, and
+  no other file is narrowed. The accepted cost: an allow rule that a setup
+  script or the agent writes into that file afterwards is not asked about —
+  the power the CLI's own "always allow" button exercises, and an allowed setup
+  script runs arbitrary shell already. Tying the rules to the copy that was
+  carried would undo the change, since adding to them in the worktree is what
+  the CLI does. A `.claude` that is a submodule is asked in its own repository,
+  which tracks the file. A way to
+  get the **repository's** committed content past the gate through this door
+  is the bug above.
 - **A repository can supply the shell the Run button executes.** A checkout
   carrying `.octopus/scripts/` decides what runs, ahead of anything configured
   in the app — so a `git pull` can change it.
@@ -56,6 +74,21 @@ service of its own — so most of the usual surface does not exist. What does:
   the block is written into — so a repository cannot point it at a file a
   commit would publish; read from the checkout rather than a worktree, so a
   branch cannot either. A way around that check is as serious as the items above.
+
+- **A repository can choose which gitignored files are carried into a
+  worktree.** A branch's `.octopus/carry` adds lines to the project's own list,
+  and a carried file sits where the agent reads it and `git add -A` commits it.
+  Those lines apply only for a trusted repository — and since the worktree is
+  the agent's to write, trust accepts a list the agent wrote there just as it
+  accepts a script the agent wrote: the gate is the user's decision to accept
+  the repository's and the worktree's content, not a wall against the agent.
+  Trusted or not, a line gives only a path — any `= source` half is ignored and
+  the file comes from the project's checkout — and counts only when there is no
+  link along it, walked normalised, in the worktree or the checkout, and git
+  ignores it in the worktree, asked as `./path` so pathspec magic cannot answer
+  for another file (`resolveCarry` in `src/core/repoSource.ts`). A way to have a
+  repository copy in a file from elsewhere on the machine, one a commit would
+  publish, or any file without trust, is as serious as the items above.
 
 - **Anything reaching a process argument.** External commands go through
   `execFile` with an argument array, and values crossing IPC are parsed with zod

@@ -5,8 +5,12 @@ import type { SourceView, SourceWarning } from '@core/sourceItems.js'
 import { SourceBadge } from './SourceBadge.js'
 import { Switch } from './Switch.js'
 
-/** Why the repository's value is not the one in effect, in the reader's words. */
-const WARNINGS = {
+/**
+ * Why the repository's value is not the one in effect, in the reader's words.
+ *
+ * Exported for `LayeredEditor`, which says the same about the carry list.
+ */
+export const SOURCE_WARNINGS = {
   repositoryNotTrusted: 'sources.warningRepositoryNotTrusted',
   baseBranchMissing: 'sources.warningBaseBranchMissing',
   envFileOutside: 'sources.warningEnvFileOutside',
@@ -36,7 +40,9 @@ export function FieldSource({
   if (view === undefined || stated === undefined) {
     // An unreadable project file states nothing, and is still worth saying.
     return view?.warning === 'projectFileUnreadable' ? (
-      <p className="text-warning max-w-lg leading-relaxed">{t(WARNINGS.projectFileUnreadable)}</p>
+      <p className="text-warning max-w-lg leading-relaxed">
+        {t(SOURCE_WARNINGS.projectFileUnreadable)}
+      </p>
     ) : null
   }
 
@@ -47,7 +53,7 @@ export function FieldSource({
         <SourceBadge effective={view.effective} />
       </div>
       {view.warning !== null && (
-        <p className="text-warning leading-relaxed">{t(WARNINGS[view.warning])}</p>
+        <p className="text-warning leading-relaxed">{t(SOURCE_WARNINGS[view.warning])}</p>
       )}
       <div className="flex items-center gap-2">
         <Switch checked={view.preferLocal} onChange={onPreferLocal} label={t('sources.useMine')} />

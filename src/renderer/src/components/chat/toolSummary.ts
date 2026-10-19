@@ -46,6 +46,44 @@ export function readPlan(toolName: string, input: unknown): string | null {
   return parsed.success ? parsed.data.plan : null
 }
 
+const ENTER_WORKTREE = 'EnterWorktree'
+const EXIT_WORKTREE = 'ExitWorktree'
+
+const EnterWorktreeSchema = z.object({ name: z.string().optional(), path: z.string().optional() })
+const ExitWorktreeSchema = z.object({ action: z.enum(['keep', 'remove']) })
+
+/** A field the model filled, trimmed; null when it left it out or blank. */
+function given(value: string | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed === undefined || trimmed === '' ? null : trimmed
+}
+
+/** Where the agent's working directory went, by one of the two calls that move it. */
+export type WorktreeMove =
+  | { readonly kind: 'enter'; readonly target: string | null }
+  | { readonly kind: 'exit'; readonly removed: boolean }
+
+/**
+ * The agent moving into another worktree, or back out of it (`docs/ui.md`).
+ *
+ * The target is the call's, not the result's: without a name or a path the CLI
+ * makes one up, and only its result says which.
+ */
+export function readWorktreeMove(toolName: string, input: unknown): WorktreeMove | null {
+  if (toolName === ENTER_WORKTREE) {
+    const parsed = EnterWorktreeSchema.safeParse(input)
+    if (!parsed.success) return null
+    return { kind: 'enter', target: given(parsed.data.path) ?? given(parsed.data.name) }
+  }
+
+  if (toolName === EXIT_WORKTREE) {
+    const parsed = ExitWorktreeSchema.safeParse(input)
+    return parsed.success ? { kind: 'exit', removed: parsed.data.action === 'remove' } : null
+  }
+
+  return null
+}
+
 /**
  * What a plan calls itself — its first heading, or its first line failing that.
  *

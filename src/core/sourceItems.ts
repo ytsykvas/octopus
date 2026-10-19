@@ -54,7 +54,8 @@ export const SOURCE_ITEM_IDS = [
   'instruction.multiAgentReview',
   'instruction.resolveConflicts',
   'project.baseBranch',
-  'project.envFile'
+  'project.envFile',
+  'project.carry'
 ] as const
 
 export const SourceItemIdSchema = z.enum(SOURCE_ITEM_IDS)
@@ -71,9 +72,10 @@ export function instructionItem(kind: InstructionKind): SourceItemId {
 /**
  * Why what the repository states is not what is in effect.
  *
- * Only the two project fields can be refused this way: a script or an
- * instruction from the repository is taken as it is, while a base branch and an
- * env file are checked against git first.
+ * Only the two project fields and the carry list can be refused this way: a
+ * script or an instruction from the repository is taken as it is (a script is
+ * gated by its own approval), while a base branch and an env file are checked
+ * against git first, and all three wait for the repository to be trusted.
  */
 export type SourceWarning =
   | 'repositoryNotTrusted'

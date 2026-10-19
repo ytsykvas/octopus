@@ -1176,6 +1176,53 @@ describe('what the log shows', () => {
     expect(screen.getByText(/74k/)).toBeVisible()
   })
 
+  /*
+   * The agent's working directory moved, and the window's did not: Changes,
+   * Files and the terminal still show the workspace. Drawn as a tool name with
+   * nothing beside it, the one call that makes the rest of the window stale
+   * read like a `Glob`.
+   */
+  it('says when the agent moves into another worktree, and when it comes back', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'enter',
+          name: 'EnterWorktree',
+          input: { name: 'spike' }
+        }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'exit',
+          name: 'ExitWorktree',
+          input: { action: 'remove' }
+        })
+      ]
+    })
+
+    expect(screen.getByText(/moving into another worktree, spike/)).toBeVisible()
+    expect(screen.getByText(/stay on this workspace/)).toBeVisible()
+    expect(screen.getByText(/leaving the other worktree and removing it/)).toBeVisible()
+  })
+
+  // Without a name the CLI makes one up, which only its result says.
+  it('says a move into a new worktree, and leaving one that is kept', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'tool_use', toolUseId: 'enter', name: 'EnterWorktree', input: {} }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'exit',
+          name: 'ExitWorktree',
+          input: { action: 'keep' }
+        })
+      ]
+    })
+
+    expect(screen.getByText(/moving into a new worktree/)).toBeVisible()
+    expect(screen.getByText(/leaving the other worktree and keeping it/)).toBeVisible()
+  })
+
   // The boundary is worth drawing on its own: metadata in a shape nothing here
   // recognises degrades the row rather than losing it.
   it('marks it even when the agent said nothing about the size', () => {
@@ -1314,6 +1361,53 @@ describe('what the log shows', () => {
     })
 
     expect(screen.getByText(/no other model took it/).parentElement?.children).toHaveLength(1)
+  })
+
+  /*
+   * A call auto mode's classifier refused. Without the line it shows only as a
+   * tool that failed, and a mode that decides for the user has to leave its
+   * decisions where they can be read.
+   */
+  it('says when auto mode blocked a call, and why', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_denied',
+          toolName: 'Bash',
+          byClassifier: true,
+          reason: 'Downloads and runs a remote script'
+        })
+      ]
+    })
+
+    expect(screen.getByText('Auto mode blocked Bash')).toBeVisible()
+    expect(screen.getByText('Downloads and runs a remote script')).toBeVisible()
+  })
+
+  it('names a rule rather than auto mode when a rule refused the call', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_denied',
+          toolName: 'Write',
+          byClassifier: false,
+          reason: null
+        })
+      ]
+    })
+
+    expect(screen.getByText('Write was refused without asking')).toBeVisible()
+    expect(screen.queryByText(/Auto mode/)).not.toBeInTheDocument()
+  })
+
+  it('says why the chip left auto mode', () => {
+    renderLog({
+      entries: [fromAgent({ type: 'auto_mode_unavailable', reason: null, fallback: 'default' })]
+    })
+
+    expect(
+      screen.getByText('Auto mode is not available here, so this chat is on Manual now')
+    ).toBeVisible()
   })
 
   /*

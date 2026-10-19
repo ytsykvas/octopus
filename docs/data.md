@@ -55,6 +55,7 @@ Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 | `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                                                                                                                                            |
 | `settingSources`                  | what the agent loads for itself — `all` by default, as the CLI does; `none` is available for isolation (§4)                                                                                                                           |
 | `workingMode`                     | what a new chat may do before asking; planning is not one of them                                                                                                                                                                     |
+| `planExecutionMode`               | what an approved plan is carried out in — `auto` (the default) or `acceptEdits`; never `default`, which would ask about every step just approved                                                                                      |
 | `effort`                          | how much thinking a new chat asks for; `medium` unless changed. Five levels, never `ultracode` — see below                                                                                                                            |
 | `model`, `planModel`              | the pair a new chat starts on — which model writes the code, which one plans                                                                                                                                                          |
 | `alwaysAllowedTools`              | what the user answered "always" for — a tool and, where the bridge named one, the place the question was about. Listed so each can be undone                                                                                          |
@@ -734,8 +735,10 @@ It is two rules rather than one, because a string being relative is not the same
 as a file landing inside. `insideWorktree` answers the first and drops the line;
 `unlinkedInside` answers the second, walking every segment of the destination
 before the copy — a checkout may track `config -> ../shared`, and a worktree
-materialises that verbatim. Both live in `paths.ts`, and the env file is held to
-the same pair.
+materialises that verbatim. It walks the path normalised, as `join` will use it:
+spelled `x/../config/master.key`, a raw walk stopped at the missing `x` and
+never reached the link. Both live in `paths.ts`, and the env file is held to the
+same pair.
 
 `resolvesInside` beside them is the third, and the odd one: it **follows** a link
 rather than refusing it, and answers where it landed. Refusing every link is
@@ -749,10 +752,18 @@ redirect a write, and nothing that is not there can be read.
 **Sources do not travel.** `.octopus/carry` is committed and cloned by everybody,
 and `~/work/planner/.env` is a fact about one laptop — so `carryListForExport`
 strips every source on the way out and the repository receives the list it always
-did. The same holds coming in: a project added from a checkout that carries a
-list takes it without sources and keeps only the files git ignores, so a
-repository can neither name a file on this machine to be copied in nor have a
-real `.env` land where a commit would publish it.
+did. The same holds coming in. A trusted repository's list is read live from
+the worktree being prepared and added to this one (`resolveCarry` in
+`repoSource.ts`), but a repository line gives only its path — its file comes
+from the checkout — and counts only with no link along it, in the worktree or
+the checkout, and when git ignores that path **in the worktree**, with the
+branch's own `.gitignore`. So a repository can neither name a file on this
+machine to be copied in nor have a real `.env` land where a commit would publish
+it. Where both lists name a file, this one's line wins,
+source and all; a list replacing it would drop the `config/master.key` somebody
+added. Nothing is copied when a project is added — a copy is what kept a list
+changed upstream from ever arriving — so this file holds only what was written
+here.
 
 It **never overwrites** — `COPYFILE_EXCL`, so a file edited inside the worktree
 survives and there is no window between a check and a write. A path the checkout
@@ -795,6 +806,18 @@ is digested for it is where it leads. Following it would put whatever it points
 at — a private key, say — into the trust card; leaving it out is how a hook came
 to run without anybody being shown it. Retargeting such a link therefore asks
 again, while nothing else about the repository has changed.
+
+The allow rules of a `settings.local.json` the project's carry list brought are
+left out of the digest (`carriedTrust.ts`): the CLI adds to them on every
+"always allow", so a carried copy asked again in every new worktree. Only when
+the file is reached through no link, a carry line names it, and git tracks it
+neither in the worktree nor where it was carried from — all compared without
+case, as macOS reads paths, so neither a line spelled
+`.CLAUDE/settings.local.json` nor a committed `.Claude/settings.local.json` gets
+a repository's file through. The rest of the file — hooks, MCP servers, `env`,
+the other permissions — is still digested, and shown as what is left; contents
+that are not a JSON object count whole. A digest approved before this counted
+the rules, so such a project is asked once more.
 
 A linked **directory** is the same: one entry, never walked. The listing is
 walked by hand, one level at a time, because `readdir`'s own `recursive` stopped

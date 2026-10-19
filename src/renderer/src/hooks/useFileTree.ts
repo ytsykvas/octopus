@@ -5,6 +5,7 @@ import {
   type DirectoryListing,
   type FileTreeSnapshot,
   folderStatuses,
+  foldersFromDisk,
   listingNodes,
   type TreeIndex,
   type TreeStatus
@@ -15,7 +16,7 @@ import { useErrorMessage } from './useErrorMessage.js'
 import { useWorkspaceSettled } from './useWorkspaceSettled.js'
 
 export interface FileTreeController {
-  /** Children by folder, ignored folders read so far included; null before the first read. */
+  /** Children by folder, folders read from disk so far included; null before the first read. */
   readonly index: TreeIndex | null
   readonly statuses: Readonly<Record<string, TreeStatus>>
   /** Each folder's strongest status below it, for the dot on a collapsed one. */
@@ -23,7 +24,7 @@ export interface FileTreeController {
   readonly listings: ReadonlyMap<string, ListingState>
   readonly truncated: boolean
   readonly error: string | null
-  /** Reads an ignored folder from disk. The caller asks only for one not yet held. */
+  /** Reads a folder from disk — ignored, a submodule, a nested repository. The caller asks only for one not yet held. */
   readonly openFolder: (path: string) => void
   readonly refresh: () => void
 }
@@ -61,7 +62,7 @@ const empty = (id: string | null): TreeState => ({
 export function useFileTree(
   workspaceId: string | null,
   enabled: boolean,
-  /** The open folders: only an open ignored folder is read again with the tree. */
+  /** The open folders: only an open folder read from disk is read again with the tree. */
   expanded: ReadonlySet<string>
 ): FileTreeController {
   const describeFailure = useErrorMessage()
@@ -73,9 +74,10 @@ export function useFileTree(
   const generation = useRef(0)
 
   /*
-   * The ignored folders held and still open, so a re-read refreshes them with
-   * the rest — and only them: `node_modules/.pnpm` opened once and closed again
-   * must not cost a 5 000-entry read on every turn from then on. Mirrored into
+   * The folders read from disk, held, still open and still named whole, so a
+   * re-read refreshes them with the rest — and only them: `node_modules/.pnpm`
+   * opened once and closed again must not cost a 5 000-entry read on every
+   * turn from then on. Mirrored into
    * refs rather than read from state, because the read is started from
    * callbacks that would otherwise hold a stale copy.
    */
@@ -89,14 +91,28 @@ export function useFileTree(
   const read = useCallback(
     async (id: string) => {
       const attempt = ++generation.current
-      const [tree, listings] = await Promise.all([
+      const directory = async (folder: string) =>
+        [folder, await window.octopus.files.directory(id, folder)] as const
+      const [tree, again] = await Promise.all([
         window.octopus.files.tree(id),
-        Promise.all(
-          opened.current.map(
-            async (folder) => [folder, await window.octopus.files.directory(id, folder)] as const
-          )
-        )
+        Promise.all(opened.current.map(directory))
       ])
+      if (attempt !== generation.current) return
+
+      /*
+       * The open folders the tree says are read from disk and no listing holds
+       * — open before this hook had read anything, which is every one of them
+       * after a switch to another workspace and back. Read now rather than with
+       * the tree, which is what says which folders they are. Checked against
+       * the listings as they are now, so one opened while the tree was read is
+       * not asked for twice.
+       */
+      const unheld = tree.ok
+        ? foldersFromDisk(tree.value.entries, open.current).filter(
+            (folder) => !opened.current.includes(folder)
+          )
+        : []
+      const late = await Promise.all(unheld.map(directory))
       if (attempt !== generation.current) return
 
       setState((current) => {
@@ -105,15 +121,18 @@ export function useFileTree(
 
         // Merged into what is held rather than replacing it: a folder opened
         // while this read was under way is not among those re-read, and
-        // dropping it would leave its row reading for ever. A closed one is
-        // let go, and read afresh if it is opened again.
-        const held = new Map<string, Held>(
-          [...current.listings].filter(([folder]) => open.current.has(folder))
+        // dropping it would leave its row reading for ever.
+        // A closed folder is let go, and read afresh if it is opened again. So
+        // is one git no longer names whole, deleted or taken back in: held, it
+        // would be read on every turn for a listing nothing lays out.
+        const fromDisk = new Set(foldersFromDisk(tree.value.entries, open.current))
+        const kept = new Map<string, Held>(
+          [...current.listings].filter(([folder]) => fromDisk.has(folder))
         )
-        for (const [folder, listing] of listings) {
-          held.set(folder, listing.ok ? listing.value : 'failed')
+        for (const [folder, listing] of [...again, ...late]) {
+          if (fromDisk.has(folder)) kept.set(folder, listing.ok ? listing.value : 'failed')
         }
-        return { id, snapshot: tree.value, listings: held, error: null }
+        return { id, snapshot: tree.value, listings: kept, error: null }
       })
     },
     [describeFailure]
@@ -160,7 +179,7 @@ export function useFileTree(
 
   /*
    * Git's tree with the folders read from disk laid into it — each only while
-   * its own row is still an ignored one. A folder that stops being ignored
+   * its own row is still one git names whole. A folder that stops being ignored
    * (`.gitignore` edited, `git add -f`) goes back to git's children and marks,
    * rather than staying a grey listing that git no longer describes.
    *
@@ -175,7 +194,7 @@ export function useFileTree(
       if (typeof listing === 'string') continue
       const parent = folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : ''
       const row = merged.get(parent)?.find((node) => node.path === folder)
-      if (row?.ignored === true) merged.set(folder, listingNodes(folder, listing))
+      if (row?.childrenFromDisk === true) merged.set(folder, listingNodes(row, listing))
     }
     return merged
   }, [base, state.listings])
