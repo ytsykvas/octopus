@@ -395,6 +395,25 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('commands_changed'), commands: z.array(AgentCommandSchema) }),
 
   /**
+   * Where a message the user sent is in the CLI's queue.
+   *
+   * A message typed while a turn runs waits there until the agent folds it into
+   * that turn or starts a turn for it — measured against a live session (SDK
+   * 0.3.299): `queued` at once, `started` only when it is taken, seconds later.
+   * A Stop does not withdraw it: the interrupt's receipt lists it as still
+   * queued, and it runs as a turn of its own. The CLI's `completed` and
+   * `cancelled` are one `finished` here, and kept apart from `started` because
+   * they arrive **after** the turn's result — a reader taking any of them for
+   * "a turn is starting" would wake a conversation that has just ended. Live
+   * only, like the deltas.
+   */
+  z.object({
+    type: z.literal('message_queue'),
+    messageId: z.string(),
+    state: z.enum(['queued', 'started', 'finished'])
+  }),
+
+  /**
    * The agent replaced the older half of the conversation with a summary.
    *
    * Kept in the transcript rather than treated as ephemeral, and that is the
@@ -586,6 +605,7 @@ export function isEphemeral(event: AgentEvent): boolean {
     event.type === 'thinking_delta' ||
     event.type === 'rate_limit' ||
     event.type === 'commands_changed' ||
+    event.type === 'message_queue' ||
     event.type === 'conversation_rewound' ||
     event.type === 'mode_reported'
   )

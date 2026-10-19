@@ -324,6 +324,21 @@ as a messenger's does — read off the separators' positions on each scroll
 (`useDayAtTop`), since a sticky separator could never leave the message that
 holds it.
 
+**A message sent while the agent works says "Queued" beside its hour until the
+agent takes it.** The CLI holds such a message in its queue and folds it into
+the running turn between tool rounds, or starts a turn for it once the current
+one ends — measured on a live session, seconds after it was sent. It says so in
+`command_lifecycle` frames, which `mapMessage` turns into `message_queue` and
+`useChat` keeps as a set of message ids; a turn ending empties the set, so a
+mark cannot outlive the session that held its message. A message is marked only
+once it has waited a quarter of a second: every message passes through
+`queued`, one sent to an idle agent for two milliseconds, and marking at once
+would flash the word under each of them. Its tooltip says what
+Stop does not do: an interrupt leaves a queued message in place (the receipt
+lists it under `still_queued`) and it then runs as a turn of its own. The
+protocol can cancel it, but the installed SDK offers no typed call for that, so
+the mark tells the truth rather than Stop pretending to do more.
+
 **A failed one is shown, and shortened from the middle.** It is the row the user
 has to act on, so it is not summarised away — but it cannot be unbounded either,
 and where it is cut decides what survives. A validation error names the rule at
@@ -616,7 +631,8 @@ Two rules there are worth keeping:
   the middle of a run of tool calls — splitting one fold into two, with a break
   the reader cannot see. `isEphemeral` in `core/events.ts` names the
   events that are not part of the conversation — the two streamed fragments, the
-  rate limit, and the command list — and the log drops every one.
+  rate limit, the command list, a rewind and a message waiting in the queue —
+  and the log adds none of them as a row.
 - **A refusal is named beside the numbers, never over them.** The first attempt
   had the account's status replace the percentages, which is what the old header
   chip did — fair there, where one number gave way to a word. Here it covered

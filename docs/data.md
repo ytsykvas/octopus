@@ -300,7 +300,9 @@ rewind. The `files_rewound` event records a rewind with how much it undid and ho
 files a link kept it from restoring (`skippedLinks`, defaulting to 0). A
 transcript is appended to, and the one rewrite is a conversation rewind, which
 cuts it back to just before a user message; `conversation_rewound` is never
-stored, since the history it would describe is already gone.
+stored, since the history it would describe is already gone. Nor is
+`message_queue`, which says a message is still in the agent's queue: read
+back, every one of them was taken long ago.
 
 **`resumeAt` is the cut a rewound conversation is waiting to apply**: the last
 entry of the agent's session it should still remember, handed over as

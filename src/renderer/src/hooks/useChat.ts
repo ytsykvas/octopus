@@ -65,12 +65,50 @@ export interface Streaming {
 
 const NOTHING_STREAMING: Streaming = { text: '', thinking: '' }
 
+const NOTHING_WAITING: ReadonlySet<string> = new Set()
+
+/**
+ * How long a message has to sit in the queue before it is marked.
+ *
+ * Every message passes through `queued`, one sent to an idle agent included —
+ * measured, it is `started` two milliseconds later — and the two frames reach
+ * the window as separate messages, so marking at once could flash "Queued"
+ * under every message sent. A message the agent is really holding waits
+ * seconds, so a quarter of one costs nothing.
+ */
+const QUEUED_AFTER_MS = 250
+
+/** Drops every mark still waiting to be drawn. */
+function forgetQueuing(timers: Map<string, ReturnType<typeof setTimeout>>): void {
+  for (const timer of timers.values()) clearTimeout(timer)
+  timers.clear()
+}
+
+/** The set with one message added or taken away, the same set when nothing moved. */
+function withWaiting(
+  current: ReadonlySet<string>,
+  messageId: string,
+  waiting: boolean
+): ReadonlySet<string> {
+  if (current.has(messageId) === waiting) return current
+
+  const next = new Set(current)
+  if (waiting) next.add(messageId)
+  else next.delete(messageId)
+  return next
+}
+
 export interface ChatController {
   readonly chat: Chat | null
   readonly entries: readonly ChatEntry[]
   readonly streaming: Streaming
   /** A turn is in flight: the agent is working, or waiting on an answer. */
   readonly busy: boolean
+  /**
+   * The messages the agent has not taken yet, by id: sent while it worked, and
+   * waiting in the CLI's queue until it folds them in or starts a turn for them.
+   */
+  readonly waiting: ReadonlySet<string>
   /** The request the agent is blocked on, or null when it is not blocked. */
   readonly pending: PendingPermission | null
   /**
@@ -194,6 +232,9 @@ export function useChat(
   const [entries, setEntries] = useState<readonly ChatEntry[]>([])
   const [streaming, setStreaming] = useState<Streaming>(NOTHING_STREAMING)
   const [busy, setBusy] = useState(false)
+  const [waiting, setWaiting] = useState<ReadonlySet<string>>(NOTHING_WAITING)
+  /** Messages queued too recently to mark yet, each with the timer that will. */
+  const queuing = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const [pending, setPending] = useState<PendingPermission | null>(null)
   /** The one MCP question a server is holding open, by its request id. */
   const [pendingElicitation, setPendingElicitation] = useState<string | null>(null)
@@ -326,9 +367,31 @@ export function useChat(
         return
       }
 
-      // What is left of `isEphemeral` after the two deltas above is the rate
-      // limit, which describes the account rather than the conversation and
-      // is drawn in the attic by `useRateLimit`. Falling through cost twice:
+      if (event.type === 'message_queue') {
+        const { messageId } = event
+        const timer = queuing.current.get(messageId)
+        if (event.state === 'queued') {
+          if (timer !== undefined) return
+          queuing.current.set(
+            messageId,
+            setTimeout(() => {
+              queuing.current.delete(messageId)
+              setWaiting((current) => withWaiting(current, messageId, true))
+            }, QUEUED_AFTER_MS)
+          )
+          return
+        }
+
+        clearTimeout(timer)
+        queuing.current.delete(messageId)
+        setWaiting((current) => withWaiting(current, messageId, false))
+        return
+      }
+
+      // What else `isEphemeral` names — the rate limit, the command list —
+      // describes the account or the session rather than the conversation,
+      // and is drawn elsewhere (`useRateLimit`, `useCommands`). Falling
+      // through cost twice:
       // it wiped the answer being written, and left an entry that draws
       // nothing in the middle of a run of tool calls, splitting the fold in
       // two around a break the reader cannot see.
@@ -390,12 +453,20 @@ export function useChat(
         setBusy(false)
         setPending(null)
         setPendingElicitation(null)
+        // A mark must never outlive the reason for it. A message still queued
+        // here is taken by the very next frame, which starts its turn — and one
+        // the CLI never says more about, a session that died holding it, would
+        // otherwise say "queued" for good.
+        forgetQueuing(queuing.current)
+        setWaiting(NOTHING_WAITING)
       }
     }, openChatId)
 
+    const pendingMarks = queuing.current
     return () => {
       listening = false
       release()
+      forgetQueuing(pendingMarks)
     }
   }, [openChatId, describeFailure])
 
@@ -687,6 +758,7 @@ export function useChat(
     entries,
     streaming,
     busy: working,
+    waiting,
     pending,
     loading,
     error,
