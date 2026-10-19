@@ -1190,7 +1190,7 @@ describe('the model the session is running', () => {
     expect(box.className).toContain('composer-ring')
   })
 
-  it('wears the colour ring at rest', () => {
+  it('wears the ring frame at rest', () => {
     renderComposer()
     const box = field().closest('div') as HTMLElement
 

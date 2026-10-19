@@ -541,10 +541,12 @@ return first, so the Escape that closes a list never also interrupts the agent �
 only while a turn is running, since idle it would be a second way to do nothing,
 and not while an input method is composing, where Escape cancels the candidate.
 
-**The composer wears a colour ring** — the project palette in a conic gradient
-around the frame, with a soft glow outside it that brightens while focus is
-anywhere inside. It is the one deliberate exception to panes taking borders
-rather than shadows (§10.2 of PROJECT.md).
+**The composer wears a colour ring while it has focus** — at rest it is an
+ordinary 1px border like every other separator. Once focus is anywhere inside
+(a click in the field, a click on one of its buttons, the keyboard), the
+project palette fades in as a conic gradient around the frame, with a soft glow
+outside it. It is the one deliberate exception to panes taking borders rather
+than shadows (§10.2 of PROJECT.md).
 
 Three layers. The line is a span of its own, `.composer-ring-line`, the
 frame's first child: a conic gradient masked down to its 1.5px edge. Under the
@@ -554,6 +556,11 @@ glow outside — a mask cut the blur off in a hard rectangle, since a mask clips
 at the edge of its own box. The frame takes `z-index: 20` to hold those layers:
 `isolation` would have done it at level zero, and the menus that open upwards
 out of the frame then slid under the log's floating day chip.
+
+A gradient cannot be transitioned into a flat colour, so the plain border is
+the frame's own and the fade is by opacity: the border to transparent, the line
+and the glow up, over 0.2s. The line and the glow are also `visibility: hidden`
+at rest, so a blurred layer nobody can see is not painted.
 
 **The line turns while focus is inside the composer, and nothing else moves.**
 It turns its gradient's own angle (`--ring-angle`, registered with `@property`
@@ -565,7 +572,7 @@ page on the same Electron, that held ~17% of a core while it ran (an earlier
 in-app reading put it at 29%), and a compositor rotation 6–8% for as long as
 the window was on screen. Turning only the line measured ~0.5% while focused —
 no different from the still ring — and no change in memory; unfocused it costs
-nothing at all. So there is no pause for an inactive window either: there is
+nothing at all, and now nothing is lit either. So there is no pause for an inactive window either: there is
 nothing measurable to save. Reduced motion stops it with every other animation.
 
 **The field is set in Menlo**, at 13px — `--font-prompt`, falling back to the

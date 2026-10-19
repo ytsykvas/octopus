@@ -532,7 +532,7 @@ export function Composer({
         // A drop target says so in the plain accent: the ring is decoration,
         // and "let go here" has to read the same everywhere.
         className={`bg-surface relative mx-auto flex w-full max-w-6xl flex-col rounded-[var(--radius-panel)] border transition-colors ${
-          dragging ? 'border-accent' : 'composer-ring border-transparent'
+          dragging ? 'border-accent' : 'composer-ring'
         }`}
       >
         {/* The ring's line, the one layer that moves — its own element so that

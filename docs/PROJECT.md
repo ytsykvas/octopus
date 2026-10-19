@@ -272,9 +272,10 @@ Every status has a paired `*-bg` background for badges and notices.
 - Radii: `--radius-control` 6px for buttons and rows, `--radius-panel` 10px for panes.
 - 1px borders in `line`. Panes are separated by borders, **not** shadows.
 - Shadows only for things floating above content: `--shadow-pop`, `--shadow-modal`.
-- The one exception is the composer: a still ring of the project palette (blue → red →
-  amber → green) with a soft glow outside it. It is the single place the user types, and
-  it is meant to be found at a glance.
+- The one exception is the composer: at rest an ordinary 1px border, and once focus is
+  inside it a ring of the project palette (blue → red → amber → green) with a soft glow
+  outside it fades in. It is the single place the user types, and it is meant to be found
+  at a glance.
 - Control heights: 24px (`sm`), 28px (`md`). The interface is dense because there is a lot of data.
 
 ### 10.3 Typography
