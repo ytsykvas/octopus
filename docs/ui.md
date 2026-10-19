@@ -36,7 +36,12 @@ live status, so it holds until the question is answered — then red for a turn
 that failed and green for one that finished. Those two are news only until it
 is seen: they are recorded only for a workspace that is not on screen, and
 opening the workspace clears them. One notice per conversation, not per
-workspace, or a chat that finished would wipe out another still waiting.
+workspace, or a chat that finished would wipe out another still waiting. A
+green one is withheld while its conversation is running again (`settle`): a
+message left in the agent's queue runs as a turn of its own once the last one
+ended — after a Stop, always — and "finished" over a working tab is the one
+thing the dot must not say. The chime has already rung by then; the dot and the
+toast wait for the turn that is really last. A red one stays.
 
 Kept in the window (`useAttention`, `attention.ts`) rather than in
 `state.json`: "seen" is one person looking at one window, and a field under

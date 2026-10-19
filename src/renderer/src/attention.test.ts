@@ -143,6 +143,28 @@ describe('the list of notices', () => {
     expect(settle([asking, finished], ALL)).toEqual([finished])
   })
 
+  /*
+   * A message left in the agent's queue runs as a turn of its own once this one
+   * has ended — after a Stop, always — and the conversation is running again.
+   * "Done" over a tab that is working is the one thing the notice must not say.
+   */
+  it('drops a finished turn whose conversation is running again', () => {
+    const finished = notice({ chatId: 'c-1', kind: 'done' })
+    const failed = notice({ chatId: 'c-2', kind: 'error' })
+    const running: WorkspaceView = {
+      ...ANNA,
+      status: 'running',
+      chats: [
+        { id: 'c-1', agent: 'claude', title: null, status: 'running', started: true },
+        { id: 'c-2', agent: 'claude', title: null, status: 'running', started: true }
+      ]
+    }
+
+    // A failure stays: it is still news while the next turn runs.
+    expect(settle([finished, failed], [running])).toEqual([failed])
+    expect(settle([finished, failed], ALL)).toEqual([finished, failed])
+  })
+
   it('hands back the same list when nothing changed', () => {
     const list = [notice()]
 
