@@ -61,7 +61,7 @@ describe('the two ways out', () => {
     renderDialog()
 
     expect(
-      screen.getByText('Runs in Accept edits — file edits go ahead without asking.')
+      screen.getByText('Runs with Accept edits on — file changes go ahead without asking.')
     ).toBeInTheDocument()
   })
 
@@ -70,7 +70,7 @@ describe('the two ways out', () => {
   it('says nothing about Accept edits when executing changes no mode', () => {
     renderDialog({ accepting: false })
 
-    expect(screen.queryByText(/Runs in Accept edits/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Runs with Accept edits on/)).not.toBeInTheDocument()
   })
 
   it('executes when that is what was chosen', async () => {

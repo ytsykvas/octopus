@@ -1158,7 +1158,7 @@ export const en = {
     planEdited: 'Plan, as you edited it',
     /* Said before the click, because the click widens what the agent may do:
        an approved plan always goes on in Accept edits. */
-    planExecuteHint: 'Runs in Accept edits — file edits go ahead without asking.',
+    planExecuteHint: 'Runs with Accept edits on — file changes go ahead without asking.',
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     questionTitle: 'The agent is asking',
@@ -1355,7 +1355,7 @@ export const en = {
       'Reading is silent; writing a file or running a command waits for an answer.',
     permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
-      'File changes go through without asking. Commands still wait — they leave the worktree.',
+      'File changes go through without asking, the plain file commands too (mkdir, mv, rm). Other commands still wait.',
 
     alwaysAllowed: 'Answered "always"',
     alwaysAllowedHint:

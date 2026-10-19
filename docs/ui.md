@@ -1026,11 +1026,12 @@ the dialog carries no such line.
 
 `Accept edits` keeps its English name in every locale — it is what Claude
 Code's own status line calls the mode, and a translated name for a borrowed one
-reads as a second setting rather than the same one. It was `Accept edits` until
-Claude Code gained a mode of that name, a classifier approving each call (`auto`
-in the SDK's `PermissionMode`): someone who knows the agent read the chip as
-that one and expected commands to run unasked, where `acceptEdits` accepts only
-file edits.
+reads as a second setting rather than the same one — Settings names it the same
+way. It was `Auto mode` until Claude Code gained a mode of that name, a
+classifier approving each call (`auto` in the SDK's `PermissionMode`): someone
+who knows the agent read the chip as that one and expected commands to run
+unasked, where `acceptEdits` accepts file edits and the plain filesystem
+commands (`mkdir`, `touch`, `rm`, `mv`, `cp`, `sed`), not commands in general.
 
 **The right pane** holds Changes, Terminal, Scripts and Pull request. The
 Scripts tab runs `setup.sh` on its build half and `run.sh` on its server half,

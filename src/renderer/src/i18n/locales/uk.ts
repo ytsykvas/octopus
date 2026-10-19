@@ -860,7 +860,7 @@ export const uk: Translation = {
     planEditDone: 'Назад до плану',
     planEditLabel: 'План у форматі markdown',
     planEdited: 'План у вашій редакції',
-    planExecuteHint: 'Виконується в Accept edits — зміни у файлах вносяться без запитів.',
+    planExecuteHint: 'Виконується в режимі Accept edits — зміни у файлах вносяться без запитів.',
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
     questionTitle: 'Агент запитує',
@@ -1033,9 +1033,9 @@ export const uk: Translation = {
     permissionAsk: 'Питати',
     permissionAskHint:
       'Читання відбувається мовчки; запис файлу чи запуск команди чекає на відповідь.',
-    permissionAcceptEdits: 'Правки без питань',
+    permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
-      'Зміни у файлах проходять без запиту. Команди все одно чекають — вони виходять за межі робочого дерева.',
+      'Зміни у файлах проходять без запиту, прості файлові команди теж (mkdir, mv, rm). Решта команд чекає.',
 
     alwaysAllowed: 'Відповідь «завжди»',
     alwaysAllowedHint:

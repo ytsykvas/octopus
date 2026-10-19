@@ -869,7 +869,7 @@ describe('deciding on a plan', () => {
 
     emitAgentEvent(planRequest)
     expect(
-      await screen.findByText('Runs in Accept edits — file edits go ahead without asking.')
+      await screen.findByText('Runs with Accept edits on — file changes go ahead without asking.')
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Execute' }))
 
@@ -928,7 +928,7 @@ describe('deciding on a plan', () => {
     await user.click(await screen.findByRole('button', { name: 'Execute' }))
 
     expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'allow', undefined)
-    expect(screen.queryByText(/Runs in Accept edits/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Runs with Accept edits on/)).not.toBeInTheDocument()
     expect(mode()).toHaveTextContent('Ask first')
   })
 
