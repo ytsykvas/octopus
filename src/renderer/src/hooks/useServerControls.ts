@@ -18,6 +18,8 @@ export interface ServerControls {
   readonly sequence: RunSequence
   /** Records where a workspace's server actually ended up. */
   readonly settlePort: (workspaceId: string, port: number) => void
+  /** The port a workspace's server is on, or will start on: where it settled, else its own. */
+  readonly portOf: (workspace: WorkspaceView) => number
   /**
    * The workspace every control acts on, or null where there is none.
    *
@@ -146,9 +148,11 @@ export function useServerControls({
           })()
         }
 
+  const portOf = (workspace: WorkspaceView): number => settledPorts[workspace.id] ?? workspace.port
+
   const servingAt =
     activeWorkspace !== null && activeRun.stage === 'serving'
-      ? { ...activeWorkspace, port: settledPorts[activeWorkspace.id] ?? activeWorkspace.port }
+      ? { ...activeWorkspace, port: portOf(activeWorkspace) }
       : null
 
   const restartServer =
@@ -170,6 +174,7 @@ export function useServerControls({
   return {
     sequence,
     settlePort,
+    portOf,
     activeWorkspace,
     activeRun,
     runnable,

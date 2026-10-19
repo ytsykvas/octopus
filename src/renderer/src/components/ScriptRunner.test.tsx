@@ -215,7 +215,6 @@ describe('ScriptRunner', () => {
         env: expect.objectContaining({ OCTOPUS_PORT: '3220' }) as unknown
       })
     )
-    expect(await screen.findByText('OCTOPUS_PORT=3220')).toBeInTheDocument()
   })
 
   // The same window as the env write, one step later: a stop that lands while
@@ -813,11 +812,12 @@ describe('ScriptRunner', () => {
 
   // Beside a half that is going, so the header's own words stay free to say
   // what pressing something would do rather than what is already happening.
+  // The build's own row says it; the server's is said in its title row.
   it('says so while its script is running, and stops saying so when it ends', async () => {
     mountAndStart({
       workspace: anna,
-      kind: 'run',
-      script: RUN_SCRIPT,
+      kind: 'setup',
+      script: SETUP_SCRIPT,
       port: 3111,
       rootPath: '/Users/test/planner',
       onOpenSettings: vi.fn()

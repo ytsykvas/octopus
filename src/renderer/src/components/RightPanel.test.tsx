@@ -1038,7 +1038,9 @@ describe('RightPanel', () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
     await userEvent.click(scriptsTab())
 
+    // The whole header: the editor's own row and the controls' row under it.
     const row = screen.getByRole('button', { name: "Edit this project's scripts" }).parentElement
+      ?.parentElement
     if (!row) throw new Error('the header drew no row')
 
     const first = (): HTMLElement => {
@@ -1270,6 +1272,20 @@ describe('RightPanel', () => {
       'href',
       'http://localhost:3190'
     )
+    // The server half's title row names the same port, and says it is running.
+    expect(within(serverSection()).getByText('OCTOPUS_PORT=3190')).toBeInTheDocument()
+    expect(within(serverSection()).getByText('running…')).toBeInTheDocument()
+  })
+
+  it('says nothing is running beside the server’s name while it is not', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(
+      within(serverSection()).getByText(`OCTOPUS_PORT=${String(anna.port)}`)
+    ).toBeInTheDocument()
+    expect(within(serverSection()).queryByText('running…')).not.toBeInTheDocument()
   })
 
   it('offers no link while nothing is serving', async () => {

@@ -1250,6 +1250,14 @@ One control that is always there, and three that change with the run:
 | building        | `Building…`, disabled, `Stop`      |
 | serving         | open in browser, `Restart`, `Stop` |
 
+**The header is two rows.** The sentence saying what Run will do sits above,
+with the constant one at its right; the set switch and the controls sit below,
+the switch at the left edge. In one row the sentence was the part cut to a
+couple of words, and it is the part a reader needs before pressing anything.
+The server half's own title row carries its port (`OCTOPUS_PORT=…`, where the
+run settled) and `running…` at the right of its name, rather than a row of its
+own above the terminal that held one word.
+
 **Every way a half can end reports it, including the one where nothing starts.**
 `building` is left only by the sequence hearing that a half is finished, and the
 route to that is the session's exit — which a session that never started can

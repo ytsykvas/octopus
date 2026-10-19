@@ -456,14 +456,17 @@ function Runner({
       {/* What this half is, and nothing to press. Every control moved to the
           tab's own header: the two halves are one question — what this
           workspace runs — and answering it took four buttons in two places, two
-          of which were called the same thing. */}
-      <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
-        <span className="text-ink-faint min-w-0 flex-1 truncate font-mono text-[11px]">
-          {kind === 'run' ? `OCTOPUS_PORT=${String(port)}` : script.from}
-        </span>
+          of which were called the same thing. The server's port and its
+          `running…` sit in the half's own title row instead, beside its name. */}
+      {kind === 'setup' && (
+        <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
+          <span className="text-ink-faint min-w-0 flex-1 truncate font-mono text-[11px]">
+            {script.from}
+          </span>
 
-        {running && <span className="text-ink-faint text-[11px]">{t('scripts.busy')}</span>}
-      </div>
+          {running && <span className="text-ink-faint text-[11px]">{t('scripts.busy')}</span>}
+        </div>
+      )}
 
       {/* Above the terminal rather than inside it: the run never began, so
           there is no output for this to belong to. */}
