@@ -2875,7 +2875,11 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Pull request' }))
     await user.click(await screen.findByText('anna'))
 
-    await user.click(await screen.findByRole('button', { name: 'Remove workspace…' }))
+    const remove = await screen.findByRole('button', { name: 'Remove workspace…' })
+    // Red, with a bin: this deletes a directory, and the button says so.
+    expect(remove).toHaveClass('bg-danger')
+    expect(remove.querySelector('svg')).not.toBeNull()
+    await user.click(remove)
 
     expect(await screen.findByText('Remove “anna”?')).toBeInTheDocument()
   })
