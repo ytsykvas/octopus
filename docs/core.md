@@ -560,9 +560,10 @@ to stop.
 Both sets are also emptied with the chat when its workspace is removed, which is
 bookkeeping rather than a guard. Neither can strand a flag that matters: a
 `/clear` whose result never arrives means the session stopped answering, and
-`closeChatsOf` — the only thing that drops a session — runs on workspace
-removal, not on an agent error. A session that dies is kept in `sessions`, so
-there is no later turn for a stale flag to swallow.
+every session dropped — a tab closed, a workspace removed, a rewind, a new
+compaction window — goes through `closeOneChat`, which empties both; none is
+dropped on an agent error. A session that dies is kept in `sessions`, so there
+is no later turn for a stale flag to swallow.
 
 The log has the matching rule, because the transcripts written before this did
 not get one: a footer at the head of the log closes no turn, so `groupToolRuns`
@@ -687,14 +688,23 @@ its own, the second registered over the first and the first's child process left
 running with nothing holding it. `requireOpenChat` is what sending and rewinding
 ask for instead of `requireChat`, since a closed conversation has no tab and no
 status to show a session at it; and `setChatStatus` skips a closed one, so the
-late `result` of the session that has just ended cannot leave it `error`.
+late `result` of the session that has just ended cannot leave it `error`. It
+asks inside its commit, not before: the close is written before the session
+ends, and a status queued while that write was on its way would otherwise land
+on the closed record. Whether the status moved, and so whether the window is
+told, is decided there too — read before, a question withdrawn before its wait
+was written announced the wait and never its end.
 
 `closeChat` ends a conversation's session and **keeps** it: the record gets a
 `closedAt` and its `status` goes back to `idle`, and the transcript stays where
 it is. It refuses the last open conversation of a workspace: emptying the only
 conversation is `/clear`, which does it without leaving the pane with nothing to
 draw — and does it with a confirmation, which a second route through the tab's
-menu would not have carried.
+menu would not have carried. The refusal is decided inside the commit — asked
+before it, two closes of the last two tabs each saw the other still open and
+left none — and the session is closed only after the commit, so a close it
+refuses leaves the session running. A tab closed twice at once, from two
+windows, is closed once and refused never: the second finds it closed already.
 
 A closed conversation is invisible to everything that means "the tabs of this
 workspace" — `chatsOfWorkspace` skips it, so the cap, the strip, the workspace's

@@ -2231,14 +2231,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * Records what a conversation is doing, and says so.
-   *
-   * Its own stream beside the workspace's, because the tab strip draws the
-   * conversation while the list draws the workspace, and the two move at
-   * different moments: a second tab finishing leaves a workspace whose first
-   * tab is still running exactly where it was.
-   */
-  /**
    * Back to `running` once a question is answered — unless the same chat is
    * still asking another.
    *
@@ -2253,24 +2245,41 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return setChatStatus(chatId, asking ? 'waiting_permission' : 'running')
   }
 
+  /**
+   * Records what a conversation is doing, and says so.
+   *
+   * Its own stream beside the workspace's, because the tab strip draws the
+   * conversation while the list draws the workspace, and the two move at
+   * different moments: a second tab finishing leaves a workspace whose first
+   * tab is still running exactly where it was.
+   */
   function setChatStatus(chatId: string, status: ChatStatus): Promise<void> {
     const before = findChat(state, chatId)
-    // A closing session goes on emitting for a moment after its conversation
-    // was closed, and there is nothing left to record it against. A closed
-    // conversation is not a tab any more: a late `result` from the session that
-    // has just ended must not leave it `error`, red on the day it is reopened.
-    if (!before || !isOpenChat(before)) return Promise.resolve()
+    if (!before) return Promise.resolve()
 
     const { workspaceId } = before
+    let changed = false
 
-    // Mapped for the same reason the workspaces are: a conversation closed
+    // Mapped for the same reason the workspaces are: a conversation removed
     // while its session's last events were still arriving is not in the list,
     // and that is the whole of what has to happen about it.
     return commitChats(workspaceId, (current) => ({
       ...current,
-      chats: current.chats.map((chat) => (chat.id === chatId ? { ...chat, status } : chat))
+      chats: current.chats.map((chat) => {
+        // A closing session goes on emitting for a moment after its
+        // conversation was closed. A closed conversation is not a tab any more:
+        // a late `result` must not leave it `error`, red on the day it is
+        // reopened. Asked here rather than before the commit, because the
+        // close is recorded before its session ends and may still be queued —
+        // and whether the status moves is asked here too: two writes in flight
+        // both read the one before either, and the second, finding its status
+        // equal to that, never announced the end of the first.
+        if (chat.id !== chatId || !isOpenChat(chat) || chat.status === status) return chat
+        changed = true
+        return { ...chat, status }
+      })
     })).then(() => {
-      if (before.status === status) return
+      if (!changed) return
       for (const listener of chatStatusListeners) listener({ chatId, workspaceId, status })
     })
   }
@@ -5242,14 +5251,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async closeChat(chatId) {
       const chat = requireChat(chatId)
 
-      // A workspace without a conversation has no way back to one but the
-      // first message, and throwing the only one away is `/clear` — which does
-      // it without leaving the pane with nothing to draw.
-      if (chatsOfWorkspace(state, chat.workspaceId).length <= 1) {
-        throw new ChatError('lastChat', { chatId }, `Chat ${chatId} is its workspace's only one.`)
-      }
-
-      await closeOneChat(chat)
       // Through `commitChats` rather than a plain commit: the workspace's
       // status is derived from its conversations, and one of them has left the
       // tabs — closing the tab that was running leaves the workspace idle, and
@@ -5259,11 +5260,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // or a conversation closed mid-turn would reopen claiming to be working.
       let expired: Chat[] = []
       await commitChats(chat.workspaceId, (current) => {
+        // Closed already — the same tab, closed from a second window at once.
+        // What was asked for has happened, and counting it would refuse it.
+        if (findChat(current, chatId)?.closedAt !== null) return current
+
+        // A workspace without a conversation has no way back to one but the
+        // first message, and throwing the only one away is `/clear` — which
+        // does it without leaving the pane with nothing to draw. Inside the
+        // commit, so two closes of the last two tabs cannot both pass.
+        if (chatsOfWorkspace(current, chat.workspaceId).length <= 1) {
+          throw new ChatError('lastChat', { chatId }, `Chat ${chatId} is its workspace's only one.`)
+        }
+
         const closed = updateChat(current, chatId, { closedAt: now(), status: 'idle' })
-        expired = expiredClosedChats(closed, chat.workspaceId)
+        // Never the one being closed, which a clock tie could sort among the
+        // oldest: its session is closed below and needs the record to be there.
+        expired = expiredClosedChats(closed, chat.workspaceId).filter((gone) => gone.id !== chatId)
         return expired.reduce((next, gone) => removeChat(next, gone.id), closed)
       })
 
+      // After the record says it may close, so a refused close leaves its
+      // session running.
+      await closeOneChat(chat)
       // Only the records past the keep limit lose their history, and after the
       // commit, for the reason `discardHistories` gives.
       await discardHistories(expired)
