@@ -338,9 +338,11 @@
     border-radius: var(--radius-panel);
   }
 
-  /* The composer's frame: a colour ring with a soft glow outside it. The one
-     deliberate exception to "panes take borders, not shadows" — it is the
-     single place the user types, and it is meant to be found at a glance.
+  /* The composer's frame: at rest an ordinary 1px border like every other
+     separator; once focus is inside, a colour ring with a soft glow outside it
+     fades in. The one deliberate exception to "panes take borders, not
+     shadows" — it is the single place the user types, and it is meant to be
+     found at a glance, which a ring that is always lit would stop doing.
 
      Three layers. The line itself is a span of its own (`.composer-ring-line`),
      masked down to its 1.5px edge. Under the contents, `::before` is a fill of
@@ -348,6 +350,12 @@
      `::after` is the glow: the gradient, blurred. A mask was tried for the glow
      and cut its blur off in a hard rectangle, since a mask clips at the edge
      of its own box.
+
+     A gradient cannot be transitioned into a flat colour, so the plain border
+     is the frame's own and the two colour layers fade by opacity instead: the
+     border to transparent, the line and the glow up. Both layers are also
+     `visibility: hidden` at rest — flipped at the end of the fade out and the
+     start of the fade in — so a blurred layer nobody can see is not painted.
 
      The line turns while focus is inside, and nothing else does. That split
      is what makes it cheap: the version that turned the gradient under both
@@ -362,21 +370,28 @@
        out of the frame are confined to its context, and the log's floating
        day chip (`z-10`) drew over them. */
     z-index: 20;
+    border-color: var(--border);
     --ring-colours:
       var(--project-blue), var(--project-red), var(--project-amber), var(--project-green),
       var(--project-blue);
+  }
+
+  .composer-ring:focus-within {
+    border-color: transparent;
   }
 
   .composer-ring::before,
   .composer-ring::after {
     content: '';
     position: absolute;
-    inset: -1px;
     border-radius: inherit;
     pointer-events: none;
   }
 
+  /* Inside the border, so the plain one at rest stays visible. The line
+     covers the border once it is lit. */
   .composer-ring::before {
+    inset: 0;
     z-index: -1;
     background: var(--surface);
   }
@@ -395,22 +410,34 @@
     mask:
       linear-gradient(#000 0 0) content-box exclude,
       linear-gradient(#000 0 0);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 0.2s ease,
+      visibility 0.2s;
   }
 
   .composer-ring:focus-within .composer-ring-line {
+    opacity: 1;
+    visibility: visible;
     animation: ring-turn 6s linear infinite;
   }
 
   .composer-ring::after {
+    inset: -1px;
     z-index: -2;
     background: conic-gradient(var(--ring-colours));
     filter: blur(12px);
-    opacity: 0.3;
-    transition: opacity 0.2s ease;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 0.2s ease,
+      visibility 0.2s;
   }
 
   .composer-ring:focus-within::after {
     opacity: 0.55;
+    visibility: visible;
   }
 
   /* Radio and checkbox, drawn rather than left to the platform.
