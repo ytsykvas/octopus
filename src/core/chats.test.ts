@@ -29,7 +29,8 @@ import {
   sessionEffort,
   sessionMode,
   sessionModel,
-  WORKING_MODES
+  WORKING_MODES,
+  windowStrayed
 } from './chats.js'
 
 describe('a new chat', () => {
@@ -948,5 +949,26 @@ describe('the compaction windows a conversation may choose', () => {
     expect(AutoCompactWindowSchema.parse(500_000)).toBe(500_000)
     expect(AutoCompactWindowSchema.safeParse(450_000).success).toBe(false)
     expect(AutoCompactWindowSchema.safeParse('500000').success).toBe(false)
+  })
+})
+
+describe('windowStrayed', () => {
+  it('finds no stray when the reading names the choice', () => {
+    expect(windowStrayed({ chosen: 300_000, effective: 300_000, modelWindow: 1_000_000 })).toBe(
+      false
+    )
+  })
+
+  // A model holding less caps the choice, and that is not straying from it.
+  it('holds it to the model where the model holds less', () => {
+    expect(windowStrayed({ chosen: 300_000, effective: 200_000, modelWindow: 200_000 })).toBe(false)
+  })
+
+  it('says so when the reading names another window', () => {
+    expect(windowStrayed({ chosen: 300_000, effective: 450_000, modelWindow: null })).toBe(true)
+  })
+
+  it('says nothing when nothing was chosen', () => {
+    expect(windowStrayed({ chosen: null, effective: 450_000, modelWindow: null })).toBe(false)
   })
 })

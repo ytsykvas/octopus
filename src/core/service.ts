@@ -55,6 +55,7 @@ import {
   newChat,
   sessionMode,
   sessionModel,
+  windowStrayed,
   type WorkingMode
 } from './chats.js'
 import { type AutoCompactView, findWindowOverride, type WindowOverride } from './autoCompact.js'
@@ -382,6 +383,12 @@ export type SessionMessagesFn = (
   sessionId: string,
   options: { readonly dir: string }
 ) => Promise<unknown>
+
+/** What a running session is on, as a chat's record answers it. */
+interface InForce {
+  readonly model: string | null
+  readonly effort: EffortChoice
+}
 
 export interface ServiceOptions {
   readonly stateFilePath?: string
@@ -1504,16 +1511,23 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
   const sessions = new Map<string, AgentSession>()
   /**
-   * What each running session was started with, as far as compaction goes.
+   * What each running session was started with, as far as compaction goes,
+   * and what its readings have said since.
    *
    * Kept beside the session because the agent fixes the window at start and
-   * never reports which one it was asked for — and the variable that outranks
-   * it is read at start too, so looking again later could name a value the
-   * session never saw.
+   * never reports which one it was asked for. The variable that outranks it is
+   * looked for at start (`override`), since looking again later could name a
+   * value the session never saw; one the CLI takes from a settings file later
+   * shows only in a reading (`strayed`).
    */
   const compaction = new Map<
     string,
-    { readonly startedWith: AutoCompactWindow | null; readonly override: WindowOverride | null }
+    {
+      readonly startedWith: AutoCompactWindow | null
+      readonly override: WindowOverride | null
+      /** The last reading named another window than the one it was started with (`windowStrayed`). */
+      readonly strayed: boolean
+    }
   >()
   /** What each model holds, as any session's turns have said; outlives the sessions. */
   const modelWindows = new Map<string, number>()
@@ -1676,7 +1690,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * awaits, so a status change from the agent and one the user asked for
    * genuinely can land together.
    */
-  let stateWrites: Promise<void> = Promise.resolve()
+  const stateWrites = oneAtATime()
 
   /**
    * Applies a change to the state and persists it.
@@ -1690,25 +1704,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * write it is already part of, and wait for itself.
    */
   function commit(change: (current: State) => State): Promise<void> {
-    const apply = async (): Promise<void> => {
+    return stateWrites(async () => {
       const next = change(state)
       await saveState(next, statePath, stateTempPath)
       state = next
-    }
-
-    // Chained onto both outcomes: one write that could not be made is not a
-    // reason to stop making the rest.
-    const run = stateWrites.then(apply, apply)
-    stateWrites = run.then(
-      () => undefined,
-      () => undefined
-    )
-
-    return run
+    })
   }
 
   /** Config writes, run one after another for the reasons `stateWrites` gives. */
-  let configWrites: Promise<void> = Promise.resolve()
+  const configWrites = oneAtATime()
 
   /**
    * Applies a change to the config and persists it, in turn.
@@ -1723,20 +1727,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * whatever arrived — and the two could disagree until the next restart.
    */
   function applyConfig(change: (current: Config) => Partial<Config>): Promise<Config> {
-    const apply = async (): Promise<Config> => {
+    return configWrites(async () => {
       const next: Config = ConfigSchema.parse({ ...config, ...change(config) })
       await saveConfig(next, configPath)
       config = next
       return next
-    }
-
-    const run = configWrites.then(apply, apply)
-    configWrites = run.then(
-      () => undefined,
-      () => undefined
-    )
-
-    return run
+    })
   }
 
   /**
@@ -2030,8 +2026,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return workspace
   }
 
-  function requireChat(chatId: string): Chat {
-    const chat = findChat(state, chatId)
+  /**
+   * The chat, or the refusal a missing one gets.
+   *
+   * `from` is for a commit's callback, which decides against `current` rather
+   * than against what was held when the call began.
+   */
+  function requireChat(chatId: string, from: State = state): Chat {
+    const chat = findChat(from, chatId)
     if (!chat) {
       throw new WorkspaceError('worktreeMissing', { chatId }, `Chat ${chatId} not found.`)
     }
@@ -2041,9 +2043,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * A conversation that is a tab, for what only makes sense in one.
    *
-   * Sending and rewinding change the worktree, and a closed conversation has no
-   * tab and no status to show it at it. A window that has not heard about the
-   * close is exactly who asks.
+   * Sending and rewinding change the worktree, and a closed conversation has
+   * no tab and no status to show that happening — a window that has not heard
+   * about the close is exactly who asks. And a session started on one would
+   * never be ended (`closeChat`), which is why `startFor` asks too.
    */
   function requireOpenChat(chatId: string): Chat {
     const chat = requireChat(chatId)
@@ -2081,11 +2084,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * Transcript appends, run one after another.
    *
-   * Their own chain rather than the state one: an append does not read the
+   * Their own line rather than the state one: an append does not read the
    * state, so making it wait for a save would only slow the log down. What it
    * does need is order — two appends racing would interleave the conversation.
    */
-  let transcriptWrites: Promise<void> = Promise.resolve()
+  const transcriptWrites = oneAtATime()
 
   function record(chat: Chat, entry: ChatEntry): void {
     const append = async (): Promise<void> => {
@@ -2095,7 +2098,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (findChat(state, chat.id)) await appendEntry(chat.id, entry, dataRoot)
     }
 
-    transcriptWrites = transcriptWrites.then(append, append).catch((error: unknown) => {
+    transcriptWrites(append).catch((error: unknown) => {
       report(chat, error)
     })
   }
@@ -2113,7 +2116,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // already absent is exactly what was wanted anyway.
     const remove = (): Promise<void> => removeTranscript(chat.id, dataRoot)
 
-    transcriptWrites = transcriptWrites.then(remove, remove).catch((error: unknown) => {
+    transcriptWrites(remove).catch((error: unknown) => {
       report(chat, error)
     })
   }
@@ -2127,13 +2130,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * about to hand the new conversation to a window that reads the file at once.
    */
   function copyHistory(from: Chat, to: Chat): Promise<void> {
-    // No failure arms, unlike `record` and `discard`: the queue's tail is
-    // always a settled promise because both of those end in a `catch`, and
-    // `copyTranscript` is silent rather than throwing.
-    const run = transcriptWrites.then(() => copyTranscript(from.id, to.id, dataRoot))
-    transcriptWrites = run
-
-    return run
+    return transcriptWrites(() => copyTranscript(from.id, to.id, dataRoot))
   }
 
   /**
@@ -2142,17 +2139,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    *
    * In the same queue as the appends, for the reason `discard` gives. Awaited,
    * unlike `record`: a failure here has to undo the rewind around it rather
-   * than surface as a stray error. The queue's tail is left settled either
-   * way, since everything after it chains on without failure arms.
+   * than surface as a stray error.
    */
   function cutHistory(chat: Chat, messageId: string): Promise<string | null> {
-    const run = transcriptWrites.then(() => truncateTranscript(chat.id, messageId, dataRoot))
-    transcriptWrites = run.then(
-      () => undefined,
-      () => undefined
-    )
-
-    return run
+    return transcriptWrites(() => truncateTranscript(chat.id, messageId, dataRoot))
   }
 
   /**
@@ -2542,10 +2532,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await Promise.allSettled([...inFlight].map((entry) => entry.promise))
     }
 
-    // State and config writes are serialised on chains of their own, which the
-    // work above will have added to.
-    await stateWrites
-    await configWrites
+    // State, config and transcript writes are serialised on lines of their
+    // own, which the work above will have added to. The transcript one too:
+    // left out, a quit dropped the lines of a conversation still streaming.
+    await stateWrites.idle()
+    await configWrites.idle()
+    await transcriptWrites.idle()
   }
 
   /**
@@ -2703,17 +2695,42 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * what the other half says, not merely "not planning".
    */
   async function applyMode(chatId: string, patch: Partial<Chat>): Promise<void> {
-    const before = sessionModel(requireChat(chatId))
-    const beforeEffort = effortInForce(requireChat(chatId))
-    await commit((current) => updateChat(current, chatId, patch))
+    const before = await changeInForce(chatId, () => patch)
 
     // Applied to the running session too, so the choice takes effect on the
     // current turn rather than only on the next one. Read back after the write
     // rather than merged by hand: the session wants both halves, and only one
     // of them is in the patch.
     await sessions.get(chatId)?.setPermissionMode(sessionMode(requireChat(chatId)))
-    await pushModel(chatId, before)
-    await pushEffort(chatId, beforeEffort)
+    await pushModel(chatId, before.model)
+    await pushEffort(chatId, before.effort)
+  }
+
+  /** The model and effort a chat's record puts in force right now. */
+  function inForce(chat: Chat): InForce {
+    return { model: sessionModel(chat), effort: effortInForce(chat) }
+  }
+
+  /**
+   * Commits a change to a chat and answers with what was in force just before
+   * it, for `pushModel` and `pushEffort` to compare with — read inside the
+   * commit, where the change is decided (`docs/core.md` says what reading it
+   * before did).
+   */
+  async function changeInForce(
+    chatId: string,
+    change: (chat: Chat) => Partial<Chat>
+  ): Promise<InForce> {
+    // A placeholder until the commit runs, which it does before resolving.
+    let before = inForce(requireChat(chatId))
+
+    await commit((current) => {
+      const latest = requireChat(chatId, current)
+      before = inForce(latest)
+      return updateChat(current, chatId, change(latest))
+    })
+
+    return before
   }
 
   /**
@@ -2758,17 +2775,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * `resume` carries it into the new session — and the caller makes sure the
    * agent is not mid-turn, since a turn in progress and a message queued behind
    * it would both go with the process.
+   *
+   * `recheck` is a choice made in the menu, which may start it again on the
+   * same window — see below.
    */
   async function restartForWindow(chatId: string, recheck = false): Promise<void> {
     const chat = findChat(state, chatId)
     const started = compaction.get(chatId)
     if (!chat || !started || !sessions.has(chatId)) return
     // Chosen again while a variable outranked it: it may have been taken out
-    // since, and only a new session reads it again. Asked for by a choice in
-    // the menu and never by a message, or a variable left in place would
-    // start the session over before every one of them.
-    const recheckOverride = recheck && started.override !== null
-    if (started.startedWith === chat.autoCompactWindow && !recheckOverride) return
+    // since, and only a new session reads it again. The same when the last
+    // reading strayed from the window it started with and no variable was
+    // seen — the CLI takes one from a settings file mid-session too. Asked for
+    // by a choice in the menu and never by a message, or a variable left in
+    // place would start the session over before every one of them.
+    const recheckStart = recheck && (started.override !== null || started.strayed)
+    if (started.startedWith === chat.autoCompactWindow && !recheckStart) return
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
 
     await closeOneChat(chat)
@@ -3004,7 +3026,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (cut !== null) {
         // Once the log is what it will be: every window holding it reads it
         // again on this, and a read racing the line above would miss it.
-        await transcriptWrites
+        await transcriptWrites.idle()
         handleEvent(chat, { type: 'conversation_rewound', messageId })
       }
 
@@ -3415,10 +3437,42 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return { global: config.disabledSkillDefaults, project: project.disabledSkillDefaults }
   }
 
+  /**
+   * The skills a session of this chat is started with or told, as its record
+   * answers.
+   *
+   * The whole answer, not a change — `setSkills` works out what to say about a
+   * key the record stopped naming — and read off the record rather than off
+   * what the session lists, which leaves out every skill it withholds.
+   */
+  function skillMapOf(chat: Chat): Record<string, SkillOverride> {
+    const { projectId } = requireWorkspace(chat.workspaceId)
+    return skillOverridesFor(skillDefaultsOf(requireProject(projectId)), chat.skillOverrides)
+  }
+
+  /**
+   * Tells every running conversation the skills its record now gives it.
+   *
+   * After every write that can move the answer for all of them — the config,
+   * a project, a rename — as `setChatSkill` does for its one. The panel reads
+   * the record at once, so a session left on the map it started with is a
+   * switch that looks broken. Not narrowed to the writes that name a list:
+   * `setSkills` sends nothing when the map has not moved, which is the one
+   * check that cannot miss a write. Settled rather than awaited whole: the
+   * write has landed, and a session that will not answer must not fail it for
+   * the rest.
+   */
+  async function pushSkillsToRunning(): Promise<void> {
+    await Promise.allSettled(
+      [...sessions].map(async ([chatId, session]) => {
+        await session.setSkills(skillMapOf(requireChat(chatId)))
+      })
+    )
+  }
+
   interface SessionSkills {
     /** Extra roots to hand the session, so it finds the stores' skills. */
     readonly roots: string[]
-    readonly overrides: Record<string, SkillOverride>
     readonly listing: SkillListing[]
   }
 
@@ -3572,7 +3626,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * would buy nothing.
        */
       roots: loaded ? [globalRoot, projectRoot] : [],
-      overrides: skillOverridesFor(defaults, chat.skillOverrides),
       listing
     }
   }
@@ -3745,18 +3798,23 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       ])
     ])
 
-    // Asked of the files this session will read, as it starts: the variable is
-    // read once by the agent too.
+    // Asked of the files this session will read, as it starts. The agent can
+    // still take one from a settings file later; a reading that strays from the
+    // window it started with is how that shows (`windowStrayed`).
     const override = await windowOverrideFor(workspace.path, settingSources)
 
     // The record as it is **now**, read after the last await and before the
     // session is registered, with nothing in between. What was asked for is a
-    // snapshot from before all of the above, and a mode, an effort or a model
-    // changed while they ran went to a session that was not registered yet —
+    // snapshot from before all of the above, and a mode, an effort, a model or
+    // a skill list changed while they ran went to a session not registered yet —
     // so it reached nothing, and the conversation started on what it had been.
-    // Two things reach here that did not before a rewind could start one: a
-    // message joining a start somebody else began.
-    const chat = requireChat(asked.id)
+    // And since a rewind can start one too, the snapshot may be the other
+    // caller's: a message joining a start a rewind began never handed over its
+    // own snapshot.
+    //
+    // Open, too: a tab closed while this ran found no session to end
+    // (`closeChat`).
+    const chat = requireOpenChat(asked.id)
 
     // A rewind's cut, applied by this session and settled by it: once a turn
     // has run on top of it, a plain resume follows the new branch, and before
@@ -3782,7 +3840,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
         additionalDirectories: [...skills.roots, attachments],
-        skillOverrides: skills.overrides,
+        skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow
       },
       {
@@ -3802,7 +3860,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
 
     sessions.set(chat.id, session)
-    compaction.set(chat.id, { startedWith: chat.autoCompactWindow, override })
+    compaction.set(chat.id, { startedWith: chat.autoCompactWindow, override, strayed: false })
 
     // Fire-and-forget, and the two failures go different ways. A list that
     // cannot be *read* is swallowed: it is a convenience for the picker, a
@@ -3928,8 +3986,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return config
     },
 
-    updateConfig(patch) {
-      return applyConfig(() => patch)
+    async updateConfig(patch) {
+      const next = await applyConfig(() => patch)
+      await pushSkillsToRunning()
+      return next
     },
 
     listProjects() {
@@ -3984,6 +4044,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const wasEnvFile = (await liveProject(project)).envFile
 
       await commit((current) => updateProject(current, projectId, applied))
+      // Straight after the write, so a failure in the clean-up below cannot
+      // leave the running sessions on the old lists.
+      await pushSkillsToRunning()
 
       /*
        * The block in the file the project used to name.
@@ -4530,6 +4593,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }))
 
       await refreshRunningSkills()
+      await pushSkillsToRunning()
 
       return renamed
     },
@@ -4670,7 +4734,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatSkill(chatId, key, enabled) {
-      const workspace = requireWorkspace(requireChat(chatId).workspaceId)
+      requireChat(chatId)
 
       // Built from the record as the write's turn finds it, not as it was read
       // before: two switches flipped together otherwise both started from the
@@ -4680,22 +4744,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           skillOverrides: { ...findChat(current, chatId)?.skillOverrides, [key]: enabled }
         })
       )
-      const { skillOverrides } = requireChat(chatId)
-
-      // A running conversation is told at once rather than on its next start.
-      // A switch whose effect waits for a restart is a switch that looks
-      // broken, and the flag layer takes this the way it takes the effort.
-      //
-      // The record's whole answer, read back after the write — so it includes
-      // a switch that landed while this one waited — and not only this key:
-      // `setSkills` replaces the map, and the map is read off the record rather
-      // than off what the session lists, which leaves out every skill it
-      // withholds.
-      await sessions
-        .get(chatId)
-        ?.setSkills(
-          skillOverridesFor(skillDefaultsOf(requireProject(workspace.projectId)), skillOverrides)
-        )
+      // Read back after the write, so it includes a switch that landed while
+      // this one waited.
+      await sessions.get(chatId)?.setSkills(skillMapOf(requireChat(chatId)))
     },
 
     async removeProjectById(projectId) {
@@ -5307,7 +5358,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
 
       // After the record says it may close, so a refused close leaves its
-      // session running.
+      // session running. And after it is written: a session still starting,
+      // which this cannot see, re-reads the record just before it registers —
+      // so it either registered already and is ended here, or reads the close
+      // and refuses (`startFor`). One registered on a closed conversation is
+      // never ended, since a workspace's removal walks the open ones.
       await closeOneChat(chat)
       // Only the records past the keep limit lose their history, and after the
       // commit, for the reason `discardHistories` gives.
@@ -5417,18 +5472,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * fixed here.
        */
       /*
-       * Whether this message is the one that throws the conversation away.
-       *
-       * Decided here because here is the only place it can be: the reset that
-       * comes back looks identical to the one the agent sends when it leaves
-       * plan mode, so read from the event alone it would erase the log every
-       * time a plan was approved. Aliases count — `/reset` and `/new` are the
-       * same command — which is why the chat's own list is consulted rather
-       * than the text compared to one word.
-       */
-      if (isClearCommand(text, chat.knownCommands)) clearRequests.add(chatId)
-
-      /*
        * The model is deliberately **not** re-asserted here, unlike the mode.
        *
        * It was, briefly, on the belief that `/model` changed the session behind
@@ -5515,6 +5558,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         return null
       }
 
+      /*
+       * Whether this message is the one that throws the conversation away.
+       *
+       * Decided here because here is the only place it can be: the reset that
+       * comes back looks identical to the one the agent sends when it leaves
+       * plan mode, so read from the event alone it would erase the log every
+       * time a plan was approved. Aliases count — `/reset` and `/new` are the
+       * same command — which is why the chat's own list is consulted rather
+       * than the text compared to one word.
+       *
+       * Only once the message is going, and only while the session it goes to
+       * is still the chat's. Marked earlier, a start that failed or was
+       * refused, or a session a close or a rewind ended during the awaits
+       * above, left the request with no reset coming — and the next reset the
+       * agent sent of its own accord was read as the clear. A `/clear` that
+       * also restarted the session for a new window was the opposite: the
+       * restart emptied the set, and the clear asked for was never honoured.
+       */
+      if (sessions.get(chatId) === session && isClearCommand(text, chat.knownCommands)) {
+        clearRequests.add(chatId)
+      }
       session.send(text, messageId)
 
       await setChatStatus(chatId, 'running')
@@ -5548,13 +5612,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatEffort(chatId, effort) {
-      const before = effortInForce(requireChat(chatId))
-      await commit((current) => updateChat(current, chatId, { effort }))
+      const before = await changeInForce(chatId, () => ({ effort }))
       // Through the same guard as the two toggles: while planning is on and a
       // plan effort is set, changing the working one moves nothing that is
       // running, and pushing it would drop the session to the wrong level
       // mid-plan.
-      await pushEffort(chatId, before)
+      await pushEffort(chatId, before.effort)
     },
 
     async setChatAutoCompact(chatId, window) {
@@ -5564,9 +5627,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async setChatPlanEffort(chatId, effort) {
-      const before = effortInForce(requireChat(chatId))
-      await commit((current) => updateChat(current, chatId, { planEffort: effort }))
-      await pushEffort(chatId, before)
+      const before = await changeInForce(chatId, () => ({ planEffort: effort }))
+      await pushEffort(chatId, before.effort)
     },
 
     async setChatModel(chatId, model) {
@@ -5705,8 +5767,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // session does not start by planning again, and the running session, so
       // the work the plan describes can actually begin.
       if (leaving) {
-        const before = sessionModel(requireChat(request.chatId))
-        const beforeEffort = effortInForce(requireChat(request.chatId))
         // An approved plan goes on in `acceptEdits`. The composer holds one
         // control that cycles through asking, accepting and planning, so there
         // is no second one left to say what should follow a plan — and a plan
@@ -5715,24 +5775,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // Only out of planning, though. The agent may call the plan tool from
         // any mode, and handing over there would let it raise a conversation
         // the user set to ask first into one that does not, by asking once.
-        const planning = requireChat(request.chatId).planMode
-        await commit((current) =>
-          updateChat(current, request.chatId, {
-            planMode: false,
-            ...(planning && { workingMode: 'acceptEdits' as const })
-          })
-        )
+        const before = await changeInForce(request.chatId, (chat) => ({
+          planMode: false,
+          ...(chat.planMode && { workingMode: 'acceptEdits' as const })
+        }))
 
         // The model leaves planning with the record. Before the reply, never
         // after it: the reply is what releases the tool call, so a model sent
         // behind it would reach a session already editing files on the model
         // that wrote the plan. The reply carries a mode and has no field for a
         // model, so this is the closest to riding along that there is.
-        await pushModel(request.chatId, before)
+        await pushModel(request.chatId, before.model)
         // Effort leaves planning with the model, and for the same reason: the
         // reply is what releases the tool call, so anything sent after it
         // reaches a session already editing files at the level the plan wanted.
-        await pushEffort(request.chatId, beforeEffort)
+        await pushEffort(request.chatId, before.effort)
       }
 
       const chat = findChat(state, request.chatId)
@@ -5833,19 +5890,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
       const chat = requireChat(chatId)
       const started = compaction.get(chatId)
-
-      return {
-        context,
-        autoCompact: {
-          chosen: chat.autoCompactWindow,
-          effective: context.maxTokens,
-          modelWindow:
-            context.modelWindow ??
-            (context.model === null ? null : (modelWindows.get(context.model) ?? null)),
-          override: started?.override ?? null,
-          pending: started !== undefined && started.startedWith !== chat.autoCompactWindow
-        }
+      const autoCompact = {
+        chosen: chat.autoCompactWindow,
+        effective: context.maxTokens,
+        modelWindow:
+          context.modelWindow ??
+          (context.model === null ? null : (modelWindows.get(context.model) ?? null)),
+        override: started?.override ?? null,
+        pending: started !== undefined && started.startedWith !== chat.autoCompactWindow
       }
+
+      // Kept for the next choice in the menu: a reading this one disagrees
+      // with is what makes choosing the same window again worth a new session.
+      // Against the window the session started with, since a choice waiting
+      // for its turn differs for a reason already known — and only for the
+      // session still registered, or a reading from the one a restart replaced
+      // during the await would be pinned on its successor.
+      if (started && sessions.get(chatId) === session) {
+        compaction.set(chatId, {
+          ...started,
+          strayed: windowStrayed({ ...autoCompact, chosen: started.startedWith })
+        })
+      }
+
+      return { context, autoCompact }
     },
 
     onAgentEvent(handler) {

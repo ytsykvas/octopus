@@ -1,7 +1,7 @@
 import type { TreeIndex, TreeNode } from '@core/fileTree.js'
 
 /**
- * Where reading an ignored folder has got to. Absent from the map means it was
+ * Where reading a folder from disk has got to. Absent from the map means it was
  * never asked for, which reads the same as `loading`: an expanded folder asks
  * the moment it is opened.
  */
@@ -64,9 +64,9 @@ export function visibleRows(
     })
   }
 
-  // An ignored folder's contents come from disk, and may not be there yet.
+  // A folder read from disk — ignored, or a submodule — may not be read yet.
   const inside = (node: TreeNode, level: number): void => {
-    if (!node.ignored) {
+    if (!node.childrenFromDisk) {
       walk(node.path, level)
       return
     }

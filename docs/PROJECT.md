@@ -364,7 +364,7 @@ Files opened from the right pane's tree take tabs of their own in the same strip
 | `⌘C`        | in a file: copy the lines' reference |
 | `⇧⇥`        | next mode                            |
 
-`⇧⇥` works in the composer's field only, and goes round ask first → `Auto mode` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
+`⇧⇥` works in the composer's field only, and goes round ask first → `Accept edits` → plan, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 
 `⌘W` closes a file tab and nothing else: with a conversation in front the key is left alone, because closing a conversation is a menu item on purpose.
 
