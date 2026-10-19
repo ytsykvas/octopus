@@ -651,6 +651,79 @@ describe('following the conversation', () => {
     expect(log.scrollTop).toBe(1000)
   })
 
+  // Hiding a tab resets its scroll position and reports it. Read as the reader
+  // leaving the end, it stopped the log following for good — and a session
+  // opened afterwards began at the top.
+  it('does not read a scroll with no height as leaving the end', async () => {
+    givenChat()
+    await openLoadedChat()
+
+    const log = screen.getByRole('log')
+    Object.defineProperty(log, 'scrollHeight', { value: 1000, configurable: true })
+    log.scrollTop = 0
+    fireEvent.scroll(log)
+
+    emitAgentEvent({ type: 'text', text: 'a new line' })
+
+    expect(log.scrollTop).toBe(1000)
+  })
+
+  // Rows grow after they are laid out, so the scroll to the end lands short.
+  it('keeps to the end as the content grows, until the reader leaves it', async () => {
+    const watchers: (() => void)[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(notify: () => void) {
+          watchers.push(notify)
+        }
+        observe = vi.fn()
+        unobserve = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
+    givenChat()
+    await openLoadedChat()
+
+    const log = screen.getByRole('log')
+    Object.defineProperty(log, 'scrollHeight', { value: 1000, configurable: true })
+    Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
+    watchers.forEach((notify) => {
+      notify()
+    })
+    expect(log.scrollTop).toBe(1000)
+
+    log.scrollTop = 0
+    fireEvent.scroll(log)
+    watchers.forEach((notify) => {
+      notify()
+    })
+    expect(log.scrollTop).toBe(0)
+  })
+
+  it('offers the way back down once the reader is a screen above the end', async () => {
+    const user = userEvent.setup()
+    givenChat()
+    await openLoadedChat()
+
+    const log = screen.getByRole('log')
+    Object.defineProperty(log, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
+    const jump = (): HTMLElement | null =>
+      screen.queryByRole('button', { name: 'Jump to the latest message' })
+
+    log.scrollTop = 1500
+    fireEvent.scroll(log)
+    expect(jump()).toBeNull()
+
+    log.scrollTop = 0
+    fireEvent.scroll(log)
+    await user.click(screen.getByRole('button', { name: 'Jump to the latest message' }))
+
+    expect(log.scrollTop).toBe(2000)
+    expect(jump()).toBeNull()
+  })
+
   /*
    * Reported from a running app: the menu on the context reading shut a few
    * times a second for as long as the agent was answering, and stayed open
@@ -693,6 +766,8 @@ describe('the day on screen', () => {
   /** Pins where the log and each day's separator sit, as layout would. */
   function place(log: HTMLElement, tops: Record<string, number>): void {
     log.getBoundingClientRect = () => ({ top: 0 }) as DOMRect
+    // A scroll with no height is a hidden tab's, and is not read.
+    Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
     for (const separator of log.querySelectorAll<HTMLElement>('[data-day]')) {
       const top = tops[separator.dataset.day ?? '']
       separator.getBoundingClientRect = () => ({ top }) as DOMRect
@@ -1086,12 +1161,13 @@ describe('the permission mode', () => {
    * record, while `openChat` created that record from the settings. Set
    * "Accept edits" as the global default and the first message ran with it
    * while the footer said the agent would ask — and both pickers then flipped
-   * on their own as the record came back.
+   * on their own as the record came back. A new record starts out planning,
+   * whatever working mode the settings name.
    */
   it('names what the settings will create the first record with', async () => {
     await openChat(workspaceView('anna'), { workingMode: 'acceptEdits', effort: 'high' })
 
-    expect(picker()).toHaveTextContent('Accept edits')
+    expect(picker()).toHaveTextContent('Plan')
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
   })
 
@@ -1209,7 +1285,7 @@ describe('the permission mode', () => {
     await waitFor(() => {
       expect(octopus().chats.open).toHaveBeenCalledWith('planner/anna')
     })
-    expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith(CHAT_ID, 'acceptEdits')
+    expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith(CHAT_ID, 'auto')
   })
 
   it('sends the model to the chat it belongs to', async () => {

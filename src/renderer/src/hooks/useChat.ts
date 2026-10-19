@@ -685,7 +685,7 @@ export function useChat(
     [change]
   )
 
-  const planning = chat?.planMode ?? false
+  const planning = chat?.planMode ?? true
 
   const setMode = useCallback(
     async (mode: ChatMode) => {

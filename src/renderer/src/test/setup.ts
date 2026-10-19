@@ -58,6 +58,15 @@ Object.defineProperty(window, 'matchMedia', {
 // in the component, which would be a branch no real window ever takes.
 Element.prototype.scrollIntoView = (): void => undefined
 
+// jsdom has no ResizeObserver either, and the conversation log watches its
+// content for growth. Silent by default; a test that needs a resize to arrive
+// stubs its own.
+globalThis.ResizeObserver = class {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
+
 beforeEach(() => {
   installOctopusStub()
 })

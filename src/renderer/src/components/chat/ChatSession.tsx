@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
+import { ChevronsDownUp, ChevronsUpDown, CloudDownload } from 'lucide-react'
 
 import {
   type Chat,
@@ -306,7 +306,10 @@ export function ChatSession({
   )
 
   const scroller = useRef<HTMLDivElement | null>(null)
+  const logContent = useRef<HTMLDivElement | null>(null)
   const pinnedToBottom = useRef(true)
+  // More than a screen above the end: where the way back down is worth a button.
+  const [farFromEnd, setFarFromEnd] = useState(false)
   const dayAtTop = useDayAtTop(scroller)
 
   // Answered here rather than in the log because this is where the pending
@@ -388,6 +391,31 @@ export function ChatSession({
     element.scrollTop = element.scrollHeight
   }, [visible, chat.entries, chat.streaming])
 
+  const isEmpty =
+    chat.entries.length === 0 &&
+    !chat.loading &&
+    !chat.busy &&
+    chat.streaming.text === '' &&
+    chat.streaming.thinking === ''
+
+  // Rows grow after they are first laid out — markdown, highlighted code — so
+  // the scroll above can land short of the end. Followed here for as long as the
+  // reader has not left the end.
+  useEffect(() => {
+    const element = scroller.current
+    const content = logContent.current
+    if (!visible || !element || !content) return
+
+    const observer = new ResizeObserver(() => {
+      if (pinnedToBottom.current) element.scrollTop = element.scrollHeight
+    })
+    observer.observe(content)
+    return () => {
+      observer.disconnect()
+    }
+    // The wrapper only exists once there is a log to hold.
+  }, [visible, isEmpty])
+
   // Read again whenever the log can have moved under a still scroller: a turn
   // landing, or the tab coming back. Hidden, there is nothing to measure.
   const { update: updateDayAtTop } = dayAtTop
@@ -408,10 +436,15 @@ export function ChatSession({
         role="log"
         onScroll={(event) => {
           const element = event.currentTarget
+          // Hiding the tab resets the scroll position and says so; with no
+          // height there is nothing to measure, and reading it as "scrolled
+          // away from the end" would stop the log following for good.
+          if (element.clientHeight === 0) return
           const distance = element.scrollHeight - element.scrollTop - element.clientHeight
           // A few pixels of slack: smooth scrolling and sub-pixel heights mean
           // "at the bottom" is rarely exactly zero.
           pinnedToBottom.current = distance < 40
+          setFarFromEnd(distance > element.clientHeight)
           dayAtTop.update()
         }}
         className="min-h-0 flex-1 overflow-auto"
@@ -429,7 +462,7 @@ export function ChatSession({
         {/* "Show every step", in the same floating arrangement as the day: it
             stays in reach however far up the log has been read. */}
         {chat.entries.length > 0 && (
-          <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-end overflow-visible px-3">
+          <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-start overflow-visible px-3">
             <button
               type="button"
               aria-pressed={expansion.all}
@@ -450,11 +483,7 @@ export function ChatSession({
             without it the answer to the very first message would draw over the
             placeholder, and the pane would say "start the conversation" while
             the agent was replying to it. */}
-        {chat.entries.length === 0 &&
-        !chat.loading &&
-        !chat.busy &&
-        chat.streaming.text === '' &&
-        chat.streaming.thinking === '' ? (
+        {isEmpty ? (
           <Placeholder
             title={t('chat.emptyTitle')}
             actions={
@@ -476,47 +505,71 @@ export function ChatSession({
             {t('chat.emptyBody')}
           </Placeholder>
         ) : (
-          <ChatLog
-            entries={chat.entries}
-            streaming={chat.streaming}
-            busy={chat.busy}
-            waiting={chat.waiting}
-            pendingRequestId={pending?.requestId ?? null}
-            pendingElicitationId={chat.pendingElicitation}
-            onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
-            onAnswerElicitation={(requestId, answer, values) =>
-              void chat.answerElicitation(requestId, answer, values)
-            }
-            onAnswerQuestions={(requestId, answers) =>
-              void chat.answerQuestions(requestId, answers)
-            }
-            // Sent as an ordinary message, because that is what it is: the
-            // request it belonged to was answered when the dialog closed, and
-            // there is nothing left to approve. Naming the plan matters — by
-            // the time anyone comes back to one the conversation may hold
-            // several, and "the plan above" would be the agent's guess.
-            //
-            // Planning is turned off first, and not only for the control's
-            // sake: that is what hands the session the mode the footer names.
-            // Without it the message went out while the conversation was still
-            // recorded as planning, and the agent worked in whatever mode it
-            // happened to fall back to. The mode an approved plan gets in the
-            // core — this is the same plan, approved later — and, as there,
-            // only out of planning: a plan the agent offered unasked does not
-            // lift a conversation out of Manual.
-            onRewind={(messageId) => void rewind(messageId)}
-            expansion={expansion}
-            workspacePath={workspace.path}
-            onOpenFile={openFile}
-            onExecutePlan={(plan) => {
-              void (async () => {
-                if (record?.planMode === true) {
-                  await chat.setMode(modeAfterPlan(record, planExecutionMode))
-                }
-                await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
-              })()
-            }}
-          />
+          <div ref={logContent}>
+            <ChatLog
+              entries={chat.entries}
+              streaming={chat.streaming}
+              busy={chat.busy}
+              waiting={chat.waiting}
+              pendingRequestId={pending?.requestId ?? null}
+              pendingElicitationId={chat.pendingElicitation}
+              onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
+              onAnswerElicitation={(requestId, answer, values) =>
+                void chat.answerElicitation(requestId, answer, values)
+              }
+              onAnswerQuestions={(requestId, answers) =>
+                void chat.answerQuestions(requestId, answers)
+              }
+              // Sent as an ordinary message, because that is what it is: the
+              // request it belonged to was answered when the dialog closed, and
+              // there is nothing left to approve. Naming the plan matters — by
+              // the time anyone comes back to one the conversation may hold
+              // several, and "the plan above" would be the agent's guess.
+              //
+              // Planning is turned off first, and not only for the control's
+              // sake: that is what hands the session the mode the footer names.
+              // Without it the message went out while the conversation was still
+              // recorded as planning, and the agent worked in whatever mode it
+              // happened to fall back to. The mode an approved plan gets in the
+              // core — this is the same plan, approved later — and, as there,
+              // only out of planning: a plan the agent offered unasked does not
+              // lift a conversation out of Manual.
+              onRewind={(messageId) => void rewind(messageId)}
+              expansion={expansion}
+              workspacePath={workspace.path}
+              onOpenFile={openFile}
+              onExecutePlan={(plan) => {
+                void (async () => {
+                  if (record?.planMode === true) {
+                    await chat.setMode(modeAfterPlan(record, planExecutionMode))
+                  }
+                  await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
+                })()
+              }}
+            />
+          </div>
+        )}
+        {farFromEnd && (
+          <div className="pointer-events-none sticky bottom-3 z-10 flex h-0 items-end justify-end overflow-visible px-3">
+            <button
+              type="button"
+              onClick={() => {
+                const element = scroller.current
+                // The button lives inside the scroller, so it cannot be clicked
+                // without one; the guard is for the type.
+                /* v8 ignore next */
+                if (!element) return
+                element.scrollTop = element.scrollHeight
+                pinnedToBottom.current = true
+                setFarFromEnd(false)
+              }}
+              title={t('chat.jumpToEnd')}
+              aria-label={t('chat.jumpToEnd')}
+              className="bg-accent text-on-accent hover:bg-accent-hover focus-ring pointer-events-auto grid size-9 place-items-center rounded-full transition-colors"
+            >
+              <CloudDownload aria-hidden size={16} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -598,7 +651,7 @@ export function ChatSession({
         focusOnMount={focusComposer}
         busy={chat.busy}
         workingMode={workingMode}
-        planMode={record?.planMode ?? false}
+        planMode={record?.planMode ?? true}
         onMode={(mode) => void chat.setMode(mode).then(moved)}
         effort={effort}
         onEffort={(level) => void chat.setEffort(level)}

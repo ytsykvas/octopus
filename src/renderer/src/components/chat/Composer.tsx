@@ -1,4 +1,4 @@
-import { ArrowUp, CheckCheck, Map, Shield, Zap } from 'lucide-react'
+import { CheckCheck, Map, Shield, Zap } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -30,6 +30,7 @@ import { MentionMenu } from './MentionMenu.js'
 import { type Mention, readMention, withoutMention } from './mentionMatch.js'
 import { modelRows } from './modelRows.js'
 import { ModelPicker } from './ModelPicker.js'
+import { SendButton } from './SendButton.js'
 
 interface ComposerProps {
   /**
@@ -771,17 +772,12 @@ export function Composer({
                 <span aria-hidden className="size-2 rounded-[2px] bg-current" />
               </button>
             ) : (
-              <button
-                type="button"
+              <SendButton
+                label={t('chat.send')}
                 onClick={submit}
                 // A review with nothing typed is still something to send.
                 disabled={trimmed === '' && notes.length === 0}
-                title={t('chat.send')}
-                aria-label={t('chat.send')}
-                className="focus-ring bg-accent text-on-accent hover:bg-accent-hover grid size-6 shrink-0 place-items-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40"
-              >
-                <ArrowUp aria-hidden size={13} />
-              </button>
+              />
             )}
           </span>
         </div>

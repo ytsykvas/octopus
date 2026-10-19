@@ -910,6 +910,7 @@ export const uk: Translation = {
     openFile: 'Відкрити {{path}} — подвійний клік, щоб лишити відкритим',
     expandAll: 'Показати всі кроки (⌘O)',
     collapseAll: 'Згорнути всі кроки (⌘O)',
+    jumpToEnd: 'До кінця розмови',
     workingElapsed: 'Працює… {{elapsed}}',
 
     changeEverywhere: 'замінено всюди',
@@ -931,6 +932,7 @@ export const uk: Translation = {
       'Виконується в режимі Auto — кожен крок схвалюється або відхиляється за вас, а незрозуміле питають.',
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
+    planSendFeedback: 'Надіслати нотатку й далі планувати',
     questionTitle: 'Агент запитує',
     questionOther: 'Інше',
     questionOtherPlaceholder: 'Напишіть свою відповідь',

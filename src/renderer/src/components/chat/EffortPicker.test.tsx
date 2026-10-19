@@ -398,6 +398,28 @@ describe('how long the scale is', () => {
     )
   })
 
+  // The pane is drawn before the conversation's record has been read, as
+  // planning; the half it opened on must not outlive that guess.
+  it('follows the running half when the mode turns out to be another', async () => {
+    const user = userEvent.setup()
+    const props = {
+      value: 'low' as const,
+      onChange: vi.fn(),
+      planValue: 'max' as const,
+      onPlanChange: vi.fn(),
+      model: OPUS
+    }
+    const { rerender } = render(<EffortPicker {...props} planMode />)
+    rerender(<EffortPicker {...props} planMode={false} />)
+
+    await user.click(chip())
+
+    expect(screen.getByRole('tab', { name: /Writing code/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+  })
+
   /* The chip names what the next message will run at, which is the planning
      level while planning — not the working one it used to name whatever was
      happening. */

@@ -960,9 +960,10 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     // about one conversation's one task.
     planEffort: null,
     workingMode: options.workingMode,
-    // Never planning to begin with. Planning is a decision taken about a
-    // particular task, in the composer, once there is a task to plan.
-    planMode: false,
+    // Planning first: a new conversation is about a task nobody has scoped yet,
+    // and the plan is the cheap place to find out what it is. A fork is the
+    // opposite case and starts outside it, see `forkChat`.
+    planMode: true,
     autoCompactWindow: null,
     // Nothing known until a session has run: the agent is the only thing that
     // can say which commands this worktree has.

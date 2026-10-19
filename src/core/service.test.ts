@@ -7411,6 +7411,8 @@ describe('the agent chat', () => {
     it('keeps asking first when a plan arrives outside planning', async () => {
       const { service, workspaceId, events } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
+      // A new conversation starts out planning; this one is about the mode it falls back to.
+      await service.setChatPlanMode(chat.id, false)
       await service.sendToChat(chat.id, 'just do it')
 
       const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
@@ -8236,6 +8238,8 @@ describe('the agent chat', () => {
       it('reaches a session that is already running', async () => {
         const { service, workspaceId } = await withWorkspace()
         const chat = await service.openChat(workspaceId)
+        // A new conversation starts out planning; this one is about the mode it falls back to.
+        await service.setChatPlanMode(chat.id, false)
         await service.sendToChat(chat.id, 'work')
 
         await service.setChatWorkingMode(chat.id, 'auto')
@@ -8249,6 +8253,8 @@ describe('the agent chat', () => {
       it('is refused with the reason, and the chat keeps its mode, when the session will not take it', async () => {
         const { service, workspaceId } = await withWorkspace()
         const chat = await service.openChat(workspaceId)
+        // A new conversation starts out planning; this one is about the mode it falls back to.
+        await service.setChatPlanMode(chat.id, false)
         await service.setChatWorkingMode(chat.id, 'acceptEdits')
         await service.sendToChat(chat.id, 'work')
         modeAnswer = refuseAuto('auto mode unavailable for this model')
@@ -8265,6 +8271,8 @@ describe('the agent chat', () => {
       it('keeps a mode chosen while auto mode was being refused', async () => {
         const { service, workspaceId } = await withWorkspace()
         const chat = await service.openChat(workspaceId)
+        // A new conversation starts out planning; this one is about the mode it falls back to.
+        await service.setChatPlanMode(chat.id, false)
         await service.sendToChat(chat.id, 'work')
 
         let refuse: (error: Error) => void = () => undefined
@@ -8291,6 +8299,8 @@ describe('the agent chat', () => {
       it('falls back to Manual on a message when the session no longer takes it', async () => {
         const { service, workspaceId, events } = await withWorkspace()
         const chat = await service.openChat(workspaceId)
+        // A new conversation starts out planning; this one is about the mode it falls back to.
+        await service.setChatPlanMode(chat.id, false)
         await service.sendToChat(chat.id, 'work')
         await service.setChatWorkingMode(chat.id, 'auto')
         agent().emit(resultMessage)
@@ -8355,6 +8365,8 @@ describe('the agent chat', () => {
       it('asks again when the session reports default, and falls back only if refused', async () => {
         const { service, workspaceId, events } = await withWorkspace()
         const chat = await service.openChat(workspaceId)
+        // A new conversation starts out planning; this one is about the mode it falls back to.
+        await service.setChatPlanMode(chat.id, false)
         await service.setChatWorkingMode(chat.id, 'auto')
         await service.sendToChat(chat.id, 'work')
         expect(agent().options().permissionMode).toBe('auto')
@@ -8381,6 +8393,8 @@ describe('the agent chat', () => {
       it('stays in auto mode when asking again after a report succeeds', async () => {
         const { service, workspaceId, events } = await withWorkspace()
         const chat = await service.openChat(workspaceId)
+        // A new conversation starts out planning; this one is about the mode it falls back to.
+        await service.setChatPlanMode(chat.id, false)
         await service.setChatWorkingMode(chat.id, 'auto')
         await service.sendToChat(chat.id, 'work')
 
@@ -8430,6 +8444,8 @@ describe('the agent chat', () => {
       it('does not fall back from a mode the chat has already left', async () => {
         const { service, workspaceId, events } = await withWorkspace()
         const chat = await service.openChat(workspaceId)
+        // A new conversation starts out planning; this one is about the mode it falls back to.
+        await service.setChatPlanMode(chat.id, false)
         await service.setChatWorkingMode(chat.id, 'auto')
         await service.sendToChat(chat.id, 'work')
 
@@ -8553,6 +8569,8 @@ describe('the agent chat', () => {
     it('moves a running session onto the plan model when planning starts', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
+      // A new conversation starts out planning; this one is about the mode it falls back to.
+      await service.setChatPlanMode(chat.id, false)
       await service.setChatModel(chat.id, 'claude-sonnet-5')
       await service.setChatPlanModel(chat.id, 'claude-opus-5')
       await service.sendToChat(chat.id, 'work')
@@ -8566,6 +8584,8 @@ describe('the agent chat', () => {
     it('moves it back when planning stops', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
+      // A new conversation starts out planning; this one is about the mode it falls back to.
+      await service.setChatPlanMode(chat.id, false)
       await service.setChatPlanModel(chat.id, 'claude-opus-5')
       await service.sendToChat(chat.id, 'work')
 
@@ -8714,6 +8734,8 @@ describe('the agent chat', () => {
     it('raises to the planning effort when planning is turned on', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
+      // A new conversation starts out planning; this one is about the mode it falls back to.
+      await service.setChatPlanMode(chat.id, false)
       await service.setChatEffort(chat.id, 'low')
       await service.setChatPlanEffort(chat.id, 'max')
       await service.sendToChat(chat.id, 'work')
@@ -8897,6 +8919,8 @@ describe('the agent chat', () => {
     it('puts a running session back into the mode the record names', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
+      // A new conversation starts out planning; this one is about the mode it falls back to.
+      await service.setChatPlanMode(chat.id, false)
       await service.setChatWorkingMode(chat.id, 'acceptEdits')
 
       await service.sendToChat(chat.id, 'first')
@@ -10393,6 +10417,7 @@ describe('the agent chat', () => {
       await service.closeChats()
       const before = agents.length
 
+      await service.setChatPlanMode(chatId, false)
       const previewing = service.previewRewind(chatId, messageId)
       await service.setChatWorkingMode(chatId, 'acceptEdits')
       await previewing

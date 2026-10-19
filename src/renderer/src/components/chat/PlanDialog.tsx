@@ -5,6 +5,7 @@ import type { WorkingMode } from '@core/chats.js'
 
 import { Button } from '../Button.js'
 import { Modal } from '../Modal.js'
+import { SendButton } from './SendButton.js'
 import { Markdown } from './Markdown.js'
 
 interface PlanDialogProps {
@@ -134,26 +135,34 @@ export function PlanDialog({
         <label className="text-ink-soft block text-[11px]" htmlFor="plan-feedback">
           {t('chat.planFeedback')}
         </label>
-        <textarea
-          id="plan-feedback"
-          value={feedback}
-          placeholder={t('chat.planFeedbackPlaceholder')}
-          onChange={(event) => {
-            setFeedback(event.target.value)
-          }}
-          // The composer's keys, so there is one convention rather than two —
-          // and with no second button, this is what sends the note at all.
-          onKeyDown={(event) => {
-            // `isComposing` for the reason the composer gives: the Enter that
-            // confirms an IME candidate is not the one that sends.
-            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
-            event.preventDefault()
-            keepPlanning()
-          }}
-          // Grows with the note, as the composer's own field does, so a
-          // sentence gets one line and a list of corrections gets room.
-          className="focus-ring border-line bg-surface field-sizing-content mt-1 max-h-40 min-h-[2.5rem] w-full resize-none rounded-[var(--radius-control)] border px-2.5 py-1.5 outline-none"
-        />
+        <div className="relative mt-1">
+          <textarea
+            id="plan-feedback"
+            value={feedback}
+            placeholder={t('chat.planFeedbackPlaceholder')}
+            onChange={(event) => {
+              setFeedback(event.target.value)
+            }}
+            // The composer's keys, so there is one convention rather than two —
+            // and with no second button, this is what sends the note at all.
+            onKeyDown={(event) => {
+              // `isComposing` for the reason the composer gives: the Enter that
+              // confirms an IME candidate is not the one that sends.
+              if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+              event.preventDefault()
+              keepPlanning()
+            }}
+            // Grows with the note, as the composer's own field does, so a
+            // sentence gets one line and a list of corrections gets room.
+            className="focus-ring border-line bg-surface field-sizing-content max-h-40 min-h-[2.5rem] w-full resize-none rounded-[var(--radius-control)] border py-1.5 pr-10 pl-2.5 outline-none"
+          />
+          {/* Beside the field it answers, as in the composer: the key is not
+              the only way to send the note. Never disabled — a plan sent back
+              with nothing written is a valid answer. */}
+          <span className="absolute right-2 bottom-2">
+            <SendButton label={t('chat.planSendFeedback')} onClick={keepPlanning} />
+          </span>
+        </div>
       </div>
     </Modal>
   )

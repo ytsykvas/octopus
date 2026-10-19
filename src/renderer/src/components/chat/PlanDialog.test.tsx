@@ -218,6 +218,22 @@ describe('the two ways out', () => {
     expect(onExecute).not.toHaveBeenCalled()
   })
 
+  // Enter is not the only way: the field has a button of its own, and it
+  // answers even with nothing written.
+  it('sends the note from the button beside the field', async () => {
+    const user = userEvent.setup()
+    const { onKeepPlanning } = renderDialog()
+    const send = screen.getByRole('button', { name: 'Send the note and keep planning' })
+
+    await user.type(screen.getByLabelText('Anything to work out first?'), 'a step for tests')
+    await user.click(send)
+    expect(onKeepPlanning).toHaveBeenLastCalledWith('a step for tests')
+
+    await user.clear(screen.getByLabelText('Anything to work out first?'))
+    await user.click(send)
+    expect(onKeepPlanning).toHaveBeenLastCalledWith('')
+  })
+
   // The note reaches the agent as the refusal's reason, which is how a
   // correction is answered by a better plan rather than by a stopped
   // conversation.
