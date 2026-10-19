@@ -189,7 +189,6 @@ Versions below are **actually installed and verified** (`npm run check` and `ele
 | @vitejs/plugin-react | 6.0.5         | React in Vite                  |
 | i18next              | 26.3.6        | localisation                   |
 | react-i18next        | 17.0.11       | React bindings                 |
-| motion               | 13.0.0        | animation                      |
 | lucide-react         | 1.30.0        | icons                          |
 | node-pty             | 1.1.0         | pseudo-terminals (native)      |
 | @xterm/xterm         | 6.0.0         | terminal rendering             |
@@ -204,6 +203,11 @@ a claim rather than a tool is worse than none, because the next person to reach
 for shared state reads the line, adds a store, and the application has two ways
 of doing one thing. If the prop threading ever stops being shallow, that is the
 moment to reconsider — not before.
+
+**Animation is CSS.** `motion` sat in this table the same way, and nothing
+imported it either: every animation is CSS, so one rule in `styles.css` stops
+them all under Reduce motion — a JavaScript library would slip past it
+(`docs/ui.md`, "Motion").
 
 **Native modules.** Stage 1 started without them to avoid a build step, and that held until the embedded terminal arrived: `node-pty` is native. A `postinstall` script runs `electron-builder install-app-deps` — the same tool that packages the app, so the two cannot disagree — and `npm install` remains a single step. The binding is built through Node-API rather than against V8 directly, so it is not tied to Electron's ABI: the same binary loads under plain Node and under Electron.
 
