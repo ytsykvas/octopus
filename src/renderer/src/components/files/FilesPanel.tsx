@@ -141,9 +141,10 @@ function WorkspaceTree({
 
   const toggle = (node: TreeNode): void => {
     const opening = !expanded.has(node.path)
-    // An ignored folder's contents come from disk, asked for the first time
-    // it is opened; after that a refresh keeps them current.
-    if (opening && node.ignored && !tree.listings.has(node.path)) tree.openFolder(node.path)
+    // An ignored folder's contents, or a submodule's, come from disk, asked for
+    // the first time it is opened; after that a refresh keeps them current.
+    if (opening && node.childrenFromDisk && !tree.listings.has(node.path))
+      tree.openFolder(node.path)
 
     onExpanded((current) => {
       const next = new Set(current)
@@ -303,7 +304,8 @@ function WorkspaceTree({
                 status={
                   row.node.kind === 'file'
                     ? tree.statuses[row.node.path]
-                    : tree.folders[row.node.path]
+                    : // A submodule git reports as changed is a status of its own.
+                      (tree.folders[row.node.path] ?? tree.statuses[row.node.path])
                 }
                 active={row.node.path === activePath}
                 focused={row.node.path === focused}

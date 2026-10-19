@@ -2355,6 +2355,16 @@ a long read on every turn after — and a listing is laid into the tree only whi
 git still calls its folder ignored, so `git add -f` or an edited `.gitignore`
 hands the folder back to git's own children and marks.
 
+**A submodule is a folder, read from disk the same way**, and nothing inside it
+is greyed or marked: the outer repository has nothing to say about it, its own
+ignored folders included. `ls-files --cached` names one like any file, which
+drew it as a file the viewer then found to be a folder, so the tracked files are
+read with `--stage` and a mode of `160000` makes the entry a folder. Every
+folder inside it is read from disk in turn — git lists nothing in there — and a
+submodule git reports as changed, by a new commit or an edit inside, carries
+that status on the folder's row. A workspace's submodules are often not checked
+out, and then the folder opens empty.
+
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when
 the window regains focus — which is what catches an edit made in another editor

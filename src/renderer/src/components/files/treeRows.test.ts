@@ -65,6 +65,16 @@ describe('visibleRows', () => {
     ).toEqual(['node_modules/', '  (loading)'])
   })
 
+  // Read from disk like an ignored folder, though nothing about it is ignored.
+  it('stands the same note in for a submodule not read yet', () => {
+    const withSubmodule = buildTree([{ path: 'vendor', kind: 'directory', ignored: false }])
+
+    expect(drawn(visibleRows(withSubmodule, new Set(['vendor']), NO_LISTINGS))).toEqual([
+      'vendor/',
+      '  (loading)'
+    ])
+  })
+
   it('says when an ignored folder could not be read', () => {
     const rows = visibleRows(
       tree,
@@ -79,10 +89,10 @@ describe('visibleRows', () => {
     const merged = new Map(tree)
     merged.set(
       'node_modules',
-      listingNodes('node_modules', {
-        entries: [{ name: 'pkg', kind: 'directory' }],
-        truncated: true
-      })
+      listingNodes(
+        { path: 'node_modules', ignored: true },
+        { entries: [{ name: 'pkg', kind: 'directory' }], truncated: true }
+      )
     )
 
     const rows = visibleRows(
