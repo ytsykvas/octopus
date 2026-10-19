@@ -137,6 +137,10 @@ is not a plain button (a `Button`, a tree row, a `<summary>`).
 `Modal` deliberately leaves its body without padding so a list can span the
 full width — a form inside it brings its own.
 
+`Modal` draws its body and footer one render after the dialog opens, so
+`autoFocus` inside works. The cost: a ref into those contents is still `null` in
+the first effect of the component that opened it.
+
 `DropdownMenu` positions its panel against the **window**, not its trigger.
 An `absolute` panel is clipped by any scrolling ancestor, and the project tab
 strip is one — the menu came out sliced to the width of a 56px column. The cost

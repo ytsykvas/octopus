@@ -613,12 +613,19 @@ says, most pressing first:
 - that **`CLAUDE_CODE_AUTO_COMPACT_WINDOW` decides instead**, naming the value
   and where it is set — the environment, or the `env` block of a settings file
   the session reads. Measured, it outranks anything a session is told. The rows
-  stay choosable: the variable is read when a session starts, so after it is
-  taken out a choice — the same window included — is what starts one to notice;
+  stay choosable: a running session keeps the variable after it is taken out,
+  so a choice — the same window included — is what starts one that notices;
 - that a choice made mid-turn **takes effect with the next message**;
 - **what is in force when it is not what was chosen** — a measurement from
   `getContextUsage`, not a guess, so a disagreement is said rather than hidden
-  behind the tick.
+  behind the tick. The CLI also takes the variable from a settings file while a
+  session runs, which the start could not see, and keeps it once taken; choosing
+  the same window again then starts the session over too, so a new one looks at
+  the files as they are. The rule for "not what was chosen" is `windowStrayed`
+  (`chats.ts`), which the menu and the core both ask — the core against the
+  window the session was started with, so a choice still waiting for its turn
+  is not taken for one. Auto has nothing to stray from, so a variable taken
+  mid-session under Auto is shed only by choosing a window.
 
 A window above what the model holds is greyed with that figure, since the
 agent would cut it down anyway. _Auto_ says what it amounts to while it is the
@@ -851,7 +858,7 @@ way to one; what the agent did next was start editing files.
 
 **One button and a field**, which is what the question actually has:
 
-- **Execute** runs it, in `Auto mode` out of planning — see the footer's mode above for
+- **Execute** runs it, in `Accept edits` out of planning — see the footer's mode above for
   why. A line beside the button says so, because the click widens what the
   agent may do and that is worth reading before it rather than in the footer
   after it.
@@ -1015,19 +1022,19 @@ set and the writing one on the default, with the error on the banner.
 
 **The footer's mode is one control over two stored fields.** `plan` is not a
 third degree of permission but a state the conversation is in: the agent runs
-no tools at all in it, so `Auto mode` has nothing to accept. Held as one field
+no tools at all in it, so `Accept edits` has nothing to accept. Held as one field
 they could not both be true, which is why approving a plan once had no mode to
 return to — and why a toggle stayed lit over an agent that had started editing.
 So the record keeps `planMode` beside `workingMode`, and the composer shows the
 two as one control beside send: `planMode` wins when it is on, and the working
 mode is what shows otherwise.
 
-It **switches in place**, going round ask first → `Auto mode` → plan → ask
+It **switches in place**, going round ask first → `Accept edits` → plan → ask
 first: the ring Claude Code's own shift+tab goes round, and Shift+Tab in the
 field does the same here. There used to be two controls — the permission chip
 among the pickers and a plan toggle by send — and each said half of what this
 says. The pickers beside it keep their menus, because their lists are
-open-ended. It is tinted for `Auto mode` and for plan, the two states where the
+open-ended. It is tinted for `Accept edits` and for plan, the two states where the
 agent does something other than ask.
 
 Leaving plan for ask first moves the working mode **before** planning ends.
@@ -1036,7 +1043,7 @@ it — so turned the other way round the session would pass through it, and an
 edit landing then would go through unasked. `setMode` in `useChat.ts` owns that
 order so no caller has to know it.
 
-**A plan approved out of planning goes on in `Auto mode`**, whatever the
+**A plan approved out of planning goes on in `Accept edits`**, whatever the
 conversation was asking before — the core writes both fields when the plan tool
 is allowed, and executing a plan from the log does the same. With one control
 there is no second one left to say what should follow a plan, and a plan read
@@ -1048,9 +1055,14 @@ handing over there would let it raise a conversation set to ask first into one
 that does not, by asking once. Outside planning, approving changes no mode and
 the dialog carries no such line.
 
-`Auto mode` keeps its English name in every locale — it is what the agent's own
-interfaces call it, and a translated name for a borrowed one reads as a second
-setting rather than the same one.
+`Accept edits` keeps its English name in every locale — it is what Claude
+Code's own status line calls the mode, and a translated name for a borrowed one
+reads as a second setting rather than the same one — Settings names it the same
+way. It was `Auto mode` until Claude Code gained a mode of that name, a
+classifier approving each call (`auto` in the SDK's `PermissionMode`): someone
+who knows the agent read the chip as that one and expected commands to run
+unasked, where `acceptEdits` accepts file edits and the plain filesystem
+commands (`mkdir`, `touch`, `rm`, `mv`, `cp`, `sed`), not commands in general.
 
 **The right pane** holds Changes, Terminal, Scripts and Pull request. The
 Scripts tab runs `setup.sh` on its build half and `run.sh` on its server half,
@@ -1652,7 +1664,10 @@ project the workspace belongs to: a turn ending is a poor reason to run
 `--no-optional-locks`, as the Files tab's does: a plain one holds `index.lock`
 for as long as it scans, and a `git add` or `git commit` running in the same
 worktree at that moment — another conversation, the terminal, a hook — fails
-with "Unable to create index.lock".
+with "Unable to create index.lock". The Changes pane's diff, read on the same
+event, writes nothing either, though not by that flag: `git diff` writes the
+index back for a file whose times moved with the flag or without it, so it reads against
+a throwaway copy of the index instead (`withIndexCopy` in `git.ts`).
 
 **The right pane carries six tabs.** Terminal, then Files, Changes, Scripts
 and Pull request, then Notes. Build and server were two tabs and are now two halves of one: they
@@ -3105,6 +3120,21 @@ removing a workspace offers to delete its branch, already marked, because a
 workspace is one task and the branch behind a finished one is finished too. That
 is the only shape a destructive default may take: on screen, in the dialog the
 user is already reading, and undone with one click before they confirm.
+
+**A dialog's contents mount once it is open.** React's `autoFocus` focuses its
+element as it mounts, and `Modal` used to mount its body with the dialog and
+call `showModal()` afterwards: the dialog was still closed, so the focus went
+nowhere, and `showModal` then gave it to the first thing that takes it — the ×
+in the header. Measured in the window, where Enter in every confirmation pressed
+×. `Modal` now opens the dialog in a layout effect and draws the body and the
+footer in the render that follows, before anything is painted, so a plain
+`autoFocus` works there as it does anywhere else — on opening and for whatever
+mounts later, such as the plugins window's other tab. A confirmation starts on
+its confirm button, and on cancel when it is destructive, which every one today
+is, so Enter alone never removes anything; `useAskText` starts in its field, the
+repository picker and the plugins window in their search. The test stub moves
+the focus as `showModal` does (`focusAsShowModalDoes` in `test/dialog.ts`), so a
+test of where it starts can fail.
 
 `useAskText` is its sibling for one line of text, in the same `{ ask, dialog }`
 shape. It exists because `useConfirm` has no field and the one place that asked
