@@ -20,6 +20,7 @@ import { type SkillVisibility, SkillVisibilitySchema } from './skills.js'
 
 /** One settings file, and how to name it to the person who has to open it. */
 export interface SettingsFile {
+  readonly source: SettingSourceName
   readonly path: string
   /** Relative to the checkout, or as the user's own is named. */
   readonly name: string
@@ -40,14 +41,21 @@ export function settingsFilesFor(
   home: string = homedir()
 ): SettingsFile[] {
   const files: SettingsFile[] = []
-  const inCheckout = (relative: string): SettingsFile => ({
+  const inCheckout = (source: SettingSourceName, relative: string): SettingsFile => ({
+    source,
     path: join(cwd, relative),
     name: relative
   })
 
-  if (sources.includes('local')) files.push(inCheckout(join('.claude', 'settings.local.json')))
-  if (sources.includes('project')) files.push(inCheckout(join('.claude', 'settings.json')))
-  if (sources.includes('user')) files.push(userFile(environment, home))
+  if (sources.includes('local')) {
+    files.push(inCheckout('local', join('.claude', 'settings.local.json')))
+  }
+  if (sources.includes('project')) {
+    files.push(inCheckout('project', join('.claude', 'settings.json')))
+  }
+  if (sources.includes('user')) {
+    files.push(userFile(environment, home))
+  }
 
   return files
 }
@@ -63,11 +71,11 @@ function userFile(environment: NodeJS.ProcessEnv, home: string): SettingsFile {
   const configured = environment.CLAUDE_CONFIG_DIR
   if (configured !== undefined && configured !== '') {
     const path = join(configured, 'settings.json')
-    return { path, name: path }
+    return { source: 'user', path, name: path }
   }
 
   const relative = join('.claude', 'settings.json')
-  return { path: join(home, relative), name: `~/${relative}` }
+  return { source: 'user', path: join(home, relative), name: `~/${relative}` }
 }
 
 /** How much of one file is read, so a large one cannot hold anything up. */
