@@ -18,6 +18,7 @@ function config(overrides: Partial<Config> = {}): Config {
     cloneDirectory: '',
     settingSources: 'none',
     workingMode: 'default',
+    planExecutionMode: 'auto',
     effort: 'medium',
     model: null,
     planModel: null,
@@ -257,9 +258,40 @@ describe('Settings', () => {
     const props = await renderSettings()
 
     await openSection(user, 'Agent')
-    await user.click(screen.getByRole('button', { name: /^Accept edits/ }))
+    // The first of the two: what a new chat may do, above what a plan goes on in.
+    const [starting] = screen.getAllByRole('button', { name: /^Accept edits/ })
+    if (!starting) throw new Error('no Accept edits choice')
+    await user.click(starting)
 
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ workingMode: 'acceptEdits' })
+  })
+
+  it('offers auto mode as what a new chat may do', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Agent')
+    const [starting] = screen.getAllByRole('button', { name: /^Auto/ })
+    if (!starting) throw new Error('no Auto choice')
+    await user.click(starting)
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ workingMode: 'auto' })
+  })
+
+  // A separate question from the one above: not what a chat starts in, but
+  // what follows a plan someone approved — and never Manual.
+  it('sets what an approved plan is carried out in', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Agent')
+    const [, afterPlan] = screen.getAllByRole('button', { name: /^Accept edits/ })
+    if (!afterPlan) throw new Error('no plan execution choice')
+    await user.click(afterPlan)
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ planExecutionMode: 'acceptEdits' })
+    expect(screen.getByText('Carrying out an approved plan')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Manual/ })).toHaveLength(1)
   })
 
   // The composer changes one conversation; this is what every new one starts
@@ -526,16 +558,64 @@ describe('Settings', () => {
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ branchPrefix: 'anna' })
   })
 
-  // Every workspace branch is named after the prefix, so an empty one would
-  // leave the app with no way to name a branch at all.
-  it('refuses an empty branch prefix and restores the stored one', async () => {
+  // Typed the way a branch reads on GitHub, with the slash: what is stored is
+  // what git will take, and the field says so before it is left.
+  it('saves the prefix as git will take it, and says what it becomes', async () => {
     const user = userEvent.setup()
     const props = await renderSettings()
 
     await openSection(user, 'Git')
     const field = screen.getByDisplayValue('ytsykvas')
     await user.clear(field)
-    expect(screen.getByText('The prefix cannot be empty.')).toBeInTheDocument()
+    await user.type(field, 'anna k/')
+
+    expect(screen.getByText('Will be saved as anna-k')).toBeInTheDocument()
+
+    await user.tab()
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ branchPrefix: 'anna-k' })
+    expect(field).toHaveValue('anna-k')
+  })
+
+  // A space at the end is on its way to the next word as often as not, and the
+  // hint flashing on every one would be noise.
+  it('says nothing about a space at the end while it is typed', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'Git')
+    await user.type(screen.getByDisplayValue('ytsykvas'), ' ')
+
+    expect(screen.queryByText(/Will be saved as/)).not.toBeInTheDocument()
+  })
+
+  it('saves nothing when the prefix only differs by what is cleaned off', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Git')
+    const field = screen.getByDisplayValue('ytsykvas')
+    await user.type(field, '/')
+    await user.tab()
+
+    expect(props.onChange).not.toHaveBeenCalled()
+    expect(field).toHaveValue('ytsykvas')
+  })
+
+  // Every workspace branch is named after the prefix, so an empty one would
+  // leave the app with no way to name a branch at all — and so would one with
+  // nothing in it git can use, which is not empty and must not say it is.
+  it('refuses a prefix with nothing usable in it and restores the stored one', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Git')
+    const field = screen.getByDisplayValue('ytsykvas')
+    await user.clear(field)
+    const refusal = 'The prefix needs at least one character git can use.'
+    expect(screen.getByText(refusal)).toBeInTheDocument()
+    await user.type(field, '...')
+    expect(screen.getByText(refusal)).toBeInTheDocument()
 
     await user.tab()
 

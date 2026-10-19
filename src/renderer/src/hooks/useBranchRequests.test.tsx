@@ -5,7 +5,12 @@ import type { BranchRequest } from '@core/pullRequestShapes.js'
 
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
+import { failOnUpdatesOutsideAct } from '../test/updatesOutsideAct.js'
 import { useBranchRequests } from './useBranchRequests.js'
+
+// Every read here answers through a promise, and one answered after a test had
+// ended failed a CI run with every test green.
+failOnUpdatesOutsideAct()
 
 const PLANNER = 'planner'
 
@@ -31,6 +36,15 @@ function cappedAnswer(...requests: BranchRequest[]): void {
     ok: true,
     value: { requests, capped: true }
   })
+}
+
+/**
+ * A read that never comes back, for a test about the moment before it does.
+ *
+ * With the answer free to arrive, it would land after the test had ended.
+ */
+function unanswered(): void {
+  vi.mocked(octopus().projects.pullRequests).mockReturnValue(new Promise(() => undefined))
 }
 
 afterEach(() => {
@@ -75,6 +89,7 @@ describe('what each branch of a project has become', () => {
       expect(result.current.byBranch.size).toBe(1)
     })
 
+    unanswered()
     rerender({ id: 'esl' })
     expect(result.current.byBranch.size).toBe(0)
   })
@@ -87,27 +102,35 @@ describe('what each branch of a project has become', () => {
       expect(result.current.byBranch.size).toBe(1)
     })
 
+    answer(request(), request({ branch: 'ytsykvas/bob', number: 813 }))
     act(() => {
       result.current.refresh()
     })
 
+    // The second answer on screen, not only the second call made: a call is
+    // over before its answer lands.
     await waitFor(() => {
-      expect(octopus().projects.pullRequests).toHaveBeenCalledTimes(2)
+      expect(result.current.byBranch.size).toBe(2)
     })
   })
 
-  // The answer belongs to a list that is no longer on screen.
+  /*
+   * The answer belongs to a list that is no longer on screen. What would give a
+   * kept answer away is the clock: an answer taken in schedules the next read,
+   * and the project would be polled for the rest of the session.
+   */
   it('drops an answer that arrives after the project was closed', async () => {
+    vi.useFakeTimers()
     const gate = held<{ ok: true; value: { requests: BranchRequest[]; capped: boolean } }>()
     vi.mocked(octopus().projects.pullRequests).mockReturnValue(gate.promise)
 
-    const { result, unmount } = renderHook(() => useBranchRequests(PLANNER))
+    const { unmount } = renderHook(() => useBranchRequests(PLANNER))
     unmount()
 
     gate.resolve({ ok: true, value: { requests: [request()], capped: false } })
-    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(200_000)
 
-    expect(result.current.byBranch.size).toBe(0)
+    expect(octopus().projects.pullRequests).toHaveBeenCalledOnce()
   })
 
   it('looks again while the project stays open', async () => {
@@ -115,7 +138,7 @@ describe('what each branch of a project has become', () => {
     answer(request())
     renderHook(() => useBranchRequests(PLANNER))
 
-    await vi.advanceTimersByTimeAsync(70_000)
+    await act(() => vi.advanceTimersByTimeAsync(70_000))
 
     expect(vi.mocked(octopus().projects.pullRequests).mock.calls.length).toBeGreaterThan(1)
   })
@@ -125,7 +148,7 @@ describe('what each branch of a project has become', () => {
     answer(request())
     const { unmount } = renderHook(() => useBranchRequests(PLANNER))
 
-    await vi.advanceTimersByTimeAsync(70_000)
+    await act(() => vi.advanceTimersByTimeAsync(70_000))
     const asked = vi.mocked(octopus().projects.pullRequests).mock.calls.length
     unmount()
 
@@ -148,7 +171,7 @@ describe('what each branch of a project has become', () => {
     })
     const { result } = renderHook(() => useBranchRequests(PLANNER))
 
-    await vi.advanceTimersByTimeAsync(70_000)
+    await act(() => vi.advanceTimersByTimeAsync(70_000))
 
     expect(result.current.byBranch.size).toBe(0)
     // Retried on the same clock rather than given up on for the session.
@@ -194,6 +217,7 @@ describe('whether the answer was all of them', () => {
       expect(result.current.capped).toBe(true)
     })
 
+    unanswered()
     rerender({ id: 'ledger' })
 
     expect(result.current.capped).toBe(false)

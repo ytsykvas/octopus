@@ -43,6 +43,7 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
         codeNotes={codeNotes}
         color="blue"
         defaultWorkingMode="default"
+        planExecutionMode="acceptEdits"
         defaultEffort="medium"
         defaultModel={null}
         defaultPlanModel={null}

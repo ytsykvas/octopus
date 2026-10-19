@@ -218,7 +218,15 @@ export function skillEnabled(
 }
 
 /** What the agent is told about one skill — the two of the CLI's four values octopus uses. */
-export type SkillOverride = 'on' | 'off'
+export type SkillOverride = Extract<SkillVisibility, 'on' | 'off'>
+
+/**
+ * All four values the CLI takes for a skill. Octopus says only the first two
+ * of its own accord; the others reach a session from a settings file the
+ * user wrote (`skillsInFiles`).
+ */
+export const SkillVisibilitySchema = z.enum(['on', 'name-only', 'user-invocable-only', 'off'])
+export type SkillVisibility = z.infer<typeof SkillVisibilitySchema>
 
 /**
  * Every skill the record has an answer for, as the agent's `skillOverrides`.
