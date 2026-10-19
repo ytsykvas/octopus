@@ -30,7 +30,7 @@ export type TreeRow =
       readonly type: 'note'
       readonly key: string
       readonly level: number
-      readonly note: 'loading' | 'failed' | 'truncated'
+      readonly note: 'loading' | 'failed' | 'truncated' | 'empty'
     }
 
 /**
@@ -77,7 +77,15 @@ export function visibleRows(
       return
     }
 
+    const before = rows.length
     walk(node.path, level)
+
+    // Most often a submodule never checked out here: with no row under it, the
+    // open folder read as still loading, or as broken.
+    if (rows.length === before) {
+      rows.push({ type: 'note', key: `${node.path}\0note`, level, note: 'empty' })
+      return
+    }
     if (listing.truncated) {
       rows.push({ type: 'note', key: `${node.path}\0note`, level, note: 'truncated' })
     }

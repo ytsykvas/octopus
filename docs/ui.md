@@ -2451,7 +2451,9 @@ read with `--stage` and a mode of `160000` makes the entry a folder. Every
 folder inside it is read from disk in turn — git lists nothing in there — and a
 submodule git reports as changed, by a new commit or an edit inside, carries
 that status on the folder's row. A workspace's submodules are often not checked
-out, and then the folder opens empty.
+out — `git worktree add` leaves every one an empty folder — and any folder read
+from disk with nothing in it says so on a line of its own, rather than opening
+onto nothing that reads as still loading.
 
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when

@@ -335,7 +335,8 @@ function rowId(path: string): string {
 const NOTES = {
   loading: 'files.loadingFolder',
   failed: 'files.folderFailed',
-  truncated: 'files.folderTruncated'
+  truncated: 'files.folderTruncated',
+  empty: 'files.folderEmpty'
 } as const
 
 function Note({ row }: { readonly row: Extract<TreeRow, { type: 'note' }> }): React.JSX.Element {
