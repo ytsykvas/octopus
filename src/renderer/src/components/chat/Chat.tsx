@@ -250,6 +250,12 @@ export function Chat({
           onWorkspacesChanged={onWorkspacesChanged}
           dismissedTips={dismissedTips}
           onDismissTip={onDismissTip}
+          // A path named in the log, as the right pane's tree opens one: one
+          // click previews it, a second keeps it.
+          onOpenFile={(path, pinned) => {
+            if (pinned) files.open(path)
+            else files.preview(path)
+          }}
         />
       ))}
 

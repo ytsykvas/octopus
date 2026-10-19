@@ -7,14 +7,12 @@ import {
   FileCode2,
   FolderGit2,
   Map,
-  Pencil,
   Play,
   Repeat,
   ShieldAlert,
   ShieldX,
   TriangleAlert,
   Undo2,
-  Wrench,
   ZapOff
 } from 'lucide-react'
 import {
@@ -29,37 +27,35 @@ import { createContext, useContext, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FormValues } from '@core/elicitation.js'
-import { type AgentEvent, type ChangeContext, type TurnOutcome, turnOutcome } from '@core/events.js'
+import { type AgentEvent, type TurnOutcome, turnOutcome } from '@core/events.js'
 import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
-import { readTodos } from '@core/todos.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
-import { DisclosureChevron } from '../Disclosure.js'
+import { DisclosureButton } from '../Disclosure.js'
 import { ColouredLines, useColouredText } from '../diff/colouredText.js'
-import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
 import { DaySeparator } from './DayChip.js'
 import { exitCodeOf, formatClock, formatFullTime, formatTokens } from './format.js'
-import type { Change, ChangeLine } from './changeSummary.js'
 import { Markdown } from './Markdown.js'
 import { BLOCK_PART, DAY_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
 import { type MessageBlock, messageBlocks } from './userMessage.js'
+import { type Expansion, ExpandContext, FileLinkContext, useExpanded } from './expansion.js'
 import {
   answersByRequest,
+  buildBlocks,
   elicitationsByRequest,
-  groupToolRuns,
   type LogBlock,
-  subagentsOf,
   planCalls,
   retractedUuids,
-  toolCount,
-  toolRunRows
-} from './toolRuns.js'
+  turnStartedAt
+} from './logBlocks.js'
+import { ToolRow } from './ToolRow.js'
+import { WorkingLine } from './WorkingLine.js'
 import { readFailure } from './toolFailure.js'
 import { describeToolInput, readPlan, readWorktreeMove, type WorktreeMove } from './toolSummary.js'
 import { UsageCard } from './UsageCard.js'
@@ -112,14 +108,21 @@ interface ChatLogProps {
   readonly onRewind: (messageId: string) => void
   /** The messages the agent has not taken yet, by id — see `useChat`. */
   readonly waiting: ReadonlySet<string>
+  /** Whether every row is open, and how many times that was asked — see `Expansion`. */
+  readonly expansion: Expansion
+  /** The checkout the agent works in, so a path it names can be opened. */
+  readonly workspacePath: string
+  /** Opens a workspace-relative path in the centre: kept open, or as a preview. */
+  readonly onOpenFile: (path: string, pinned: boolean) => void
 }
 
 /**
  * The conversation itself.
  *
- * One row per event rather than one bubble per turn: a turn is mostly tool
- * calls, and folding them into the prose hides the part that says what the
- * agent actually did to the working tree.
+ * Shaped like Claude Code's own transcript: what the agent said as prose, and
+ * every tool call as one row with what came back under it — a turn is mostly
+ * tool calls, and folding them away hid the part that says what the agent
+ * actually did.
  */
 export function ChatLog({
   entries,
@@ -132,11 +135,11 @@ export function ChatLog({
   onAnswerQuestions,
   onExecutePlan,
   onRewind,
-  waiting
+  waiting,
+  expansion,
+  workspacePath,
+  onOpenFile
 }: ChatLogProps): React.JSX.Element {
-  const { t } = useTranslation()
-  const streamingAnything = streaming.text !== '' || streaming.thinking !== ''
-
   /*
    * Both walks are held against `entries` rather than run on every render.
    *
@@ -150,8 +153,12 @@ export function ChatLog({
   // it sits further down than the question whose card draws it.
   const answers = useMemo(() => answersByRequest(entries), [entries])
   const elicitationAnswers = useMemo(() => elicitationsByRequest(entries), [entries])
-  const subagents = useMemo(() => subagentsOf(entries), [entries])
-  const blocks = useMemo(() => groupToolRuns(entries, subagents.nested), [entries, subagents])
+  const blocks = useMemo(() => buildBlocks(entries), [entries])
+  // What the working line counts from.
+  const turnStart = useMemo(() => turnStartedAt(entries), [entries])
+  // Held still, so the rows reading it are not re-rendered by every token the
+  // answer streams in: the pane hands over a callback that keeps its identity.
+  const links = useMemo(() => ({ workspacePath, onOpenFile }), [workspacePath, onOpenFile])
   // Which calls handed over a plan, so that a plan sent back for another round
   // is not drawn as something that broke.
   const plans = useMemo(() => planCalls(entries), [entries])
@@ -178,41 +185,39 @@ export function ChatLog({
           wrappers are `contents` so the column's gap still sits between rows
           and not between a row and its wrapper. */}
       <AssistantRuntimeProvider runtime={runtime}>
-        <RowsContext.Provider
-          value={{
-            plans,
-            retracted,
-            waiting,
-            steps: subagents.steps,
-            busy,
-            pendingRequestId,
-            pendingElicitationId,
-            elicitationAnswers,
-            onAnswerElicitation,
-            answers,
-            onAnswer,
-            onAnswerQuestions,
-            onExecutePlan,
-            onRewind
-          }}
-        >
-          <ThreadPrimitive.Root className="contents">
-            <ThreadPrimitive.Messages>{renderTurn}</ThreadPrimitive.Messages>
-          </ThreadPrimitive.Root>
-        </RowsContext.Provider>
+        <ExpandContext.Provider value={expansion}>
+          <FileLinkContext.Provider value={links}>
+            <RowsContext.Provider
+              value={{
+                plans,
+                retracted,
+                waiting,
+                busy,
+                pendingRequestId,
+                pendingElicitationId,
+                elicitationAnswers,
+                onAnswerElicitation,
+                answers,
+                onAnswer,
+                onAnswerQuestions,
+                onExecutePlan,
+                onRewind
+              }}
+            >
+              <ThreadPrimitive.Root className="contents">
+                <ThreadPrimitive.Messages>{renderTurn}</ThreadPrimitive.Messages>
+              </ThreadPrimitive.Root>
+            </RowsContext.Provider>
+          </FileLinkContext.Provider>
+        </ExpandContext.Provider>
       </AssistantRuntimeProvider>
 
-      {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
+      <ExpandContext.Provider value={expansion}>
+        {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
+      </ExpandContext.Provider>
       {streaming.text !== '' && <Prose text={streaming.text} />}
 
-      {/* Only while nothing else is moving — with text arriving the answer is
-          visibly under way and a second indicator is just noise. */}
-      {busy && !streamingAnything && (
-        <p className="text-ink-faint flex items-center gap-2">
-          <span className="bg-ink-faint inline-block size-1.5 animate-pulse rounded-full" />
-          {t('chat.working')}
-        </p>
-      )}
+      {busy && <WorkingLine since={turnStart} />}
     </div>
   )
 }
@@ -253,10 +258,10 @@ function BlockRow({ block }: { block: LogBlock }): React.JSX.Element | null {
   /* v8 ignore next */
   if (rows === null) return null
 
-  if (block.kind === 'tools') return <ToolRun entries={block.entries} steps={rows.steps} />
-
-  if (block.kind === 'change') {
-    return <ChangeBlock name={block.name} change={block.change} context={block.context} />
+  if (block.kind === 'tool') {
+    const { uuid } = block.call
+    const row = <ToolRow call={block.call} busy={rows.busy} />
+    return uuid !== undefined && rows.retracted.has(uuid) ? <Retracted>{row}</Retracted> : row
   }
 
   return <EntryRow entry={block.entry} {...rows} />
@@ -306,16 +311,12 @@ interface RowProps extends AnswerProps {
   retracted: ReadonlySet<string>
   /** The user's messages the agent has not taken yet, by id. */
   waiting: ReadonlySet<string>
-  /** What each subagent did, by the call that started it. */
-  steps: ReadonlyMap<string, readonly AgentEvent[]>
 }
 
 function EntryRow({
   entry,
   ...answering
 }: { entry: ChatEntry } & RowProps): React.JSX.Element | null {
-  const { t } = useTranslation()
-
   if (entry.role === 'user') {
     const messageId = entry.uuid
 
@@ -341,17 +342,27 @@ function EntryRow({
 
   const row = <AgentRow event={entry.event} {...answering} />
 
-  /* Struck through rather than dropped. The work was really done and then
-     abandoned, and a log that quietly loses it reads as though the agent never
-     started — while the same conversation on disk would still hold it. The
-     spelling is the one the sidebar already uses for a workspace whose
-     directory is gone. */
   const uuid = 'uuid' in entry.event ? entry.event.uuid : undefined
   if (uuid === undefined || !answering.retracted.has(uuid)) return row
 
+  return <Retracted>{row}</Retracted>
+}
+
+/**
+ * A row the agent took back.
+ *
+ * Struck through rather than dropped. The work was really done and then
+ * abandoned, and a log that quietly loses it reads as though the agent never
+ * started — while the same conversation on disk would still hold it. The
+ * spelling is the one the sidebar already uses for a workspace whose directory
+ * is gone.
+ */
+function Retracted({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
+  const { t } = useTranslation()
+
   return (
     <div className="text-ink-faint line-through opacity-60" title={t('chat.retracted')}>
-      {row}
+      {children}
     </div>
   )
 }
@@ -359,7 +370,6 @@ function EntryRow({
 function AgentRow({
   event,
   plans,
-  steps,
   busy,
   pendingRequestId,
   pendingElicitationId,
@@ -380,34 +390,23 @@ function AgentRow({
       // reasoning, and those are read back on every launch.
       return event.text.trim() === '' ? null : <Thinking text={event.text} />
 
+    // Only the calls with a row of their own reach here: every other one is a
+    // tool row, built by `buildBlocks` with its answer folded in.
     case 'tool_use': {
-      // The plan branch lives here rather than inside the row, because a folded
-      // run never holds one — `groupToolRuns` keeps plans out — and threading
-      // the buttons through a component that cannot draw them was noise.
       const plan = readPlan(event.name, event.input)
       if (plan !== null) return <Plan text={plan} busy={busy} onExecute={onExecutePlan} />
-
-      // The call that asks a question says nothing the card beside it does not
-      // say better. Drawn as a tool row it was the same question twice: once as
-      // a name with no readable arguments, and once as the thing to answer.
-      if (readQuestions(event.name, event.input) !== null) return null
 
       const move = readWorktreeMove(event.name, event.input)
       if (move !== null) return <WorktreeMoveRow move={move} />
 
-      // A call that changed a file never arrives here: `groupToolRuns` pulls it
-      // out into a block of its own, so that it can carry the context recorded
-      // for it — which arrives later in the log than the call does.
-      return (
-        <ToolCall
-          name={event.name}
-          input={event.input}
-          steps={steps.get(event.toolUseId)}
-          allSteps={steps}
-        />
-      )
+      // The call that asks a question says nothing the card beside it does not
+      // say better. Drawn as a tool row it was the same question twice: once as
+      // a name with no readable arguments, and once as the thing to answer.
+      return null
     }
 
+    // The answer to a call with a row of its own, or to one no longer in the
+    // log. Only a failure has anything to say.
     case 'tool_result':
       if (event.ok) return null
 
@@ -721,307 +720,33 @@ function Prose({ text }: { text: string }): React.JSX.Element {
   return <Markdown text={text} />
 }
 
+/**
+ * The agent's reasoning, folded to one line as Claude Code folds it.
+ *
+ * Opened by a click, or with every other row by ⌘O.
+ */
 function Thinking({ text }: { text: string }): React.JSX.Element {
   const { t } = useTranslation()
+  const [open, setOpen] = useExpanded()
 
   return (
-    <details className="text-ink-faint">
-      <summary className="focus-ring cursor-pointer list-none select-none">
-        <DisclosureChevron inSummary className="mr-1 inline align-[-2px]" />
+    <div className="text-ink-faint">
+      <DisclosureButton
+        open={open}
+        onOpenChange={setOpen}
+        className="focus-ring flex items-center gap-1 rounded select-none"
+      >
         {t('chat.thinking')}
-      </summary>
+      </DisclosureButton>
       {/* The same prose with the same markup, so drawn the same way. Being
           folded away is not a reason for it to be wrong. */}
-      <div className="border-line mt-1 border-l pl-3">
-        <Markdown text={text} />
-      </div>
-    </details>
-  )
-}
-
-/**
- * A stretch of tool calls, folded into the count of them.
- *
- * A turn is mostly tool calls — a rename went through fifty-nine — and one line
- * each buried the two things worth reading: what the agent said, and what it
- * changed. Closed by default, because the answer to "what did it do" is the
- * work itself and this is the working out.
- *
- * The same disclosure as reasoning above, for the same reason: available to
- * anyone who wants it, in the way of nobody who does not.
- */
-function ToolRun({
-  entries,
-  steps
-}: {
-  entries: readonly ChatEntry[]
-  steps: ReadonlyMap<string, readonly AgentEvent[]>
-}): React.JSX.Element {
-  const { t } = useTranslation()
-  const count = toolCount(entries)
-
-  return (
-    <details className="text-ink-faint">
-      <summary className="focus-ring cursor-pointer list-none select-none">
-        <DisclosureChevron inSummary className="mr-1 inline align-[-2px]" />
-        {t('chat.toolSteps', { count })}
-      </summary>
-
-      {/* The same list the summary counted, not a second reading of the block:
-          asked twice, the two answers drifted and the fold promised two steps
-          and opened on three. */}
-      <div className="border-line mt-1 flex flex-col gap-1 border-l pl-3">
-        {toolRunRows(entries).map((row, index) => (
-          <ToolCall
-            key={index}
-            name={row.name}
-            input={row.input}
-            steps={steps.get(row.toolUseId)}
-            allSteps={steps}
-          />
-        ))}
-      </div>
-    </details>
-  )
-}
-
-/** How each kind of line is tinted. Tokens only, so both themes hold. */
-const CHANGE_TONES: Record<ChangeLine['sign'], string> = {
-  '+': 'bg-success-bg text-success',
-  '-': 'bg-danger-bg text-danger',
-  ' ': 'text-ink-soft'
-}
-
-/**
- * The lines of a change, numbered where a number can be justified.
- *
- * A removed line belongs to the file as it was, and that is not something we
- * kept — so its gutter stays empty. Numbering it from the new file would be out
- * by every line the change added, and a line number is read as fact.
- *
- * Without context the numbers are left off entirely rather than started from
- * one: an edit does not begin at the top of its file, and saying so would be
- * the same lie more confidently told.
- */
-function numbered(change: Change, context: ChangeContext | null): readonly NumberedLine[] {
-  if (!context) return change.lines.map((line) => ({ ...line, number: null }))
-
-  const lines: NumberedLine[] = context.before.map((text, offset) => ({
-    sign: ' ' as const,
-    text,
-    number: context.startLine - context.before.length + offset
-  }))
-
-  // The unchanged and added lines are the file as it now stands, in order, so
-  // they take the numbers in turn. A removed line takes none and holds none up.
-  let number = context.startLine
-  for (const line of change.lines) {
-    lines.push({ ...line, number: line.sign === '-' ? null : number })
-    if (line.sign !== '-') number++
-  }
-
-  for (const [offset, text] of context.after.entries()) {
-    lines.push({ sign: ' ', text, number: number + offset })
-  }
-
-  return lines
-}
-
-interface NumberedLine extends ChangeLine {
-  readonly number: number | null
-}
-
-/**
- * What a tool call did to a file.
- *
- * The arguments carry it already — an `Edit` is handed the text it replaces and
- * the text it writes — so this needs nothing from disk and draws the same on a
- * conversation read back after a restart. The lines it landed among are the one
- * thing the arguments cannot carry, which is why `context` arrives separately.
- */
-function ChangeBlock({
-  name,
-  change,
-  context
-}: {
-  name: string
-  change: Change
-  context: ChangeContext | null
-}): React.JSX.Element {
-  const { t } = useTranslation()
-
-  return (
-    <div className="border-line min-w-0 rounded-[var(--radius-control)] border">
-      <div className="border-line text-ink-soft flex min-w-0 items-baseline gap-2 border-b px-2.5 py-1.5">
-        <Pencil aria-hidden className="shrink-0 self-center" size={12} />
-        <span className="font-medium">{name}</span>
-        {/* The path and the lines go through `shown` for the reason the diff
-            pane's do: a bidi override reorders what is read without changing
-            what runs, and this block is where a small change is usually read
-            instead of in the diff at all. */}
-        <span className="text-ink-faint truncate font-mono text-[11px]" title={change.path}>
-          {shown(change.path)}
-        </span>
-
-        {/* The counts describe one occurrence, which is all an `Edit` carries.
-            With `replace_all` that is not a total, and drawing it as one said
-            `+1 −1` over a rename through twelve places — so the number gives
-            way to the fact it cannot state. */}
-        {change.everywhere ? (
-          <span className="text-ink-faint ml-auto shrink-0 text-[11px]">
-            {t('chat.changeEverywhere')}
-          </span>
-        ) : (
-          <span className="ml-auto shrink-0 font-mono text-[11px]">
-            {change.added > 0 && <span className="text-success">+{change.added}</span>}
-            {change.added > 0 && change.removed > 0 && ' '}
-            {change.removed > 0 && <span className="text-danger">−{change.removed}</span>}
-          </span>
-        )}
-      </div>
-
-      {/* Capped rather than folded: the median change is two lines, so a click
-          to see it would cost more than it saves — but a file written whole
-          runs to hundreds, and that must not push the conversation away. */}
-      <div className="max-h-64 overflow-auto py-1 font-mono text-[11px] leading-relaxed">
-        {numbered(change, context).map((line, index) => (
-          <div key={index} className={`flex gap-2 px-2.5 ${CHANGE_TONES[line.sign]}`}>
-            <span className="text-ink-faint w-8 shrink-0 text-right tabular-nums select-none">
-              {line.number}
-            </span>
-            <span className="min-w-0 whitespace-pre-wrap">
-              {line.sign === ' ' ? ' ' : line.sign}
-              {shown(line.text)}
-            </span>
-          </div>
-        ))}
-      </div>
+      {open && (
+        <div className="border-line mt-1 border-l pl-3">
+          <Markdown text={text} />
+        </div>
+      )}
     </div>
   )
-}
-
-function ToolCall({
-  name,
-  input,
-  steps,
-  allSteps
-}: {
-  name: string
-  input: unknown
-  /** What the subagent this call started did, when it was one. */
-  steps?: readonly AgentEvent[] | undefined
-  /** Every subagent's, for the ones nested a level further down. */
-  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
-}): React.JSX.Element {
-  const { t } = useTranslation()
-
-  // The agent's task list says how far it has got, which is the thing worth
-  // reading on a row that otherwise carries none of the fields the summary
-  // looks for.
-  const todos = readTodos(name, input)
-  const target =
-    todos === null
-      ? describeToolInput(input)
-      : t('chat.todosProgress', {
-          done: todos.filter((todo) => todo.status === 'completed').length,
-          total: todos.length
-        })
-
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="text-ink-soft flex min-w-0 items-baseline gap-2">
-        <Wrench aria-hidden className="shrink-0 self-center" size={12} />
-        <span className="font-medium">{name}</span>
-        {/* Through `shown`, as the change block below does, and the title
-            through its plain-text sibling: a tooltip is laid out by the same
-            bidirectional algorithm as the row it hangs off, so leaving the raw
-            string there would be the same misreading with a delay. */}
-        {target !== null && (
-          <span className="text-ink-faint truncate font-mono text-[11px]" title={named(target)}>
-            {shown(target)}
-          </span>
-        )}
-      </div>
-
-      {steps !== undefined && <SubagentSteps steps={steps} allSteps={allSteps} />}
-    </div>
-  )
-}
-
-/**
- * What a subagent did, under the call that started it.
- *
- * A delegated task is a long stretch of the agent's own tool calls and remarks,
- * and drawn at the top level it buried what the conversation itself said. Folded
- * into the count of what it did and closed — the same disclosure as a run of
- * tool calls above, for the same reason — it is there for whoever wants it.
- *
- * Its edits are not in here: those are drawn as changes, with their diff, where
- * they happened, and a subagent's change is the most useful thing it does.
- */
-function SubagentSteps({
-  steps,
-  allSteps
-}: {
-  steps: readonly AgentEvent[]
-  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
-}): React.JSX.Element {
-  const { t } = useTranslation()
-
-  return (
-    <details className="text-ink-faint ml-5">
-      <summary className="focus-ring cursor-pointer list-none text-[11px] select-none">
-        <DisclosureChevron inSummary className="mr-1 inline align-[-2px]" />
-        {t('chat.subagentSteps', {
-          count: steps.filter((event) => event.type === 'tool_use').length
-        })}
-      </summary>
-
-      <div className="border-line mt-1 flex flex-col gap-1 border-l pl-3">
-        {steps.map((event, index) => (
-          <SubagentStep key={index} event={event} allSteps={allSteps} />
-        ))}
-      </div>
-    </details>
-  )
-}
-
-function SubagentStep({
-  event,
-  allSteps
-}: {
-  event: AgentEvent
-  allSteps: ReadonlyMap<string, readonly AgentEvent[]>
-}): React.JSX.Element | null {
-  switch (event.type) {
-    case 'tool_use':
-      return (
-        <ToolCall
-          name={event.name}
-          input={event.input}
-          steps={allSteps.get(event.toolUseId)}
-          allSteps={allSteps}
-        />
-      )
-
-    // What the subagent said along the way, one line of it: the whole of its
-    // answer reaches the conversation as the call's own result.
-    case 'text': {
-      const [first = ''] = event.text.trim().split('\n')
-      return (
-        <p className="text-ink-faint truncate text-[11px]" title={named(first)}>
-          {shown(first)}
-        </p>
-      )
-    }
-
-    case 'tool_result':
-      return event.ok ? null : <ToolFailure content={event.content} />
-
-    // Its reasoning stays its own.
-    default:
-      return null
-  }
 }
 
 /**
@@ -1086,11 +811,8 @@ function Plan({
 }
 
 /**
- * Only failures are shown.
- *
- * A tool that worked has already said so by the agent carrying on, and the
- * output of a successful `Read` is the file — pasting it into the chat would
- * bury the conversation in the codebase.
+ * A failure that has no tool row to sit under: the answer to a call that is no
+ * longer in the log, or to one drawn as something else.
  */
 function ToolFailure({ content }: { content: string }): React.JSX.Element {
   return (

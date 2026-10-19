@@ -3,6 +3,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { highlight, type Token } from './highlight.js'
 import { languageFor } from './language.js'
 import { MAX_LINE_LENGTH } from './useHighlighting.js'
+import { shown } from './shown.js'
 
 /**
  * Past these a text is drawn plain.
@@ -98,6 +99,39 @@ export function ColouredLines({
             </span>
           ))}
         </Fragment>
+      ))}
+    </>
+  )
+}
+
+/**
+ * One line, coloured where there are tokens for it, with anything that would
+ * not draw as itself named in its place.
+ *
+ * `shown` goes inside each token's span, as the diff pane's own lines do, so a
+ * syntax colour still covers the code either side of what it names. Belongs
+ * inside a `diff-code` element, like `ColouredLines`.
+ */
+export function ColouredLine({
+  text,
+  tokens
+}: {
+  readonly text: string
+  readonly tokens: readonly Token[] | undefined
+}): React.JSX.Element {
+  if (tokens === undefined) return <>{shown(text)}</>
+
+  return (
+    <>
+      {tokens.map((token, at) => (
+        <span
+          key={at}
+          style={
+            { '--shiki-light': token.light, '--shiki-dark': token.dark } as React.CSSProperties
+          }
+        >
+          {shown(token.text)}
+        </span>
       ))}
     </>
   )
