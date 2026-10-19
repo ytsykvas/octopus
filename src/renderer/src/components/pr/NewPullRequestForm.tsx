@@ -1,3 +1,4 @@
+import { Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -198,17 +199,29 @@ export function NewPullRequestForm({
       {/* Never disabled for an empty title any more: empty means "you write
           it", and a disabled button would be the app refusing the thing it is
           offering. Still disabled while either half is in flight. */}
-      <Button type="submit" variant="accent" disabled={creating || drafting}>
-        {t(
-          drafting
-            ? 'pullRequest.drafting'
-            : creating
-              ? 'pullRequest.creating'
-              : untitled
-                ? 'pullRequest.ask'
+      {untitled && !drafting && !creating ? (
+        // Handing the writing to the agent is a different act from opening the
+        // request, so it looks like one: the composer's ring, a sparkle, and a
+        // width of its own rather than the whole row.
+        <button
+          type="submit"
+          className="ai-button focus-ring text-ink hover:text-ink relative inline-flex h-8 items-center justify-center gap-2 self-center rounded-[var(--radius-control)] border border-transparent px-4 font-medium transition-colors"
+        >
+          <span aria-hidden className="ai-button-line" />
+          <Sparkles aria-hidden size={14} className="shrink-0" />
+          {t('pullRequest.ask')}
+        </button>
+      ) : (
+        <Button type="submit" variant="accent" disabled={creating || drafting}>
+          {t(
+            drafting
+              ? 'pullRequest.drafting'
+              : creating
+                ? 'pullRequest.creating'
                 : 'pullRequest.create'
-        )}
-      </Button>
+          )}
+        </Button>
+      )}
     </form>
   )
 }

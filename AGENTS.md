@@ -136,11 +136,12 @@ added here is paid for in all of them:
   `vitest.config.ts` and `vitest.renderer.config.ts` share it. Size the renderer
   tests accordingly; only the files in `bootstrapOnly` are exempt.
 - Tests are written alongside the code. A bug is reproduced by a test first.
-- **Closing a finding is four things, and none of them waits to be asked:** a
-  test that pins it, the documentation it falsified made true, the note deleted
-  from `docs/tasks/`, and the pull request. The first three belong in the commit that
-  fixes it, not in a pass afterwards — and a pass afterwards found something
-  every time it was run, which is how this line was earned.
+- **Closing a finding is three things, and none of them waits to be asked:** a
+  test that pins it, the documentation it falsified made true, and the note
+  deleted from `docs/tasks/`. They belong in the commit that fixes it, not in a
+  pass afterwards — and a pass afterwards found something every time it was
+  run, which is how this line was earned. Publishing it (push, pull request,
+  merge) does wait to be asked; see Git.
 - **A field added to anything under `StateSchema` needs a default.** The reader
   throws on a mismatch rather than falling back, so a record written before the
   field must still load — and `state.json` holds more than it looks: the last
@@ -175,7 +176,8 @@ shared equivalent for other agents.
 was private with no protection at first and the very next push went through
 carrying `Bypassed rule violations` — a protection the only person who commits
 here can step over is decoration. Every change, a one-line fix included, goes
-through a branch and a pull request, and merges once CI is green:
+through a branch and a pull request, and merges once CI is green — when the
+maintainer asks for each step (the hard rule below):
 
 ```bash
 git checkout -b fix/short-description
@@ -201,10 +203,13 @@ gh pr create --title "fix: …" --body-file body.md
   `CLAUDE.md`, `.claude/`: the repository is public and the reader cannot follow
   it.
 
-Opening the pull request is standing permission, not a question each time —
-closing a finding ends with it. What still needs asking is anything destructive
-beyond deleting a landed task note, and `git push --force`, which the local
-`deny` refuses.
+**Hard rule: never `git push`, open a pull request or merge one unless the
+maintainer asked for that, in words, in the current conversation.** Finishing a
+task, closing a finding or a green `npm run check` is not asking. Committing
+locally is fine; publishing is not, and a request to commit is not a request to
+push. The one exception is the maintainer having asked for it. Beyond that,
+anything destructive other than deleting a landed task note needs asking too,
+and `git push --force` is refused by the local `deny`.
 
 If `main` is ever broken so badly that it cannot be fixed through a pipeline
 that is also broken, turn the protection off deliberately in Settings and back
