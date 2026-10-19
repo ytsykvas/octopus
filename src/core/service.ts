@@ -2456,6 +2456,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )
     }
 
+    /*
+     * A message the CLI held in its queue, taken: a turn is running for it. Most
+     * of the time one already was and this changes nothing, but a message not
+     * folded into the turn it was sent during — and after a Stop, always — is
+     * run as a turn of its own once that one has ended, and only `sendToChat`
+     * said `running` before. Through `carryOn`, so a question still open keeps
+     * its amber. `started` alone: `finished` arrives after a result too.
+     */
+    if (event.type === 'message_queue' && event.state === 'started') {
+      background(chat, carryOn(chat.id))
+    }
+
     if (event.type === 'error') {
       background(chat, setChatStatus(chat.id, 'error'))
     }

@@ -4204,6 +4204,62 @@ describe('the agent chat', () => {
    * reaches a conversation by starting its session again, and only when
    * nothing is in flight that the old process would take with it.
    */
+  /*
+   * A message sent while the agent works and not folded into that turn — and
+   * after a Stop, always — is run by the CLI as a turn of its own once the
+   * first one has ended. Measured on a live session: the turn's result, then
+   * `completed` or `cancelled` for the message that started it, then `started`
+   * for the one that waited. Only `sendToChat` used to say `running`, so that
+   * second turn ran under an idle tab with no Stop.
+   */
+  describe('a turn the agent starts from its queue', () => {
+    const lifecycle = (command_uuid: string, state: string): SDKMessage =>
+      ({
+        type: 'command_lifecycle',
+        command_uuid,
+        state,
+        uuid: 'frame',
+        session_id: 'sess-1'
+      }) as unknown as SDKMessage
+
+    it('is shown as running', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      agent().emit(lifecycle('first', 'completed'))
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      agent().emit(lifecycle('waited', 'started'))
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+    })
+
+    // `completed` and `cancelled` arrive after the result as well, and they
+    // end a turn rather than start one.
+    it('is not imagined from a message that finished', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      agent().emit(lifecycle('first', 'cancelled'))
+      agent().emit(lifecycle('first', 'completed'))
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      // Long enough for a status write those frames started to have landed.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+    })
+  })
+
   describe('where a conversation compacts', () => {
     /** Sends one message and lets its turn finish, leaving a session with history. */
     async function idleAfterOneTurn(): Promise<{
