@@ -24,7 +24,7 @@ if [[ -d "$APP/Contents/Resources" ]]; then
   find "$APP/Contents/Resources" -maxdepth 4 \( -name '*.sh' -o -name '*.md' -o -name '*.json' \) \
     -exec sh -c 'printf "%6s  %s\n" "$(wc -l < "$1" | tr -d " ")" "${1#'"$APP"'/Contents/Resources/}"' _ {} \;
   echo
-  echo "compiled helpers:"
+  echo "runtime and its shims:"
   ls "$APP/Contents/Resources/bin/.internal" 2>/dev/null | sed 's/^/  /'
 fi
 

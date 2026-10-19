@@ -164,8 +164,10 @@ Consequences that fall out of the design rather than being chosen:
   triggered each sync.
 
 **Documented** but not in the script: turning Spotlight off restores the root's original
-state. **Inferred**: the app checkpoints the root before the first sync and restores
-that afterwards — the script has no such step, so it must happen in the caller.
+state. **Observed** in the window's code: stopping a Spotlight process kills it and then
+restores the root's pre-Spotlight state, logging an error rather than failing when the
+restore does not succeed. So the snapshot is taken and put back by the caller, not by
+`spotlighter.sh`.
 
 ## Workspace creation — **documented**
 
@@ -189,7 +191,8 @@ is no walk of the process tree, so what escapes is exactly what left the group: 
 daemon, a `setsid`, a tool that starts its own session. That one keeps the port. A
 child backgrounded with `&` stays in the group and is cleaned up; the advice is now a
 foreground supervisor that handles `SIGTERM` and waits for its children. (0.80.0
-documented `SIGHUP`, 200 ms, `SIGKILL`, and warned against `&` without qualification.)
+documented `SIGHUP`, 200 ms, `SIGKILL`, and warned against `&` without qualification;
+the bundled skill still gives that older advice.)
 
 ## The runtime — **observed**, with the interpretation inferred
 
@@ -197,8 +200,7 @@ documented `SIGHUP`, 200 ms, `SIGKILL`, and warned against `&` without qualifica
 dozen `tauri-plugin-*` crates in its strings, and it links the system `WebKit`
 framework. `Contents/Resources/bin/.internal/` holds `conductor-runtime` (76 MB) plus
 four 3-line shims — `sidecar`, `actions`, `logger`, `internal` — each exec'ing
-`conductor-runtime <name>`; `bin/conductor` does the same with `cli`. (In 0.80.0 those
-helpers were listed here as compiled binaries of their own.)
+`conductor-runtime <name>`; `bin/conductor` does the same with `cli`.
 
 `conductor-runtime` is a **Bun-compiled** JavaScript bundle (`bun-v1.4.2`, `/$bunfs/`
 paths), so `strings -a` returns minified but readable code — including Conductor's own
@@ -253,10 +255,10 @@ runtime, and none of it appears in a plain `strings` pass. Before a run script s
 the repository does not allow concurrent runs, the window lists the workspaces of the
 **same repository** and kills the run-script process of every other one, dropping it
 from its own process list on the spot. Other repositories are left alone. The kill is
-sent and not awaited, so the new script starts while the old one may still be shutting
-down under the five-second SIGTERM-then-SIGKILL sequence — a port held for those seconds
-is the new server's problem. **Inferred**: that is a choice rather than an oversight;
-nothing in the code says which.
+the same session kill the Stop button sends, and neither awaits it: the new script
+starts while the old one may still be inside its five-second grace, and a port held
+for those seconds is the new server's problem. Whether that is deliberate, nothing in
+the code says.
 
 ## What is NOT knowable
 
@@ -270,6 +272,3 @@ Support/com.conductor.app/` holds a SQLite `conductor.db` (hundreds of MB on a u
   component does what is inference.
 - How the runtime supervises a session it has started.
 - Anything about the Cloud backend beyond "Vercel Sandbox", which is documented.
-
-(The UI framework used to head this list. It is now answered: Tauri around a React app,
-see "The runtime".)

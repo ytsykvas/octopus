@@ -4,7 +4,7 @@ _As of Conductor 0.91.0, docs fetched 2026-10-19. Everything here is **documente
 unless marked otherwise._
 
 Conductor is a Mac-only app for running coding agents in parallel, each in an isolated
-workspace. It is not native Swift, as this file used to guess: the shell is **Tauri 2**
+workspace. The shell is **Tauri 2**
 (Rust, the system WebKit view) around a React interface, with the logic in a
 Bun-compiled TypeScript runtime — **observed** from `otool -L` and `strings` on the
 binaries (see `mechanisms.md`). The local app is free; Cloud, Multiplayer, the API and
@@ -154,18 +154,10 @@ terminals); the bundled skill adds `CONDUCTOR_WORKSPACE_ID` for agent and termin
 processes. Cloud-only: `CONDUCTOR_BASE_DIR`, `_API_URL`, `_API_TOKEN`, `_API_KEY`. Repo
 settings add `[environment_variables]`, with `.local` and `.cloud` sub-tables.
 
-**Process handling:** Stop sends `SIGTERM` to the script's **process group**, waits
-**five seconds** (not configurable), then `SIGKILL`s the group even if the top-level
-process already exited. It does not walk the process tree, so only a descendant that
-left the group — a daemon, a new session — survives and keeps its port. A plain `&`
-child now dies with the group; the docs ask for a foreground supervisor that handles
-`SIGTERM` and waits for its children. (Changed since 0.80.0, which sent `SIGHUP`, waited
-200 ms and warned against `&` outright. The bundled skill still gives the older
-`&` advice.)
-
-**Shell capture:** Conductor launches an interactive login shell _in the workspace
-directory_ (so `mise` and friends resolve correctly) to capture the environment, with a
-**5-second timeout**; then runs commands under zsh.
+**Process handling and shell capture:** Stop is `SIGTERM` to the process group, five
+fixed seconds, then `SIGKILL` to the group; the environment comes from an interactive
+login shell with a five-second budget. Details in `mechanisms.md`, "Process lifecycle"
+and "Shell environment capture".
 
 ## Files to copy
 

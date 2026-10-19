@@ -11,7 +11,7 @@
         "States that saving moves neither HEAD nor any file on disk",
         "Describes the second/temporary index used to capture untracked files",
         "Labels which claims come from the bundled script versus the docs versus inference",
-        "States what octopus already has — rewind and fork through the Agent SDK (rewind.ts, agent.ts) — rather than proposing to build checkpoints from nothing",
+        "States what octopus already has — rewind and fork through the Agent SDK (rewind.ts, agent.ts, service.ts) — rather than proposing to build checkpoints from nothing",
         "Proposes a concrete direction for octopus — what, if anything, Conductor's git approach would add to the SDK rewind — rather than only describing Conductor"
       ],
       "files": []
@@ -52,7 +52,8 @@
         "Names Conductor's run_mode = \"nonconcurrent\" setting and says starting such a run script stops the other run scripts first",
         "Gives the stop sequence: SIGTERM to the script's process group, a fixed five-second grace period, then SIGKILL to the group",
         "Says which Conductor version the answer describes, or checks the installed one",
-        "Labels which claims come from the docs versus inference",
+        "Labels which claims come from the docs, from Conductor's own shipped code, and from inference",
+        "Says, from Conductor's own code, that only the same repository's workspaces are stopped and that the new run does not wait for the old one to exit — and contrasts that with octopus's dispose, which waits",
         "States octopus has no such mode today and looks at how octopus already stops a run (src/main/terminals.ts) before proposing a stop of its own",
         "Proposes a concrete direction for octopus rather than only describing Conductor"
       ],

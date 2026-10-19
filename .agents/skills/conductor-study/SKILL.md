@@ -111,11 +111,21 @@ words, like everything else under "The boundary".
 end — about 1,950 files of the React app, `assets/main-*.js` among them — in
 `Contents/MacOS/conductor`, each file brotli-compressed and indexed by its path. A plain
 `strings` pass lists the paths and none of the code, so grepping the runtime and finding
-nothing is not evidence that the app does not do it. Pull a file out by the table that
-points at it, `brotli -d` it, and what the window does is readable: which button starts
-what, and logic the docs only summarise. The run-mode check that stops other workspaces'
-run scripts lives there, not in the runtime. Extract into `$TMPDIR`, never into the
-repository.
+nothing is not evidence that the app does not do it. Once a file is out, what the window
+does is readable: which button starts what, and logic the docs only summarise. The
+run-mode check that stops other workspaces' run scripts lives there, not in the runtime.
+
+Getting one out, as done against 0.91.0:
+
+1. `otool -l` on the executable gives the `__DATA_CONST` segment's `fileoff` and
+   `filesize`; the asset table is in there.
+2. The table is a run of 8-byte little-endian words, four to an entry: a pointer to the
+   path, the path's length, a pointer to the data, the data's length. Each path is an
+   `/assets/…` or `/index.html` string elsewhere in the file.
+3. A pointer is a virtual address; subtract the `0x100000000` base for the file offset.
+4. `brotli -d` the data. About 1,940 of the 1,990 paths came out this way.
+
+Extract into `$TMPDIR`, never into the repository.
 
 Read it carefully, though. A symbol name is **observed**; what the type _does_ is
 **inferred**, and a string in a binary may be dead code, a stale experiment, or a
@@ -146,10 +156,13 @@ makes things _worse_. Two habits keep it from happening.
 
 **Check what we already have before proposing to build it.** Conductor built its
 file checkpoints on raw git because one snapshot has to serve four harnesses and
-Spotlight; even its Claude runner, which does sit on the Agent SDK, shows no sign of the SDK's
-file checkpointing. We have one harness — and `@anthropic-ai/claude-agent-sdk` already ships `enableFileCheckpointing`,
-`rewindFiles`, `forkSession` and `resumeSessionAt`. Grep `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts`
-before recommending we reimplement anything Conductor had to build from scratch. Their
+Spotlight; even its Claude runner, which does sit on the Agent SDK, shows no call that
+turns the SDK's file checkpointing on — weak evidence, an absence in a minified bundle.
+We have one harness, and we already use what the SDK gives: `enableFileCheckpointing`
+and `rewindFiles` in `src/core/agent.ts`, the cut point in `src/core/rewind.ts`,
+`forkSession` and `resumeSessionAt` from `src/core/service.ts`. Read those, and grep
+`node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` for what is still unused, before
+recommending we reimplement anything Conductor had to build from scratch. Their
 constraints are not ours, and copying a workaround for a problem we don't have is the
 expensive kind of mistake.
 

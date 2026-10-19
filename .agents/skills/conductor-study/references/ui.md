@@ -82,9 +82,10 @@ city is the directory name — stable so that agents, shells and editors keep re
 the same path — while the branch or PR title is what the sidebar shows. `⌘K → Passport`
 turns the history into a travel log of cities visited.
 
-octopus's `names.ts` does the same job. The reasoning is worth borrowing whole: the
-stable, meaningless name is for the _filesystem_, and the meaningful name is the
-_branch_, which the agent renames once it knows what the work is.
+octopus's `names.ts` does the same job, for the same reason: the stable, meaningless
+name is for the _filesystem_, and the meaningful name is the _branch_. Conductor has the
+agent rename the branch; octopus does not prompt for that on purpose and leaves the
+rename to the person (see `octopus-delta.md`).
 
 ## Keyboard shortcuts
 
