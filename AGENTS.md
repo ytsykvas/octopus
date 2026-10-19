@@ -177,6 +177,14 @@ carrying `Bypassed rule violations` — a protection the only person who commits
 here can step over is decoration. Every change, a one-line fix included, goes
 through a branch and a pull request, and merges once CI is green:
 
+**Inside an Octopus workspace, do not `git checkout -b`.** The workspace's
+branch (`octopus/<name>`) is the one the app tracks: the pull request tab, the
+Changes tab and the push button all look it up by name, so a different HEAD
+leaves them empty ("HEAD is not on the branch"). Commit on the workspace branch
+and open the pull request from it — one pull request per workspace, and a second
+independent change belongs in another workspace. The recipe below is for a
+plain checkout:
+
 ```bash
 git checkout -b fix/short-description
 # work, then `npm run check`

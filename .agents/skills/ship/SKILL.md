@@ -20,6 +20,13 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
 3. **Branch.** `main` is protected: it refuses a direct push, so the work
    needs a branch before it can be committed anywhere useful.
 
+   Inside an Octopus workspace (its worktree sits under `~/.octopus/workspaces/`)
+   the branch already exists — the workspace's own, such as `octopus/gwen`.
+   Stay on it: the app finds the pull request, the Changes tab and the push
+   button by that name, and `git checkout -b` would leave all three empty.
+
+   In a plain checkout, make one:
+
    ```bash
    git checkout -b fix/short-description
    ```
