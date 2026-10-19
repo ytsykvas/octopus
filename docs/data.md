@@ -543,19 +543,30 @@ live child process, and once that process ends the next one rebuilds a context
 we never observed.
 
 **A successful tool result keeps only its head**, 2000 characters, marked
-`truncated` so a reader can tell a cut output from one that simply ended.
-Nothing can draw that content today — the log returns null for a call that
-succeeded, and the fold renders only the calls, not their answers — so a `Read`
-of three thousand lines, a `Bash` printing a build log and a `Grep` across the
-repository were each written whole, parsed back on every open, shipped over IPC
-and held in the window, to be dropped at render time. The transcript is
-append-only and never trimmed, so the cost of opening a conversation grew with
-everything the agent had **read** rather than with what it said.
+`truncated` so a reader can tell a cut output from one that simply ended. A
+`Read` of three thousand lines, a `Bash` printing a build log and a `Grep`
+across the repository were once each written whole and parsed back on every
+open. The transcript is append-only and never trimmed, so the cost of opening a
+conversation grew with everything the agent had **read** rather than with what
+it said.
 
-Bounded rather than dropped, deliberately: the fold opens into the working-out
-and showing a call's output there is the obvious next thing to build, so
-throwing the field away would spend that option to save the same bytes. **A
-failure keeps everything** — its content is the whole of what the failure says,
+The head is what the log draws — the first lines under a call's row, and the
+start of its output when the row is opened — so it is what is kept, with
+**`lineCount`** saying how long the whole was. Without it "1 210 lines" read live
+would read "57 lines" after a restart. The opened row says that only the start
+was saved rather than passing the head off as the whole.
+
+Two fields beside it come from the tool's structured output, never cut:
+**`stats`** — the counts a summary needs (lines read, files and matches found, a
+subagent's tool uses) — and **`report`**, a subagent's answer in its own words.
+The result's text carries the CLI's trailer after that answer, the agent's id
+and a usage block meant for the model, and a report is often longer than the
+head: it is the one thing the subagent was for. A conversation recorded before
+these existed has none of them, and the log falls back to counting the head —
+saying "at least" when the head was all there was — and to the text with the
+trailer taken off.
+
+**A failure keeps everything** — its content is the whole of what the failure says,
 and the pane shortening it from the middle is a decision about reading rather
 than about storage. And the bound is on the transcript alone: the live event
 reaching the window carries the lot.

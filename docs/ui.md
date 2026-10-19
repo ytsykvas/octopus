@@ -311,11 +311,60 @@ cannot see and takes the keyboard from work they can. Its tab's dot turns amber
 instead, which is how the workspace list already announces a turn waiting where
 nobody is looking.
 
-The chat draws **one row per event**, not one bubble per turn. A turn is mostly
-tool calls, and folding them into the prose hides the part that says what the
-agent actually did to the working tree. Reasoning is folded away, a successful
-tool result is not shown at all — the output of a `Read` is the file, and pasting
-it in would bury the conversation in the codebase.
+The chat is shaped like **Claude Code's own transcript**: what the agent said as
+prose, and every tool call as **one row** with what came back under it. A turn
+is mostly tool calls, and folding them into the prose — or into a count of them,
+as the log once did — hid the part that says what the agent actually did.
+
+```
+▸ ● Read  src/App.tsx
+    ⎿ 1 210 lines
+▸ ● Bash  npm test
+    ⎿ ✓ 147 passed
+      … +12 lines
+▸ ● Edit  src/App.tsx                 +3 −1
+    ⎿ (the first ten lines of the diff)
+```
+
+The mark is a spinner while the call runs, a dot once it answered — red for a
+failure, hollow for a call the turn ended before answering (`settled`: an
+interrupt leaves no answer and no work either). The line under the row says
+what came back in the fewest words that are true: the lines a `Read` returned,
+the files or matches a search found, the first four lines of a command's
+output and how many more, a fetch's first line, how many tools a subagent used.
+The counts come from the tool's structured output where there is one
+(`stats`), and never from parsing its prose.
+
+**Every per-tool decision is in one table**, `toolViews.ts`: what a row names,
+the line under it, what opening it shows. The row itself knows no tool by name,
+so adding a tool is one entry, not three `switch` statements kept in step by
+hand. A tool without an entry — an MCP tool, one the SDK adds later — gets the
+first field that reads as a target and the head of its output.
+
+**Clicking a row opens it**: the input where the row could not say all of it
+(the whole command, the arguments of a search or an MCP call), the whole output,
+paged two hundred lines at a time inside a box of its own, and for a subagent
+its steps and its report. **⌘O, or the button floating at the top of the log,
+opens every row and all the reasoning at once** — Claude Code's ctrl+o. A row
+opened or closed by hand keeps that only until the next press (`Expansion`'s
+`generation`), so "show everything" shows everything. Per conversation and in
+memory only: a log reopened fully expanded would mount every diff in it at once.
+A dialog that is open keeps ⌘O, and a conversation behind a file does not hear
+it.
+
+**A path in a row opens the file in the centre**, the way the right pane's tree
+does: a click previews, a double-click keeps it. The agent names absolute paths
+and the tabs relative ones, so `workspaceRelative` takes the workspace off — and
+a path outside the workspace stays text rather than offering a click that could
+only fail. The core checks containment again when the file is read.
+
+**Reasoning is folded to one line** and opens with a click or with ⌘O.
+
+**While a turn runs, the line under it counts its seconds** — "Working… 12s" —
+and stays while the answer streams in, as the CLI's spinner does: text
+arriving says the agent is talking, not that the turn is over. It holds its own
+clock, so the tick redraws that line and never the log. It does not say
+"esc to interrupt": Escape stops a turn only from the composer.
 
 **A sent message carries its hour, and each day opens with a chip.** The hour
 sits under the bubble in faint 24-hour figures (`14:32`), always visible, with
@@ -351,7 +400,9 @@ only a send did, and the agent worked under an idle tab with no Stop. The
 protocol can cancel it, but the installed SDK offers no typed call for that, so
 the mark tells the truth rather than Stop pretending to do more.
 
-**A failed one is shown, and shortened from the middle.** It is the row the user
+**A failure's head stands under its row, and the whole of it is a click away.**
+Where a failure has no row to sit under — the answer to a call no longer in the
+log — it is drawn on its own, **shortened from the middle.** It is the row the user
 has to act on, so it is not summarised away — but it cannot be unbounded either,
 and where it is cut decides what survives. A validation error names the rule at
 the start, spends the middle on the value it refused, and says what to do at the
@@ -434,9 +485,9 @@ turn — what the user said and everything the agent did in answer — is one
 message in an external-store runtime fed from the transcript, and each block
 rides in as a `data` part carrying itself. Nothing is mapped onto the library's
 own `text`, `reasoning` or `tool-call` parts, and that is deliberate: the log is
-one row per event with rules the library has no word for (a run folded into its
-count, an edit drawn as a diff, an answer struck through because the agent took
-it back), all of which live in the block, and translating would encode them a
+shaped by rules the library has no word for (a call and its answer as one row,
+a subagent's steps inside its call, an edit drawn as a diff, an answer struck
+through because the agent took it back), all of which live in the block, and translating would encode them a
 second time and be wrong about them in one of the two places. So the library is
 the runtime and the structure — messages, parts, the place later features such
 as per-message actions would attach — and the rows are ours.
@@ -452,6 +503,12 @@ below the thread, as it always was — which also sidesteps an open upstream iss
 where the cost of each update grows with the thread's length. Dependency pinned
 to an exact version: it is 0.x and its minors have broken things.
 
+The rows' own props travel in a context rebuilt on every render, so every row
+re-renders with the log. `ToolRow` is memoised on its call and the turn's
+state, and reads what it needs to open a file from a context held still, so a
+streamed token leaves the tool rows alone. Whether the log is expanded is a
+context of its own for the same reason: it changes on a press, not per render.
+
 **Not moved: the composer.** The slash list and the `@` list were built here, on
 the field's own keys, with the draft kept per tab, an IME guard on every key, a
 pasted image, a dropped file and the caret put back after a mention. The
@@ -466,25 +523,30 @@ from the workspace's worktree while Changes, Files, the terminal and the scripts
 stay on it. Drawn as a tool row the call was a name with nothing readable beside
 it, so it is said in the warning colour instead — where the agent went, by the
 name or path it asked for, and whether it kept or removed the worktree on the
-way back — and never folded into a run of steps. Not refused: octopus is a
+way back — and never drawn as a tool row. Not refused: octopus is a
 harness, not a filter. The line is drawn from the call, so it says what the
 agent is doing rather than what happened: the CLI asks permission for a path
 outside its own worktrees and refuses a removal with uncommitted work on
 purpose, and either answer is the line below it. A move with neither name nor
 path says "a new worktree", since only the result knows the name the CLI made
-up. A subagent's move stays a step inside its fold: it moves the subagent only.
+up. A subagent's move stays a step inside its row: it moves the subagent only.
 
-**A subagent's work is folded under the call that started it.** Its messages
-arrive on the conversation's own stream, told apart only by the id of that call
+**A subagent's work is inside the call that started it.** Its messages arrive on
+the conversation's own stream, told apart only by the id of that call
 (`parentToolUseId` on its text, reasoning, calls and results), and drawn at the
-top level a long delegated task buried what the conversation itself said. Now
-the call's row carries a closed disclosure — "12 steps by the subagent" — which
-opens to its calls, one line of each remark, and its failures; one nested inside
-another nests the same way. Its **edits stay where they happened**, with their
-diff: a subagent's change is the most useful thing it does, and folded into a
-count it would lose what the log draws for every other change. A step whose call
-is not in the log (a conversation cleared halfway) stays at the top level rather
-than vanishing.
+top level a long delegated task buried what the conversation itself said. The
+call is one row saying how many tools the subagent used; opened, it holds the
+subagent's own calls as **the same rows a level down** — edits with their diff
+included — one line of each remark, and then **its report** as markdown. One
+nested inside another nests the same way. While it works, the row's line names
+its latest step, the one sign with the row closed that something is happening.
+
+The report is the subagent's own words, from its structured output (`report`),
+because the result's text carries the CLI's trailer after it — the agent's id
+and a usage block meant for the model. A subagent sent off to run on its own
+answers its call at once, and its row says it is running in the background.
+A step whose call is not in the log (a conversation cleared halfway) stays at
+the top level rather than vanishing.
 
 **The plan can be rewritten before it is approved.** The dialog's `Edit the plan`
 swaps the rendered plan for its markdown, in a monospace field, and back; the
@@ -640,8 +702,7 @@ Two rules there are worth keeping:
 - **The reading never enters the log.** It arrives on the same stream as the
   agent's own output, and was appended there like anything else for a while:
   that wiped the answer being typed out, and left a row that draws nothing in
-  the middle of a run of tool calls — splitting one fold into two, with a break
-  the reader cannot see. `isEphemeral` in `core/events.ts` names the
+  the middle of the tool calls, with a break the reader cannot see. `isEphemeral` in `core/events.ts` names the
   events that are not part of the conversation — the two streamed fragments, the
   rate limit, the command list, a rewind and a message waiting in the queue —
   and the log adds none of them as a row.
@@ -729,8 +790,10 @@ once its result names its id, the one thing later updates refer to it by. The
 panel is shown **only while the agent is working**: a list
 left with items pending (interrupted, errored, abandoned) would otherwise stay
 pinned across every later turn and every restart, describing work nobody is
-doing, and the log still holds it. The log's own `TodoWrite` row says how far it had got ("1 of 3")
-instead of showing a bare tool name. A list written by a subagent is skipped —
+doing, and the log still holds it. In the log, a `TodoWrite` row draws the list
+it wrote as a checklist under itself, as Claude Code does, through the same
+`TodoChecklist` the panel opens to; `TaskCreate` and `TaskUpdate` are ordinary
+rows naming the task and what it moved to. A list written by a subagent is skipped —
 it is its own task's, and its calls would otherwise rewrite the conversation's.
 
 **A heads-up can sit in the same place between turns.** "✦ Heads up · …" is a
@@ -811,23 +874,13 @@ Three things about that menu:
   be copied up here: `usageTone` paints the figure at 60% and again at 80%, and
   a hover that repainted it would put the control's state over the measurement.
 
-**What the agent looked at folds; what it changed does not.** A run of tool
-calls becomes the count of them, closed, opening on a click — the same
-disclosure reasoning gets. A turn is mostly tool calls; one rename went through
-fifty-nine, and a line each buried the two things worth reading. A lone call
-stays in the open, since "1 step" costs more to read than the row it replaces,
-and a failure or anything the agent said breaks the run so it stays where it
-happened.
-
-**The count and the rows come from one function**, and that is a fix rather
-than a nicety. They were two readings of the same block — the summary filtering
-out plans, edits and the call that asks a question, the body drawing every tool
-call it found — so a run holding a search, a question and a read said "2 steps"
-and opened on three. The third read `AskUserQuestion` with nothing beside it,
-none of the fields the row draws appearing in a question's input, which is
-precisely why the unfolded path draws no row for one. The count on a fold is
-the only thing a reader has to decide whether to open it, so it has to be a
-promise about what is inside.
+**A call and its answer are one block, at the call's place** (`buildBlocks` in
+`logBlocks.ts`). The answer arrives later and sits further down the log, as does
+the context recorded for an edit; both are folded into the call's block rather
+than given blocks of their own. Position is a block's key, so an answer arriving
+never moves a row — which is what keeps a row opened while its tool ran open
+when the tool finishes. The question call is not a row at all: its card is the
+whole of it, and a row beside the card would be the same question twice.
 
 **Text the agent produced keeps the line breaks it arrived with.** A stack
 trace, a compiler's three lines of context, a validation error listing the value
@@ -869,13 +922,17 @@ the reset and the command's own result landed a tick later, so an emptied
 conversation opened on a row reading `0.1s · 0 tokens` — three facts about a
 turn nobody could see, and clearing again only replaced it. `service.ts` no
 longer writes that entry; this rule is what the transcripts already carrying one
-need, and it is why `groupToolRuns` skips rather than filters — position is a
+need, and it is why `buildBlocks` skips rather than filters — position is a
 block's key, and the entries after the footer have to keep the indices they had.
 
-**An edit is drawn as the edit**: the path, `+8 −2`, and the lines themselves,
-removed in `danger`, added in `success`, the untouched ones between them plain.
-`Plan` is likewise never folded — it arrives as a tool call and is the substance
-of the turn.
+**An edit is drawn as the edit, under its row**: the path, `+8 −2`, and the
+lines themselves on the `danger` and `success` washes, coloured by the file's
+grammar the way the diff pane colours them, a gutter sign saying which is which
+without the colour. An `Edit`, a `Write` and an older CLI's `MultiEdit` — its
+edits drawn one after another with a `⋯` between them, since they land in
+different places. An edit that failed draws no diff: it changed nothing, and
+the line under the row says why. `Plan` is not a tool row at all — it arrives as
+a tool call and is the substance of the turn.
 
 Three things about that diff are worth knowing:
 
@@ -895,9 +952,12 @@ Three things about that diff are worth knowing:
   an older transcript — the numbers are left off altogether rather than started
   from one.
 
-The block is capped and scrolls rather than folding: the median change is two
-lines, so a click would cost more than it saves, while a file written whole runs
-to hundreds and must not push the conversation away.
+The first ten lines show under the closed row, as Claude Code shows them, with
+"N more lines" for the rest; opening the row shows them all. The median change
+is two lines, so it is almost always whole, while a file written whole runs to
+hundreds and must not push the conversation away. The line diff runs once per
+edit and is remembered against the call, since the blocks are rebuilt every
+time the log grows.
 
 **Permission requests appear in the log**, where the user is already looking,
 with allow / always / decline. A request read back from the transcript shows no
