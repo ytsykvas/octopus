@@ -8339,6 +8339,28 @@ describe('the agent chat', () => {
     })
 
     /*
+     * The log is written on a line of its own, behind the events that fill it.
+     * Quitting without waiting for it dropped the tail of a conversation that
+     * was streaming — measured, all of two hundred lines — and the pane then
+     * reopened on less than the agent remembers.
+     */
+    it('waits for the log to be written', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      for (let line = 0; line < 200; line += 1) agent().emit(textMessage(`line ${String(line)}`))
+      // One turn of the loop rather than a poll: the events are handled by then
+      // and their lines queued, and a poll would give the writes time to land.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(events.filter((entry) => entry.event.type === 'text')).toHaveLength(200)
+
+      await service.closeChats()
+
+      const history = await service.chatHistory(chat.id)
+      expect(history.filter((entry) => entry.role === 'agent')).toHaveLength(200)
+    })
+
+    /*
      * The other half of stopping. Writes go out from event handlers with
      * nothing awaiting them, so closing the sessions leaves them running — and
      * a write still running when the temporary directory goes is the
