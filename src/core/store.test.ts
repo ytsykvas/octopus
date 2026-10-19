@@ -399,8 +399,6 @@ describe('projects', () => {
     envProfile: 'prod',
     trustRepoScripts: true,
     trustRepository: true,
-    preferLocal: ['script.setup'],
-    disabledSkillDefaults: ['review'],
     repoPath: '/repos/moved'
   }
 
@@ -1093,7 +1091,17 @@ describe('choosing your own over the repository', () => {
 
   // Only the items that can come from a repository can be chosen against it.
   it('refuses an item that is not one', () => {
-    expect(ProjectPatchSchema.safeParse({ preferLocal: ['script.lint'] }).success).toBe(false)
+    expect(
+      ProjectEditSchema.safeParse({ kind: 'preferLocal', item: 'script.lint', on: true }).success
+    ).toBe(false)
+  })
+
+  // A list travels as one switch, never whole: a patch carrying one is a list
+  // built from a stale copy, the bug the edit exists to prevent.
+  it('takes no list in a patch', () => {
+    expect(
+      ProjectPatchSchema.parse({ preferLocal: ['script.setup'], disabledSkillDefaults: ['review'] })
+    ).toEqual({})
   })
 })
 

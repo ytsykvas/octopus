@@ -540,8 +540,6 @@ export const ProjectPatchSchema = z
         envProfile: true,
         trustRepoScripts: true,
         trustRepository: true,
-        preferLocal: true,
-        disabledSkillDefaults: true,
         repoPath: true
       }).shape
     )
@@ -717,10 +715,6 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
             }),
             ...(patch.trustRepository !== undefined && {
               trustRepository: patch.trustRepository
-            }),
-            ...(patch.preferLocal !== undefined && { preferLocal: patch.preferLocal }),
-            ...(patch.disabledSkillDefaults !== undefined && {
-              disabledSkillDefaults: patch.disabledSkillDefaults
             }),
             ...(repoPath !== undefined && { repoPath }),
             ...(patch.approvedSettings !== undefined && {

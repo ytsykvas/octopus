@@ -103,7 +103,8 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 The default marks travel on `config:edit` and `projects:edit`, as one switch at
 a time rather than the finished list: a list the window built from its own copy
 was a snapshot, and two switches flipped inside one round trip wrote the first
-one back out.
+one back out. Either one tells every running session at once, as `skills:rename`
+does, including that a skill is back on.
 
 ### Plugins
 
