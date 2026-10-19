@@ -1051,6 +1051,10 @@ const api = {
         Result<Record<ScriptKind, string | null>>
       >,
 
+    /** Saves the order of the project tabs: every project id, first to last. */
+    reorder: (orderedIds: readonly string[]): Promise<Result<void>> =>
+      ipcRenderer.invoke('projects:reorder', orderedIds) as Promise<Result<void>>,
+
     remove: (projectId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<void>>,
 

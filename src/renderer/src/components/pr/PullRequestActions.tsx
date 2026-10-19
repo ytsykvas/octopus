@@ -1,4 +1,4 @@
-import { ArrowUpFromLine, GitMerge, Upload } from 'lucide-react'
+import { ArrowUpFromLine, GitMerge, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -310,7 +310,8 @@ export function PullRequestActions({
         <div className="flex flex-col items-start gap-2">
           <p className="text-ink-faint leading-relaxed">{t('pullRequest.mergedDone')}</p>
 
-          <Button size="sm" variant="quiet" onClick={onRemoveWorkspace}>
+          <Button size="sm" variant="destructive" onClick={onRemoveWorkspace}>
+            <Trash2 aria-hidden size={13} />
             {t('pullRequest.removeWorkspace')}
           </Button>
         </div>

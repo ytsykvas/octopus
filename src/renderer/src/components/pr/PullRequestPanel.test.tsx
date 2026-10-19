@@ -297,6 +297,23 @@ describe('the pull request tab', () => {
     )
   })
 
+  // Handing the writing to the agent looks like it: the ring and a sparkle, at
+  // the width of its words. Typing a title turns it back into the plain action.
+  it('wears the colour ring while it asks the agent, and not once there is a title', async () => {
+    const user = userEvent.setup()
+    answer(view())
+    renderPanel()
+
+    const ask = await screen.findByRole('button', { name: 'Ask the agent to describe it' })
+    expect(ask).toHaveClass('ai-button')
+    expect(ask.querySelector('svg')).not.toBeNull()
+    expect(ask).not.toHaveClass('w-full')
+
+    await user.type(screen.getByLabelText('Title'), 'Something')
+
+    expect(screen.getByRole('button', { name: 'Open pull request' })).not.toHaveClass('ai-button')
+  })
+
   /*
    * The commit message is the one text here that stays in the history for good,
    * and it used to be the one nobody saw: kept out of the field and committed

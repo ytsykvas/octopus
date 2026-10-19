@@ -797,13 +797,14 @@ export function App(): React.JSX.Element {
           a pane's colour reaching up here made the window look like it started
           in the wrong place. */}
       <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b pr-3 pl-[5.5rem]">
-        <span className="shrink-0 truncate font-medium">
-          {selectedProject?.name ?? t('app.name')}
-        </span>
-        {selectedProject && (
+        {/* The project's name is not repeated here: the sidebar beside the
+            window always shows it. */}
+        {selectedProject ? (
           <span className="text-ink-faint min-w-0 truncate font-mono text-[11px]">
             {selectedProject.repoPath}
           </span>
+        ) : (
+          <span className="shrink-0 truncate font-medium">{t('app.name')}</span>
         )}
 
         {/* The branch, beside the path it is a branch of.
@@ -955,6 +956,7 @@ export function App(): React.JSX.Element {
               }}
               onEdit={setEditingProjectId}
               onRemove={(id) => void removeProject(id)}
+              onReorder={(ids) => void projects.reorder(ids)}
               onAddFromDisk={() => void addFromDisk()}
               onAddFromGitHub={() => void addFromGitHub()}
               busy={projects.busy || checkingGitHub}

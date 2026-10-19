@@ -1001,6 +1001,18 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Changes' })).toBeInTheDocument()
   })
 
+  // The sidebar beside it always names the project, so the bar gives its
+  // room to the directory.
+  it('shows the project directory in the title bar without repeating its name', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    const bar = screen.getByRole('banner')
+
+    expect(await within(bar).findByText(PLANNER.repoPath)).toBeInTheDocument()
+    expect(within(bar).queryByText('planner')).not.toBeInTheDocument()
+  })
+
   describe('Run and Stop in the title bar', () => {
     /** Opens the planner project on anna, with the given scripts for its workspaces. */
     async function onAnna(
@@ -1996,6 +2008,17 @@ describe('App', () => {
     })
   })
 
+  it('saves the order a project tab is dragged into', async () => {
+    givenTwoProjects()
+    await openApp()
+    const ledger = await screen.findByRole('button', { name: 'LE' })
+
+    fireEvent.dragStart(ledger)
+    fireEvent.drop(screen.getByRole('button', { name: 'PL' }))
+
+    expect(window.octopus.projects.reorder).toHaveBeenCalledWith(['ledger', 'planner'])
+  })
+
   it('closes the project settings again', async () => {
     givenTwoProjects()
     const user = await openApp()
@@ -2852,7 +2875,11 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Pull request' }))
     await user.click(await screen.findByText('anna'))
 
-    await user.click(await screen.findByRole('button', { name: 'Remove workspace…' }))
+    const remove = await screen.findByRole('button', { name: 'Remove workspace…' })
+    // Red, with a bin: this deletes a directory, and the button says so.
+    expect(remove).toHaveClass('bg-danger')
+    expect(remove.querySelector('svg')).not.toBeNull()
+    await user.click(remove)
 
     expect(await screen.findByText('Remove “anna”?')).toBeInTheDocument()
   })

@@ -35,6 +35,7 @@ import {
   rememberModels,
   rememberSkills,
   removeProject,
+  reorderProjects,
   removeWorkspace,
   updateProject,
   saveState,
@@ -510,6 +511,30 @@ describe('projects', () => {
     const after = removeProject(state, 'planner')
     expect(after.projects).toHaveLength(0)
     expect(after.workspaces).toHaveLength(0)
+  })
+
+  describe('reorderProjects', () => {
+    const two = addProject(withProject, { ...project, id: 'esl', repoPath: '/repos/esl' })
+    const three = addProject(two, { ...project, id: 'ledger', repoPath: '/repos/ledger' })
+    const idsOf = (state: typeof three): string[] => state.projects.map((item) => item.id)
+
+    it('puts the projects in the order given', () => {
+      expect(idsOf(reorderProjects(three, ['ledger', 'planner', 'esl']))).toEqual([
+        'ledger',
+        'planner',
+        'esl'
+      ])
+    })
+
+    // The window's list can be a step behind: a project added since it was
+    // read must not vanish, nor one removed since come back.
+    it('keeps a project the list lacks, last, and ignores an id that is gone', () => {
+      expect(idsOf(reorderProjects(three, ['gone', 'ledger', 'esl']))).toEqual([
+        'ledger',
+        'esl',
+        'planner'
+      ])
+    })
   })
 
   it('removing a missing project breaks nothing', () => {
