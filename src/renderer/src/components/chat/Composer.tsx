@@ -355,17 +355,21 @@ export function Composer({
   const modelValue = chosenModel?.value ?? DEFAULT_MODEL
 
   /*
-   * What the chip says.
-   *
-   * The chosen row's name, unless the session has moved off it — which a
-   * `/model` command is what causes: the CLI scopes it to the session, so it
-   * changes what is running without changing what this chat chose, and the chip
-   * names what is running.
+   * What the chip says: the chosen row's name, unless the session has moved off
+   * it — which a `/model` command is what causes: the CLI scopes it to the
+   * session, so it changes what is running without changing what this chat
+   * chose, and the chip names what is running.
    */
-  const modelLabel =
-    activeModel === null || runningModel?.value === modelValue
-      ? (chosenModel?.displayName ?? rows[0].displayName)
-      : (runningModel?.displayName ?? activeModel)
+  const movedTo =
+    activeModel !== null && runningModel?.value !== modelValue
+      ? (runningModel?.displayName ?? activeModel)
+      : null
+  const modelLabel = movedTo ?? chosenModel?.displayName ?? rows[0].displayName
+
+  // And the panel says why its tick disagrees — but only with a catalogue to
+  // compare against. Without one the default row has no model behind it, so
+  // every session would read as moved by a `/model` nobody typed.
+  const sessionMovedTo = models.length > 0 ? movedTo : null
 
   const trimmed = draft.trim()
 
@@ -686,6 +690,7 @@ export function Composer({
             planModel={planModel}
             onPlanModel={onPlanModel}
             display={modelLabel}
+            sessionMovedTo={sessionMovedTo}
           />
 
           <EffortPicker

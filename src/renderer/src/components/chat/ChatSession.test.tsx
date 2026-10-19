@@ -5,8 +5,10 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AgentModel, Effort, WorkingMode } from '@core/chats.js'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
+import type { SessionUsage } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
+import type { Result } from '../../../../preload/index.js'
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
 import { useCodeNotes } from '../../hooks/useCodeNotes.js'
@@ -1173,6 +1175,45 @@ describe('the permission mode', () => {
     await waitFor(() => {
       expect(octopus().chats.setModel).toHaveBeenCalledWith(CHAT_ID, 'claude-opus-5')
     })
+  })
+
+  /*
+   * A pick moves the session at once, but the reading that names its model
+   * used to wait for the next turn's result — and the panel, which stays open
+   * after a pick, then said "/model chose" the model just left, under the
+   * reader's own click.
+   */
+  it('reads the running model again once a pick has landed', async () => {
+    const user = userEvent.setup()
+    givenLiveCatalogue()
+    const reading = (model: string): Result<SessionUsage> => ({
+      ok: true,
+      value: {
+        context: {
+          percentage: 8,
+          usedTokens: 16_000,
+          maxTokens: 200_000,
+          model,
+          modelWindow: null
+        },
+        autoCompact: null
+      }
+    })
+    vi.mocked(octopus().chats.usage).mockResolvedValue(reading('claude-opus-5[1m]'))
+    givenChat()
+    await openLoadedChat()
+    await user.click(await screen.findByRole('button', { name: 'Model' }))
+    vi.mocked(octopus().chats.usage).mockResolvedValue(reading('claude-sonnet-5'))
+
+    await user.click(within(codeColumn()).getByRole('radio', { name: 'Sonnet' }))
+
+    await waitFor(() => {
+      expect(within(codeColumn()).getByRole('radio', { name: 'Sonnet' })).toBeChecked()
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Sonnet')
+    })
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('/model')
   })
 
   // The other half of the panel, on its own channel: the two models are two

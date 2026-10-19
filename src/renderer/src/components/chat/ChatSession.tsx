@@ -194,10 +194,13 @@ export function ChatSession({
   const rateLimit = useRateLimit()
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)
-  // Moved once a window chosen in the context menu has been applied, which
-  // starts the session again — see `useSessionUsage`.
-  const [compactChoices, setCompactChoices] = useState(0)
-  const usage = useSessionUsage(chat.chat?.id ?? null, compactChoices)
+  // Moved once a choice that moves the session has been applied — a window, a
+  // model, a mode — so the reading is taken again; see `useSessionUsage`.
+  const [sessionMoves, setSessionMoves] = useState(0)
+  const moved = (): void => {
+    setSessionMoves((count) => count + 1)
+  }
+  const usage = useSessionUsage(chat.chat?.id ?? null, sessionMoves)
   const skills = useSkills(chat.chat?.id ?? null, workspace.id, chat.ensure)
 
   /*
@@ -289,7 +292,7 @@ export function ChatSession({
     // context gauge read from has been closed.
     setSeed((current) => ({ text, id: (current?.id ?? 0) + 1 }))
     pinnedToBottom.current = true
-    setCompactChoices((count) => count + 1)
+    moved()
   }
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
@@ -502,20 +505,18 @@ export function ChatSession({
         busy={chat.busy}
         workingMode={workingMode}
         planMode={record?.planMode ?? false}
-        onMode={(mode) => void chat.setMode(mode)}
+        onMode={(mode) => void chat.setMode(mode).then(moved)}
         effort={effort}
         onEffort={(level) => void chat.setEffort(level)}
         planEffort={planEffort}
         onPlanEffort={(level) => void chat.setPlanEffort(level)}
         onAutoCompact={(window) => {
-          void chat.setAutoCompact(window).then(() => {
-            setCompactChoices((count) => count + 1)
-          })
+          void chat.setAutoCompact(window).then(moved)
         }}
         model={model}
-        onModel={(chosen) => void chat.setModel(chosen)}
+        onModel={(chosen) => void chat.setModel(chosen).then(moved)}
         planModel={planModel}
-        onPlanModel={(chosen) => void chat.setPlanModel(chosen)}
+        onPlanModel={(chosen) => void chat.setPlanModel(chosen).then(moved)}
         models={models}
         // What the session reports it is running, which the chip shows when it
         // differs from what was chosen here. It rides in with the context

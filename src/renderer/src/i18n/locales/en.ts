@@ -1104,6 +1104,10 @@ export const en = {
        as well. The model that resolves to is named underneath, because that is
        the fact the reader came for. */
     modelsSame: 'Same as writing code',
+    /* Above the columns while a `/model` command has the session on a model
+       they do not tick: the command lasts for the session, the columns are
+       what this conversation chose. */
+    modelsSessionOnly: 'This session is running {{model}}: /model chose it for this session only.',
 
     effort: 'Effort',
     effortLow: 'Low',
