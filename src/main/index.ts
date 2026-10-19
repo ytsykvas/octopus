@@ -4,7 +4,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'e
 
 import { describeError } from '../core/persist.js'
 import { claimDataRoot } from '../core/dataLock.js'
-import { rootDir } from '../core/paths.js'
+import { dataRootOverride, rootDir } from '../core/paths.js'
 import { createService, type OctopusService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
 import {
@@ -261,7 +261,16 @@ async function start(): Promise<void> {
  * The lock is keyed on Electron's own userData directory rather than on
  * `~/.octopus`, so a build whose userData differs is still unguarded. That is a
  * known limit, stated here rather than left unsaid.
+ *
+ * A copy given its own data root (`OCTOPUS_DATA_DIR`, how a development copy
+ * runs beside the real app) moves userData into it first. Left alone, userData
+ * would still be the shared one and the lock would refuse the second copy even
+ * though the two no longer share any data.
  */
+if (dataRootOverride() !== null) {
+  app.setPath('userData', join(rootDir(), 'electron'))
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {

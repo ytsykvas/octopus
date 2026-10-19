@@ -17,9 +17,30 @@ import type { ChatId, ProjectId, WorkspaceId } from './types.js'
 
 const ROOT_DIR_NAME = '.octopus'
 
-/** Application data root: `~/.octopus`. */
-export function rootDir(home: string = homedir()): string {
-  return join(home, ROOT_DIR_NAME)
+/** The variable that moves the data root, so a development copy can run beside the real app. */
+export const DATA_DIR_ENV = 'OCTOPUS_DATA_DIR'
+
+/**
+ * Where a copy was told to keep its data instead of `~/.octopus`, or null.
+ *
+ * Both single-instance locks are keyed on the data root, so a copy with a root
+ * of its own can run beside the real app without either touching the other's
+ * `state.json`. A relative path throws rather than being ignored: falling back
+ * would put the copy on the real data, the one outcome this exists to avoid.
+ */
+export function dataRootOverride(env: NodeJS.ProcessEnv = process.env): string | null {
+  const value = env[DATA_DIR_ENV]
+  if (value === undefined || value === '') return null
+  if (!isAbsolute(value)) {
+    throw new Error(`${DATA_DIR_ENV} must be an absolute path, got "${value}"`)
+  }
+  return value
+}
+
+/** Application data root: `~/.octopus`, or `$OCTOPUS_DATA_DIR` when no `home` is given. */
+export function rootDir(home?: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (home !== undefined) return join(home, ROOT_DIR_NAME)
+  return dataRootOverride(env) ?? join(homedir(), ROOT_DIR_NAME)
 }
 
 /** Global settings: `~/.octopus/config.json`. */
