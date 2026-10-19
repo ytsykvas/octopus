@@ -2471,7 +2471,10 @@ the open folders outlive the switch and the listings do not. A listing is laid
 into the tree only while git still calls its folder ignored, so `git add -f` or
 an edited `.gitignore` hands the folder back to git's own children and marks —
 and the listing is let go on the next read, as it is for a folder deleted whole,
-rather than read again on every turn for nothing.
+rather than read again on every turn for nothing. A folder inside one read from
+disk goes the same way once that one's listing stops naming it —
+`node_modules/pkg` after a reinstall, which git cannot report, since it still
+names `node_modules` whole.
 
 **A submodule is a folder, read from disk the same way**, and nothing inside it
 is greyed or marked: the outer repository has nothing to say about it, its own
