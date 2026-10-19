@@ -180,13 +180,14 @@ const MODE_ICONS: Record<ChatMode, React.ReactNode> = {
  *
  * Tinted for the modes that change what the agent does unasked or at all: of
  * the settings in this row, those are the ones worth noticing without being
- * looked for. Auto mode in its own colour rather than the accent the other two
- * share, because it is the one where a classifier, not a rule, decides — the
- * mode most worth telling apart at a glance.
+ * looked for. Each in its own colour, so the mode reads at a glance without the
+ * word: Accept edits in the amber the app uses for "goes ahead, take note",
+ * planning in the accent, and Auto in green — the one where a classifier, not
+ * a rule, decides.
  */
 const MODE_TINTS: Record<ChatMode, string> = {
   default: 'text-ink-soft hover:bg-muted hover:text-ink',
-  acceptEdits: 'bg-accent/12 text-accent',
+  acceptEdits: 'bg-warning/12 text-warning',
   plan: 'bg-accent/12 text-accent',
   auto: 'bg-success/12 text-success'
 }
@@ -530,6 +531,10 @@ export function Composer({
           dragging ? 'border-accent' : 'composer-ring border-transparent'
         }`}
       >
+        {/* The ring's line, the one layer that moves — its own element so that
+            turning it repaints an edge rather than the whole frame. First, so
+            the menus that open out of the frame draw over it. */}
+        {!dragging && <span aria-hidden className="composer-ring-line" />}
         {suggesting && (
           <CommandMenu commands={matches} active={active} onActive={setActive} onPick={complete} />
         )}
@@ -691,7 +696,7 @@ export function Composer({
           // and no measuring in JavaScript: the field also has to re-fit when
           // the panes either side of it are dragged, and the browser already
           // knows about that.
-          className="focus-ring field-sizing-content max-h-80 min-h-[8rem] w-full resize-none bg-transparent px-3 py-2.5 outline-none"
+          className="focus-ring font-prompt field-sizing-content max-h-80 min-h-[8rem] w-full resize-none bg-transparent px-3 py-2.5 text-[13px] outline-none"
         />
 
         {/* Wraps rather than overflows. The centre pane may be dragged down to

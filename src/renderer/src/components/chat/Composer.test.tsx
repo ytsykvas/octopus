@@ -617,6 +617,15 @@ describe('the settings the next message runs under', () => {
     expect(modeButton().querySelector('.lucide-map')).not.toBeNull()
   })
 
+  // Accept edits in the amber the app uses for "goes ahead, take note", apart
+  // from planning's blue and auto's green.
+  it('draws Accept edits in amber', () => {
+    renderComposer({ workingMode: 'acceptEdits' })
+
+    expect(modeButton()).toHaveClass('text-warning')
+    expect(modeButton()).not.toHaveClass('text-accent')
+  })
+
   // Manual is the one mode left untinted: nothing happens there unasked.
   it('leaves Manual untinted', () => {
     renderComposer({ workingMode: 'default' })
@@ -1163,6 +1172,30 @@ describe('the model the session is running', () => {
 
     expect(box.className).toContain('composer-ring')
     expect(box.className).not.toContain('border-accent')
+  })
+
+  // The ring's line is its own element, so that turning it repaints an edge
+  // rather than the whole frame — and it is decoration, so nothing reads it.
+  it('draws the ring line as a hidden layer of its own, and none while dragging', () => {
+    renderComposer()
+    const box = field().closest('div') as HTMLElement
+    const line = box.querySelector('.composer-ring-line')
+
+    expect(line).not.toBeNull()
+    expect(line).toHaveAttribute('aria-hidden')
+    expect(box.firstElementChild).toBe(line)
+
+    fireEvent.dragOver(box, { dataTransfer: { files: [], types: ['Files'] } })
+
+    expect(box.querySelector('.composer-ring-line')).toBeNull()
+  })
+
+  // The field is written in the fixed-width face, the rest of the window in
+  // the sans.
+  it('sets what is typed in the prompt face', () => {
+    renderComposer()
+
+    expect(field()).toHaveClass('font-prompt')
   })
 
   it('takes a file dropped anywhere on the composer', () => {

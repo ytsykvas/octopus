@@ -491,19 +491,31 @@ around the frame, with a soft glow outside it that brightens while focus is
 anywhere inside. It is the one deliberate exception to panes taking borders
 rather than shadows (§10.2 of PROJECT.md).
 
-The frame's `::before` is the ring, a gradient border around a fill of the
-frame's own surface; its `::after` is the glow, the same gradient blurred,
-underneath. That fill is what keeps the glow outside — a mask cut the blur off
-in a hard rectangle, since a mask clips at the edge of its own box. The frame
-takes `z-index: 20` to hold those layers: `isolation` would have done it at level
-zero, and the menus that open upwards out of the frame then slid under the log's
-floating day chip.
+Three layers. The line is a span of its own, `.composer-ring-line`, the
+frame's first child: a conic gradient masked down to its 1.5px edge. Under the
+contents, the frame's `::before` is a fill of its own surface, and its `::after`
+is the glow, the gradient blurred, beneath that. The fill is what keeps the
+glow outside — a mask cut the blur off in a hard rectangle, since a mask clips
+at the edge of its own box. The frame takes `z-index: 20` to hold those layers:
+`isolation` would have done it at level zero, and the menus that open upwards
+out of the frame then slid under the log's floating day chip.
 
-**The ring does not turn.** A turning version was built and measured: even rotated
-by the compositor rather than repainted, it held 6–8% of the CPU for as long as
-the window was on screen, and a version that animated the gradient's own angle
-held about 29%. A laptop with octopus open all day pays for that in battery, for
-decoration.
+**The line turns while focus is inside the composer, and nothing else moves.**
+It turns its gradient's own angle (`--ring-angle`, registered with `@property`
+so it interpolates) once every six seconds; the glow stays still and only
+brightens. The split is the whole reason it is affordable. The first turning
+versions kept the line and the fill in one layer and turned the gradient
+under the glow as well, so every frame re-blurred it: measured in an isolated
+page on the same Electron, that held ~17% of a core while it ran (an earlier
+in-app reading put it at 29%), and a compositor rotation 6–8% for as long as
+the window was on screen. Turning only the line measured ~0.5% while focused —
+no different from the still ring — and no change in memory; unfocused it costs
+nothing at all. So there is no pause for an inactive window either: there is
+nothing measurable to save. Reduced motion stops it with every other animation.
+
+**The field is set in Menlo**, at 13px — `--font-prompt`, falling back to the
+mono stack. A prompt is closer to code than to prose, and the maintainer chose
+the face by eye; the log and the rest of the window stay in the sans.
 
 While something is dragged over the composer, the ring steps aside for the plain
 accent border: "let go here" reads the same everywhere. The strip around the
@@ -1038,11 +1050,11 @@ It **switches in place**, going round `Manual` → `Accept edits` → plan →
 Shift+Tab in the field does the same here. There used to be two controls — the
 permission chip among the pickers and a plan toggle by send — and each said
 half of what this says. The pickers beside it keep their menus, because their
-lists are open-ended. `Manual` is untinted; `Accept edits` and plan are tinted
-with the accent, and `Auto` is green with a bolt — the one mode where a
-classifier rather than a rule decides, and the one most worth telling apart.
-The tints are `MODE_TINTS` in `Composer.tsx`, through the `accent` and
-`success` tokens.
+lists are open-ended. Each mode has its own colour, so it reads without the
+word: `Manual` is untinted, `Accept edits` amber (the `warning` token, the
+app's "goes ahead, take note"), plan in the accent, and `Auto` green with a
+bolt — the one mode where a classifier rather than a rule decides. The tints
+are `MODE_TINTS` in `Composer.tsx`.
 
 Leaving plan for the next mode moves the working mode **before** planning ends.
 Planning holds a working mode underneath — `acceptEdits`, when the ring reached

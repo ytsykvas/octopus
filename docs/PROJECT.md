@@ -289,7 +289,8 @@ Every status has a paired `*-bg` background for badges and notices.
 `styles.css` provides the base patterns — check them before writing new styles:
 
 - `.panel` — surface with border and radius;
-- `.composer-ring` — the composer's colour ring and glow;
+- `.composer-ring` — the composer's colour ring and glow, with `.composer-ring-line`
+  as its own first child (the one layer that turns, and only while focused);
 - `.row` / `.row-selected` — list row with hover and selection;
 - `.section-label` — section heading;
 - `.focus-ring` — visible keyboard focus;

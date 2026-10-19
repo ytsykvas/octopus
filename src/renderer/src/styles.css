@@ -159,6 +159,11 @@
   --font-sans:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  /* The composer's field only: Menlo first, the face Chromium itself gives a
+     plain field on a Mac, and the one the maintainer picked by eye. A prompt
+     is closer to code than to prose, so it reads in a fixed width, while the
+     log around it stays in the sans. */
+  --font-prompt: Menlo, ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace;
 }
 
 @layer base {
@@ -337,16 +342,19 @@
      deliberate exception to "panes take borders, not shadows" — it is the
      single place the user types, and it is meant to be found at a glance.
 
-     Two layers under the frame's contents. On top, the ring: a gradient
-     border around a fill of the frame's own surface, which is what leaves
-     only an edge of colour showing and keeps the glow outside. Beneath it,
-     the glow: the same gradient, blurred. A mask was tried for the glow and
-     cut its blur off in a hard rectangle, since a mask clips at the edge of
-     its own box.
+     Three layers. The line itself is a span of its own (`.composer-ring-line`),
+     masked down to its 1.5px edge. Under the contents, `::before` is a fill of
+     the frame's surface, which keeps the glow outside, and beneath that
+     `::after` is the glow: the gradient, blurred. A mask was tried for the glow
+     and cut its blur off in a hard rectangle, since a mask clips at the edge
+     of its own box.
 
-     Still, on purpose. A turning version was built and measured: even
-     rotated by the compositor it held 6–8% of the CPU for as long as the
-     window was on screen, which a laptop open all day pays for in battery. */
+     The line turns while focus is inside, and nothing else does. That split
+     is what makes it cheap: the version that turned the gradient under both
+     layers re-blurred the glow every frame and held ~17% of a core while it
+     ran; turning only the line's own angle measured ~0.5%, no different from
+     the still ring, and no more memory. The glow stays still and only
+     brightens. */
   .composer-ring {
     /* A stacking context of its own, or the layers at a negative z-index
        would slide under the pane behind the frame. A z-index rather than
@@ -354,13 +362,9 @@
        out of the frame are confined to its context, and the log's floating
        day chip (`z-10`) drew over them. */
     z-index: 20;
-    --ring: conic-gradient(
-      var(--project-blue),
-      var(--project-red),
-      var(--project-amber),
-      var(--project-green),
-      var(--project-blue)
-    );
+    --ring-colours:
+      var(--project-blue), var(--project-red), var(--project-amber), var(--project-green),
+      var(--project-blue);
   }
 
   .composer-ring::before,
@@ -372,19 +376,34 @@
     pointer-events: none;
   }
 
-  /* Exactly over the frame's 1px border, half a pixel thicker so none of it
-     shows at the edge. */
   .composer-ring::before {
     z-index: -1;
-    border: 1.5px solid transparent;
-    background:
-      linear-gradient(var(--surface) 0 0) padding-box,
-      var(--ring) border-box;
+    background: var(--surface);
+  }
+
+  /* Exactly over the frame's 1px border, half a pixel thicker so none of it
+     shows at the edge. The padding is the line's width; the mask keeps the
+     border box and cuts the content box out of it, so only that edge is
+     painted. */
+  .composer-ring-line {
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1.5px;
+    pointer-events: none;
+    background: conic-gradient(from var(--ring-angle), var(--ring-colours));
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+  }
+
+  .composer-ring:focus-within .composer-ring-line {
+    animation: ring-turn 6s linear infinite;
   }
 
   .composer-ring::after {
     z-index: -2;
-    background: var(--ring);
+    background: conic-gradient(var(--ring-colours));
     filter: blur(12px);
     opacity: 0.3;
     transition: opacity 0.2s ease;
@@ -548,6 +567,20 @@
 
 /* A toast arriving (AttentionToasts.tsx): a short fade and lift, so the eye
    finds it without the corner flashing. */
+/* Registered so the angle interpolates: an unregistered custom property only
+   flips at the halfway point, and the ring would jump instead of turn. */
+@property --ring-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes ring-turn {
+  to {
+    --ring-angle: 360deg;
+  }
+}
+
 @keyframes notice-in {
   from {
     opacity: 0;
