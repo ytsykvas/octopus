@@ -345,6 +345,7 @@ describe('channel table', () => {
     'projects:add',
     'projects:update',
     'projects:edit',
+    'projects:reorder',
     'projects:remove',
     'projects:branches',
     'projects:pullRequests',
@@ -530,6 +531,22 @@ describe('editing a list', () => {
       ok: true,
       value: [{ disabledSkillDefaults: [] }]
     })
+  })
+
+  it('saves the order of the projects', async () => {
+    const first = await addProject('planner')
+    const second = await addProject('ledger')
+
+    await expect(invoke('projects:reorder', [second, first])).resolves.toMatchObject({ ok: true })
+
+    await expect(invoke('projects:list')).resolves.toMatchObject({
+      ok: true,
+      value: [{ id: second }, { id: first }]
+    })
+  })
+
+  it('refuses an order that is not a list of ids', async () => {
+    await expect(invoke('projects:reorder', 'planner')).resolves.toMatchObject({ ok: false })
   })
 
   it('applies a project edit', async () => {

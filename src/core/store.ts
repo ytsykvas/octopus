@@ -728,6 +728,23 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
   }
 }
 
+/**
+ * Puts the projects in the order `orderedIds` gives — the order the tab strip
+ * shows and ⌘1–⌘9 count by.
+ *
+ * Applied to the state the commit hands over, so a list the window built
+ * before a project was added or removed is still safe: ids that are gone are
+ * ignored, and a project the list never heard of goes last in its old place.
+ */
+export function reorderProjects(state: State, orderedIds: readonly string[]): State {
+  const rank = (project: Project): number => {
+    const index = orderedIds.indexOf(project.id)
+    return index === -1 ? orderedIds.length : index
+  }
+
+  return { ...state, projects: state.projects.toSorted((a, b) => rank(a) - rank(b)) }
+}
+
 /** Removes a project together with its workspaces — no orphans are left behind. */
 export function removeProject(state: State, projectId: string): State {
   const dropped = new Set(workspacesOfProject(state, projectId).map((workspace) => workspace.id))

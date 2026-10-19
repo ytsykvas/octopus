@@ -321,6 +321,18 @@ describe('workspaces', () => {
     await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
   })
 
+  it('keeps the order the projects were reordered into across a restart', async () => {
+    const { service, projectId } = await withProject()
+    const ledger = join(dir, 'ledger')
+    await initRepo(ledger)
+    const other = await service.addProjectFromPath(ledger)
+
+    await service.reorderProjects([other.id, projectId])
+
+    const reopened = await createService(paths(dir))
+    expect(reopened.listProjects().map((item) => item.id)).toEqual([other.id, projectId])
+  })
+
   it('creates a workspace with a generated name', async () => {
     const { service, projectId } = await withProject()
 

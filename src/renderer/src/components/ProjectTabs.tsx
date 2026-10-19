@@ -1,4 +1,5 @@
 import { CloudDownload, FolderOpen, Pencil, Plus, Puzzle, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { initials } from '@core/initials.js'
@@ -19,6 +20,8 @@ interface ProjectTabsProps {
   readonly onSelect: (projectId: string) => void
   readonly onEdit: (projectId: string) => void
   readonly onRemove: (projectId: string) => void
+  /** Every project id in the order the user dragged them into. */
+  readonly onReorder: (orderedIds: readonly string[]) => void
   readonly onAddFromDisk: () => void
   readonly onAddFromGitHub: () => void
   readonly busy: boolean
@@ -49,6 +52,7 @@ export function ProjectTabs({
   onSelect,
   onEdit,
   onRemove,
+  onReorder,
   onAddFromDisk,
   onAddFromGitHub,
   busy,
@@ -57,6 +61,24 @@ export function ProjectTabs({
   onOpenPlugins
 }: ProjectTabsProps): React.JSX.Element {
   const { t } = useTranslation()
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+
+  const indexOf = (id: string | null): number => projects.findIndex((project) => project.id === id)
+
+  // Dropped on a tile, the dragged project takes that tile's place, so moving
+  // down lands below it and moving up lands above it.
+  const drop = (targetId: string): void => {
+    const from = indexOf(draggingId)
+    const to = indexOf(targetId)
+    if (from !== -1 && to !== -1 && from !== to) {
+      const ids = projects.map((project) => project.id)
+      ids.splice(to, 0, ...ids.splice(from, 1))
+      onReorder(ids)
+    }
+    setDraggingId(null)
+    setOverId(null)
+  }
 
   return (
     <nav className="bg-surface flex w-15 shrink-0 flex-col">
@@ -67,6 +89,28 @@ export function ProjectTabs({
             project={project}
             active={project.id === activeProjectId}
             mark={marks.get(project.id) ?? null}
+            dragging={project.id === draggingId}
+            // Which edge the line sits on follows the direction of the move.
+            dropEdge={
+              project.id === overId && project.id !== draggingId
+                ? indexOf(project.id) > indexOf(draggingId)
+                  ? 'below'
+                  : 'above'
+                : null
+            }
+            onDragStart={() => {
+              setDraggingId(project.id)
+            }}
+            onDragOver={() => {
+              setOverId(project.id)
+            }}
+            onDrop={() => {
+              drop(project.id)
+            }}
+            onDragEnd={() => {
+              setDraggingId(null)
+              setOverId(null)
+            }}
             onSelect={() => {
               onSelect(project.id)
             }}
@@ -194,6 +238,12 @@ function ProjectTab({
   project,
   active,
   mark,
+  dragging,
+  dropEdge,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
   onSelect,
   onEdit,
   onRemove
@@ -201,6 +251,13 @@ function ProjectTab({
   project: Project
   active: boolean
   mark: Mark | null
+  dragging: boolean
+  /** The edge the dragged project would land against, when it is over this tab. */
+  dropEdge: 'above' | 'below' | null
+  onDragStart: () => void
+  onDragOver: () => void
+  onDrop: () => void
+  onDragEnd: () => void
   onSelect: () => void
   onEdit: () => void
   onRemove: () => void
@@ -209,7 +266,19 @@ function ProjectTab({
 
   return (
     <div
-      className="relative"
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(event) => {
+        // Without this the browser refuses the drop.
+        event.preventDefault()
+        onDragOver()
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        onDrop()
+      }}
+      onDragEnd={onDragEnd}
+      className={`relative ${dragging ? 'opacity-40' : ''}`}
       style={{ '--project-color': `var(--project-${project.color})` } as React.CSSProperties}
     >
       <DropdownMenu
@@ -272,6 +341,16 @@ function ProjectTab({
           rather than part of its name, so the tab is still called by its
           letters. The ring is the strip's own colour, cutting the dot out of
           the tile. */}
+      {dropEdge !== null && (
+        <span
+          data-testid="drop-line"
+          aria-hidden
+          className={`bg-accent pointer-events-none absolute right-0 left-0 h-0.5 rounded-full ${
+            dropEdge === 'above' ? '-top-[3px]' : '-bottom-[3px]'
+          }`}
+        />
+      )}
+
       {mark !== null && (
         <span
           role="img"
