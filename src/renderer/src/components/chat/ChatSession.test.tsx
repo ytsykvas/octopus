@@ -2,11 +2,13 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
-import type { AgentModel, Effort, WorkingMode } from '@core/chats.js'
+import type { AgentModel, Effort, PlanExecutionMode, WorkingMode } from '@core/chats.js'
 import type { ProjectColor } from '@core/colors.js'
 import type { WorkspaceView } from '@core/workspaces.js'
+import type { SessionUsage } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
+import type { Result } from '../../../../preload/index.js'
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
 import { useCodeNotes } from '../../hooks/useCodeNotes.js'
@@ -30,6 +32,7 @@ interface PaneProps {
   readonly quotes?: PullRequestQuoteController
   readonly color?: ProjectColor
   readonly defaultWorkingMode?: WorkingMode
+  readonly planExecutionMode?: PlanExecutionMode
   readonly defaultEffort?: Effort
   readonly defaultModel?: string | null
   readonly defaultPlanModel?: string | null
@@ -57,6 +60,7 @@ function ChatPane({
   quotes = quoteController(),
   color = 'blue',
   defaultWorkingMode = 'default',
+  planExecutionMode = 'acceptEdits',
   defaultEffort = 'medium',
   defaultModel = null,
   defaultPlanModel = null,
@@ -86,6 +90,7 @@ function ChatPane({
       codeNotes={codeNotes}
       color={color}
       defaultWorkingMode={defaultWorkingMode}
+      planExecutionMode={planExecutionMode}
       defaultEffort={defaultEffort}
       defaultModel={defaultModel}
       defaultPlanModel={defaultPlanModel}
@@ -109,6 +114,7 @@ async function openChat(
   target: WorkspaceView = workspaceView('anna'),
   defaults: {
     workingMode?: WorkingMode
+    planExecutionMode?: PlanExecutionMode
     effort?: Effort
     model?: string | null
     planModel?: string | null
@@ -118,6 +124,7 @@ async function openChat(
     <ChatPane
       workspace={target}
       defaultWorkingMode={defaults.workingMode ?? 'default'}
+      planExecutionMode={defaults.planExecutionMode ?? 'acceptEdits'}
       defaultEffort={defaults.effort ?? 'medium'}
       defaultModel={defaults.model ?? null}
       defaultPlanModel={defaults.planModel ?? null}
@@ -172,8 +179,8 @@ function givenLiveCatalogue(): void {
  * first message is exactly the one worth choosing, so that signal would be true
  * before the chat had arrived and every test after it would race the load.
  */
-async function openLoadedChat(): Promise<void> {
-  await openChat()
+async function openLoadedChat(planExecutionMode: PlanExecutionMode = 'acceptEdits'): Promise<void> {
+  await openChat(workspaceView('anna'), { planExecutionMode })
   await waitFor(() => {
     expect(octopus().chats.history).toHaveBeenCalled()
   })
@@ -857,10 +864,10 @@ describe('deciding on a plan', () => {
    * record changed, so a control still saying Plan over an agent that has
    * started editing is exactly the state this was reported as.
    *
-   * To Auto mode whatever the chat was asking before, as the core does: that
+   * To Accept edits whatever the chat was asking before, as the core does: that
    * is what an approved plan runs in, so it is what the control must name.
    */
-  it('answers and shows the chat in Auto mode', async () => {
+  it('answers and shows the chat in Accept edits', async () => {
     const user = userEvent.setup()
     givenChat([], { planMode: true, workingMode: 'default' })
     await openLoadedChat()
@@ -869,14 +876,64 @@ describe('deciding on a plan', () => {
 
     emitAgentEvent(planRequest)
     expect(
-      await screen.findByText('Runs in Auto mode — edits go ahead without asking.')
+      await screen.findByText('Runs with Accept edits on — file changes go ahead without asking.')
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Execute' }))
 
     expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'allow', undefined)
     await waitFor(() => {
-      expect(mode()).toHaveTextContent('Auto mode')
+      expect(mode()).toHaveTextContent('Accept edits')
     })
+  })
+
+  // With the setting on Auto — its default — an approved plan goes on in auto
+  // mode, and the dialog says so before the click.
+  it('answers and shows the chat in Auto when that is the setting', async () => {
+    const user = userEvent.setup()
+    givenChat([], { planMode: true, workingMode: 'default' })
+    await openLoadedChat('auto')
+
+    emitAgentEvent(planRequest)
+    expect(
+      await screen.findByText(
+        'Runs in Auto — each step is approved or refused for you, and anything unclear is asked.'
+      )
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+    expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'allow', undefined)
+    await waitFor(() => {
+      expect(mode()).toHaveTextContent('Auto')
+    })
+  })
+
+  // The plan in the log, carried out later while still planning: the same
+  // rule, so the chat goes on in the mode the settings name.
+  it('carries a set-aside plan out in Auto when that is the setting', async () => {
+    const user = userEvent.setup()
+    givenChat(
+      [
+        {
+          role: 'agent',
+          at: '2026-08-13T09:00:00.000Z',
+          event: {
+            type: 'tool_use',
+            toolUseId: 'call-1',
+            name: 'ExitPlanMode',
+            input: { plan: '# Normalising the locales' }
+          }
+        }
+      ],
+      { planMode: true, workingMode: 'default' }
+    )
+    await openLoadedChat('auto')
+
+    await user.click(screen.getByRole('button', { name: 'Execute' }))
+
+    await waitFor(() => {
+      expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith(CHAT_ID, 'auto')
+    })
+    expect(octopus().chats.setPlanMode).toHaveBeenCalledWith(CHAT_ID, false)
   })
 
   /*
@@ -928,8 +985,8 @@ describe('deciding on a plan', () => {
     await user.click(await screen.findByRole('button', { name: 'Execute' }))
 
     expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'allow', undefined)
-    expect(screen.queryByText(/Runs in Auto mode/)).not.toBeInTheDocument()
-    expect(mode()).toHaveTextContent('Ask first')
+    expect(screen.queryByText(/Runs with Accept edits on/)).not.toBeInTheDocument()
+    expect(mode()).toHaveTextContent('Manual')
   })
 
   /*
@@ -979,7 +1036,7 @@ describe('deciding on a plan', () => {
     expect(accepting).toBeLessThan(stopped)
     expect(stopped).toBeLessThan(sent)
 
-    expect(mode()).toHaveTextContent('Auto mode')
+    expect(mode()).toHaveTextContent('Accept edits')
   })
 
   // Sending it back is not leaving planning: the agent is still working the
@@ -1015,7 +1072,7 @@ describe('the permission mode', () => {
     await openLoadedChat()
 
     await waitFor(() => {
-      expect(picker()).toHaveTextContent('Auto mode')
+      expect(picker()).toHaveTextContent('Accept edits')
     })
 
     await user.click(picker())
@@ -1034,7 +1091,7 @@ describe('the permission mode', () => {
   it('names what the settings will create the first record with', async () => {
     await openChat(workspaceView('anna'), { workingMode: 'acceptEdits', effort: 'high' })
 
-    expect(picker()).toHaveTextContent('Auto mode')
+    expect(picker()).toHaveTextContent('Accept edits')
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('High')
   })
 
@@ -1048,23 +1105,24 @@ describe('the permission mode', () => {
       expect(octopus().chats.history).toHaveBeenCalled()
     })
 
-    expect(picker()).toHaveTextContent('Ask first')
+    expect(picker()).toHaveTextContent('Manual')
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Low')
   })
 
   /*
-   * The ring Claude Code's shift+tab goes round, end to end: ask first, accept
-   * edits, plan, and back. The core deliberately leaves `bypassPermissions`
-   * out, and going all the way round is what shows no fourth mode hides in it.
+   * The ring Claude Code's shift+tab goes round, end to end: manual, accept
+   * edits, plan, auto, and back. The core deliberately leaves
+   * `bypassPermissions` out, and going all the way round is what shows no
+   * fifth mode hides in it.
    */
-  it('cycles through asking, accepting and planning and no others', async () => {
+  it('cycles through manual, accepting, planning and auto and no others', async () => {
     const user = userEvent.setup()
     givenChat()
     await openLoadedChat()
 
     await user.click(picker())
     await waitFor(() => {
-      expect(picker()).toHaveTextContent('Auto mode')
+      expect(picker()).toHaveTextContent('Accept edits')
     })
 
     await user.click(picker())
@@ -1074,7 +1132,12 @@ describe('the permission mode', () => {
 
     await user.click(picker())
     await waitFor(() => {
-      expect(picker()).toHaveTextContent('Ask first')
+      expect(picker()).toHaveTextContent('Auto')
+    })
+
+    await user.click(picker())
+    await waitFor(() => {
+      expect(picker()).toHaveTextContent('Manual')
     })
 
     expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument()
@@ -1096,12 +1159,13 @@ describe('the permission mode', () => {
   })
 
   /*
-   * Leaving a plan for "ask first" changes both fields, and the order is the
+   * Leaving a plan for auto mode changes both fields, and the order is the
    * point. Planning held `acceptEdits` underneath; ended first, the session
-   * would pass through it, and an edit landing then would go through unasked.
-   * The working mode moves while the agent still runs no tools at all.
+   * would pass through it, and an edit landing then would go through without
+   * the classifier. The working mode moves while the agent still runs no
+   * tools at all.
    */
-  it('leaves planning for asking first without passing through accepting edits', async () => {
+  it('leaves planning for auto mode without passing through accepting edits', async () => {
     const user = userEvent.setup()
     givenChat([], { planMode: true, workingMode: 'acceptEdits' })
     await openLoadedChat()
@@ -1111,12 +1175,12 @@ describe('the permission mode', () => {
     await waitFor(() => {
       expect(octopus().chats.setPlanMode).toHaveBeenCalledWith(CHAT_ID, false)
     })
-    expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith(CHAT_ID, 'default')
+    expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith(CHAT_ID, 'auto')
 
     const asking = vi.mocked(octopus().chats.setWorkingMode).mock.invocationCallOrder[0] ?? 0
     const stopped = vi.mocked(octopus().chats.setPlanMode).mock.invocationCallOrder[0] ?? 0
     expect(asking).toBeLessThan(stopped)
-    expect(picker()).toHaveTextContent('Ask first')
+    expect(picker()).toHaveTextContent('Auto')
   })
 
   // Switching between the two degrees of permission is not a reason to touch
@@ -1173,6 +1237,45 @@ describe('the permission mode', () => {
     await waitFor(() => {
       expect(octopus().chats.setModel).toHaveBeenCalledWith(CHAT_ID, 'claude-opus-5')
     })
+  })
+
+  /*
+   * A pick moves the session at once, but the reading that names its model
+   * used to wait for the next turn's result — and the panel, which stays open
+   * after a pick, then said "/model chose" the model just left, under the
+   * reader's own click.
+   */
+  it('reads the running model again once a pick has landed', async () => {
+    const user = userEvent.setup()
+    givenLiveCatalogue()
+    const reading = (model: string): Result<SessionUsage> => ({
+      ok: true,
+      value: {
+        context: {
+          percentage: 8,
+          usedTokens: 16_000,
+          maxTokens: 200_000,
+          model,
+          modelWindow: null
+        },
+        autoCompact: null
+      }
+    })
+    vi.mocked(octopus().chats.usage).mockResolvedValue(reading('claude-opus-5[1m]'))
+    givenChat()
+    await openLoadedChat()
+    await user.click(await screen.findByRole('button', { name: 'Model' }))
+    vi.mocked(octopus().chats.usage).mockResolvedValue(reading('claude-sonnet-5'))
+
+    await user.click(within(codeColumn()).getByRole('radio', { name: 'Sonnet' }))
+
+    await waitFor(() => {
+      expect(within(codeColumn()).getByRole('radio', { name: 'Sonnet' })).toBeChecked()
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Sonnet')
+    })
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('/model')
   })
 
   // The other half of the panel, on its own channel: the two models are two
@@ -1938,8 +2041,32 @@ describe('the permission mode', () => {
     await user.click(picker())
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
-    expect(picker()).toHaveTextContent('Ask first')
+    expect(picker()).toHaveTextContent('Manual')
   })
+
+  // The core gave auto mode up by itself, and the line in the log is the only
+  // word of it the window gets: the chip has to follow it, to wherever it went.
+  it.each([
+    ['default', 'Manual'],
+    ['acceptEdits', 'Accept edits']
+  ] as const)(
+    'moves the chip off auto mode when the core falls back to %s',
+    async (fallback, label) => {
+      givenChat([], { workingMode: 'auto' })
+      await openLoadedChat()
+      expect(picker()).toHaveTextContent('Auto')
+
+      emitAgentEvent({ type: 'auto_mode_unavailable', reason: 'not for this model', fallback })
+
+      await waitFor(() => {
+        expect(picker()).toHaveTextContent(label)
+      })
+      expect(
+        screen.getByText(`Auto mode is not available here, so this chat is on ${label} now`)
+      ).toBeInTheDocument()
+      expect(screen.getByText('not for this model')).toBeInTheDocument()
+    }
+  )
 })
 
 /*
@@ -2292,7 +2419,8 @@ describe('choosing where the conversation compacts', () => {
           effective: 1_000_000,
           modelWindow: 1_000_000,
           override: null,
-          pending: false
+          pending: false,
+          settled: false
         }
       }
     })

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { WorkingMode } from '@core/chats.js'
+
 import { Button } from '../Button.js'
 import { Modal } from '../Modal.js'
 import { Markdown } from './Markdown.js'
@@ -20,10 +22,12 @@ interface PlanDialogProps {
   readonly text: string
   readonly onText: (text: string) => void
   /**
-   * Whether executing moves the conversation to `acceptEdits` — true only out
-   * of planning, since a plan the agent offered unasked changes no mode.
+   * The mode executing moves the conversation to, when it moves at all — only
+   * out of planning, since a plan the agent offered unasked changes no mode.
+   * `acceptEdits` or `auto`, whichever the settings name, and `auto` for a
+   * conversation already in it.
    */
-  readonly accepting: boolean
+  readonly goesOnIn: WorkingMode | null
   /**
    * Approves the plan. `editedPlan` is the user's own version when they changed
    * it, and null when they did not — so the agent is only ever told a plan is
@@ -49,14 +53,15 @@ interface PlanDialogProps {
  *
  * Executing out of planning goes on in `acceptEdits`, whatever the
  * conversation was asking before — the composer's one mode control has no
- * second half left to say otherwise. That widens what the agent may do, so the line beside the
+ * second half left to say otherwise — or back in `auto` for a conversation
+ * that was there. Either widens what the agent may do, so the line beside the
  * button says it before the click rather than the footer after it.
  */
 export function PlanDialog({
   plan,
   text,
   onText,
-  accepting,
+  goesOnIn,
   onExecute,
   onKeepPlanning
 }: PlanDialogProps): React.JSX.Element {
@@ -82,8 +87,10 @@ export function PlanDialog({
       onClose={keepPlanning}
       footer={
         <>
-          {accepting && (
-            <span className="text-ink-soft mr-auto text-[11px]">{t('chat.planExecuteHint')}</span>
+          {goesOnIn !== null && (
+            <span className="text-ink-soft mr-auto text-[11px]">
+              {t(goesOnIn === 'auto' ? 'chat.planExecuteHintAuto' : 'chat.planExecuteHint')}
+            </span>
           )}
           <Button
             onClick={() => {

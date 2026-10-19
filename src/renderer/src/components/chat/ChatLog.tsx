@@ -4,14 +4,17 @@ import {
   CircleSlash,
   Eraser,
   FileCode2,
+  FolderGit2,
   Map,
   Pencil,
   Play,
   Repeat,
   ShieldAlert,
+  ShieldX,
   TriangleAlert,
   Undo2,
-  Wrench
+  Wrench,
+  ZapOff
 } from 'lucide-react'
 import {
   AssistantRuntimeProvider,
@@ -20,6 +23,7 @@ import {
   type ThreadMessageLike,
   useExternalStoreRuntime
 } from '@assistant-ui/react'
+import type { TFunction } from 'i18next'
 import { createContext, useContext, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -32,6 +36,7 @@ import type { ChatEntry } from '@core/transcript.js'
 
 import { Button } from '../Button.js'
 import { DisclosureChevron } from '../Disclosure.js'
+import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import type { Streaming } from '../../hooks/useChat.js'
@@ -55,7 +60,7 @@ import {
   toolRunRows
 } from './toolRuns.js'
 import { readFailure } from './toolFailure.js'
-import { describeToolInput, readPlan } from './toolSummary.js'
+import { describeToolInput, readPlan, readWorktreeMove, type WorktreeMove } from './toolSummary.js'
 import { UsageCard } from './UsageCard.js'
 
 /**
@@ -379,6 +384,9 @@ function AgentRow({
       // a name with no readable arguments, and once as the thing to answer.
       if (readQuestions(event.name, event.input) !== null) return null
 
+      const move = readWorktreeMove(event.name, event.input)
+      if (move !== null) return <WorktreeMoveRow move={move} />
+
       // A call that changed a file never arrives here: `groupToolRuns` pulls it
       // out into a block of its own, so that it can carry the context recorded
       // for it — which arrives later in the log than the call does.
@@ -525,6 +533,12 @@ function AgentRow({
     case 'model_refusal_no_fallback':
       return <RefusalNoFallbackRow event={event} />
 
+    case 'permission_denied':
+      return <DeniedRow event={event} />
+
+    case 'auto_mode_unavailable':
+      return <AutoFellBackRow event={event} />
+
     // A record, not a row. What it names is struck through above it, and a line
     // of its own would say the same thing twice.
     case 'retracted':
@@ -648,6 +662,10 @@ function NoteCard({
 }: {
   readonly note: Extract<MessageBlock, { kind: 'note' }>
 }): React.JSX.Element {
+  // In its file's colours, as the viewer and the diff draw the same lines: a
+  // few lines out of context are where colour helps most.
+  const { lines, tokens } = useColouredText(note.path, note.quote)
+
   return (
     <div className="border-line bg-canvas text-ink min-w-0 overflow-hidden rounded-[var(--radius-control)] border">
       <p className="text-ink-soft border-line flex min-w-0 items-center gap-1.5 border-b px-2 py-1 font-mono text-[11px]">
@@ -658,8 +676,8 @@ function NoteCard({
         {note.suffix !== null && <span className="text-ink-faint shrink-0">{note.suffix}</span>}
       </p>
       {/* Not wrapped: code read with its lines broken is code misread. */}
-      <pre className="text-ink-soft overflow-x-auto px-2 py-1 font-mono text-[11px] leading-[16px] whitespace-pre">
-        {note.quote}
+      <pre className="diff-code text-ink overflow-x-auto px-2 py-1 font-mono text-[11px] leading-[16px] whitespace-pre">
+        <ColouredLines lines={lines} tokens={tokens} />
       </pre>
       {note.text !== '' && <p className="border-line border-t px-2 py-1">{note.text}</p>}
     </div>
@@ -1338,6 +1356,34 @@ function CompactedRow({
 }
 
 /**
+ * The line where the agent moved into another worktree, or came back.
+ *
+ * In the warning colour rather than the compaction line's faint one: from here
+ * on the rest of the window may be showing a directory the agent has left,
+ * which is worth noticing before trusting the diff beside it. Worded as what
+ * the agent is doing rather than what happened, because the line is drawn from
+ * the call: the CLI may ask permission first, and refuses a removal with
+ * uncommitted work on purpose — its answer is the red line below.
+ */
+function worktreeMoveText(move: WorktreeMove, t: TFunction): string {
+  if (move.kind === 'exit') return t(move.removed ? 'chat.worktreeRemoved' : 'chat.worktreeLeft')
+  return move.target === null
+    ? t('chat.worktreeEnteredNew')
+    : t('chat.worktreeEntered', { target: move.target })
+}
+
+function WorktreeMoveRow({ move }: { move: WorktreeMove }): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <p className="text-warning border-line flex items-center gap-2 border-t pt-2 text-[11px] wrap-anywhere">
+      <FolderGit2 aria-hidden size={12} className="shrink-0" />
+      {worktreeMoveText(move, t)}
+    </p>
+  )
+}
+
+/**
  * The line where a model refused and another one took the turn.
  *
  * In the same quiet register as the compaction and reset lines, and for the
@@ -1402,9 +1448,60 @@ function RefusalNoFallbackRow({
 }
 
 /**
- * What both refusal lines are made of.
+ * The line where a tool call was refused without anyone being asked.
  *
- * Shared because the two differ in one sentence and one glyph, and the markup
+ * Auto mode's classifier, mostly, and the reason this is drawn: the call it
+ * blocked otherwise shows only as a tool that failed, and a mode that decides
+ * on the user's behalf has to leave those decisions where they can be read.
+ * The reason is the deciding component's own prose, shown as given.
+ */
+function DeniedRow({
+  event
+}: {
+  event: Extract<AgentEvent, { type: 'permission_denied' }>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <RefusalRow
+      icon={<ShieldX aria-hidden size={12} />}
+      said={t(event.byClassifier ? 'chat.deniedByAuto' : 'chat.deniedByRule', {
+        tool: event.toolName
+      })}
+      explanation={event.reason}
+    />
+  )
+}
+
+/**
+ * The line where auto mode was given up, which is why the chip moved.
+ *
+ * The chip changed by itself, and this is the only account of it: the mode it
+ * went to, and the SDK's reason when there was one — which plan, model or
+ * setting stood in the way.
+ */
+function AutoFellBackRow({
+  event
+}: {
+  event: Extract<AgentEvent, { type: 'auto_mode_unavailable' }>
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <RefusalRow
+      icon={<ZapOff aria-hidden size={12} />}
+      said={t('chat.autoFellBack', {
+        mode: t(event.fallback === 'acceptEdits' ? 'chat.modeAcceptEdits' : 'chat.modeDefault')
+      })}
+      explanation={event.reason}
+    />
+  )
+}
+
+/**
+ * What the refusal and denial lines are made of.
+ *
+ * Shared because the lines differ in one sentence and one glyph, and the markup
  * under them is load-bearing — the explanation is a second paragraph, so this
  * is the one row in the quiet register that is a `div` rather than a `p`.
  * Two copies of that would drift the first time either is touched.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { describeToolInput, planTitle, readPlan } from './toolSummary.js'
+import { describeToolInput, planTitle, readPlan, readWorktreeMove } from './toolSummary.js'
 
 describe('what a tool call acted on', () => {
   // A tool call is only legible if the row says what it touched, and every
@@ -91,5 +91,49 @@ describe('what a plan calls itself', () => {
 
   it('answers nothing for a plan with nothing in it', () => {
     expect(planTitle('\n   \n')).toBe('')
+  })
+})
+
+/*
+ * The agent can move its working directory into another worktree. The window's
+ * diff, files, terminal and scripts stay on the workspace's own, so the move is
+ * said in the log rather than left as a tool name with nothing beside it.
+ */
+describe('the agent moving into another worktree, or back', () => {
+  it('names the worktree it moved into, by path or by name', () => {
+    expect(readWorktreeMove('EnterWorktree', { path: '/repo/.claude/worktrees/spike' })).toEqual({
+      kind: 'enter',
+      target: '/repo/.claude/worktrees/spike'
+    })
+    expect(readWorktreeMove('EnterWorktree', { name: ' spike ' })).toEqual({
+      kind: 'enter',
+      target: 'spike'
+    })
+  })
+
+  // Without either the CLI makes up a name, which only its result says.
+  it('moves into a new worktree it was given no name for', () => {
+    expect(readWorktreeMove('EnterWorktree', {})).toEqual({ kind: 'enter', target: null })
+    expect(readWorktreeMove('EnterWorktree', { name: '  ' })).toEqual({
+      kind: 'enter',
+      target: null
+    })
+  })
+
+  it('tells leaving one kept from leaving one removed', () => {
+    expect(readWorktreeMove('ExitWorktree', { action: 'keep' })).toEqual({
+      kind: 'exit',
+      removed: false
+    })
+    expect(readWorktreeMove('ExitWorktree', { action: 'remove', discard_changes: true })).toEqual({
+      kind: 'exit',
+      removed: true
+    })
+  })
+
+  it('is not looked for in any other tool, nor in an input it cannot read', () => {
+    expect(readWorktreeMove('Bash', { path: '/elsewhere' })).toBeNull()
+    expect(readWorktreeMove('ExitWorktree', { action: 'archive' })).toBeNull()
+    expect(readWorktreeMove('EnterWorktree', null)).toBeNull()
   })
 })
