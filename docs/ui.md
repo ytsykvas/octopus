@@ -2482,23 +2482,13 @@ only the ignored folders still open — one opened once and closed must not cost
 long read on every turn after. An open folder with no listing yet is read along
 with them: every one of them after a switch to another workspace and back, since
 the open folders outlive the switch and the listings do not. A listing is laid
-into the tree only while git still calls its folder ignored, so `git add -f` or
-an edited `.gitignore` hands the folder back to git's own children and marks —
-and the listing is let go on the next read, as it is for a folder deleted whole,
-rather than read again on every turn for nothing. A folder inside one read from
-disk goes the same way once that one's listing stops naming it —
-`node_modules/pkg` after a reinstall, which git cannot report, since it still
-names `node_modules` whole.
-
-**A submodule is a folder, read from disk the same way**, and nothing inside it
-is greyed or marked: the outer repository has nothing to say about it, its own
-ignored folders included. `ls-files --cached` names one like any file, which
-drew it as a file the viewer then found to be a folder, so the tracked files are
-read with `--stage` and a mode of `160000` makes the entry a folder. Every
-folder inside it is read from disk in turn — git lists nothing in there — and a
-submodule git reports as changed, by a new commit or an edit inside, carries
-that status on the folder's row. A workspace's submodules are often not checked
-out, and then the folder opens empty.
+into the tree only while git still names its folder whole, so `git add -f`, an
+edited `.gitignore` or a first file in an empty folder hands it back to git's
+own children and marks — and the listing is let go on the next read, as it is
+for a folder deleted whole, rather than read again on every turn for nothing. A
+folder inside one read from disk goes the same way once that one's listing
+stops naming it — `node_modules/pkg` after a reinstall, which git cannot report,
+since it still names `node_modules` whole.
 
 **A submodule is a folder, read from disk the same way**, and nothing inside it
 is greyed or marked: the outer repository has nothing to say about it, its own
@@ -2515,6 +2505,17 @@ inside the worktree without being added as a submodule is the same kind of
 folder: git names it `nested/` among the untracked and never looks inside, and
 taken as a path that drew a folder holding a row with no name. It now opens like
 a submodule, ungreyed, with the untracked mark on its own row.
+
+**An empty folder is in the tree too**, mostly. git lists files, so a folder the
+agent has just made — before it writes into it — was nowhere here while every
+editor's explorer showed it. `ls-files --others --directory` names it, and names
+a folder of untracked files the same way, so `parseEmptyFolders` keeps only the
+folders with nothing at or under them in the untracked or the ignored listing —
+a hidden name like `.DS_Store` not counting, since the tree drops it. Each is
+read from disk when opened, and says it holds nothing; a folder holding only an
+empty folder is named whole and opens onto it. What is still missed: git names
+only the topmost untracked folder, so an empty `new/b` beside a written
+`new/a/x.ts` is never printed, and only a read of the disk could find it.
 
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when

@@ -30,7 +30,8 @@ export type TreeEntryKind = 'file' | 'directory'
  * One path the tree knows about.
  *
  * `directory` is only ever a folder git names whole — an ignored one, a
- * submodule, or a repository nested in the worktree — and its contents are
+ * submodule, a repository nested in the worktree, or an untracked folder with
+ * nothing in it — and its contents are
  * read from disk when it is opened. Every other folder is implied by the files
  * under it, which is how git lists them.
  */
@@ -73,8 +74,8 @@ export interface TreeNode {
   readonly ignored: boolean
   /**
    * Whether its children come from disk when it is opened, rather than from
-   * git's listings: a folder git ignores whole, a submodule or a nested
-   * repository, and every folder read inside one. Apart from `ignored` because
+   * git's listings: a folder git ignores whole, a submodule, a nested
+   * repository or an empty untracked folder, and every folder read inside one. Apart from `ignored` because
    * a submodule or a nested repository is read that way and is not greyed —
    * nothing inside it is the outer repository's to leave out.
    */
@@ -240,6 +241,45 @@ export function parseUntracked(output: string): TreeEntry[] {
   return othersIn(output, false)
 }
 
+/**
+ * Reads `git ls-files --others --exclude-standard --directory -z` for the
+ * folders no other listing names: the ones with no file in them.
+ *
+ * A folder the agent has just made, before it writes into it, is in every
+ * editor's explorer and was nowhere here. `--directory` names it — `a/` for a
+ * folder holding only an empty `b`, too — and names a folder of untracked files
+ * the same way, so a folder is kept only when neither the untracked listing nor
+ * the ignored one has anything at or under it. What is kept is a folder read
+ * from disk when opened, like a nested repository, and one with nothing in it
+ * says so.
+ *
+ * Not every empty folder: `--directory` names only the topmost untracked one,
+ * so an empty `new/b` beside a written `new/a/x.ts` is never printed, and only
+ * a read of the disk could find it.
+ *
+ * One more walk of the untracked files, run beside the others: 24ms against
+ * the untracked listing's 23ms and the status's 35ms, on a checkout of 1,700
+ * files (2026-10-19).
+ */
+export function parseEmptyFolders(
+  output: string,
+  untracked: readonly TreeEntry[],
+  ignored: readonly TreeEntry[]
+): TreeEntry[] {
+  // Every listed path and every folder above one: a folder in here holds
+  // something, or is something. An untracked file `--directory` prints is in
+  // the untracked listing too, so only folders get through. A hidden name does
+  // not count: the tree drops it, and a folder holding only Finder's
+  // `.DS_Store` would then be drawn nowhere.
+  const holding = new Set<string>()
+  for (const { path } of [...untracked, ...ignored]) {
+    if (hidden(path)) continue
+    for (let at = path; at !== ''; at = parentOf(at)) holding.add(at)
+  }
+
+  return othersIn(output, false).filter((entry) => !holding.has(entry.path))
+}
+
 function hidden(path: string): boolean {
   return path.split('/').some((segment) => HIDDEN_NAMES.has(segment))
 }
@@ -375,7 +415,8 @@ export function buildTree(entries: readonly TreeEntry[]): Map<string, TreeNode[]
 
 /**
  * Which of these folders have their children read from disk: one git names
- * whole — ignored, or a submodule — and any folder inside one.
+ * whole — ignored, a submodule, a nested repository or an empty folder — and
+ * any folder inside one.
  *
  * Told from the entries alone, so a folder open inside another is found
  * without waiting for the outer one's listing.
@@ -477,17 +518,24 @@ export function folderStatuses(
  * failed first is not something anybody acts on here.
  */
 export async function readFileTree(exec: GitExec): Promise<FileTreeSnapshot> {
-  const [status, staged, others, ignored] = await Promise.all([
+  const [status, staged, others, ignored, folders] = await Promise.all([
     exec(['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-uall']),
     exec(['ls-files', '-z', '--stage']),
     exec(['ls-files', '-z', '--others', '--exclude-standard']),
-    exec(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'])
+    exec(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory']),
+    exec(['ls-files', '-z', '--others', '--exclude-standard', '--directory'])
   ])
 
   const { statuses, movedAway } = parseStatus(status)
+  const untracked = parseUntracked(others)
+  const ignoredEntries = parseIgnored(ignored)
   const { entries, truncated } = collectTreeEntries(
-    [...parseStaged(staged), ...parseUntracked(others)],
-    parseIgnored(ignored),
+    [
+      ...parseStaged(staged),
+      ...untracked,
+      ...parseEmptyFolders(folders, untracked, ignoredEntries)
+    ],
+    ignoredEntries,
     statuses,
     movedAway
   )
