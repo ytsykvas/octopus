@@ -2037,7 +2037,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * Transcript appends, run one after another.
    *
-   * Their own chain rather than the state one: an append does not read the
+   * Their own line rather than the state one: an append does not read the
    * state, so making it wait for a save would only slow the log down. What it
    * does need is order — two appends racing would interleave the conversation.
    */
@@ -2476,7 +2476,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await Promise.allSettled([...inFlight].map((entry) => entry.promise))
     }
 
-    // State and config writes are serialised on chains of their own, which the
+    // State and config writes are serialised on lines of their own, which the
     // work above will have added to.
     await stateWrites.idle()
     await configWrites.idle()

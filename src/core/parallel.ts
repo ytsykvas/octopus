@@ -108,9 +108,9 @@ export async function within(ms: number, work: Promise<unknown>): Promise<boolea
  *
  * For work whose **choice** has to be serialised, not only its write: anything
  * that reads, decides and then writes, where two overlapping in the middle would
- * both decide from the same picture — and for a file written whole, where two
- * writes racing for one temporary path fail. A failure does not stop the line:
- * the caller still gets the rejection, and the task behind it still runs.
+ * both decide from the same picture — and for a file whose writes must not
+ * overlap or interleave. A failure does not stop the line: the caller still
+ * gets the rejection, and the task behind it still runs.
  */
 export function oneAtATime(): Line {
   let last: Promise<unknown> = Promise.resolve()

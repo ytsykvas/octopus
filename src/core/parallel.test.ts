@@ -194,4 +194,16 @@ describe('one at a time', () => {
 
     expect(order).toEqual(['first ends', 'second fails'])
   })
+
+  // So a wait does not chase a stream that keeps queueing behind it.
+  it('does not wait for what is queued after it was asked', async () => {
+    const line = oneAtATime()
+    const order: string[] = []
+
+    const idle = line.idle()
+    void line(() => later('after', 20, () => order.push('after ends')))
+    await idle
+
+    expect(order).toEqual([])
+  })
 })
