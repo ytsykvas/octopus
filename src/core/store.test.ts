@@ -142,6 +142,20 @@ describe('load and save', () => {
     await expect(loadState(file)).resolves.toEqual(marked)
   })
 
+  // A project copies the prefix as it was when it was added, so one stored
+  // with a slash too many kept failing every workspace after the setting was
+  // put right.
+  it('reads a project’s stored branch prefix as git will take it', async () => {
+    const stored = {
+      ...withProject,
+      projects: withProject.projects.map((one) => ({ ...one, branchPrefix: 'octo/' }))
+    }
+    await writeFile(file, JSON.stringify(stored), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.projects[0]?.branchPrefix).toBe('octo')
+  })
+
   // Every project on disk predates icons, and a state file that refused to load
   // over a missing key would lose the whole list.
   it('loads a project written before icons existed', async () => {

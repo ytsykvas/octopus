@@ -528,6 +528,22 @@ describe('workspaces', () => {
     await expect(service.revertWorkspaceFile(workspace.id, '../escape.txt')).rejects.toThrow()
   })
 
+  /*
+   * Typed the way a branch reads on GitHub, the prefix used to give
+   * `octo//magda`, and every new workspace failed with git's own refusal.
+   */
+  it('creates a workspace under a prefix typed with a slash too many', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const service = await createService(paths(dir))
+    await service.updateConfig({ branchPrefix: 'octo/' })
+    const project = await service.addProjectFromPath(repo)
+
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    expect(workspace.branch).toMatch(/^octo\/[^/]+$/)
+  })
+
   it('reads what a workspace changed against the project’s base branch', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)
