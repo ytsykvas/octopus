@@ -335,7 +335,10 @@ once it has waited a quarter of a second: every message passes through
 `queued`, one sent to an idle agent for two milliseconds, and marking at once
 would flash the word under each of them. Its tooltip says what
 Stop does not do: an interrupt leaves a queued message in place (the receipt
-lists it under `still_queued`) and it then runs as a turn of its own. The
+lists it under `still_queued`) and it then runs as a turn of its own — which
+the tab shows as running: `started` for a message after the previous turn's
+result sets the chat `running` again (`handleEvent`), where before only a send
+did and the agent worked under an idle tab with no Stop. The
 protocol can cancel it, but the installed SDK offers no typed call for that, so
 the mark tells the truth rather than Stop pretending to do more.
 
