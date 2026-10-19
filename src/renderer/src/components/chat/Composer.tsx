@@ -57,8 +57,7 @@ interface ComposerProps {
   readonly busy: boolean
   /**
    * Takes the caret on mount — for a workspace just made, whose task is the
-   * next thing typed. An effect rather than `autoFocus`, which the linter
-   * refuses for every field because it is wrong for most.
+   * next thing typed.
    */
   readonly focusOnMount?: boolean
   /** What the agent may do without asking, once it is doing anything. */

@@ -53,6 +53,19 @@ describe('PluginsWindow', () => {
     expect(screen.getByRole('tabpanel')).toHaveTextContent('context7')
   })
 
+  it('starts in the search, and moves to the store\u2019s on a tab switch', async () => {
+    const user = userEvent.setup()
+    draw({ installed: [installedPlugin()], catalog: catalogOf([]) })
+
+    expect(screen.getByRole('searchbox', { name: 'Filter installed plugins' })).toHaveFocus()
+
+    await user.click(screen.getByRole('tab', { name: /Store/ }))
+
+    expect(
+      screen.getByRole('searchbox', { name: 'Search plugins by name, description or keyword' })
+    ).toHaveFocus()
+  })
+
   it('counts nothing before the listing has answered', () => {
     draw({ installed: null })
 
