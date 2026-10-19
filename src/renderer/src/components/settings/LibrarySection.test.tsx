@@ -256,6 +256,18 @@ describe('editing one', () => {
 })
 
 describe('renaming one', () => {
+  // The question is a name, so the caret is where the answer goes.
+  it('starts in the field', async () => {
+    const user = userEvent.setup()
+    holding([entry()])
+    await renderSection()
+
+    await user.click(await screen.findByRole('button', { name: 'What to do with ship' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Rename' }))
+
+    expect(await screen.findByLabelText(/New name/)).toHaveFocus()
+  })
+
   it('asks for the new name and moves it', async () => {
     const user = userEvent.setup()
     holding([entry()])

@@ -838,9 +838,9 @@ export const uk: Translation = {
 
     modeToggle: 'Дозволи: {{mode}}',
     modeDefault: 'Питати',
-    modeAcceptEdits: 'Auto mode',
+    modeAcceptEdits: 'Accept edits',
     planMode: 'План',
-    modeCycle: 'Змінити режим — Питати, Auto mode, План (Shift+Tab)',
+    modeCycle: 'Змінити режим — Питати, Accept edits, План (Shift+Tab)',
 
     toolSteps_one: '{{count}} дія',
     toolSteps_few: '{{count}} дії',
@@ -861,7 +861,7 @@ export const uk: Translation = {
     planEditDone: 'Назад до плану',
     planEditLabel: 'План у форматі markdown',
     planEdited: 'План у вашій редакції',
-    planExecuteHint: 'Виконується в Auto mode — зміни вносяться без запитів.',
+    planExecuteHint: 'Виконується в режимі Accept edits — зміни у файлах вносяться без запитів.',
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
     questionTitle: 'Агент запитує',
@@ -997,7 +997,8 @@ export const uk: Translation = {
     branchPrefix: 'Префікс гілок',
     branchPrefixHint:
       'Гілки воркспейсів називаються <префікс>/<воркспейс>. Зазвичай беруть GitHub-username.',
-    branchPrefixEmpty: 'Префікс не може бути порожнім.',
+    branchPrefixUnusable: 'У префіксі має бути хоча б один символ, який приймає git.',
+    branchPrefixBecomes: 'Буде збережено як {{prefix}}',
 
     cloneDirectory: 'Тека для клонування',
     cloneDirectoryHint:
@@ -1034,9 +1035,9 @@ export const uk: Translation = {
     permissionAsk: 'Питати',
     permissionAskHint:
       'Читання відбувається мовчки; запис файлу чи запуск команди чекає на відповідь.',
-    permissionAcceptEdits: 'Правки без питань',
+    permissionAcceptEdits: 'Accept edits',
     permissionAcceptEditsHint:
-      'Зміни у файлах проходять без запиту. Команди все одно чекають — вони виходять за межі робочого дерева.',
+      'Зміни у файлах проходять без запиту, прості файлові команди теж (mkdir, mv, rm). Решта команд чекає.',
 
     alwaysAllowed: 'Відповідь «завжди»',
     alwaysAllowedHint:
@@ -1131,7 +1132,7 @@ export const uk: Translation = {
 
     inRepository: 'У цьому репозиторії',
     inRepositoryNote:
-      'Агент знаходить їх у клоні сам. Вимкніть, щоб скіл не потрапляв у нові розмови тут, або скопіюйте, щоб мати його в кожному проєкті.',
+      'Агент знаходить їх у клоні сам. Вимкніть, щоб скіл не потрапляв у розмови тут, або скопіюйте, щоб мати його в кожному проєкті.',
     copyToGlobal: 'Скопіювати для всіх проєктів',
     inspectAction: 'Прочитати',
     noDescription: 'Опису про себе не дає.',

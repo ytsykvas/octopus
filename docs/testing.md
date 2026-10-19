@@ -309,7 +309,7 @@ catch it.
 `setup.ts` wraps Testing Library's `asyncWrapper` so each wait ends with one
 more `setImmediate`, queued behind whatever the scheduler had queued when the
 wait finished. That covers a wait that ended **because the DOM changed**. It
-does not cover work the scheduler queues afterwards, which leaves three shapes
+does not cover work the scheduler queues afterwards, which leaves four shapes
 a test can still get wrong:
 
 - **`getBy` right after an action whose result is a round trip** — a list read
@@ -324,6 +324,15 @@ a test can still get wrong:
   _nothing more_ happened passes on broken code. Settle the very promise the
   component is awaiting, inside `act`, as `useAccounts.test.tsx` does, or wait
   out the delay being counted, as `useWorkspaces.test.tsx` does.
+- **An answer still on its way when the test ends.** The scheduler renders it
+  after the last assertion, and when the file has finished by then it runs with
+  jsdom's `window` gone: `window is not defined`, one unhandled error that
+  failed a CI run with every test green. A test about the moment before an
+  answer holds that answer back, and fake timers are advanced inside `act`.
+  React warns as such an update is made, and `failOnUpdatesOutsideAct()`
+  (`test/updatesOutsideAct.ts`) turns the warning into the test's failure —
+  `useBranchRequests.test.tsx` calls it. It is not in `setup.ts` yet, while
+  other files still make updates outside `act`.
 
 **`vi.useFakeTimers()` without `shouldAdvanceTime`** now holds a wait until a
 real `setImmediate` has run: advancing the fake clock while a `waitFor` is

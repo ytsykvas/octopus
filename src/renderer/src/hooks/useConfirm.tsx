@@ -68,6 +68,7 @@ export function useConfirm(): Confirmation {
     [checked]
   )
 
+  const destructive = request?.destructive === true
   const dialog =
     request === null ? null : (
       <Modal
@@ -78,8 +79,12 @@ export function useConfirm(): Confirmation {
         }}
         footer={
           <>
+            {/* Enter answers what starts with the focus: yes to a question,
+                and no to one that destroys something, so a stray key is never
+                what removes it. */}
             <Button
               variant="quiet"
+              autoFocus={destructive}
               onClick={() => {
                 close(false)
               }}
@@ -87,8 +92,8 @@ export function useConfirm(): Confirmation {
               {request.cancelLabel}
             </Button>
             <Button
-              variant={request.destructive === true ? 'destructive' : 'accent'}
-              autoFocus
+              variant={destructive ? 'destructive' : 'accent'}
+              autoFocus={!destructive}
               onClick={() => {
                 close(true)
               }}
@@ -99,7 +104,7 @@ export function useConfirm(): Confirmation {
         }
       >
         <div className="flex gap-3 p-5">
-          {request.destructive === true && (
+          {destructive && (
             <span
               aria-hidden
               className="bg-danger-bg text-danger flex size-8 shrink-0 items-center justify-center rounded-full"
