@@ -303,6 +303,26 @@ describe('FilesPanel', () => {
       expect(octopus().files.directory).toHaveBeenCalledTimes(1)
     })
 
+    // The panel keeps it open across a switch; the listing has to come back with it.
+    it('is read again when its workspace comes back with it still open', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue({
+        ok: true,
+        value: { entries: [{ name: 'pkg', kind: 'directory' }], truncated: false }
+      })
+      const { rerender } = renderPanel()
+      await shown()
+      await userEvent.click(row('node_modules'))
+      await screen.findByRole('treeitem', { name: /^pkg/ })
+
+      rerender({ workspace: BOB })
+      await shown()
+      rerender({ workspace: ANNA })
+
+      expect(await screen.findByRole('treeitem', { name: /^pkg/ })).toBeInTheDocument()
+      expect(screen.queryByText('Reading…')).not.toBeInTheDocument()
+    })
+
     it('says it is reading, then that it could not', async () => {
       answering()
       let finish: (value: { ok: false; error: string }) => void = () => undefined
@@ -328,7 +348,7 @@ describe('FilesPanel', () => {
       answering()
       vi.mocked(octopus().files.directory).mockResolvedValue({
         ok: true,
-        value: { entries: [], truncated: true }
+        value: { entries: [{ name: 'pkg', kind: 'file' }], truncated: true }
       })
       renderPanel()
       await shown()
@@ -336,6 +356,22 @@ describe('FilesPanel', () => {
       await userEvent.click(row('node_modules'))
 
       expect(await screen.findByText(/Only the first 5,000 entries are listed/)).toBeInTheDocument()
+    })
+
+    // A submodule never checked out here is the usual one; with no row under
+    // it, the open folder looked like it was still being read.
+    it('says when there is nothing in it', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue({
+        ok: true,
+        value: { entries: [], truncated: false }
+      })
+      renderPanel()
+      await shown()
+
+      await userEvent.click(row('node_modules'))
+
+      expect(await screen.findByText('Nothing in this folder.')).toHaveClass('text-ink-faint')
     })
   })
 

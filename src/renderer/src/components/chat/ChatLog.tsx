@@ -4,6 +4,7 @@ import {
   CircleSlash,
   Eraser,
   FileCode2,
+  FolderGit2,
   Map,
   Pencil,
   Play,
@@ -22,6 +23,7 @@ import {
   type ThreadMessageLike,
   useExternalStoreRuntime
 } from '@assistant-ui/react'
+import type { TFunction } from 'i18next'
 import { createContext, useContext, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -58,7 +60,7 @@ import {
   toolRunRows
 } from './toolRuns.js'
 import { readFailure } from './toolFailure.js'
-import { describeToolInput, readPlan } from './toolSummary.js'
+import { describeToolInput, readPlan, readWorktreeMove, type WorktreeMove } from './toolSummary.js'
 import { UsageCard } from './UsageCard.js'
 
 /**
@@ -381,6 +383,9 @@ function AgentRow({
       // say better. Drawn as a tool row it was the same question twice: once as
       // a name with no readable arguments, and once as the thing to answer.
       if (readQuestions(event.name, event.input) !== null) return null
+
+      const move = readWorktreeMove(event.name, event.input)
+      if (move !== null) return <WorktreeMoveRow move={move} />
 
       // A call that changed a file never arrives here: `groupToolRuns` pulls it
       // out into a block of its own, so that it can carry the context recorded
@@ -1346,6 +1351,34 @@ function CompactedRow({
             before: formatTokens(preTokens),
             after: formatTokens(postTokens)
           })}
+    </p>
+  )
+}
+
+/**
+ * The line where the agent moved into another worktree, or came back.
+ *
+ * In the warning colour rather than the compaction line's faint one: from here
+ * on the rest of the window may be showing a directory the agent has left,
+ * which is worth noticing before trusting the diff beside it. Worded as what
+ * the agent is doing rather than what happened, because the line is drawn from
+ * the call: the CLI may ask permission first, and refuses a removal with
+ * uncommitted work on purpose — its answer is the red line below.
+ */
+function worktreeMoveText(move: WorktreeMove, t: TFunction): string {
+  if (move.kind === 'exit') return t(move.removed ? 'chat.worktreeRemoved' : 'chat.worktreeLeft')
+  return move.target === null
+    ? t('chat.worktreeEnteredNew')
+    : t('chat.worktreeEntered', { target: move.target })
+}
+
+function WorktreeMoveRow({ move }: { move: WorktreeMove }): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <p className="text-warning border-line flex items-center gap-2 border-t pt-2 text-[11px] wrap-anywhere">
+      <FolderGit2 aria-hidden size={12} className="shrink-0" />
+      {worktreeMoveText(move, t)}
     </p>
   )
 }

@@ -448,6 +448,8 @@ export const en = {
     loadingFolder: 'Reading…',
     folderFailed: 'This folder could not be read.',
     folderTruncated: 'Only the first {{limit}} entries are listed.',
+    /* Under an open folder read from disk with nothing in it — most often a submodule never checked out in this worktree. */
+    folderEmpty: 'Nothing in this folder.',
     /* Said aloud after a greyed row's name; the grey says it to the eye. */
     ignored: 'ignored by git',
     /* Said aloud after a folder's name when its dot is drawn. */
@@ -957,6 +959,13 @@ export const en = {
     thinking: 'Thinking',
     memoryReset: 'The agent’s memory of this conversation starts again here',
     compacted: 'The agent summarised everything above to make room',
+    /* Said from the call, before its answer: the CLI may still ask for leave or refuse, and its refusal is the red line below. */
+    worktreeEntered:
+      'The agent is moving into another worktree, {{target}}. Changes, Files, the terminal and the scripts here stay on this workspace.',
+    worktreeEnteredNew:
+      'The agent is moving into a new worktree. Changes, Files, the terminal and the scripts here stay on this workspace.',
+    worktreeLeft: 'The agent is leaving the other worktree and keeping it.',
+    worktreeRemoved: 'The agent is leaving the other worktree and removing it, with its branch.',
     /* An exit code past 128 is a signal: something outside ended the process. */
     processStopped:
       'Claude Code was stopped from outside — by the system or another program. Send a message to carry on; the conversation is kept.',
