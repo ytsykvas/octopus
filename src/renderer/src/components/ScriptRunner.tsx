@@ -483,7 +483,9 @@ function Runner({
       )}
 
       {started ? (
-        <div className="relative flex-1">
+        // `min-h-0` because the fit reads this box's height: sized by its
+        // content it read back xterm's own 24 rows and spilled out of the half.
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           <Terminal
             key={run}
             cwd={workspace.path}

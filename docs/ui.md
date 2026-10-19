@@ -1374,14 +1374,15 @@ line of output is written: either left at xterm's 80×24 default, or floored at
 the fit addon's minimum of two columns. Refitting when the pane opens is already
 wired and cannot undo it, because the pty was created at that width and the
 program running in it has already wrapped its output to match. What is left is
-the unreadable fragments somebody opened the pane to read.
+the unreadable fragments somebody opened the pane to read. For the same reason a
+box with its width and no height keeps the terminal's rows and takes only its
+columns: fitted to one row there, a progress display could not move above it
+and every frame would land in the scrollback.
 
-**A build still cannot be stopped**, and that is the asymmetry rather than an
-omission. A server is started and stopped for as long as the work lasts; a build
-is run, read, and run again when something changed — and `Run` already ends the
-build it replaces, because remounting the terminal is what kills the old
-process. So stopping a build is running it again, and `Stop` stays with the
-thing it was asked for.
+**A build can be stopped while it runs**, beside `Building…` — one that hangs
+otherwise left `Run` disabled with nothing to press. It ends through the
+terminal's stop token rather than by unmounting it, so the log stays on screen;
+see "A build can be stopped, and keeps its log" above.
 
 The fold control on the build's heading is named for what it does rather than
 for the word on it: `Build` is also the heading it carries, and two controls
@@ -1819,6 +1820,11 @@ Each half is a named region rather than an anonymous box. Both are on screen
 together, so "the Run button" is ambiguous to anything reading the pane aloud —
 and each half keeps its own `min-h-0`, because a terminal measures itself against
 the box it is in and one never told it may be shorter grows instead of scrolling.
+So does the terminal's own box inside the runner, and for the same reason with
+a twist: the fit reads that box's height, and sized by its content the box was
+exactly as tall as xterm's own 24 rows — the fit read them back, never shrank,
+and a build run while its half was folded drew over the server half once
+unfolded. The runners' box clips as well, so no half can paint outside itself.
 
 **The build half folds away; the server half does not.** A build runs once when
 a workspace is made and is then read; a server runs for as long as the work

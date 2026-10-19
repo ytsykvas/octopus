@@ -1277,6 +1277,18 @@ describe('RightPanel', () => {
     expect(within(serverSection()).getByText('running…')).toBeInTheDocument()
   })
 
+  // Neither half's runners may paint outside it: the build's log once ran on
+  // over the server's name and log. jsdom lays nothing out, so the class is the
+  // only handle there is.
+  it('clips each half to its own box', async () => {
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+
+    await userEvent.click(scriptsTab())
+
+    expect(buildBody().firstElementChild).toHaveClass('overflow-hidden')
+    expect(serverSection().lastElementChild).toHaveClass('overflow-hidden')
+  })
+
   it('says nothing is running beside the server’s name while it is not', async () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
