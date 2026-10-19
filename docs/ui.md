@@ -1652,7 +1652,10 @@ project the workspace belongs to: a turn ending is a poor reason to run
 `--no-optional-locks`, as the Files tab's does: a plain one holds `index.lock`
 for as long as it scans, and a `git add` or `git commit` running in the same
 worktree at that moment — another conversation, the terminal, a hook — fails
-with "Unable to create index.lock".
+with "Unable to create index.lock". The Changes pane's diff, read on the same
+event, writes nothing either, though not by that flag: `git diff` writes the
+index back for a file whose times moved with the flag or without it, so it reads against
+a throwaway copy of the index instead (`withIndexCopy` in `git.ts`).
 
 **The right pane carries six tabs.** Terminal, then Files, Changes, Scripts
 and Pull request, then Notes. Build and server were two tabs and are now two halves of one: they
