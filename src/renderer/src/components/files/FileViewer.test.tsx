@@ -5,14 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FileContent } from '@core/workspaceFiles.js'
 
 import { octopus } from '../../test/octopus.js'
+import { MAX_HIGHLIGHT_CHARS, MAX_HIGHLIGHT_LINES } from '../diff/colouredText.js'
 import { highlight } from '../diff/highlight.js'
 import { MAX_LINE_LENGTH } from '../diff/useHighlighting.js'
-import {
-  FileViewer,
-  MAX_HIGHLIGHT_CHARS,
-  MAX_HIGHLIGHT_LINES,
-  type NoteTarget
-} from './FileViewer.js'
+import { FileViewer, type NoteTarget } from './FileViewer.js'
 
 vi.mock('../diff/highlight.js', () => ({ highlight: vi.fn() }))
 
