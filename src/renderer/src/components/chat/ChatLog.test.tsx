@@ -1145,6 +1145,53 @@ describe('what the log shows', () => {
     expect(screen.getByText(/74k/)).toBeVisible()
   })
 
+  /*
+   * The agent's working directory moved, and the window's did not: Changes,
+   * Files and the terminal still show the workspace. Drawn as a tool name with
+   * nothing beside it, the one call that makes the rest of the window stale
+   * read like a `Glob`.
+   */
+  it('says when the agent moves into another worktree, and when it comes back', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'enter',
+          name: 'EnterWorktree',
+          input: { name: 'spike' }
+        }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'exit',
+          name: 'ExitWorktree',
+          input: { action: 'remove' }
+        })
+      ]
+    })
+
+    expect(screen.getByText(/moving into another worktree, spike/)).toBeVisible()
+    expect(screen.getByText(/stay on this workspace/)).toBeVisible()
+    expect(screen.getByText(/leaving the other worktree and removing it/)).toBeVisible()
+  })
+
+  // Without a name the CLI makes one up, which only its result says.
+  it('says a move into a new worktree, and leaving one that is kept', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'tool_use', toolUseId: 'enter', name: 'EnterWorktree', input: {} }),
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'exit',
+          name: 'ExitWorktree',
+          input: { action: 'keep' }
+        })
+      ]
+    })
+
+    expect(screen.getByText(/moving into a new worktree/)).toBeVisible()
+    expect(screen.getByText(/leaving the other worktree and keeping it/)).toBeVisible()
+  })
+
   // The boundary is worth drawing on its own: metadata in a shape nothing here
   // recognises degrades the row rather than losing it.
   it('marks it even when the agent said nothing about the size', () => {
