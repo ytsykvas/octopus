@@ -2476,10 +2476,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await Promise.allSettled([...inFlight].map((entry) => entry.promise))
     }
 
-    // State and config writes are serialised on lines of their own, which the
-    // work above will have added to.
+    // State, config and transcript writes are serialised on lines of their
+    // own, which the work above will have added to. The transcript one too:
+    // left out, a quit dropped the lines of a conversation still streaming.
     await stateWrites.idle()
     await configWrites.idle()
+    await transcriptWrites.idle()
   }
 
   /**
