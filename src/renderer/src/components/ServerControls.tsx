@@ -56,30 +56,25 @@ export function ServerControls({
             className="bg-success absolute top-1 right-1 h-1.5 w-1.5 rounded-full motion-safe:animate-pulse"
           />
         </a>
-        <button
-          type="button"
-          onClick={stopRun}
-          title={t('scripts.stop')}
-          aria-label={t('scripts.stop')}
-          className={`${SQUARE} bg-danger-bg text-danger hover:ring-danger/40 hover:ring-1 hover:ring-inset`}
-        >
-          <Square aria-hidden size={12} fill="currentColor" />
-        </button>
+        <StopButton onStop={stopRun} />
       </span>
     )
   }
 
   if (building) {
     return (
-      <button
-        type="button"
-        disabled
-        title={t('scripts.running')}
-        aria-label={t('scripts.running')}
-        className={`${SQUARE} bg-success-bg text-success cursor-default`}
-      >
-        <LoaderCircle aria-hidden size={15} className="motion-safe:animate-spin" />
-      </button>
+      <span className="flex items-center gap-1">
+        <button
+          type="button"
+          disabled
+          title={t('scripts.running')}
+          aria-label={t('scripts.running')}
+          className={`${SQUARE} bg-success-bg text-success cursor-default`}
+        >
+          <LoaderCircle aria-hidden size={15} className="motion-safe:animate-spin" />
+        </button>
+        <StopButton onStop={stopRun} />
+      </span>
     )
   }
 
@@ -108,6 +103,23 @@ export function ServerControls({
       {failed && (
         <span aria-hidden className="bg-danger absolute top-1 right-1 h-1.5 w-1.5 rounded-full" />
       )}
+    </button>
+  )
+}
+
+/** The one Stop, for a build and a server alike. */
+function StopButton({ onStop }: { readonly onStop: (() => void) | undefined }): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <button
+      type="button"
+      onClick={onStop}
+      title={t('scripts.stop')}
+      aria-label={t('scripts.stop')}
+      className={`${SQUARE} bg-danger-bg text-danger hover:ring-danger/40 hover:ring-1 hover:ring-inset`}
+    >
+      <Square aria-hidden size={12} fill="currentColor" />
     </button>
   )
 }

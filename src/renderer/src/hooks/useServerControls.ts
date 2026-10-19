@@ -42,6 +42,7 @@ export interface ServerControls {
   readonly servingAt: (WorkspaceView & { readonly port: number }) | null
   readonly runAll: (() => void) | undefined
   readonly restartServer: (() => void) | undefined
+  /** Ends a build or a server; absent while neither is going. */
   readonly stopRun: (() => void) | undefined
 }
 
@@ -157,11 +158,13 @@ export function useServerControls({
           sequence.restart(servingAt.id)
         }
 
+  // A build too, not only a server: one that hangs otherwise left Run disabled
+  // with nothing to press.
   const stopRun =
-    servingAt === null
+    activeWorkspace === null || (servingAt === null && !building)
       ? undefined
       : (): void => {
-          sequence.stop(servingAt.id)
+          sequence.stop(activeWorkspace.id)
         }
 
   return {

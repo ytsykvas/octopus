@@ -1068,6 +1068,19 @@ describe('App', () => {
       expect(within(rightPane()).getByRole('button', { name: 'Building\u2026' })).toBeDisabled()
     })
 
+    it('stops a build from the title bar', async () => {
+      const user = await onAnna({ setup: '/tmp/planner/setup.sh', ...SERVER_ONLY })
+      const bar = titleBar()
+
+      await user.click(await within(bar).findByRole('button', { name: 'Run' }))
+      await waitFor(() => {
+        expect(window.octopus.workspaces.prepare).toHaveBeenCalledWith('planner/anna')
+      })
+      await user.click(await within(bar).findByRole('button', { name: 'Stop' }))
+
+      expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
+    })
+
     // The pane is hidden rather than unmounted when folded, so the runner a
     // press reaches is still there — which is what makes the title bar the
     // place to run from with the pane out of the way.

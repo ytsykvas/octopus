@@ -25,7 +25,7 @@ put the project name under them. Its left padding clears the buttons outright,
 so nothing depends on how wide the tab strip happens to be.
 
 **Its right end runs the selected workspace's server.** A Play icon, a spinner
-while the build goes, and then a globe to the server's port beside a Stop — the
+while the build goes with a Stop beside it, and then a globe to the server's port beside a Stop — the
 same sequence as the Scripts tab's `Run`, read from the same state in `App`, so
 a press in either place moves both. Running is the thing done to a workspace
 all day, and with the right pane folded the tab that does it is out of reach.
@@ -1188,7 +1188,7 @@ One control that is always there, and three that change with the run:
 | --------------- | ---------------------------------- |
 | always          | edit the project's scripts         |
 | nothing running | `Run`                              |
-| building        | `Building…`, disabled              |
+| building        | `Building…`, disabled, `Stop`      |
 | serving         | open in browser, `Restart`, `Stop` |
 
 **Every way a half can end reports it, including the one where nothing starts.**
@@ -1209,6 +1209,13 @@ the tab out of view, and a token is heard only by a runner that exists: one
 mounted on first sight of the tab left a press from the title bar in `Building…`
 with nothing to press, for any workspace picked while the pane was folded or
 another tab was showing.
+
+**A build can be stopped, and keeps its log.** Its session is ended through the
+terminal's own stop token rather than by unmounting it, so the output somebody
+stopped it to read stays on screen; a stopped server's terminal closes as
+before, because its restart waits on that. The exit a stop causes reports no
+outcome — the sequence asked for nothing to be running, not for a failed build —
+and a stop pressed before the session exists ends it the moment it arrives.
 
 The constant one is drawn first, ahead of everything that moves. It is the way
 to the scripts themselves — see the fold section below for why the header needs

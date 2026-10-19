@@ -786,11 +786,19 @@ export function RightPanel({
               the ones that can mean something. Run goes once the server is up:
               what it offers has already happened, and a rebuild from there is
               Stop and then Run, which is also the order that frees the port
-              before anything tries to bind it again. */}
+              before anything tries to bind it again. A build can be stopped
+              too: one that hangs otherwise left Run disabled for good. */}
             {servingAt === null && (
               <Button size="sm" variant="accent" disabled={runAll === undefined} onClick={runAll}>
                 <Play aria-hidden size={12} />
                 {t(building ? 'scripts.running' : 'scripts.runAll')}
+              </Button>
+            )}
+
+            {servingAt === null && stopRun !== undefined && (
+              <Button size="sm" variant="danger" onClick={stopRun}>
+                <Square aria-hidden size={12} />
+                {t('scripts.stop')}
               </Button>
             )}
 

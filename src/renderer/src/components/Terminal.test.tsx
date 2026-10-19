@@ -421,6 +421,63 @@ describe('Terminal', () => {
     })
   })
 
+  describe('stopping while staying on screen', () => {
+    // A stopped build keeps its log: the session ends, the emulator does not,
+    // and the exit still arrives — it is how the owner learns the process went.
+    it('ends the session and keeps its output when the stop token moves', async () => {
+      const onExit = vi.fn()
+      const view = render(<Terminal cwd="/tmp/planner/anna" onExit={onExit} stopToken={0} />)
+      await sessionStarted()
+      await waitFor(() => {
+        expect(emulator().focused).toBe(true)
+      })
+
+      view.rerender(<Terminal cwd="/tmp/planner/anna" onExit={onExit} stopToken={1} />)
+
+      expect(window.octopus.terminal.dispose).toHaveBeenCalledTimes(1)
+      expect(window.octopus.terminal.dispose).toHaveBeenCalledWith('term-1')
+      expect(emulator().disposed).toBe(false)
+
+      subscriberFor<TerminalExit>(window.octopus.terminal.onExit)({ id: 'term-1', exitCode: null })
+
+      expect(onExit).toHaveBeenCalledWith(null)
+    })
+
+    // Pressed in the moment between asking for a session and getting one: there
+    // is no id to end yet, and dropping the press left the process running.
+    it('ends a session that was still being started when the stop came', async () => {
+      let start: ((result: Result<string>) => void) | undefined
+      vi.mocked(window.octopus.terminal.create).mockReturnValue(
+        new Promise<Result<string>>((resolve) => {
+          start = resolve
+        })
+      )
+      const onExit = vi.fn()
+      const view = render(<Terminal cwd="/tmp/planner/anna" onExit={onExit} stopToken={0} />)
+      await sessionStarted()
+
+      view.rerender(<Terminal cwd="/tmp/planner/anna" onExit={onExit} stopToken={1} />)
+      expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
+      start?.({ ok: true, value: 'term-1' })
+
+      await waitFor(() => {
+        expect(window.octopus.terminal.dispose).toHaveBeenCalledWith('term-1')
+      })
+      subscriberFor<TerminalExit>(window.octopus.terminal.onExit)({ id: 'term-1', exitCode: null })
+      expect(onExit).toHaveBeenCalledWith(null)
+    })
+
+    it('ends nothing for the stop token it was mounted with', async () => {
+      render(<Terminal cwd="/tmp/planner/anna" stopToken={3} />)
+      await sessionStarted()
+      await waitFor(() => {
+        expect(emulator().focused).toBe(true)
+      })
+
+      expect(window.octopus.terminal.dispose).not.toHaveBeenCalled()
+    })
+  })
+
   it('prints the reason on screen when no session can be started', async () => {
     vi.mocked(window.octopus.terminal.create).mockResolvedValue({
       ok: false,

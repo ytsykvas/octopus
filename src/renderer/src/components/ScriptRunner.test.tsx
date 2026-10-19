@@ -686,9 +686,9 @@ describe('ScriptRunner', () => {
     expect(octopus().terminal.create).toHaveBeenCalledTimes(1)
   })
 
-  // A build has already exited by the time a server can be stopped, so the stop
-  // reaches it as a bystander — and unmounting its terminal would throw away
-  // the log somebody is reading, which is the one thing `started` exists for.
+  // A stop for the server reaches a build that has already finished as a
+  // bystander — and unmounting its terminal would throw away the log somebody
+  // is reading, which is the one thing `started` exists for.
   it('keeps a finished run on screen when the stop reaches it', async () => {
     const { rerender } = mountAndStart({
       workspace: anna,
@@ -704,6 +704,54 @@ describe('ScriptRunner', () => {
     rerender({ stopToken: 1 })
 
     expect(screen.queryByText(/Runs setup.sh in this workspace/)).not.toBeInTheDocument()
+  })
+
+  // Stopped while still going, a build ends through its terminal: the process
+  // goes, the log stays, and the exit that follows is not an outcome — the
+  // sequence asked for nothing to be running, not for a failed build.
+  it('ends a running build and keeps its log on screen', async () => {
+    const onOutcome = vi.fn()
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      script: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn(),
+      onOutcome
+    })
+    await sessionsOpened(1)
+
+    rerender({ stopToken: 1 })
+
+    expect(octopus().terminal.dispose).toHaveBeenCalledWith(sessionId(1))
+    expect(screen.queryByText(/Runs setup.sh in this workspace/)).not.toBeInTheDocument()
+    expect(screen.queryByText('running…')).not.toBeInTheDocument()
+
+    processExits(sessionId(1))
+
+    expect(onOutcome).not.toHaveBeenCalled()
+  })
+
+  it('reports the build started after a stopped one', async () => {
+    const onOutcome = vi.fn()
+    const { rerender } = mountAndStart({
+      workspace: anna,
+      kind: 'setup',
+      script: SETUP_SCRIPT,
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn(),
+      onOutcome
+    })
+    await sessionsOpened(1)
+    rerender({ stopToken: 1 })
+
+    rerender({ stopToken: 1, startToken: 2 })
+    await sessionsOpened(2)
+    processExits(sessionId(2))
+
+    expect(onOutcome).toHaveBeenCalledExactlyOnceWith(true)
   })
 
   // The window is one `env:apply` round trip. Starting after a stop that landed
