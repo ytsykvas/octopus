@@ -1520,6 +1520,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * value the session never saw; one the CLI takes from a settings file later
    * shows only in a reading (`strayed`).
    */
+  /**
+   * The messages each conversation's session holds in its queue, not taken yet.
+   *
+   * A turn ending while one is held is not the conversation ending: the CLI
+   * runs it as a turn of its own straight after — after a Stop, always. So the
+   * result leaves the chat `running` rather than writing `idle` and then
+   * `running` a state write later, which flashed a "finished" dot and toast
+   * over a tab that was still working.
+   */
+  const heldMessages = new Map<string, Set<string>>()
   const compaction = new Map<
     string,
     {
@@ -2432,8 +2442,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (edit && event.ok) background(chat, recordContext(chat, event.toolUseId, edit))
     }
 
-    if (event.type === 'result') {
+    if (event.type === 'message_queue') {
+      const held = heldMessages.get(chat.id) ?? new Set<string>()
+      if (event.state === 'queued') held.add(event.messageId)
+      else held.delete(event.messageId)
+      heldMessages.set(chat.id, held)
+    }
+
+    // A failure is still said: it is news even with another turn to come.
+    const another = (heldMessages.get(chat.id)?.size ?? 0) > 0
+    if (event.type === 'result' && !(event.ok && another)) {
       background(chat, setChatStatus(chat.id, event.ok ? 'idle' : 'error'))
+    }
+
+    if (event.type === 'result') {
       background(chat, saveWriters(chat.workspaceId))
 
       /*
@@ -2825,6 +2847,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const session = sessions.get(chat.id)
     sessions.delete(chat.id)
     compaction.delete(chat.id)
+    // Its queue goes with its process.
+    heldMessages.delete(chat.id)
 
     // A session that ends mid-tool leaves an edit nobody will ever answer
     // for, and a question nobody will ever answer at all. Both go with it,
