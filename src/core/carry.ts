@@ -17,6 +17,10 @@
  * a checkout with **no** gitignored file in it — they were never pushed — while
  * the real `.env` sits in another copy of the same repository, on the same
  * disk. A workspace then came up with nothing and said nothing about it.
+ *
+ * A repository's `.octopus/carry` adds to this list while the app works, read
+ * from the worktree being prepared; `resolveCarry` in `repoSource.ts` says
+ * what is taken from it and why so little.
  */
 
 import { constants, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -233,6 +237,10 @@ function alreadyThere(error: unknown): boolean {
 /**
  * Copies a project's carried files into a workspace.
  *
+ * The list arrives resolved — the project's own merged with what the
+ * worktree's `.octopus/carry` adds (`resolveCarry` in `repoSource.ts`) — so
+ * this decides nothing about where a line came from, only how it is copied.
+ *
  * Never over a file the worktree already has — a tracked `.env.example`, or one
  * somebody edited in the workspace — which is what `COPYFILE_EXCL` says without
  * a check that could be raced.
@@ -251,18 +259,23 @@ function alreadyThere(error: unknown): boolean {
  * is the same one — the list names this file and your worktree has not got it.
  */
 export async function carryInto(
-  projectId: ProjectId,
+  files: readonly CarriedFile[],
   repoPath: string,
-  workspacePath: string,
-  root?: string
+  workspacePath: string
 ): Promise<CarryReport> {
-  // Every destination here is relative and cannot climb out: `carriedFiles` is
-  // what guarantees it, so nothing below has to check again.
-  const list = carriedFiles(await readCarryList(projectId, root))
   const written: string[] = []
   const missing: string[] = []
 
-  for (const { path, from: source } of list) {
+  for (const { path, from: source } of files) {
+    // `carriedFiles` already drops a destination that climbs out, and every
+    // list today is built from it — but this is the function that writes, and
+    // `unlinkedInside` below walks segments without ever objecting to `..`.
+    // A string check costs nothing and does not depend on the caller.
+    if (!insideWorktree(path)) {
+      missing.push(path)
+      continue
+    }
+
     const from = sourcePath(source, repoPath, path)
     const to = join(workspacePath, path)
 
