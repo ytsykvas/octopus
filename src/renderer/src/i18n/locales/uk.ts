@@ -815,6 +815,8 @@ export const uk: Translation = {
     modelsPlan: 'План і дослідження',
     modelsCode: 'Написання коду',
     modelsSame: 'Та сама, що й для коду',
+    modelsSessionOnly:
+      'Ця сесія працює на {{model}}: команда /model обрала цю модель лише для цієї сесії.',
 
     effort: 'Зусилля',
     effortLow: 'Низьке',

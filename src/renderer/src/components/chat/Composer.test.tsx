@@ -1059,6 +1059,10 @@ describe('the model the session is running', () => {
 
     await user.click(modelButton())
     expect(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
+    // And the panel says why its tick and the chip disagree.
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'This session is running Sonnet: /model chose it for this session only.'
+    )
   })
 
   // The ordinary case, where the two agree. The button says the name once.
@@ -1067,6 +1071,15 @@ describe('the model the session is running', () => {
 
     expect(modelButton()).toHaveTextContent('Opus (1M context)')
     expect(modelButton()).not.toHaveTextContent('auto')
+  })
+
+  it('says nothing of /model while the session runs what the panel ticks', async () => {
+    const user = userEvent.setup()
+    renderComposer({ models: CATALOGUE, model: null, activeModel: 'claude-opus-5[1m]' })
+
+    await user.click(modelButton())
+
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('/model')
   })
 
   it('names the chosen model when one was chosen here', () => {
@@ -1127,6 +1140,17 @@ describe('the model the session is running', () => {
     renderComposer({ models: [], model: null, activeModel: 'claude-brand-new-1' })
 
     expect(modelButton()).toHaveTextContent('claude-brand-new-1')
+  })
+
+  // With no catalogue the default row has no model behind it, so any running
+  // model would read as moved there by a `/model` nobody typed.
+  it('blames no /model while there is no catalogue to compare against', async () => {
+    const user = userEvent.setup()
+    renderComposer({ models: [], model: null, activeModel: 'claude-brand-new-1' })
+
+    await user.click(modelButton())
+
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('/model')
   })
   /*
    * Three ways in, and the paperclip is the only visible one. A file is more

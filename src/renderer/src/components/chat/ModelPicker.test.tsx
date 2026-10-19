@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -50,6 +50,7 @@ function renderPicker(overrides: Partial<React.ComponentProps<typeof ModelPicker
         planModel={null}
         onPlanModel={onPlanModel}
         display="Opus (1M context)"
+        sessionMovedTo={null}
         {...overrides}
       />
       <button type="button">Somewhere else</button>
@@ -69,14 +70,18 @@ const codeColumn = (): HTMLElement => screen.getByRole('radiogroup', { name: 'Wr
  * Which means every branch that decides where the panel goes is unreachable
  * without this — the same reason `DropdownMenu.test.tsx` spies on it.
  */
+/** What `place` makes the chip, and the room `useAnchoredPanel` leaves beside it. */
+const CHIP_HEIGHT = 24
+const GAP = 6
+
 function place(element: HTMLElement, at: { top: number; left: number }): void {
   vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
     top: at.top,
-    bottom: at.top + 24,
+    bottom: at.top + CHIP_HEIGHT,
     left: at.left,
     right: at.left + 120,
     width: 120,
-    height: 24,
+    height: CHIP_HEIGHT,
     x: at.left,
     y: at.top,
     toJSON: () => ({})
@@ -216,6 +221,26 @@ describe('the two columns', () => {
 })
 
 /*
+ * `/model` moves the running session and leaves the record alone, because the
+ * CLI scopes it to the session. The columns tick the record, so without a line
+ * saying otherwise the panel read as the model the next message would run on.
+ */
+describe('a model chosen by /model for this session only', () => {
+  it('says what the session is running above the columns', async () => {
+    const user = userEvent.setup()
+    renderPicker({ display: 'Sonnet', sessionMovedTo: 'Sonnet' })
+
+    await user.click(chip())
+
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'This session is running Sonnet: /model chose it for this session only.'
+    )
+    // The record is still what the columns tick.
+    expect(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
+  })
+})
+
+/*
  * What closes the panel, where it lands when the window is tight, and every
  * edge either of those has, are `useAnchoredPanel`'s and tested with it. What
  * is left here is the part only this component can get wrong: the height it
@@ -247,5 +272,26 @@ describe('the room it asks for', () => {
 
     // Pinned 6px above the chip by its bottom edge.
     expect(screen.getByRole('dialog')).toHaveStyle({ bottom: '46px' })
+  })
+
+  /*
+   * The line takes room, and the panel flips on the height it expects to draw.
+   * Placed so the columns alone just fit below — the title, the headings, four
+   * rows and the padding come to 188px — and the line does not.
+   */
+  it('counts the line in the room it asks for', async () => {
+    const user = userEvent.setup()
+    const top = window.innerHeight - CHIP_HEIGHT - GAP - 188
+
+    renderPicker()
+    place(chip(), { top, left: 40 })
+    await user.click(chip())
+    expect(screen.getByRole('dialog').style.bottom).toBe('')
+    cleanup()
+
+    renderPicker({ sessionMovedTo: 'Sonnet' })
+    place(chip(), { top, left: 40 })
+    await user.click(chip())
+    expect(screen.getByRole('dialog').style.bottom).not.toBe('')
   })
 })
