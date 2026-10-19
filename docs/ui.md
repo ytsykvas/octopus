@@ -2328,10 +2328,12 @@ path the status names.
 `node_modules/` as one entry, and its contents are read from disk only when it
 is expanded, through the same containment check as opening a file. A folder
 lists at most 5 000 entries and says so under the last. A refresh reads again
-only the ignored folders still open — one opened once and closed must not cost
-a long read on every turn after — and a listing is laid into the tree only while
-git still calls its folder ignored, so `git add -f` or an edited `.gitignore`
-hands the folder back to git's own children and marks.
+only the ignored folders still open — one opened once and closed must not cost a
+long read on every turn after. An open folder with no listing yet is read along
+with them: every one of them after a switch to another workspace and back, since
+the open folders outlive the switch and the listings do not. A listing is laid
+into the tree only while git still calls its folder ignored, so `git add -f` or
+an edited `.gitignore` hands the folder back to git's own children and marks.
 
 **A submodule is a folder, read from disk the same way**, and nothing inside it
 is greyed or marked: the outer repository has nothing to say about it, its own

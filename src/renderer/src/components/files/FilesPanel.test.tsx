@@ -275,6 +275,26 @@ describe('FilesPanel', () => {
       expect(octopus().files.directory).toHaveBeenCalledTimes(1)
     })
 
+    // The panel keeps it open across a switch; the listing has to come back with it.
+    it('is read again when its workspace comes back with it still open', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue({
+        ok: true,
+        value: { entries: [{ name: 'pkg', kind: 'directory' }], truncated: false }
+      })
+      const { rerender } = renderPanel()
+      await shown()
+      await userEvent.click(row('node_modules'))
+      await screen.findByRole('treeitem', { name: /^pkg/ })
+
+      rerender({ workspace: BOB })
+      await shown()
+      rerender({ workspace: ANNA })
+
+      expect(await screen.findByRole('treeitem', { name: /^pkg/ })).toBeInTheDocument()
+      expect(screen.queryByText('Reading…')).not.toBeInTheDocument()
+    })
+
     it('says it is reading, then that it could not', async () => {
       answering()
       let finish: (value: { ok: false; error: string }) => void = () => undefined
