@@ -4,7 +4,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ ●●●   sport   /Users/…/sport                                      ⊞  │  title bar
+│ ●●●   sport   /Users/…/sport                                  ▶ │ ⊞  │  title bar
 ├────┬──────────────┬──────────────────────────┬──────────────────────┤
 │ TG │  sport       │                          │ Changes Terminal …   │
 │ SP │  ⑂ develop   │        agent chat        │                      │
@@ -23,6 +23,17 @@
 draw its own, which pushed the tab strip's fill up behind the traffic lights and
 put the project name under them. Its left padding clears the buttons outright,
 so nothing depends on how wide the tab strip happens to be.
+
+**Its right end runs the selected workspace's server.** A Play icon, a spinner
+while the build goes, and then a globe to the server's port beside a Stop — the
+same sequence as the Scripts tab's `Run`, read from the same state in `App`, so
+a press in either place moves both. Running is the thing done to a workspace
+all day, and with the right pane folded the tab that does it is out of reach.
+Icons only, with the words as tooltips: the bar is one row for the whole
+window. It is absent where the workspace has no server script, disabled while a
+repository's scripts wait to be allowed, and marks a failed build with a red
+dot — with the pane folded, that is the only place the failure can show.
+`Restart` stays on the tab alone.
 
 **Projects are a tab strip**; workspaces are a list of the active one. Putting
 both in one tree outgrows the window and makes a click mean two things — select
@@ -1161,7 +1172,7 @@ so `Run` is disabled — the server half already carries that invitation.
 The sequence is **keyed by workspace**, exactly as the runs are: leaving one
 mid-build to look at another must not report the second as building.
 
-**Running is decided on that header, never in the halves.** There were four
+**Running is decided on that header — and on the title bar, which mirrors it from the same state — never in the halves.** There were four
 controls across the two of them — `Build`/`Rebuild` in one, `Start`/`Restart`/
 `Stop` in the other — and beside a `Run` that does both, two of them said the
 same word twice. A half's job is to show what is happening; the pressing belongs

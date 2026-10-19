@@ -393,6 +393,9 @@ export const en = {
     runBuilding: 'Building. The server starts when this finishes.',
     runServing: 'Serving.',
     buildFailed: 'The build failed, so the server was not started.',
+    /* The title bar's Run, held while the repository's scripts wait to be read
+       on the Scripts tab — the button has no room to say why on its own. */
+    awaitingApproval: 'Allow this repository\u2019s scripts on the Scripts tab first.',
     /* Said rather than enforced: the script belongs to whoever wrote it, and
        being wrong about it must not take the link or the controls away. */
     portSilent: 'Running, but nothing is listening on {{port}}. Does the script use $OCTOPUS_PORT?',
