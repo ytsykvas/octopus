@@ -449,8 +449,7 @@ export const en = {
     ignored: 'ignored by git',
     /* Said aloud after a folder's name when its dot is drawn. */
     changesInside: 'has changes',
-    /* The letter for a conflict, beside the diff's own A, M, D, U. */
-    statusConflicted: '!',
+    /* Said aloud after a conflicted file's name; the `!` says it to the eye. */
     statusConflictedLabel: 'Conflicted',
     tabs: 'Open files',
     preview: '{{name}} — preview. Opening another file replaces it; double-click to keep it open.',
@@ -830,15 +829,6 @@ export const en = {
     copyFailed: 'Could not copy',
     openFile: 'Open file',
     fileActions: 'Actions for {{path}}',
-    // The one-letter marks in a file's header. Each is the initial of the word
-    // beside it, so a translation changes both together or neither.
-    statusAdded: 'A',
-    statusModified: 'M',
-    statusDeleted: 'D',
-    statusRenamed: 'R',
-    statusCopied: 'C',
-    statusTypeChanged: 'T',
-    statusUntracked: 'U',
     statusAddedLabel: 'Added',
     statusModifiedLabel: 'Modified',
     statusDeletedLabel: 'Deleted',

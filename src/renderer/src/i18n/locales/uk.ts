@@ -367,7 +367,6 @@ export const uk: Translation = {
     folderTruncated: 'Показано лише перші {{limit}} записів.',
     ignored: 'ігнорується git',
     changesInside: 'має зміни',
-    statusConflicted: '!',
     statusConflictedLabel: 'Конфлікт',
     tabs: 'Відкриті файли',
     preview:
@@ -646,15 +645,6 @@ export const uk: Translation = {
     copyFailed: 'Не вдалося скопіювати',
     openFile: 'Відкрити файл',
     fileActions: 'Дії для {{path}}',
-    // Позначки в заголовку файла — перша літера слова поруч, тож переклад
-    // змінює або обидва разом, або жодного.
-    statusAdded: 'Д',
-    statusModified: 'З',
-    statusDeleted: 'В',
-    statusRenamed: 'П',
-    statusCopied: 'К',
-    statusTypeChanged: 'Т',
-    statusUntracked: 'Н',
     statusAddedLabel: 'Додано',
     statusModifiedLabel: 'Змінено',
     statusDeletedLabel: 'Видалено',
