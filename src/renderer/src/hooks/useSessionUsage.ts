@@ -22,13 +22,18 @@ const NOTHING: SessionUsage = { context: null, autoCompact: null }
  * That is fine three times a turn and would not be on an interval. If the
  * numbers ever look stale the answer is another event, not a shorter one.
  *
- * The fourth moment is a compaction window chosen in the menu. Choosing
- * starts the session again, and the window the reading is measured against
- * changes with it — so `asked` is a count the caller moves once the core has
+ * The fourth moment is a choice that moves the session: a compaction window
+ * chosen in the menu, which starts it again and changes the window the reading
+ * is measured against, or a model, a plan model or a mode, which change what it
+ * runs at once. `asked` is a count the caller moves once the core has
  * finished, and each move is read again on. A count rather than the choice:
  * choosing the same window again also starts a session (to look again for a
  * variable that outranked it, or one the reading says strayed in), and an
  * unchanged value would read nothing.
+ *
+ * Until that reading lands the running model is not known, and is said to be
+ * so: the one from before the choice is what the composer would otherwise go
+ * on naming as chosen by `/model`, under the reader's own click.
  */
 export function useSessionUsage(chatId: string | null, asked = 0): SessionUsage {
   const [usage, setUsage] = useState<SessionUsage>(NOTHING)
@@ -40,6 +45,16 @@ export function useSessionUsage(chatId: string | null, asked = 0): SessionUsage 
   if (chatId !== shownFor) {
     setShownFor(chatId)
     setUsage(NOTHING)
+  }
+
+  const [askedFor, setAskedFor] = useState(asked)
+  if (asked !== askedFor) {
+    setAskedFor(asked)
+    setUsage((current) =>
+      current.context === null
+        ? current
+        : { ...current, context: { ...current.context, model: null } }
+    )
   }
 
   const refresh = useCallback(async (id: string) => {

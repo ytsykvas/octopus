@@ -666,7 +666,12 @@ says, most pressing first:
   (`chats.ts`), which the menu and the core both ask — the core against the
   window the session was started with, so a choice still waiting for its turn
   is not taken for one. Auto has nothing to stray from, so a variable taken
-  mid-session under Auto is shed only by choosing a window.
+  mid-session under Auto is shed only by choosing a window. The note says
+  choosing again starts the session over, and stops saying it once a session
+  started over for that very reading has read it again: a stray no new session
+  clears — a model holding less before any turn has said how much, a managed
+  settings file the start does not read — costs one restart to find out, and
+  choosing it again after that changes nothing.
 
 A window above what the model holds is greyed with that figure, since the
 agent would cut it down anyway. _Auto_ says what it amounts to while it is the
@@ -1049,7 +1054,16 @@ A `/model` command is what causes it: the CLI scopes it to the session ("for thi
 session only"), so it moves what is running without moving what this chat chose
 — and the record staying put is the truth rather than a compromise. The name
 reaches the footer with the context reading, which is already refreshed on every
-`result`, so the chip moves as soon as the command's turn ends.
+`result`, so the chip moves as soon as the command's turn ends. The panel keeps
+ticking the record and says so in a line above the columns ("This session is
+running Sonnet: /model chose it for this session only"); without it the panel
+read as the model the next message runs on, and the chip contradicted it. Two
+things keep the line from blaming a `/model` nobody typed. A pick in the panel,
+a plan model or a mode moves the session at once, so the reading is taken again
+as soon as the core has applied it, and the model it named before is forgotten
+until then — it waited for the next turn's result, and the panel, open after
+the pick, named the model just left. And with no catalogue yet there is no line:
+the default row has no model behind it to compare with.
 
 **`/model opusplan` is the one command the panel follows.** The alias means Opus
 while planning and Sonnet otherwise, which is precisely a split, and left to the
@@ -2509,6 +2523,13 @@ landed on the base branch after the fork does not. A change staged and then
 reverted in the working tree is invisible, which is the right answer for a pane
 that reports what the workspace now holds.
 
+**A repository nested in the worktree is one row that says so.** Cloned or
+initialised inside it rather than added as a submodule, git lists it as
+`nested/` and never looks inside. The row has nothing to read: git records such
+a folder as a link rather than its files, and only once it has a commit of its
+own. Nor does it offer a revert — git has no record of it to undo, and the
+untracked revert removes a file, which a folder is not.
+
 **How far each change has got, and whether the request is behind it.** One diff
 against the merge base is one comparison, and it folds committed, staged and
 unstaged work into a single pile — which is not the question a reviewer has once
@@ -2794,6 +2815,9 @@ file back to the state the workspace branched from, which is the pane's own
 scope, so the row leaves the pane. It always asks first, and what the dialog
 says is the asymmetry: committed work survives, undone by a change in the
 working tree, while uncommitted work is gone and nothing in git holds a copy.
+An untracked path already gone counts as reverted; one that could not be
+removed — a folder, a file this user may not delete — says so in the banner
+rather than letting the row come back as though the click had worked.
 
 ## Colour
 

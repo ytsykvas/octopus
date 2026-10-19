@@ -132,10 +132,12 @@ const started: OctopusService[] = []
 const answering = new Set<number>()
 
 async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
-  // Nobody outranks a window unless a test says so: the default reads the
-  // machine's own `~/.claude/settings.json` and environment.
+  // Nobody outranks a window and no file names a skill unless a test says so:
+  // the defaults read the machine's own `~/.claude/settings.json` and
+  // environment.
   const made = await makeService({
     windowOverride: () => Promise.resolve(null),
+    skillsInFiles: () => Promise.resolve(new Map()),
     listening: (port) => Promise.resolve(answering.has(port)),
     ...options
   })
@@ -4469,6 +4471,63 @@ describe('the agent chat', () => {
     })
 
     /*
+     * A stray the new session reads again — a model holding less than the
+     * choice before any turn has said how much, a managed settings file the
+     * start does not read — is one no restart can shed. Started over once to
+     * find that out, then left alone: every further choice of the same window
+     * would otherwise cost a restart and change nothing.
+     */
+    it('starts over only once for a stray the new session reads again', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { effective: 450_000, settled: false }
+      })
+
+      await service.setChatAutoCompact(chat.id, 300_000)
+      expect(agents).toHaveLength(2)
+
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { effective: 450_000, settled: true }
+      })
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(2)
+    })
+
+    // The restart did shed it: a later stray is a new one, worth a restart.
+    it('starts over again for a stray that differs from the one shed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatAutoCompact(chat.id, 300_000)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 450_000 })
+      await service.sessionUsage(chat.id)
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      contextAnswer = () => Promise.resolve({ ...CONTEXT_RESPONSE, maxTokens: 500_000 })
+      await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({
+        autoCompact: { settled: false }
+      })
+      await service.setChatAutoCompact(chat.id, 300_000)
+
+      expect(agents).toHaveLength(3)
+    })
+
+    /*
      * Measured against the window the session was started with, not the one
      * chosen since: a choice waiting for the turn to end is a reading that
      * differs for a reason already known, and taking it for a stray started
@@ -4628,7 +4687,8 @@ describe('the agent chat', () => {
           effective: 1_000_000,
           modelWindow: null,
           override: null,
-          pending: false
+          pending: false,
+          settled: false
         }
       })
     })
@@ -5863,6 +5923,48 @@ describe('the agent chat', () => {
         expect(history.some((entry) => entry.role === 'user' && entry.text === 'carry on')).toBe(
           true
         )
+      })
+    })
+
+    /*
+     * A newer CLI says what caused the reset, and that outranks the guess made
+     * from what was sent: a /clear the chat did not recognise still clears,
+     * and a request still waiting is not spent on another flow's reset.
+     */
+    it('clears when the agent says the reset came from /clear', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'remember this')
+      agent().emit(textMessage('noted'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+      })
+
+      agent().emit({ ...resetMessage, trigger: 'clear' } as unknown as SDKMessage)
+
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).toEqual([])
+      })
+    })
+
+    it('keeps a waiting /clear for its own reset when another flow resets first', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, '/clear')
+      agent().emit({ ...resetMessage, trigger: 'plan_mode_exit' } as unknown as SDKMessage)
+      agent().emit(resetMessage)
+
+      await vi.waitFor(() => {
+        expect(
+          events
+            .map((announced) => announced.event)
+            .filter((event) => event.type === 'conversation_reset')
+        ).toEqual([
+          { type: 'conversation_reset', cleared: false, trigger: 'plan_mode_exit' },
+          { type: 'conversation_reset', cleared: true }
+        ])
       })
     })
 
@@ -11732,6 +11834,31 @@ describe('the agent chat', () => {
       await service.updateConfig({ disabledSkillDefaults: [] })
 
       expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'on' })
+    })
+
+    /*
+     * The flag layer outranks the user's own files, so a skill octopus stops
+     * withholding goes back to what the files the session reads say — asked of
+     * the checkout and the sources that session started with.
+     */
+    it("gives a skill back as the user's settings files say it", async () => {
+      const asked: { cwd: string; sources: readonly string[] }[] = []
+      const { service, workspaceId } = await withWorkspace({
+        skillsInFiles: (cwd, sources) => {
+          asked.push({ cwd, sources })
+          return Promise.resolve(new Map([['review', 'name-only' as const]]))
+        }
+      })
+      await service.updateConfig({ disabledSkillDefaults: ['review'] })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.updateConfig({ disabledSkillDefaults: [] })
+
+      expect(agent().flagSettings().at(-1)?.skillOverrides).toEqual({ review: 'name-only' })
+      expect(asked).toEqual([
+        { cwd: agent().options().cwd, sources: agent().options().settingSources }
+      ])
     })
 
     it('gives a running conversation back a skill its project stops withholding', async () => {

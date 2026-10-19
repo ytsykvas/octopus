@@ -342,6 +342,7 @@ describe('where the conversation compacts', () => {
       modelWindow: 1_000_000,
       override: null,
       pending: false,
+      settled: false,
       ...overrides
     }
   })
@@ -468,6 +469,19 @@ describe('where the conversation compacts', () => {
   // The tick and the measurement disagreeing is said rather than left silent.
   it('says when the window in force is not the one chosen', async () => {
     renderAttic(view({ chosen: 300_000, effective: 200_000, modelWindow: null }))
+    await open()
+
+    expect(
+      screen.getByText(
+        'In effect: 200k, not the chosen 300k. Choose it again to start the session over.'
+      )
+    ).toHaveClass('text-warning')
+  })
+
+  // A session already started over for this reading read it again: choosing
+  // again would only do the same, so the menu does not suggest it.
+  it('does not suggest choosing again once a restart could not shed it', async () => {
+    renderAttic(view({ chosen: 300_000, effective: 200_000, modelWindow: null, settled: true }))
     await open()
 
     expect(screen.getByText('In effect: 200k, not the chosen 300k.')).toHaveClass('text-warning')

@@ -24,12 +24,12 @@
  * read and each rule says which one it came from.
  */
 
-import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import { z } from 'zod'
 
+import { readSettingsFile } from './settingsFiles.js'
 import { parseStandingRule, type StandingPermission } from './standingPermissions.js'
 
 /**
@@ -77,9 +77,6 @@ const SettingsSchema = z.looseObject({
     .optional()
 })
 
-/** How much of one file is read, so a large one cannot hold a dialog up. */
-const MAX_BYTES = 256 * 1024
-
 /**
  * Every permission rule the three files hold, in the order they are read.
  *
@@ -126,22 +123,6 @@ interface Listed {
 
 /** The permissions of one file, or null for anything short of a clear answer. */
 async function settingsIn(path: string): Promise<Listed | null> {
-  let raw: string
-  try {
-    raw = await readFile(path, 'utf8')
-  } catch {
-    return null
-  }
-
-  if (raw.length > MAX_BYTES) return null
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return null
-  }
-
-  const result = SettingsSchema.safeParse(parsed)
+  const result = SettingsSchema.safeParse(await readSettingsFile(path))
   return result.success ? (result.data.permissions ?? null) : null
 }

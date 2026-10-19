@@ -27,6 +27,7 @@ import {
   toIsoTimestamp
 } from './agent.js'
 import type { AgentEvent } from './events.js'
+import type { SkillVisibility } from './skills.js'
 
 /**
  * A stand-in for `query()`.
@@ -70,6 +71,8 @@ function fakeAgent(
     commands?: SlashCommand[]
     /** What the agent answers when asked to rewind files. */
     rewind?: Record<string, unknown>
+    /** What the session's settings files say about skills; left out, it reads none. */
+    skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -201,7 +204,8 @@ function fakeAgent(
       askPermission: (ask) =>
         hooks.askPermission?.(ask) ?? Promise.resolve({ allow: true } as const),
       askElicitation: (ask) =>
-        hooks.askElicitation?.(ask) ?? Promise.resolve({ action: 'decline' } as const)
+        hooks.askElicitation?.(ask) ?? Promise.resolve({ action: 'decline' } as const),
+      ...(hooks.skillsInFiles && { skillsInFiles: hooks.skillsInFiles })
     }
   )
 
@@ -580,14 +584,40 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)).toEqual([{ type: 'conversation_reset', cleared: false }])
   })
 
-  // Whether the user asked for it cannot be known from one message — the same
-  // reset arrives when the agent leaves plan mode — so the mapping reports the
-  // form that changes nothing, and the service, which sent the message, decides.
-  it('never claims a reset was asked for', () => {
+  // An older CLI does not say what caused the reset, and the same message
+  // arrives when the agent leaves plan mode — so the mapping reports the form
+  // that changes nothing, and the service, which sent the message, decides.
+  it('does not claim a reset was asked for when the message does not say', () => {
     const message = { type: 'conversation_reset' } as unknown as SDKMessage
     const [event] = mapMessage(message)
 
     expect(event).toEqual({ type: 'conversation_reset', cleared: false })
+  })
+
+  it('reads a reset the CLI says came from /clear as asked for', () => {
+    const message = { type: 'conversation_reset', trigger: 'clear' } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_reset', cleared: true, trigger: 'clear' }
+    ])
+  })
+
+  it('passes on what else caused a reset, without reading it as asked for', () => {
+    const message = {
+      type: 'conversation_reset',
+      trigger: 'plan_mode_exit'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      { type: 'conversation_reset', cleared: false, trigger: 'plan_mode_exit' }
+    ])
+  })
+
+  // The SDK's own advice: an unrecognised value is an unspecified reset.
+  it('reads a cause it does not know as no cause at all', () => {
+    const message = { type: 'conversation_reset', trigger: 'teleport' } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([{ type: 'conversation_reset', cleared: false }])
   })
 
   it('passes on a new command list, translated', () => {
@@ -1464,6 +1494,106 @@ describe('a session', () => {
     await agent.session.setSkills({})
 
     expect(agent.flagSettings()[1]).toMatchObject({ skillOverrides: { 'octopus:review': 'on' } })
+  })
+
+  /*
+   * Measured (SDK 0.3.299): the flag layer outranks the settings files, so an
+   * `'on'` for a skill the user's own file switches off brought it back for
+   * the rest of the session. A key octopus stops naming goes back to what the
+   * files say, and only to `'on'` where they say nothing.
+   */
+  it("puts a dropped skill back as the user's settings files say it", async () => {
+    const files = new Map<string, SkillVisibility>([
+      ['octopus:review', 'off'],
+      ['octopus:ship', 'name-only']
+    ])
+    const { agent } = fakeAgent(
+      { skillOverrides: { 'octopus:review': 'on', 'octopus:ship': 'off', 'octopus:plan': 'off' } },
+      { skillsInFiles: () => Promise.resolve(files) }
+    )
+
+    await agent.session.setSkills({})
+
+    expect(agent.flagSettings()).toEqual([
+      expect.objectContaining({
+        skillOverrides: {
+          'octopus:review': 'off',
+          'octopus:ship': 'name-only',
+          'octopus:plan': 'on'
+        }
+      })
+    ])
+  })
+
+  /*
+   * Two pushes overlapping while the first waits on the files — a default list
+   * changed, then a chat's own switch. Run side by side, both started from the
+   * same map and the slower read sent the older record last.
+   */
+  it('lets a later push land after an earlier one still reading the files', async () => {
+    let release: (files: ReadonlyMap<string, SkillVisibility>) => void = () => undefined
+    let reading = false
+    const { agent } = fakeAgent(
+      { skillOverrides: { 'octopus:review': 'off' } },
+      {
+        skillsInFiles: () =>
+          new Promise((resolve) => {
+            reading = true
+            release = resolve
+          })
+      }
+    )
+
+    const first = agent.session.setSkills({})
+    const second = agent.session.setSkills({ 'octopus:review': 'off', 'octopus:ship': 'off' })
+    // Until the first push is holding its read open.
+    await vi.waitFor(() => {
+      expect(reading).toBe(true)
+    })
+    release(new Map())
+    await Promise.all([first, second])
+
+    expect(agent.flagSettings().at(-1)).toMatchObject({
+      skillOverrides: { 'octopus:review': 'off', 'octopus:ship': 'off' }
+    })
+  })
+
+  it('keeps pushing after one that failed', async () => {
+    const { agent } = fakeAgent(
+      { skillOverrides: { 'octopus:review': 'off' } },
+      { skillsInFiles: () => Promise.reject(new Error('unreadable')) }
+    )
+
+    await expect(agent.session.setSkills({})).rejects.toThrow('unreadable')
+    await agent.session.setSkills({ 'octopus:ship': 'off', 'octopus:review': 'off' })
+
+    expect(agent.flagSettings().at(-1)).toMatchObject({
+      skillOverrides: { 'octopus:review': 'off', 'octopus:ship': 'off' }
+    })
+  })
+
+  // A skill may be called `constructor`, which every object answers for.
+  it('puts back a skill named like a property every object has', async () => {
+    const { agent } = fakeAgent({ skillOverrides: { constructor: 'off' as const } })
+
+    await agent.session.setSkills({})
+
+    expect(agent.flagSettings().at(-1)).toMatchObject({ skillOverrides: { constructor: 'on' } })
+  })
+
+  // A push that drops nothing has no use for the files, and pushes follow
+  // every config write. A key once dropped stays in the map, though, so this
+  // holds only until the first one.
+  it('reads the settings files only when a skill drops off the map', async () => {
+    const read = vi.fn(() => Promise.resolve(new Map<string, SkillVisibility>()))
+    const { agent } = fakeAgent(
+      { skillOverrides: { 'octopus:review': 'off' } },
+      { skillsInFiles: read }
+    )
+
+    await agent.session.setSkills({ 'octopus:review': 'on' })
+
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('says a skill is on when the session started withholding it', async () => {

@@ -82,9 +82,11 @@ It also ships a **Claude Code plugin skill** at
 and review. It instructs the agent to branch on `CONDUCTOR_IS_LOCAL`, and to prefer
 Conductor's own `DiffComment` tool over posting to GitHub.
 
-**octopus does not do this** (§2, §4): it adds no prompt of its own to any action.
-Worth knowing precisely, because the objection is to _hidden_ injection — and
-Conductor's is documented and editable, which is a weaker target than "opaque".
+**octopus does not do this** (§2, §4): no system prompt and no bundled skill. Its
+pull request pane does send prepared prompts on a click, but as visible user
+messages in the chat, never behind the log. Worth knowing precisely, because the
+objection is to _hidden_ injection — and Conductor's is documented and editable,
+which is a weaker target than "opaque".
 
 Note what is **not** the objection: reading the repository's `AGENTS.md`,
 `CLAUDE.md` and `.claude/commands` is the user's own material and octopus loads all

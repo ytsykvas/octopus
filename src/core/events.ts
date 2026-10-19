@@ -39,6 +39,14 @@ const ToolInputSchema = z.unknown()
 const ParentSchema = z.string().optional()
 
 /**
+ * What emptied the agent's memory, as the CLI names it: `/clear` or an alias,
+ * leaving plan mode with its context cleared, a fresh session for an approved
+ * plan, or onboarding run again.
+ */
+export const ResetTriggerSchema = z.enum(['clear', 'plan_mode_exit', 'fresh_session', 'onboarding'])
+export type ResetTrigger = z.infer<typeof ResetTriggerSchema>
+
+/**
  * The lines an edit landed among, and where they start.
  *
  * `startLine` is the 1-based number of the first line of the changed region in
@@ -288,11 +296,16 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
    * records that one. Measured against a live session rather than assumed.
    *
    * `cleared` is whether the user asked for this. The SDK emits the same reset
-   * for leaving plan mode and for fresh-session flows, so the event alone
-   * cannot be read as "the user wanted the log gone" — that is decided where
-   * the message was sent, and travels here.
+   * for leaving plan mode and for fresh-session flows. A newer CLI says which
+   * in `trigger`; an older one does not, and then it is decided where the
+   * message was sent, and travels here. Optional, so a reset stored before the
+   * field still reads.
    */
-  z.object({ type: z.literal('conversation_reset'), cleared: z.boolean() }),
+  z.object({
+    type: z.literal('conversation_reset'),
+    cleared: z.boolean(),
+    trigger: ResetTriggerSchema.optional()
+  }),
 
   /**
    * A model refused, and the turn was retried on another one.

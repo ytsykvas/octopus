@@ -768,6 +768,8 @@ export const en = {
     modeChanged: 'mode {{from}} \u2192 {{to}}',
     binary: 'Binary file — nothing to show.',
     tooLarge: 'Too large to draw here. Open the file to read it.',
+    nestedRepository:
+      'A repository of its own. Git records it as a link rather than its files, once it has a commit of its own.',
     revert: 'Revert',
     revertFile: 'Revert {{path}}',
     revertTitle: 'Revert this file?',
@@ -1038,6 +1040,8 @@ export const en = {
     autoCompactOverriddenEnv:
       '{{variable}}={{value}} in the environment decides instead. Take it out there, then choose here again.',
     autoCompactMismatch: 'In effect: {{effective}}, not the chosen {{chosen}}.',
+    autoCompactMismatchRetry:
+      'In effect: {{effective}}, not the chosen {{chosen}}. Choose it again to start the session over.',
     clearTitle: 'Clear this conversation?',
     clearMessage: 'The agent starts again with no memory of what was said here.',
     clearDetail: 'The log is deleted with it, and cannot be brought back.',
@@ -1113,6 +1117,10 @@ export const en = {
        as well. The model that resolves to is named underneath, because that is
        the fact the reader came for. */
     modelsSame: 'Same as writing code',
+    /* Above the columns while a `/model` command has the session on a model
+       they do not tick: the command lasts for the session, the columns are
+       what this conversation chose. */
+    modelsSessionOnly: 'This session is running {{model}}: /model chose it for this session only.',
 
     effort: 'Effort',
     effortLow: 'Low',
@@ -1875,6 +1883,7 @@ export const en = {
       'Could not determine a base branch in {{path}}. Check out the branch you want and try again.',
     baseUnknown:
       'Could not find where this workspace branched off {{branch}}. The branch may have been renamed or deleted — check the project settings.',
+    notRemoved: '{{path}} is still there: it could not be removed.',
     duplicateProject: 'This repository is already added as project "{{name}}".',
     notConnected: 'Could not reach GitHub. Check the account in Settings.',
     listFailed: 'GitHub returned something unexpected.',

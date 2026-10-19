@@ -442,17 +442,15 @@ The codebase follows **the best practices of its stack**. This is a condition, n
 
 #### Testing
 
-The coverage target is differentiated, and that is a deliberate decision rather than a relaxation:
+The coverage target is **100% on every layer** — statements, branches, functions and lines — held by one threshold (`vitest.shared.ts`) that both `vitest.config.ts` (core, main, preload) and `vitest.renderer.config.ts` (the window) apply, and `npm run check` and CI fail when either drops. Only `bootstrapOnly` in `vitest.shared.ts` is exempt: the bootstrap that mounts a framework or starts the app, type-only modules, and the tests and their helpers.
 
-| Layer               | Target        | Why                                                                                          |
-| ------------------- | ------------- | -------------------------------------------------------------------------------------------- |
-| `core/`             | **100%**      | pure headless logic without Electron; trivially testable, and this is where costly bugs live |
-| `main/`, `preload/` | IPC contracts | a thin proxy layer; the point is that channels carry what they promise                       |
-| `renderer/`         | behaviour     | tests on user actions rather than markup snapshots                                           |
+| Layer               | What the tests pin                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `core/`             | pure headless logic without Electron; trivially testable, and this is where costly bugs live |
+| `main/`, `preload/` | IPC contracts: that channels carry what they promise                                         |
+| `renderer/`         | behaviour: user actions rather than markup snapshots                                         |
 
-The 100% figure for `core/` is a threshold in `vitest.config.ts` and fails the build when it drops.
-
-We deliberately do **not** chase 100% on UI and IPC: there, chasing the number breeds hollow tests that catch nothing yet break on every refactor. Coverage is a tool, not a metric for a report.
+It began differentiated, with 100% for `core/` alone, on the reasoning that chasing the number on UI and IPC breeds hollow tests. UI and IPC reached it anyway. The original worry stands as a rule rather than a target: 100% says a line ran, not that anything would notice if it went, so a guard is verified by putting the bug back and watching the suite go red ([testing.md](testing.md#100-coverage-is-not-the-same-as-tested)). Coverage is a tool, not a metric for a report.
 
 Further rules:
 
@@ -640,7 +638,8 @@ the app never sees a token (§10.9).
   reading order. The inline ones come from a GraphQL query by the request's node
   id, for the one field REST does not carry: whether the thread is resolved.
   **Add to chat** puts a remark into the composer beside the diff's own notes,
-  so a question can be typed under it rather than the app asking one.
+  so a question can be typed under it rather than the app asking one. A thread
+  is replied to, resolved and reopened from the same list.
 - **The four prepared messages** — answer the review, review it, review it with
   several subagents, resolve the conflicts — each the project's own instruction
   plus a line naming the request, sent as one visible user message (§4).
@@ -757,12 +756,12 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 - **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. In `Auto` the SDK's classifier decides instead, prompting only when it cannot, and every refusal it makes is drawn in the log; `bypassPermissions` stays out. The mode a new chat starts in, and the one an approved plan is carried out in, are global settings, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
 - **Task sources** — creating a workspace from a GitHub issue or a Linear ticket.
-- **Code review** — answered twice over. A note against a line rides out inside
+- **Code review** — answered. A note against a line rides out inside
   the next message, as readable text rather than as anything hidden (§4); and
   GitHub's review threads now appear on the same surface, with **Add to chat**
-  putting a remark into the same composer strip the diff's own notes use. Still
-  open is the other direction: a thread can be read here and not replied to, so
-  the answer goes back as a commit or in a browser.
+  putting a remark into the same composer strip the diff's own notes use. The
+  other direction is answered too: a thread is replied to, resolved or reopened
+  from the same pane (§12.4).
 - **Several agents per workspace** — half answered. The interface offers it: up to three conversations per workspace, no locking between them (§10.8). Still open is what two agents editing the same files at once actually does — the changes pane shows one diff for the workspace, with no way to tell whose work is whose, and a review note against a line may be about a line another conversation has since moved. `agent` is still an enum with one member, so a second _kind_ of agent remains a widened enum rather than a migration.
 - **What the list shows** — agent status, change count, CI state. Not session cost: the SDK's `total_cost_usd` is what the same tokens would have cost through the API, which a subscription never pays, and its own documentation calls it "an estimate, not a billing statement". Shown beside a workspace name it is a made-up number in a currency, and the second half of this stands — usage belongs on the list as tokens or as distance to a rate limit, if at all.
 

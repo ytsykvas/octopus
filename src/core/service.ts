@@ -205,10 +205,12 @@ import {
   skillOverridesFor,
   type SkillPreview,
   type SkillSave,
+  type SkillVisibility,
   writeRawSkill,
   writeSkill
 } from './skills.js'
 import { describeSessionSkill, withholdable } from './sessionSkills.js'
+import { skillsInFiles } from './settingsFiles.js'
 import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
@@ -476,6 +478,15 @@ export interface ServiceOptions {
     cwd: string,
     sources: readonly SettingSourceName[]
   ) => Promise<WindowOverride | null>
+  /**
+   * What the settings files a session reads say about each skill
+   * (`skillsInFiles`). Reads the user's own file by default, so a test passes
+   * its own.
+   */
+  readonly skillsInFiles?: (
+    cwd: string,
+    sources: readonly SettingSourceName[]
+  ) => Promise<ReadonlyMap<string, SkillVisibility>>
 }
 
 /**
@@ -1475,6 +1486,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const dataRoot = options.dataRoot ?? rootDir()
   const cliDir = options.cliConfigDir ?? cliConfigDir()
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
+  const fileSkillsFor = options.skillsInFiles ?? skillsInFiles
   const listening = options.listening ?? isListening
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
@@ -1526,10 +1538,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     {
       readonly startedWith: AutoCompactWindow | null
       readonly override: WindowOverride | null
-      /** The last reading named another window than the one it was started with (`windowStrayed`). */
-      readonly strayed: boolean
+      /**
+       * The window the last reading named, in tokens, when it was another than
+       * the one the session was started with (`windowStrayed`) and not the one
+       * it was started to shed; null otherwise.
+       */
+      readonly strayed: number | null
+      /**
+       * The stray reading a restart started this session to shed, or null. Read
+       * again, it is one no new session clears, and choosing the same window
+       * once more would only start another for nothing.
+       */
+      readonly shedding: number | null
     }
   >()
+  /** The stray a restart starts a chat's next session to shed — `restartForWindow`. */
+  const shedOnStart = new Map<string, number | null>()
   /** What each model holds, as any session's turns have said; outlives the sessions. */
   const modelWindows = new Map<string, number>()
   /**
@@ -2314,13 +2338,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * Fills in the half of a reset the SDK layer could not know.
    *
-   * `mapMessage` is a pure function of one message, and one message cannot say
-   * whether the user asked for this: the same reset arrives when the agent
-   * leaves plan mode. The answer was recorded when the message went out, and
-   * this is where the two halves meet. Everything else passes through.
+   * `mapMessage` is a pure function of one message, and a message from an
+   * older CLI cannot say whether the user asked for this: the same reset
+   * arrives when the agent leaves plan mode. The answer was recorded when the
+   * message went out, and this is where the two halves meet. Everything else
+   * passes through.
    */
   function answerReset(chat: Chat, event: AgentEvent): AgentEvent {
     if (event.type !== 'conversation_reset') return event
+
+    // Another flow's reset, named by the CLI: a `/clear` still on its way
+    // belongs to the reset it is about to cause, not to this one.
+    if (event.trigger !== undefined && event.trigger !== 'clear') return event
 
     // Deleted whether or not it was there: the request belongs to the reset it
     // caused, and leaving it behind would clear the log on the next one.
@@ -2911,11 +2940,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // seen — the CLI takes one from a settings file mid-session too. Asked for
     // by a choice in the menu and never by a message, or a variable left in
     // place would start the session over before every one of them.
-    const recheckStart = recheck && (started.override !== null || started.strayed)
+    const recheckStart = recheck && (started.override !== null || started.strayed !== null)
     if (started.startedWith === chat.autoCompactWindow && !recheckStart) return
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
 
     await closeOneChat(chat)
+    // Remember the stray the old session read, so the new one reading it again
+    // says no restart could help — whatever this one was started for, a fresh
+    // session reading the same value proves the same thing.
+    shedOnStart.set(chatId, started.strayed)
     await sessionFor(chat, requireWorkspace(chat.workspaceId))
   }
 
@@ -3592,10 +3625,43 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
-  interface SessionSkills {
-    /** Extra roots to hand the session, so it finds the stores' skills. */
-    readonly roots: string[]
-    readonly listing: SkillListing[]
+  /**
+   * Whether a session loads the skills of our stores and the checkout at all:
+   * only with the project layer, under which the SDK reads every root's
+   * `.claude/skills`. One rule for the roots a session is handed and the list
+   * the panel draws, so neither offers what the other cannot reach.
+   */
+  function loadsOurSkills(settingSources: readonly SettingSourceName[]): boolean {
+    return settingSources.includes('project')
+  }
+
+  /**
+   * The extra roots a session is handed, so it finds the stores' skills.
+   *
+   * Both, whether or not either holds anything today.
+   *
+   * An empty store used to be left unmentioned — a root widens what the
+   * session may reach, and one handed over for an empty directory looked like
+   * a cost with nothing bought. It buys the ability to fill it. The roots are
+   * passed **once**, at session start, and `reloadSkills` only re-scans the
+   * directories the session already knows about, so a store that was empty
+   * then stayed invisible for the life of the conversation — every skill later
+   * written into it, not merely the first. That is the state of every fresh
+   * install, and the panel listed the new skill as available the whole time
+   * because it re-reads disk on every call.
+   *
+   * None with no project layer in `settingSources`: the SDK then reads no
+   * `.claude/skills` under any root, so a root there really would buy nothing.
+   *
+   * Kept out of `sessionSkills`, and reads nothing, because a start needs only
+   * the roots: building the panel's listing as well cost three directory reads
+   * per start and lengthened the window in which a change has to be caught by
+   * the re-read after the last await.
+   */
+  function skillRootsFor(project: Project, settingSources: readonly SettingSourceName[]): string[] {
+    return loadsOurSkills(settingSources)
+      ? [globalSkillsRoot(dataRoot), projectSkillsRoot(project.id, dataRoot)]
+      : []
   }
 
   /**
@@ -3636,13 +3702,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      * list exists only once a session does.
      */
     held: readonly AgentSkill[] = []
-  ): Promise<SessionSkills> {
+  ): Promise<SkillListing[]> {
     const globalRoot = globalSkillsRoot(dataRoot)
     const projectRoot = projectSkillsRoot(project.id, dataRoot)
 
     // A switch over something the session would not load is a control with
     // nothing behind it, so the list is empty rather than inert.
-    const loaded = settingSources.includes('project')
+    const loaded = loadsOurSkills(settingSources)
 
     const [ours, theirs, carried] = await Promise.all([
       loaded ? readSkillsIn(skillsDirOf(globalRoot)) : [],
@@ -3728,28 +3794,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
     }
 
-    return {
-      /*
-       * Both, whether or not either holds anything today.
-       *
-       * An empty store used to be left unmentioned — a root widens what the
-       * session may reach, and one handed over for an empty directory looked
-       * like a cost with nothing bought. It buys the ability to fill it. The
-       * roots are passed **once**, at session start, and `reloadSkills` only
-       * re-scans the directories the session already knows about, so a store
-       * that was empty then stayed invisible for the life of the conversation
-       * — every skill later written into it, not merely the first. That is the
-       * state of every fresh install, and the panel listed the new skill as
-       * available the whole time because it re-reads disk on every call.
-       *
-       * The `loaded` gate stays, and it is the one case where the old
-       * reasoning still holds: with no project layer in `settingSources` the
-       * SDK reads no `.claude/skills` under any root, so a root there really
-       * would buy nothing.
-       */
-      roots: loaded ? [globalRoot, projectRoot] : [],
-      listing
-    }
+    return listing
   }
 
   /**
@@ -3882,12 +3927,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     workspace: Workspace,
     settingSources: readonly SettingSourceName[]
   ): Promise<AgentSession> {
-    const skills = await sessionSkills(
-      requireProject(workspace.projectId),
-      workspace,
-      asked,
-      settingSources
-    )
+    const roots = skillRootsFor(requireProject(workspace.projectId), settingSources)
 
     /*
      * Where a pasted image is written, handed over as a root of its own.
@@ -3908,16 +3948,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Before the roots are handed over, because `--add-dir` on a directory that
     // is not there is at best untested — and until the first skill is written
     // neither of ours exists. A write, so it lives here rather than in
-    // `sessionSkills`, which is also the read path behind the skills panel.
+    // `skillRootsFor`, which only names them.
     await Promise.all([
-      ...[...skills.roots, attachments].map((root) => ensureStore(root)),
+      ...[...roots, attachments].map((root) => ensureStore(root)),
       // The commands and subagents beside them, for the same reason: the roots
       // are passed once at session start, and a directory that was not there
       // then stays invisible for the life of the conversation.
-      ...skills.roots.flatMap((root) => [
-        ensureLibrary(root, 'command'),
-        ensureLibrary(root, 'subagent')
-      ])
+      ...roots.flatMap((root) => [ensureLibrary(root, 'command'), ensureLibrary(root, 'subagent')])
     ])
 
     // Asked of the files this session will read, as it starts. The agent can
@@ -3961,7 +3998,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // already doing. `askPermission` consults `alwaysAllowedTools` itself,
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
-        additionalDirectories: [...skills.roots, attachments],
+        additionalDirectories: [...roots, attachments],
         skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow
       },
@@ -3977,12 +4014,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         askPermission: (ask) => askPermission(chat, ask),
         // The snapshot, as `askPermission` above takes it: this reads only the
         // chat's id and its workspace, and neither of those changes.
-        askElicitation: (ask) => askElicitation(chat, ask)
+        askElicitation: (ask) => askElicitation(chat, ask),
+        // The sources this session started with, not the project's current
+        // ones: those are the files it reads.
+        skillsInFiles: () => fileSkillsFor(workspace.path, settingSources)
       }
     )
 
     sessions.set(chat.id, session)
-    compaction.set(chat.id, { startedWith: chat.autoCompactWindow, override, strayed: false })
+    compaction.set(chat.id, {
+      startedWith: chat.autoCompactWindow,
+      override,
+      strayed: null,
+      shedding: shedOnStart.get(chat.id) ?? null
+    })
+    shedOnStart.delete(chat.id)
 
     // Fire-and-forget, and the two failures go different ways. A list that
     // cannot be *read* is swallowed: it is a convenience for the picker, a
@@ -4821,7 +4867,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           ?.refreshSkills()
           .catch(() => [])) ?? []
 
-      const { listing } = await sessionSkills(
+      const listing = await sessionSkills(
         requireProject(workspace.projectId),
         workspace,
         chat,
@@ -4845,14 +4891,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async skillsForWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
 
-      const { listing } = await sessionSkills(
+      return sessionSkills(
         requireProject(workspace.projectId),
         workspace,
         { skillOverrides: {} },
         await sourcesFor(workspace)
       )
-
-      return listing
     },
 
     async setChatSkill(chatId, key, enabled) {
@@ -6014,7 +6058,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           context.modelWindow ??
           (context.model === null ? null : (modelWindows.get(context.model) ?? null)),
         override: started?.override ?? null,
-        pending: started !== undefined && started.startedWith !== chat.autoCompactWindow
+        pending: started !== undefined && started.startedWith !== chat.autoCompactWindow,
+        settled: started?.shedding === context.maxTokens
       }
 
       // Kept for the next choice in the menu: a reading this one disagrees
@@ -6026,7 +6071,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (started && sessions.get(chatId) === session) {
         compaction.set(chatId, {
           ...started,
-          strayed: windowStrayed({ ...autoCompact, chosen: started.startedWith })
+          strayed:
+            !autoCompact.settled && windowStrayed({ ...autoCompact, chosen: started.startedWith })
+              ? context.maxTokens
+              : null
         })
       }
 
