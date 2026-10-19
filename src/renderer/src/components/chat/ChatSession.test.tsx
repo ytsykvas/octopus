@@ -2448,3 +2448,113 @@ describe('choosing where the conversation compacts', () => {
     })
   })
 })
+
+describe('showing every step', () => {
+  const AT = '2026-08-11T09:00:00.000Z'
+  const history: ChatEntry[] = [
+    { role: 'user', at: AT, text: 'look' },
+    { role: 'agent', at: AT, event: { type: 'thinking', text: 'weighing it up' } },
+    {
+      role: 'agent',
+      at: AT,
+      event: {
+        type: 'tool_use',
+        toolUseId: 'c-1',
+        name: 'Read',
+        input: { file_path: '/tmp/planner/anna/src/App.tsx' }
+      }
+    }
+  ]
+
+  const pressCmdO = (extra: Partial<KeyboardEventInit> = {}): void => {
+    fireEvent.keyDown(window, { key: 'o', metaKey: true, ...extra })
+  }
+
+  // Claude Code's ctrl+o, here ⌘O: every row and every piece of reasoning.
+  it('opens everything on ⌘O, and folds it again on the next press', async () => {
+    givenChat(history)
+    await openChat()
+    await screen.findByText('look')
+
+    pressCmdO()
+    expect(screen.getByText('weighing it up')).toBeVisible()
+
+    pressCmdO()
+    expect(screen.queryByText('weighing it up')).not.toBeInTheDocument()
+  })
+
+  it('ignores ⌘O with another modifier held, and O alone', async () => {
+    givenChat(history)
+    await openChat()
+    await screen.findByText('look')
+
+    pressCmdO({ shiftKey: true })
+    pressCmdO({ altKey: true })
+    fireEvent.keyDown(window, { key: 'o' })
+
+    expect(screen.queryByText('weighing it up')).not.toBeInTheDocument()
+  })
+
+  // A dialog owns the keyboard while it is open.
+  it('leaves ⌘O to an open dialog', async () => {
+    givenChat(history)
+    await openChat()
+    await screen.findByText('look')
+
+    const dialog = document.createElement('dialog')
+    dialog.setAttribute('open', '')
+    document.body.append(dialog)
+    try {
+      pressCmdO()
+      expect(screen.queryByText('weighing it up')).not.toBeInTheDocument()
+    } finally {
+      dialog.remove()
+    }
+  })
+
+  it('offers the same from a button that says which way it goes', async () => {
+    const user = userEvent.setup()
+    givenChat(history)
+    await openChat()
+
+    const button = await screen.findByRole('button', { name: 'Show every step (⌘O)' })
+    expect(button).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(button)
+
+    expect(screen.getByRole('button', { name: 'Fold every step (⌘O)' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(screen.getByText('weighing it up')).toBeVisible()
+  })
+
+  // The path in a row opens the file in the centre, the way the right pane's
+  // tree opens one — and with the file in front, the conversation behind it
+  // no longer answers ⌘O.
+  it('opens a file a row names, and stops answering ⌘O behind it', async () => {
+    const user = userEvent.setup()
+    givenChat(history)
+    await openChat()
+
+    await user.click(await screen.findByRole('button', { name: 'src/App.tsx' }))
+
+    await waitFor(() => {
+      expect(octopus().files.read).toHaveBeenCalledWith(workspaceView('anna').id, 'src/App.tsx')
+    })
+    pressCmdO()
+    expect(screen.queryByText('weighing it up')).not.toBeInTheDocument()
+  })
+
+  it('keeps a file opened with a double-click', async () => {
+    const user = userEvent.setup()
+    givenChat(history)
+    await openChat()
+
+    await user.dblClick(await screen.findByRole('button', { name: 'src/App.tsx' }))
+
+    await waitFor(() => {
+      expect(octopus().files.read).toHaveBeenCalledWith(workspaceView('anna').id, 'src/App.tsx')
+    })
+  })
+})

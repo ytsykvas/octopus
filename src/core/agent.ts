@@ -31,6 +31,7 @@ import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
+import { readToolOutput } from './toolOutput.js'
 import type { SkillOverride, SkillVisibility } from './skills.js'
 import type { UsageReport } from './usage.js'
 import { toUsageReport } from './usage.js'
@@ -1200,7 +1201,7 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
   const results = content.filter((block) => block.type === 'tool_result')
   // The structured output is one per message, so it can only be told apart
   // from its neighbours' when the message carries a single result.
-  const taskId = results.length === 1 ? createdTaskId(message.tool_use_result) : null
+  const output = results.length === 1 ? readToolOutput(message.tool_use_result) : {}
 
   for (const block of results) {
     events.push({
@@ -1208,7 +1209,7 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
       toolUseId: block.tool_use_id,
       ok: block.is_error !== true,
       content: describeToolResult(block.content),
-      ...(taskId !== null && { taskId }),
+      ...output,
       // Optional on this message where it is required on an assistant one, so
       // a result that arrives without one simply cannot be retracted.
       ...(message.uuid === undefined ? {} : { uuid: message.uuid }),
@@ -1217,20 +1218,6 @@ function fromUser(message: SDKUserMessage): AgentEvent[] {
   }
 
   return events
-}
-
-/** `TaskCreate`'s structured output — `TaskGet`'s has the same shape. */
-const CreatedTaskSchema = z.object({ task: z.object({ id: z.string() }) })
-
-/**
- * The id of the task a result made, or null when it made none.
- *
- * Another result that happens to name a task the same way (`TaskGet`) gets one
- * too, and that is harmless: the list only reads it off a `TaskCreate`.
- */
-function createdTaskId(output: unknown): string | null {
-  const parsed = CreatedTaskSchema.safeParse(output)
-  return parsed.success ? parsed.data.task.id : null
 }
 
 /**
