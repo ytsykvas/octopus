@@ -2506,6 +2506,33 @@ recycled. Arrows, Home and End move; Right opens a folder and steps into it, Lef
 closes it and steps out; Enter keeps a file open, Space previews it. Collapsing
 a folder that held the focused row leaves focus on the folder, not at the top.
 
+**The filter narrows the tree to a flat list.** Typing in the field over the
+tree swaps it for the files that answer, best first and each beside its folder,
+ranked by `rankFiles` — the `@` list's own order, so the two never disagree
+about what a query means. Flat, because the question was "where is it", and an
+answer folded into folders makes the reader open them to find out. It covers
+every file the tree holds, including those of a folder already read from disk —
+the tree, not the disk, which is what the empty answer says — and stops at 200
+with a line saying so. The field keeps focus — a combobox over its listbox — so
+the arrows move through the matches while typing goes on, the one they reach is
+scrolled into view, Enter keeps it open, a click previews it, and Escape gives
+the tree back. The choice is held by its file, not its place: the tree is read
+again after every turn, and a place held across that pointed at another file.
+The state lives in `useFileFilter`; a match draws its name and mark with the
+tree's own `EntryLabel`.
+
+**Show the open file** opens every folder above the file in the centre, scrolls
+to its row and puts focus on the tree there, as an editor's explorer does on
+request. A folder above it that is read from disk — `node_modules`, a submodule
+— is read along the way, and every folder inside that one too, since the tree
+cannot know them before their parent's listing arrives; the scroll waits for
+the row rather than for the click. It stops waiting once nothing it opened is
+still being read, or when the reader moves on — another file in the centre, a
+key or a scroll in the tree, the tab put away. Left armed, a row turning up in a
+later re-read moved the tree long after the click. The scroll is measured from
+the tree as it is at that moment, which is also why the tree measures itself
+when it comes back from under the filter.
+
 **The icons are Catppuccin Icons**, the VS Code theme, resolved by the rules VS
 Code applies to the same manifest: the whole name, then each extension from the
 longest (`test.ts` before `ts`), then the language. It replaced Material Icon

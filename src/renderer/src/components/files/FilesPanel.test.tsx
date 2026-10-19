@@ -6,6 +6,7 @@ import type { FileTreeSnapshot, TreeEntry } from '@core/fileTree.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import i18n, { DEFAULT_LANGUAGE } from '../../i18n/index.js'
+import { held } from '../../test/held.js'
 import { octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { FilesPanel, ROW_HEIGHT } from './FilesPanel.js'
@@ -592,6 +593,25 @@ describe('FilesPanel', () => {
       expect(await screen.findByTitle('f0000.ts')).toBeInTheDocument()
     })
 
+    // The filter's list stands in for the tree; one back from under it draws
+    // as tall as it is now, not as the pane measured while it was away.
+    it('measures the tree again when it comes back from under the filter', async () => {
+      answering(many)
+      renderPanel()
+      await shown()
+      const field = screen.getByRole('combobox', { name: 'Filter files' })
+      await userEvent.type(field, 'f1')
+      act(() => {
+        window.dispatchEvent(new Event('resize'))
+      })
+
+      await userEvent.clear(field)
+
+      await waitFor(() => {
+        expect(screen.getAllByRole('treeitem')).toHaveLength(40)
+      })
+    })
+
     it('measures itself again when the window is resized', async () => {
       answering(many)
       renderPanel()
@@ -609,6 +629,388 @@ describe('FilesPanel', () => {
       await waitFor(() => {
         expect(screen.getAllByRole('treeitem')).toHaveLength(80)
       })
+    })
+  })
+
+  describe('the filter', () => {
+    const field = (): HTMLElement => screen.getByRole('combobox', { name: 'Filter files' })
+    const options = (): string[] =>
+      screen.getAllByRole('option').map((option) => option.getAttribute('title') ?? '')
+
+    it('lists the matching files flat, best first, each beside its folder', async () => {
+      answering()
+      renderPanel()
+      await shown()
+
+      await userEvent.type(field(), 'b')
+
+      expect(screen.queryByRole('tree')).not.toBeInTheDocument()
+      expect(options()).toEqual(['src/b.ts'])
+      const match = screen.getByRole('option', { name: /^b\.ts/ })
+      expect(match).toHaveTextContent('src')
+      expect(match).toHaveAccessibleName(/Modified/)
+    })
+
+    it('ranks the way the mention list does, a name before a path', async () => {
+      answering({
+        entries: [file('docs/core/notes.md'), file('core.ts'), file('src/core/a.ts')],
+        statuses: {},
+        truncated: false
+      })
+      renderPanel()
+      await shown()
+
+      await userEvent.type(field(), 'core')
+
+      expect(options()).toEqual(['core.ts', 'src/core/a.ts', 'docs/core/notes.md'])
+    })
+
+    it('greys a file git ignores, and finds what a folder read from disk holds', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue({
+        ok: true,
+        value: { entries: [{ name: 'pkg.js', kind: 'file' }], truncated: false }
+      })
+      renderPanel()
+      await shown()
+      await userEvent.click(row('node_modules'))
+      await screen.findByRole('treeitem', { name: /^pkg\.js/ })
+
+      await userEvent.type(field(), 'e')
+
+      expect(options()).toContain('.env')
+      expect(screen.getByRole('option', { name: /^\.env/ })).toHaveAccessibleName(/ignored by git/)
+      await userEvent.clear(field())
+      await userEvent.type(field(), 'pkg')
+      expect(options()).toEqual(['node_modules/pkg.js'])
+    })
+
+    it('opens with the arrows and Enter, and previews on a click', async () => {
+      answering()
+      const { onOpen } = renderPanel()
+      await shown()
+
+      await userEvent.type(field(), '.ts')
+      expect(options()).toEqual(['src/b.ts', 'src/gone.ts', 'src/core/a.ts'])
+      expect(field()).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[0]?.id)
+
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowUp}')
+      expect(screen.getByRole('option', { name: /^gone\.ts/ })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+      await userEvent.keyboard('{Enter}')
+      expect(onOpen).toHaveBeenLastCalledWith('src/gone.ts', true)
+
+      await userEvent.click(screen.getByRole('option', { name: /^a\.ts/ }))
+      expect(onOpen).toHaveBeenLastCalledWith('src/core/a.ts', false)
+      await userEvent.dblClick(screen.getByRole('option', { name: /^b\.ts/ }))
+      expect(onOpen).toHaveBeenLastCalledWith('src/b.ts', true)
+    })
+
+    // A longer query is a new list, and its first match is the likeliest.
+    it('starts each new list at its first match, and stops at either end', async () => {
+      answering()
+      renderPanel()
+      await shown()
+      await userEvent.type(field(), '.ts')
+
+      await userEvent.keyboard('{ArrowUp}')
+      expect(field()).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[0]?.id)
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+      expect(field()).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[2]?.id)
+
+      await userEvent.type(field(), 'x')
+      await userEvent.keyboard('{Backspace}')
+      expect(field()).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option')[0]?.id)
+    })
+
+    // Every list here keeps what the arrows are on in view.
+    it('scrolls the match the arrows reach into view', async () => {
+      answering()
+      renderPanel()
+      await shown()
+      const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView')
+      await userEvent.type(field(), '.ts')
+
+      await userEvent.keyboard('{ArrowDown}')
+
+      expect(scrolled.mock.contexts.at(-1)).toBe(screen.getByRole('option', { name: /^gone\.ts/ }))
+      expect(scrolled).toHaveBeenLastCalledWith({ block: 'nearest' })
+    })
+
+    // The tree is read again after every turn; a place held across that would
+    // point at another file.
+    it('keeps the arrows on the same file when the tree is read again', async () => {
+      answering()
+      const { onOpen } = renderPanel()
+      await shown()
+      await userEvent.type(field(), '.ts')
+      await userEvent.keyboard('{ArrowDown}')
+
+      answering({ ...SNAPSHOT, entries: [file('src/a.ts'), ...SNAPSHOT.entries] })
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+      await waitFor(() => {
+        expect(screen.getAllByRole('option')).toHaveLength(4)
+      })
+      fireEvent.keyDown(field(), { key: 'Enter' })
+
+      expect(onOpen).toHaveBeenLastCalledWith('src/gone.ts', true)
+    })
+
+    it('follows the pointer, so Enter opens what it rests on', async () => {
+      answering()
+      const { onOpen } = renderPanel()
+      await shown()
+      await userEvent.type(field(), '.ts')
+
+      fireEvent.mouseMove(screen.getByRole('option', { name: /^a\.ts/ }))
+      fireEvent.keyDown(field(), { key: 'Enter' })
+
+      expect(onOpen).toHaveBeenLastCalledWith('src/core/a.ts', true)
+    })
+
+    it('marks the file in front of the centre among the matches', async () => {
+      answering()
+      renderPanel({ activePath: 'src/b.ts' })
+      await shown()
+
+      await userEvent.type(field(), 'b')
+
+      expect(screen.getByRole('option', { name: /^b\.ts/ })).toHaveClass('row-selected')
+    })
+
+    it('gives the tree back on Escape, and lets other keys through', async () => {
+      answering()
+      renderPanel()
+      await shown()
+      expect(fireEvent.keyDown(field(), { key: 'ArrowDown' })).toBe(true)
+
+      await userEvent.type(field(), 'b')
+      expect(fireEvent.keyDown(field(), { key: 'a' })).toBe(true)
+      await userEvent.keyboard('{Escape}')
+
+      expect(field()).toHaveValue('')
+      expect(await shown()).toBeInTheDocument()
+    })
+
+    it('says when nothing matches', async () => {
+      answering()
+      const { onOpen } = renderPanel()
+      await shown()
+
+      await userEvent.type(field(), 'zzz ')
+
+      expect(screen.getByText('No file matches')).toBeInTheDocument()
+      expect(screen.getByText(/anything like “zzz”/)).toBeInTheDocument()
+      expect(field()).not.toHaveAttribute('aria-activedescendant')
+      expect(field()).toHaveAttribute('aria-expanded', 'false')
+      expect(field()).not.toHaveAttribute('aria-controls')
+      fireEvent.keyDown(field(), { key: 'Enter' })
+      expect(onOpen).not.toHaveBeenCalled()
+    })
+
+    it('says when the list stopped at its cap', async () => {
+      answering({
+        entries: Array.from({ length: 300 }, (_, index) => file(`f${String(index)}.ts`)),
+        statuses: {},
+        truncated: false
+      })
+      renderPanel()
+      await shown()
+
+      await userEvent.type(field(), 'f')
+
+      expect(screen.getAllByRole('option')).toHaveLength(200)
+      expect(
+        screen.getByText('The first 200 matches. Type more to narrow them.')
+      ).toBeInTheDocument()
+    })
+  })
+
+  describe('showing the open file', () => {
+    const button = (): HTMLElement => screen.getByRole('button', { name: 'Show the open file' })
+
+    it('waits for a file to be open', async () => {
+      answering()
+      renderPanel()
+      await shown()
+
+      expect(button()).toBeDisabled()
+    })
+
+    it('opens the folders above it, scrolls to it and gives it focus', async () => {
+      answering()
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(3 * ROW_HEIGHT)
+      renderPanel({ activePath: 'src/core/a.ts' })
+      const tree = await shown()
+
+      await userEvent.click(button())
+
+      const target = row('a.ts')
+      expect(row('src')).toHaveAttribute('aria-expanded', 'true')
+      expect(row('core')).toHaveAttribute('aria-expanded', 'true')
+      expect(tree).toHaveAttribute('aria-activedescendant', target.id)
+      // node_modules, src, core, a.ts: the fourth row's bottom edge at the
+      // bottom of a three-row view, the 4px padding under it.
+      await waitFor(() => {
+        expect(tree.scrollTop).toBe(4 + 4 * ROW_HEIGHT + 4 - 3 * ROW_HEIGHT)
+      })
+      // On the tree, so the arrows go on from the row it found.
+      expect(tree).toHaveFocus()
+    })
+
+    // The tree is put away while the filter shows, and a resize meanwhile
+    // measured nothing: the scroll is measured from the tree as it is now.
+    it('scrolls by the height the tree has when it comes back', async () => {
+      answering()
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(3 * ROW_HEIGHT)
+      renderPanel({ activePath: 'src/core/a.ts' })
+      await shown()
+      await userEvent.type(screen.getByRole('combobox', { name: 'Filter files' }), 'b')
+      act(() => {
+        window.dispatchEvent(new Event('resize'))
+      })
+
+      await userEvent.click(button())
+
+      const tree = await shown()
+      await waitFor(() => {
+        expect(tree.scrollTop).toBe(4 + 4 * ROW_HEIGHT + 4 - 3 * ROW_HEIGHT)
+      })
+    })
+
+    // Not in the tree at all: nothing is read for it, and a re-read that later
+    // brings it in must not move the tree long after the click.
+    it('gives up on a file the tree does not hold', async () => {
+      answering()
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(3 * ROW_HEIGHT)
+      renderPanel({ activePath: 'src/late.ts' })
+      const tree = await shown()
+      await userEvent.click(button())
+
+      answering({ ...SNAPSHOT, entries: [...SNAPSHOT.entries, file('src/late.ts')] })
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+      await screen.findByRole('treeitem', { name: /^late\.ts/ })
+
+      expect(tree.scrollTop).toBe(0)
+      expect(tree).not.toHaveFocus()
+    })
+
+    // Still waiting on a folder read from disk when the reader moved on.
+    it.each([
+      ['another file comes to the centre', 'activePath'],
+      ['the tree is scrolled by hand', 'scroll'],
+      ['a key is pressed in the tree', 'key'],
+      ['the tab is put away', 'visible']
+    ])('gives up when %s', async (_, how) => {
+      answering()
+      // One row tall, so the row the reveal waits for is out of view.
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(ROW_HEIGHT)
+      const reply = held<{
+        ok: true
+        value: { entries: { name: string; kind: 'file' }[]; truncated: false }
+      }>()
+      vi.mocked(octopus().files.directory).mockReturnValue(reply.promise)
+      const { rerender } = renderPanel({ activePath: 'node_modules/pkg.js' })
+      const tree = await shown()
+      await userEvent.click(button())
+
+      if (how === 'activePath') rerender({ activePath: 'README.md' })
+      if (how === 'scroll') fireEvent.scroll(tree)
+      if (how === 'key') fireEvent.keyDown(tree, { key: 'x' })
+      if (how === 'visible') rerender({ visible: false })
+      if (how === 'visible') rerender({ visible: true })
+      await act(async () => {
+        reply.resolve({
+          ok: true,
+          value: { entries: [{ name: 'pkg.js', kind: 'file' }], truncated: false }
+        })
+        await Promise.resolve()
+      })
+
+      expect(await screen.findByRole('treeitem', { name: /^pkg\.js/ })).toBeInTheDocument()
+      expect(tree.scrollTop).toBe(0)
+      expect(tree).not.toHaveFocus()
+    })
+
+    // The control for the cases above: left alone, the same wait ends in a scroll.
+    it('scrolls once the folder it waits on is read', async () => {
+      answering()
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(ROW_HEIGHT)
+      const reply = held<{
+        ok: true
+        value: { entries: { name: string; kind: 'file' }[]; truncated: false }
+      }>()
+      vi.mocked(octopus().files.directory).mockReturnValue(reply.promise)
+      renderPanel({ activePath: 'node_modules/pkg.js' })
+      const tree = await shown()
+      await userEvent.click(button())
+
+      await act(async () => {
+        reply.resolve({
+          ok: true,
+          value: { entries: [{ name: 'pkg.js', kind: 'file' }], truncated: false }
+        })
+        await Promise.resolve()
+      })
+
+      await waitFor(() => {
+        expect(tree.scrollTop).toBe(4 + 2 * ROW_HEIGHT + 4 - ROW_HEIGHT)
+      })
+    })
+
+    it('clears the filter to show it', async () => {
+      answering()
+      renderPanel({ activePath: 'README.md' })
+      await shown()
+      await userEvent.type(screen.getByRole('combobox', { name: 'Filter files' }), 'b')
+
+      await userEvent.click(button())
+
+      expect(await shown()).toHaveAttribute('aria-activedescendant', row('README.md').id)
+    })
+
+    // Every folder from the first one read from disk down is read that way,
+    // and the deeper ones are not in the tree until the outer listing lands.
+    it('reads the folders it opens from disk, and waits for the row', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockImplementation((_, folder) =>
+        Promise.resolve({
+          ok: true,
+          value:
+            folder === 'node_modules'
+              ? { entries: [{ name: 'pkg', kind: 'directory' }], truncated: false }
+              : { entries: [{ name: 'index.js', kind: 'file' }], truncated: false }
+        })
+      )
+      renderPanel({ activePath: 'node_modules/pkg/index.js' })
+      const tree = await shown()
+
+      await userEvent.click(button())
+
+      const target = await screen.findByRole('treeitem', { name: /^index\.js/ })
+      expect(octopus().files.directory).toHaveBeenCalledWith(ANNA.id, 'node_modules')
+      expect(octopus().files.directory).toHaveBeenCalledWith(ANNA.id, 'node_modules/pkg')
+      expect(tree).toHaveAttribute('aria-activedescendant', target.id)
+    })
+
+    it('reads no folder it already holds', async () => {
+      answering()
+      vi.mocked(octopus().files.directory).mockResolvedValue({
+        ok: true,
+        value: { entries: [{ name: 'pkg.js', kind: 'file' }], truncated: false }
+      })
+      renderPanel({ activePath: 'node_modules/pkg.js' })
+      await shown()
+      await userEvent.click(row('node_modules'))
+      await screen.findByRole('treeitem', { name: /^pkg\.js/ })
+      await userEvent.click(row('node_modules'))
+
+      await userEvent.click(button())
+
+      expect(await screen.findByRole('treeitem', { name: /^pkg\.js/ })).toBeInTheDocument()
+      expect(octopus().files.directory).toHaveBeenCalledTimes(1)
     })
   })
 })

@@ -1,22 +1,25 @@
-import { ChevronsDownUp, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronsDownUp, LocateFixed, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
   MAX_DIRECTORY_ENTRIES,
   MAX_TREE_ENTRIES,
+  type TreeIndex,
   type TreeNode,
   type TreeStatus
 } from '@core/fileTree.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { useFileFilter } from '../../hooks/useFileFilter.js'
 import { useFileTree } from '../../hooks/useFileTree.js'
 import { DisclosureChevron } from '../Disclosure.js'
 import { IconButton, Notice } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
-import { TREE_STATUS_MARKS } from '../statusMarks.js'
 import { FileIcon } from './FileIcon.js'
-import { type TreeRow, visibleRows } from './treeRows.js'
+import { EntryLabel } from './EntryLabel.js'
+import { FilterResults, matchId } from './FilterResults.js'
+import { revealPath, type TreeRow, visibleRows } from './treeRows.js'
 
 /**
  * The height of a row, fixed so the tree can draw only what is on screen.
@@ -48,6 +51,17 @@ interface FilesPanelProps {
 }
 
 const NONE: ReadonlySet<string> = new Set()
+
+/**
+ * Where to scroll for a row to be in view, moving no further than that — as a
+ * list moved by keys does.
+ */
+function scrollFor(position: number, current: number, height: number): number {
+  const top = PADDING + position * ROW_HEIGHT
+  if (top < current) return top - PADDING
+  if (top + ROW_HEIGHT > current + height) return top + ROW_HEIGHT + PADDING - height
+  return current
+}
 
 /**
  * The right pane's Files tab: the worktree as an editor's explorer draws it,
@@ -111,16 +125,33 @@ function WorkspaceTree({
 
   const [focus, setFocus] = useState<string | null>(null)
 
+  const filter = useFileFilter(tree.index)
+  const listId = useId()
+
+  /*
+   * The file "Show the open file" is waiting to draw. Its folders are opened at
+   * the click, but a folder read from disk lays its rows in only once its
+   * listing arrives, so the scroll waits for the row rather than for the click.
+   */
+  const [revealing, setRevealing] = useState<string | null>(null)
+  // The row to bring into view, as an object so asking for the same row twice
+  // still moves a tree scrolled away in between.
+  const [scrollRequest, setScrollRequest] = useState<{ readonly position: number } | null>(null)
+
   const scroller = useRef<HTMLDivElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   // A scroller mounted afresh — after a notice stood in for it — starts at the
   // top, and the slice drawn has to start there with it.
+  // Measured here too: the filter's list stands in for the tree, and a tree
+  // back from under it would otherwise draw at the height it had before.
+  const [height, setHeight] = useState(0)
   const attach = useCallback((element: HTMLDivElement | null) => {
     scroller.current = element
-    if (element !== null) setScrollTop(element.scrollTop)
+    if (element !== null) {
+      setScrollTop(element.scrollTop)
+      setHeight(element.clientHeight)
+    }
   }, [])
-  const [height, setHeight] = useState(0)
-
   // Measured when the tab is shown and when the window resizes — the only two
   // things that change how tall the pane is. A hidden element measures zero.
   useEffect(() => {
@@ -139,7 +170,39 @@ function WorkspaceTree({
     [tree.index, expanded, tree.listings]
   )
 
+  /*
+   * A reveal ends when its row is drawn, or when it can no longer be: nothing it
+   * opened is still being read, another file came to the centre, or the tab was
+   * put away. Left armed, a row that turned up later — a re-read after a turn —
+   * would have moved the tree long after the click.
+   */
+  if (revealing !== null) {
+    const position = rows.findIndex((row) => row.type === 'node' && row.node.path === revealing)
+    const reading =
+      tree.index !== null &&
+      revealPath(tree.index, revealing).fromDisk.some((folder) => {
+        const status = tree.listings.get(folder)?.status
+        return status === undefined || status === 'loading'
+      })
+    if (position !== -1) {
+      setRevealing(null)
+      setScrollRequest({ position })
+    } else if (!reading || revealing !== activePath || !visible) {
+      setRevealing(null)
+    }
+  }
+
+  const showOpenFile = (path: string, index: TreeIndex): void => {
+    const { open, fromDisk } = revealPath(index, path)
+    for (const folder of fromDisk) if (!tree.listings.has(folder)) tree.openFolder(folder)
+    onExpanded((current) => new Set([...current, ...open]))
+    filter.clear()
+    setFocus(path)
+    setRevealing(path)
+  }
+
   const toggle = (node: TreeNode): void => {
+    setRevealing(null)
     const opening = !expanded.has(node.path)
     // The contents of a folder git names whole — ignored, a submodule, a nested
     // repository — come from disk, asked for the first time it is opened;
@@ -160,13 +223,7 @@ function WorkspaceTree({
     const element = scroller.current
     /* v8 ignore next */
     if (!element) return
-    const top = PADDING + position * ROW_HEIGHT
-    const next =
-      top < element.scrollTop
-        ? top - PADDING
-        : top + ROW_HEIGHT > element.scrollTop + height
-          ? top + ROW_HEIGHT + PADDING - height
-          : element.scrollTop
+    const next = scrollFor(position, element.scrollTop, height)
     element.scrollTop = next
     setScrollTop(next)
   }
@@ -196,6 +253,7 @@ function WorkspaceTree({
   }
 
   const onKeyDown = (event: React.KeyboardEvent): void => {
+    setRevealing(null)
     const at = located === undefined ? -1 : nodeRows.indexOf(located)
     const current = located?.row
     // A slice of one rather than an index, which the type admits may miss:
@@ -247,16 +305,62 @@ function WorkspaceTree({
     event.preventDefault()
   }
 
+  // An effect rather than a write during render: the tree may only just have
+  // mounted — back from under the filter — and the hooks' rules keep the DOM out
+  // of render. Measured from the element as it is now, and focused, so the
+  // arrows go on from the row the reveal found. After every other write to the
+  // scroller, which those rules ask of an effect that writes to it too.
+  useEffect(() => {
+    const element = scroller.current
+    if (scrollRequest === null || element === null) return
+    element.scrollTop = scrollFor(scrollRequest.position, element.scrollTop, element.clientHeight)
+    element.focus({ preventScroll: true })
+  }, [scrollRequest])
+
   if (tree.error !== null) return <Notice tone="danger">{tree.error}</Notice>
-  if (tree.index === null) return <Notice>{t('files.loading')}</Notice>
+  const index = tree.index
+  if (index === null) return <Notice>{t('files.loading')}</Notice>
 
   const first = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
   const last = Math.min(rows.length, Math.ceil((scrollTop + height) / ROW_HEIGHT) + OVERSCAN)
+  const listed = (filter.matches?.length ?? 0) > 0
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-line flex shrink-0 items-center gap-2 border-b px-3 py-2">
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <input
+          type="search"
+          value={filter.query}
+          placeholder={t('files.filter')}
+          aria-label={t('files.filter')}
+          role="combobox"
+          aria-expanded={listed}
+          aria-controls={listed ? listId : undefined}
+          aria-autocomplete="list"
+          aria-activedescendant={filter.chosen === -1 ? undefined : matchId(listId, filter.chosen)}
+          spellCheck={false}
+          onChange={(event) => {
+            filter.setQuery(event.target.value)
+          }}
+          onKeyDown={(event) => {
+            filter.onKeyDown(event, onOpen)
+          }}
+          className="input focus-ring h-6 min-w-0 flex-1 text-[12px]"
+        />
+        <div className="flex shrink-0 items-center gap-0.5">
+          <IconButton
+            label={t('files.reveal')}
+            disabled={activePath === null}
+            onClick={
+              activePath === null
+                ? undefined
+                : () => {
+                    showOpenFile(activePath, index)
+                  }
+            }
+          >
+            <LocateFixed aria-hidden size={13} />
+          </IconButton>
           <IconButton
             label={t('files.collapseAll')}
             onClick={() => {
@@ -277,7 +381,19 @@ function WorkspaceTree({
         </p>
       )}
 
-      {rows.length === 0 ? (
+      {filter.matches !== null ? (
+        <FilterResults
+          id={listId}
+          query={filter.query}
+          matches={filter.matches}
+          capped={filter.capped}
+          chosen={filter.chosen}
+          activePath={activePath}
+          statuses={tree.statuses}
+          onChoose={filter.choose}
+          onOpen={onOpen}
+        />
+      ) : rows.length === 0 ? (
         <Placeholder compact title={t('files.emptyTitle')}>
           {t('files.emptyBody')}
         </Placeholder>
@@ -291,6 +407,8 @@ function WorkspaceTree({
           onKeyDown={onKeyDown}
           onScroll={(event) => {
             setScrollTop(event.currentTarget.scrollTop)
+            // Scrolled by hand while a reveal waited: the reader has moved on.
+            setRevealing(null)
           }}
           className="group/tree min-h-0 flex-1 overflow-auto py-1 outline-none"
         >
@@ -371,12 +489,8 @@ function Row({
   onClick,
   onDoubleClick
 }: RowProps): React.JSX.Element {
-  const { t } = useTranslation()
   const { node, level, expanded } = row
-  const mark = status === undefined ? null : TREE_STATUS_MARKS[status]
   const directory = node.kind === 'directory'
-
-  const tone = node.ignored ? 'text-ink-faint' : (mark?.tone ?? 'text-ink-soft')
 
   return (
     <div
@@ -401,24 +515,7 @@ function Row({
         <span aria-hidden className="w-3.5 shrink-0" />
       )}
       <FileIcon name={node.name} path={node.path} kind={node.kind} expanded={expanded} />
-      <span
-        className={`min-w-0 flex-1 truncate ${tone} ${status === 'deleted' && !directory ? 'line-through' : ''}`}
-      >
-        {node.name}
-      </span>
-      {mark !== null && !directory && (
-        <span aria-hidden className={`shrink-0 font-mono text-[11px] ${mark.tone}`}>
-          {mark.letter}
-        </span>
-      )}
-      {mark !== null && directory && (
-        <span aria-hidden className={`size-1.5 shrink-0 rounded-full bg-current ${mark.tone}`} />
-      )}
-      {/* The marks above are for the eye; this is what a reader hears. */}
-      <span className="sr-only">
-        {mark !== null && (directory ? `, ${t('files.changesInside')}` : `, ${t(mark.label)}`)}
-        {node.ignored && `, ${t('files.ignored')}`}
-      </span>
+      <EntryLabel node={node} status={status} />
     </div>
   )
 }

@@ -28,7 +28,8 @@ export function IconButton({
   children
 }: {
   readonly label: string
-  readonly onClick: () => void
+  /** May be absent while the button is disabled, when nothing can call it. */
+  readonly onClick?: (() => void) | undefined
   readonly disabled?: boolean
   readonly children: React.ReactNode
 }): React.JSX.Element {
