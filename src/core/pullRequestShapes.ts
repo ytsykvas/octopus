@@ -57,6 +57,13 @@ export interface PullRequestCheck {
   readonly startedAt: string | null
   /** Null while it is still running — see `moment`. */
   readonly completedAt: string | null
+  /**
+   * The Actions run the job belongs to, which is what `gh run rerun` takes.
+   *
+   * Null for anything that did not come from Actions: the older status API has
+   * no run, and nothing here can restart Buildkite.
+   */
+  readonly runId: string | null
 }
 
 /** Every check at once, which is all the workspace list has room to say. */
@@ -142,6 +149,16 @@ function moment(value: string): string | null {
   return value === '' || value === NO_TIME ? null : value
 }
 
+/**
+ * The run id inside an Actions job's link.
+ *
+ * Read from the link because the rollup carries no other trace of it, and
+ * `…/actions/runs/<run>/job/<job>` is the only shape GitHub gives a job's page.
+ */
+function runOf(url: string): string | null {
+  return /\/actions\/runs\/(\d+)\//u.exec(url)?.[1] ?? null
+}
+
 /** An empty string is how `gh` spells an absent URL, having marshalled a Go string. */
 function link(value: string | null | undefined): string | null {
   return value === undefined || value === null || value === '' ? null : value
@@ -166,7 +183,8 @@ function checkRun(entry: z.infer<typeof CheckRunSchema>): PullRequestCheck {
         : 'pending',
     url: link(entry.detailsUrl),
     startedAt: moment(entry.startedAt),
-    completedAt: moment(entry.completedAt)
+    completedAt: moment(entry.completedAt),
+    runId: runOf(entry.detailsUrl)
   }
 }
 
@@ -180,7 +198,8 @@ function statusContext(entry: z.infer<typeof StatusContextSchema>): PullRequestC
     url: link(entry.targetUrl),
     startedAt: moment(entry.startedAt),
     // Never sent for this half of the union. A status is a point, not a span.
-    completedAt: null
+    completedAt: null,
+    runId: null
   }
 }
 
@@ -214,6 +233,43 @@ export function summariseChecks(checks: readonly PullRequestCheck[]): ChecksSumm
   if (checks.some((check) => check.state === 'failed')) return 'failed'
   if (checks.some((check) => check.state === 'pending')) return 'running'
   return 'passed'
+}
+
+/** Which runs a re-run restarts: only what failed, or every one of them. */
+export type RerunScope = 'failed' | 'all'
+
+/**
+ * The Actions runs a re-run of `scope` restarts, each once.
+ *
+ * Per run rather than per job because that is what `gh run rerun` takes; its
+ * `--failed` narrows a run to its failed jobs. A run with a job still going is
+ * left out of `all`: GitHub refuses to restart a run in progress, and one such
+ * refusal would stop the others with it.
+ */
+export function runsToRerun(checks: readonly PullRequestCheck[], scope: RerunScope): string[] {
+  const runs = new Map<string, CheckState[]>()
+  for (const check of checks) {
+    if (check.runId !== null) runs.set(check.runId, [...(runs.get(check.runId) ?? []), check.state])
+  }
+
+  return [...runs]
+    .filter(([, states]) =>
+      scope === 'failed' ? states.includes('failed') : !states.includes('pending')
+    )
+    .map(([run]) => run)
+}
+
+/** What `gh pr view --json headRefName,statusCheckRollup` sends before a re-run. */
+export const RerunPayloadSchema = z.object({
+  headRefName: z.string().min(1),
+  statusCheckRollup: RollupSchema
+})
+
+export function toRerunPayload(payload: z.infer<typeof RerunPayloadSchema>): {
+  readonly headRefName: string
+  readonly checks: PullRequestCheck[]
+} {
+  return { headRefName: payload.headRefName, checks: toChecks(payload.statusCheckRollup) }
 }
 
 // ─── the review ──────────────────────────────────────────────────────────────

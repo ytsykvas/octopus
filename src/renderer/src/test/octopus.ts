@@ -150,6 +150,7 @@ export function installOctopusStub(): Api {
       pullRequestDetail: vi.fn(() => ok(detailFixture())),
       mergePullRequest: vi.fn(() => ok(undefined)),
       closePullRequest: vi.fn(() => ok(undefined)),
+      rerunChecks: vi.fn(() => ok(undefined)),
       replyToReviewThread: vi.fn(() => ok(undefined)),
       setReviewThreadResolved: vi.fn(() => ok(undefined)),
       instruction: vi.fn(() => ok('Describe what changed and why.')),

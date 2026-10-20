@@ -652,6 +652,10 @@ export const en = {
 
     checks: 'Checks',
     checksNone: 'This repository runs nothing on a pull request.',
+    rerunFailed: 'Failed',
+    rerunFailedTitle: 'Re-run the failed jobs',
+    rerunAll: 'All',
+    rerunAllTitle: 'Re-run every check',
     /* The state as a word beside the mark, because a colour reaches nobody
        using a screen reader and no test can hold one. */
     checkPending: 'running',
@@ -2044,6 +2048,8 @@ export const en = {
     headNotOnBranch:
       'HEAD is not on this workspace\u2019s branch {{branch}}. Nothing was committed or pushed \u2014 check it out in the terminal first.',
     closeFailed: 'GitHub would not close #{{number}}. It said: {{reason}}',
+    nothingToRerun: 'No GitHub Actions run of #{{number}} can be re-run right now.',
+    rerunFailed: 'GitHub would not re-run the checks of #{{number}}. It said: {{reason}}',
     /* No number on either: a reply and a resolve are addressed to a thread, and
        the thread is what the reader is looking at when one of them fails. */
     replyFailed: 'GitHub would not post the reply. It said: {{reason}}',

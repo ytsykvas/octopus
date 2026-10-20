@@ -2209,6 +2209,15 @@ which run went red. The log itself is not pasted in: a message is capped at
 to truncate it — possibly past the error. The agent reads it where it lives, and
 can read it again after it pushes.
 
+**Re-running the checks is two buttons**, beside the heading of the checks and
+only while one is red: _Failed_ restarts the failed jobs of each run that has
+one (`gh run rerun --failed`), _All_ restarts every run whole. The run id comes
+from the job's link, the only place the rollup carries it, so a status from
+outside Actions has none and is left alone. `all` skips a run still in progress,
+because GitHub refuses to restart one and that refusal would stop the rest.
+The rollup is read again in core rather than taken from the pane, in the same
+call that checks the number is this branch's request.
+
 **A branch says where its pull request stands**, in a glyph beside the workspace
 name: green once the checks pass, a spinning green ring while they run, orange
 when one has failed, accent while the repository has run nothing, red once it is

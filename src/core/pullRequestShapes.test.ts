@@ -5,6 +5,7 @@ import {
   BranchListSchema,
   commentKey,
   pullRequestStanding,
+  runsToRerun,
   type DetailPayload,
   DetailPayloadSchema,
   type PullRequestCheck,
@@ -220,7 +221,8 @@ describe('the check rollup', () => {
         state: 'passed',
         url: PASSED.detailsUrl,
         startedAt: '2026-08-20T10:59:48Z',
-        completedAt: '2026-08-20T11:02:24Z'
+        completedAt: '2026-08-20T11:02:24Z',
+        runId: '32361632571'
       },
       {
         name: 'build / build',
@@ -228,7 +230,8 @@ describe('the check rollup', () => {
         state: 'pending',
         url: QUEUED.detailsUrl,
         startedAt: '2026-08-20T11:16:23Z',
-        completedAt: null
+        completedAt: null,
+        runId: '32362999714'
       }
     ])
   })
@@ -261,7 +264,8 @@ describe('the check rollup', () => {
         state: 'passed',
         url: CONTEXT.targetUrl,
         startedAt: '2026-08-20T11:06:03Z',
-        completedAt: null
+        completedAt: null,
+        runId: null
       }
     ])
   })
@@ -325,6 +329,46 @@ describe('the check rollup', () => {
   })
 })
 
+describe('which runs a re-run restarts', () => {
+  const check = (runId: string | null, state: PullRequestCheck['state']): PullRequestCheck => ({
+    name: `${runId ?? 'status'}-${state}`,
+    workflow: null,
+    state,
+    url: null,
+    startedAt: null,
+    completedAt: null,
+    runId
+  })
+
+  /* A job's page outside Actions — a GitHub App's own check — carries no run,
+     and a run id guessed from it would restart something else. */
+  it('finds no run in a link that is not an Actions job', () => {
+    const [app] = checksOf({
+      statusCheckRollup: [{ ...PASSED, detailsUrl: 'https://app.example.com/checks/1' }]
+    })
+
+    expect(app?.runId).toBeNull()
+  })
+
+  it('names each run once, however many of its jobs failed', () => {
+    expect(runsToRerun([check('1', 'failed'), check('1', 'failed')], 'failed')).toEqual(['1'])
+  })
+
+  it('takes only the runs with a failure for the failed scope', () => {
+    const checks = [check('1', 'passed'), check('2', 'failed'), check(null, 'failed')]
+
+    expect(runsToRerun(checks, 'failed')).toEqual(['2'])
+  })
+
+  /* GitHub refuses to restart a run that is still going, and one refusal would
+     stop the rest. */
+  it('leaves a run still in progress out of all', () => {
+    const checks = [check('1', 'passed'), check('2', 'failed'), check('2', 'pending')]
+
+    expect(runsToRerun(checks, 'all')).toEqual(['1'])
+  })
+})
+
 describe('summarising the checks for a workspace row', () => {
   const check = (state: PullRequestCheck['state']): PullRequestCheck => ({
     name: state,
@@ -332,7 +376,8 @@ describe('summarising the checks for a workspace row', () => {
     state,
     url: null,
     startedAt: null,
-    completedAt: null
+    completedAt: null,
+    runId: null
   })
 
   it('says there are none where there are none', () => {

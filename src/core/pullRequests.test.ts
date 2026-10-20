@@ -25,6 +25,8 @@ import {
   readPullRequestDetail,
   replyToReviewThread,
   ReplyBodySchema,
+  rerunChecks,
+  RerunScopeSchema,
   setReviewThreadResolved,
   ThreadIdSchema
 } from './pullRequests.js'
@@ -1013,6 +1015,116 @@ describe('closing one', () => {
       code: 'closeFailed',
       params: { number: '7', reason: 'could not close: already merged' }
     })
+  })
+})
+
+/** A job of an Actions run, as the rollup names it. */
+function job(run: string, conclusion: string, status = 'COMPLETED'): Record<string, string> {
+  return {
+    __typename: 'CheckRun',
+    name: `job-${run}-${conclusion}`,
+    workflowName: 'CI',
+    status,
+    conclusion,
+    startedAt: '2026-08-20T11:00:00Z',
+    completedAt: '2026-08-20T11:02:00Z',
+    detailsUrl: `https://github.com/o/p/actions/runs/${run}/job/9${run}`
+  }
+}
+
+function rollup(head: string, ...entries: Record<string, string>[]): string {
+  return JSON.stringify({ headRefName: head, statusCheckRollup: entries })
+}
+
+describe('re-running the checks', () => {
+  const reruns = (calls: string[][]): string[][] => calls.filter((call) => call[1] === 'rerun')
+
+  it('restarts only the failed jobs of the runs that failed', async () => {
+    const { gh, calls } = fakeGh({
+      view: rollup('octopus/anna', job('1', 'FAILURE'), job('2', 'SUCCESS')),
+      rerun: ''
+    })
+
+    await rerunChecks(7, 'failed', 'octopus/anna', gh)
+
+    expect(calls[0]).toEqual(['pr', 'view', '7', '--json', 'headRefName,statusCheckRollup'])
+    expect(reruns(calls)).toEqual([['run', 'rerun', '1', '--failed']])
+  })
+
+  it('restarts every finished run whole, once each, when asked for all', async () => {
+    const { gh, calls } = fakeGh({
+      view: rollup(
+        'octopus/anna',
+        job('1', 'FAILURE'),
+        job('1', 'SUCCESS'),
+        job('2', 'SUCCESS'),
+        job('3', '', 'IN_PROGRESS')
+      ),
+      rerun: ''
+    })
+
+    await rerunChecks(7, 'all', 'octopus/anna', gh)
+
+    expect(reruns(calls)).toEqual([
+      ['run', 'rerun', '1'],
+      ['run', 'rerun', '2']
+    ])
+  })
+
+  /* The same guard as merging and closing: `gh` resolves a number against the
+     repository, so a stale one would restart some other branch's CI. */
+  it('refuses a number that belongs to another branch, without restarting anything', async () => {
+    const { gh, calls } = fakeGh({ view: rollup('octopus/bo', job('1', 'FAILURE')), rerun: '' })
+
+    await expect(rerunChecks(7, 'failed', 'octopus/anna', gh)).rejects.toMatchObject({
+      code: 'requestNotOnBranch',
+      params: { number: '7', head: 'octopus/bo', branch: 'octopus/anna' }
+    })
+
+    expect(reruns(calls)).toEqual([])
+  })
+
+  /* A status from outside Actions has no run, and is not one to pretend at. */
+  it('says there is nothing to re-run where no Actions run qualifies', async () => {
+    const context = {
+      __typename: 'StatusContext',
+      context: 'buildkite/p',
+      state: 'FAILURE',
+      targetUrl: 'https://buildkite.com/o/p/builds/1',
+      startedAt: '2026-08-20T11:00:00Z'
+    }
+    const { gh, calls } = fakeGh({ view: rollup('octopus/anna', context), rerun: '' })
+
+    await expect(rerunChecks(7, 'failed', 'octopus/anna', gh)).rejects.toMatchObject({
+      code: 'nothingToRerun',
+      params: { number: '7' }
+    })
+
+    expect(reruns(calls)).toEqual([])
+  })
+
+  it('stops at the first run GitHub refuses, carrying what it said', async () => {
+    const calls: string[][] = []
+    const gh: GhExec = (args) => {
+      calls.push([...args])
+      if (args[1] === 'view') {
+        return Promise.resolve(rollup('octopus/anna', job('1', 'FAILURE'), job('2', 'FAILURE')))
+      }
+      return Promise.reject(Object.assign(new Error('failed'), { stderr: 'run is in progress' }))
+    }
+
+    await expect(rerunChecks(7, 'failed', 'octopus/anna', gh)).rejects.toMatchObject({
+      code: 'rerunFailed',
+      params: { number: '7', reason: 'run is in progress' }
+    })
+
+    expect(reruns(calls)).toEqual([['run', 'rerun', '1', '--failed']])
+  })
+
+  it('accepts the two scopes and nothing else from the renderer', () => {
+    expect(RerunScopeSchema.safeParse('failed').success).toBe(true)
+    expect(RerunScopeSchema.safeParse('all').success).toBe(true)
+    expect(RerunScopeSchema.safeParse('everything').success).toBe(false)
   })
 })
 

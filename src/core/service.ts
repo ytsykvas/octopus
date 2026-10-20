@@ -144,6 +144,7 @@ import {
   type MergeMethod,
   closePullRequest,
   mergePullRequest,
+  rerunChecks,
   replyToReviewThread,
   setReviewThreadResolved,
   type NewPullRequest,
@@ -156,7 +157,7 @@ import {
   readPullRequest,
   readPullRequestDetail
 } from './pullRequests.js'
-import type { PullRequestDetail } from './pullRequestShapes.js'
+import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, withIndexCopy } from './git.js'
 import { FETCH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
@@ -1208,6 +1209,9 @@ export interface OctopusService {
 
   /** Closes it without merging. The branch is left alone. */
   closePullRequest(workspaceId: string, number: number): Promise<void>
+
+  /** Restarts its Actions runs — only the failed jobs, or all of them. */
+  rerunChecks(workspaceId: string, number: number, scope: RerunScope): Promise<void>
 
   /**
    * Answers one review thread.
@@ -5455,6 +5459,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     closePullRequest(workspaceId, number) {
       const workspace = requireWorkspace(workspaceId)
       return closePullRequest(number, workspace.branch, makeGh(workspace.path))
+    },
+
+    rerunChecks(workspaceId, number, scope) {
+      const workspace = requireWorkspace(workspaceId)
+      return rerunChecks(number, scope, workspace.branch, makeGh(workspace.path))
     },
 
     /* No branch check on either of these, unlike merge and close. Those take a
