@@ -646,7 +646,9 @@ the app never sees a token (§10.9).
   through the second, so a repository commonly has both. Re-read every 15 s
   while a check is running **or** while GitHub has not worked out whether the
   branch is mergeable, since it computes that asynchronously and a repository
-  with no CI has no pending check to wait on.
+  with no CI has no pending check to wait on. While one is red, two buttons
+  beside the heading restart its Actions runs — only the failed jobs, or all of
+  them — through `gh run rerun`.
 - **The review.** Issue comments, review submissions and inline notes in one
   reading order. The inline ones come from a GraphQL query by the request's node
   id, for the one field REST does not carry: whether the thread is resolved.

@@ -45,6 +45,7 @@ import {
   NewPullRequestSchema,
   PullRequestNumberSchema,
   ReplyBodySchema,
+  RerunScopeSchema,
   ThreadIdSchema
 } from '../core/pullRequests.js'
 import { MAX_PASTE_BYTES } from '../core/attachments.js'
@@ -840,6 +841,18 @@ export function registerIpc(
 
   host.handle('workspaces:closePullRequest', (_event, workspaceId: string, number: unknown) =>
     attempt(() => service.closePullRequest(workspaceId, PullRequestNumberSchema.parse(number)))
+  )
+
+  host.handle(
+    'workspaces:rerunChecks',
+    (_event, workspaceId: string, number: unknown, scope: unknown) =>
+      attempt(() =>
+        service.rerunChecks(
+          workspaceId,
+          PullRequestNumberSchema.parse(number),
+          RerunScopeSchema.parse(scope)
+        )
+      )
   )
 
   // Both become arguments to `gh` the same way a number does, so both are

@@ -434,6 +434,7 @@ describe('channel table', () => {
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
     'workspaces:closePullRequest',
+    'workspaces:rerunChecks',
     'workspaces:replyToReviewThread',
     'workspaces:resolveReviewThread',
     'files:open',
@@ -2023,6 +2024,49 @@ describe('workspaces of a real project', () => {
     await expect(
       invoke('workspaces:closePullRequest', workspace.id, 'seven')
     ).resolves.toMatchObject({ ok: false })
+  })
+
+  it('re-runs the failed checks, and refuses a scope that is not one', async () => {
+    const projectId = await addProject('rerunning')
+    const asked: string[][] = []
+    let branch = ''
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve(
+          args[1] === 'view'
+            ? JSON.stringify({
+                headRefName: branch,
+                url: 'https://github.com/o/p/pull/7',
+                statusCheckRollup: [
+                  {
+                    __typename: 'CheckRun',
+                    name: 'check',
+                    workflowName: 'check',
+                    status: 'COMPLETED',
+                    conclusion: 'FAILURE',
+                    startedAt: '2026-08-20T11:00:00Z',
+                    completedAt: '2026-08-20T11:02:00Z',
+                    detailsUrl: 'https://github.com/o/p/actions/runs/123/job/456'
+                  }
+                ]
+              })
+            : ''
+        )
+      }
+    })
+    const workspace = await createWorkspace(projectId)
+    branch = workspace.branch
+
+    await expect(
+      invoke('workspaces:rerunChecks', workspace.id, 7, 'failed')
+    ).resolves.toMatchObject({ ok: true })
+    expect(asked[1]).toEqual(['run', 'rerun', '123', '--failed'])
+
+    await expect(
+      invoke('workspaces:rerunChecks', workspace.id, 7, 'everything')
+    ).resolves.toMatchObject({ ok: false })
+    expect(asked).toHaveLength(2)
   })
 
   it('answers a review thread, and refuses an id that is not a node id', async () => {

@@ -32,7 +32,8 @@ const check = (state: PullRequestCheck['state']): PullRequestCheck => ({
   state,
   url: null,
   startedAt: null,
-  completedAt: null
+  completedAt: null,
+  runId: null
 })
 
 function answer(value: PullRequestDetail): void {

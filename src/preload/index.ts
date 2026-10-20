@@ -37,7 +37,7 @@ import type { CliPermission } from '@core/cliPermissions.js'
 import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
-import type { PullRequestDetail } from '@core/pullRequestShapes.js'
+import type { PullRequestDetail, RerunScope } from '@core/pullRequestShapes.js'
 import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
@@ -565,6 +565,12 @@ const api = {
     /** Closes it without merging, and leaves the branch where it is. */
     closePullRequest: (workspaceId: string, number: number): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:closePullRequest', workspaceId, number) as Promise<
+        Result<void>
+      >,
+
+    /** Restarts its Actions runs. The caller reads the request again. */
+    rerunChecks: (workspaceId: string, number: number, scope: RerunScope): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:rerunChecks', workspaceId, number, scope) as Promise<
         Result<void>
       >,
 
