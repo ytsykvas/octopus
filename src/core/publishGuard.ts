@@ -1,4 +1,4 @@
-import { ghWords, gitCommand, parseCommand, programs, type Segment } from './shellCommand.js'
+import { ghWords, gitCommand, parseCommand, programs } from './shellCommand.js'
 
 /**
  * Keeps the agent from publishing: pushing, or opening, merging or closing a
@@ -86,7 +86,18 @@ const GRAPHQL_PUBLISHES =
  * a workspace's work.
  */
 const TAMPERED_KEY =
-  /^(?:url\..+\.(?:push)?insteadof|remote\..+\.(?:url|pushurl|receivepack|proxy)|core\.(?:hookspath|sshcommand)|http\.(?:.+\.)?proxy|credential\..+|alias\..+)$/iu
+  /^(?:url\..+\.(?:push)?insteadof|remote\..+\.(?:url|pushurl|receivepack|proxy)|core\.(?:hookspath|sshcommand|gitproxy)|http\.(?:.+\.)?(?:proxy|extraheader)|credential\..+|alias\..+|include\.path|includeif\..+\.path)$/iu
+
+/** `git config` options that take their value as the next word. */
+const CONFIG_VALUE_OPTIONS = new Set([
+  '-f',
+  '--file',
+  '--blob',
+  '--type',
+  '--default',
+  '--comment',
+  '--value'
+])
 
 /** The prefix of the environment variables git reads `agentEnv`'s rewrite from. */
 const GIT_CONFIG_VARIABLE = 'GIT_CONFIG'
@@ -151,7 +162,10 @@ function gitTampers(options: readonly string[], command: string, args: readonly 
   if (command === 'remote') return args[0] === 'set-url' || args[0] === 'add'
   if (command !== 'config') return false
 
-  const positional = args.filter((arg) => !arg.startsWith('-'))
+  // `-f .git/config` names the file, and its value is not the key.
+  const positional = args.filter(
+    (arg, at) => !arg.startsWith('-') && !CONFIG_VALUE_OPTIONS.has(args[at - 1] ?? '')
+  )
   const reads =
     args.some((arg) => /^(?:--get.*|--list|-l)$/u.test(arg)) ||
     positional[0] === 'get' ||
@@ -176,11 +190,12 @@ function envTampers(name: string, args: readonly string[]): boolean {
 
 /** The code an interpreter at `argv[at]` is handed inline or on stdin, or null for a script on disk. */
 function codeOf(
-  segment: Segment,
+  words: readonly string[],
+  stdin: readonly string[],
   at: number,
   name: string
 ): { shell: boolean; code: string[] } | null {
-  const args = segment.words.slice(at + 1)
+  const args = words.slice(at + 1)
 
   if (name === 'eval') return { shell: true, code: [args.join(' ')] }
   if (AWKS.has(name))
@@ -192,11 +207,20 @@ function codeOf(
   const flag = args.findIndex((arg) => CODE_FLAG.test(arg))
   if (flag !== -1) return { shell, code: args.slice(flag + 1, flag + 2) }
   if (name === 'deno' && args[0] === 'eval') return { shell, code: args.slice(1, 2) }
-  return args.every((arg) => arg.startsWith('-')) ? { shell, code: [...segment.heredocs] } : null
+  return args.every((arg) => arg.startsWith('-')) ? { shell, code: [...stdin] } : null
 }
 
-function segmentPublishes(segment: Segment, depth: number): boolean {
-  const { words } = segment
+/**
+ * Whether one simple command publishes.
+ *
+ * `stdin` is every heredoc in the command line, not only this command's own:
+ * `cat <<EOF | bash` hands one command's heredoc to the next through the pipe.
+ */
+function segmentPublishes(
+  words: readonly string[],
+  stdin: readonly string[],
+  depth: number
+): boolean {
   if (words.some((word) => /^GIT_CONFIG\w*=/u.test(word))) return true
 
   let piped = false
@@ -222,7 +246,7 @@ function segmentPublishes(segment: Segment, depth: number): boolean {
       return true
     }
 
-    const inline = codeOf(segment, at, name)
+    const inline = codeOf(words, stdin, at, name)
     if (inline !== null) {
       const publishesIn = inline.shell
         ? (code: string): boolean => publishes(code, depth + 1)
@@ -237,8 +261,9 @@ function segmentPublishes(segment: Segment, depth: number): boolean {
 function publishes(text: string, depth: number): boolean {
   if (depth > MAX_DEPTH) return false
   const { segments, substitutions } = parseCommand(text)
+  const stdin = segments.flatMap((segment) => segment.heredocs)
   return (
-    segments.some((segment) => segmentPublishes(segment, depth)) ||
+    segments.some((segment) => segmentPublishes(segment.words, stdin, depth)) ||
     substitutions.some((inside) => publishes(inside, depth + 1))
   )
 }

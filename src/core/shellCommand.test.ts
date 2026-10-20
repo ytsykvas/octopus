@@ -39,6 +39,12 @@ describe('parseCommand', () => {
     expect(words(`$'gh' $"pr"`)).toEqual([['gh', 'pr']])
   })
 
+  it("resolves the escapes $'…' allows, as the shell would", () => {
+    expect(
+      words(`$'\\x67h' $'\\147h' $'\\u0067h' $'\\U00000067h' $'a\\tb' $'\\q' $'it\\'s' $'a\\`)
+    ).toEqual([['gh', 'gh', 'gh', 'gh', 'a\tb', 'q', "it's", 'a']])
+  })
+
   it('runs an unterminated quote to the end', () => {
     expect(words("echo 'open")).toEqual([['echo', 'open']])
     expect(words('echo "open')).toEqual([['echo', 'open']])

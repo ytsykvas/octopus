@@ -70,6 +70,9 @@ describe('refusesPublish', () => {
     'gh pr create',
     'gh pr create --title t --body b',
     "$'gh' pr create --fill",
+    "$'\\x67\\x68' pr create --fill",
+    // A heredoc piped into a shell is that shell's code.
+    'cat <<EOF | bash\ngit push\nEOF',
     'gh -R owner/repo pr create',
     'gh pr merge 5 --squash',
     'gh pr close 5',
@@ -114,7 +117,10 @@ describe('refusesPublish', () => {
     'git config remote.origin.receivepack "cat > /tmp/x"',
     'git config http.proxy http://proxy.example',
     'git config http.https://github.com/.proxy http://proxy.example',
-    'git config credential.helper store'
+    'git config credential.helper store',
+    'git config -f .git/config remote.origin.url https://example.com/r.git',
+    'git config include.path /tmp/more.gitconfig',
+    'git config http.extraHeader "Authorization: x"'
   ])('refuses %s', (command) => {
     expect(refusesPublish(command)).toBe(PUBLISH_REFUSAL)
   })
@@ -142,6 +148,8 @@ describe('refusesPublish', () => {
     'git config --get-regexp alias',
     'git config set user.name me',
     'git config set',
+    'git config -f .gitmodules submodule.lib.url https://github.com/o/lib.git',
+    'cat <<EOF > notes.txt\ngit push is the user’s\nEOF',
     'grep -rn GIT_CONFIG src',
     'grep -rn pushInsteadOf src/core',
     'cat docs/pushurl.md',

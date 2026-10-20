@@ -27,6 +27,48 @@ const SEPARATORS = new Set([';', '&', '|', '\n', '(', ')', '`', '{', '}'])
 /** A heredoc's delimiter, bare or quoted either way; the second group is the word. */
 const DELIMITER = /^(['"]?)([^'"\s;&|<>()]+)\1/u
 
+/** The escapes `$'…'` resolves that name one character each. */
+const ANSI_ESCAPES: Readonly<Record<string, string>> = {
+  n: '\n',
+  t: '\t',
+  r: '\r',
+  e: '\u001b',
+  a: '\u0007',
+  b: '\b',
+  f: '\f',
+  v: '\v'
+}
+
+/**
+ * The text of a `$'…'` string starting at `from`, escapes resolved, and where
+ * its closing quote is. `$'\x67h'` is `gh` to the shell, so it is `gh` here.
+ */
+function ansiQuoted(text: string, from: number): { value: string; end: number } {
+  let value = ''
+  let at = from
+  while (at < text.length && text.charAt(at) !== "'") {
+    if (text.charAt(at) !== '\\') {
+      value += text.charAt(at)
+      at += 1
+      continue
+    }
+    const escape =
+      /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|(.))/su.exec(
+        text.slice(at + 1)
+      )
+    const [whole = '', hex, unicode, wide, octal, single = ''] = escape ?? []
+    const code = hex ?? unicode ?? wide
+    value +=
+      code !== undefined
+        ? String.fromCodePoint(Number.parseInt(code, 16))
+        : octal !== undefined
+          ? String.fromCodePoint(Number.parseInt(octal, 8))
+          : (ANSI_ESCAPES[single] ?? single)
+    at += 1 + whole.length
+  }
+  return { value, end: at }
+}
+
 interface PendingHeredoc {
   readonly delimiter: string
   readonly stripTabs: boolean
@@ -86,11 +128,18 @@ export function parseCommand(text: string): ParsedCommand {
     const char = text.charAt(at)
     const next = text.charAt(at + 1)
 
-    if (char === "'" || (char === '$' && next === "'")) {
-      const open = char === '$' ? at + 1 : at
-      const close = text.indexOf("'", open + 1)
+    if (char === '$' && next === "'") {
+      const { value, end } = ansiQuoted(text, at + 2)
+      word += value
+      inWord = true
+      at = end + 1
+      continue
+    }
+
+    if (char === "'") {
+      const close = text.indexOf("'", at + 1)
       const end = close === -1 ? text.length : close
-      word += text.slice(open + 1, end)
+      word += text.slice(at + 1, end)
       inWord = true
       at = end + 1
       continue
