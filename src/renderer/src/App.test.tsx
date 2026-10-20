@@ -3147,11 +3147,10 @@ describe('a branch list that came back full', () => {
    * the answer, and absent reads exactly like "has none" — so the header used
    * to offer **Create PR** for a branch that already had one.
    *
-   * It cannot know, so it stops naming the action and names the place. The
-   * button opens the same tab either way, and that tab asks about this branch
-   * rather than reading the capped list.
+   * It cannot know, so it offers nothing: the pull request tab asks about this
+   * branch rather than reading the capped list, and is still one press away.
    */
-  it('names the place rather than the action', async () => {
+  it('offers no shortcut at all', async () => {
     vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
     vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
       ok: true,
@@ -3167,10 +3166,11 @@ describe('a branch list that came back full', () => {
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(await screen.findByText('anna'))
 
-    // Not "Pull request": that is what the tab it opens is already called, and
-    // two buttons of one name is a question for whoever hears them read out.
-    expect(await screen.findByRole('button', { name: 'Check PR' })).toBeInTheDocument()
+    // Wait for the row to be selected and the header to settle before asserting
+    // an absence, or the check passes before the button could ever have shown.
+    expect(await screen.findByRole('button', { name: 'Pull request' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create PR' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Check PR' })).not.toBeInTheDocument()
   })
 
   // Under an answer that was all of them, absent means absent — and saying so

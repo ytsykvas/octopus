@@ -502,7 +502,6 @@ export const uk: Translation = {
     stateClosed: 'Pull request #{{number}} закрито без злиття.',
 
     createShortcut: 'Створити PR',
-    openShortcut: 'Перевірити PR',
     commitMessage: 'Повідомлення коміту',
     commitMessagePlaceholder: 'Перейменувати те саме',
     commitHint:

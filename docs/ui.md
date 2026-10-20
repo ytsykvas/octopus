@@ -1783,17 +1783,14 @@ than those hundred is simply not in the answer, and **absent reads exactly like
 "has none"**: the header then offered `Create PR` for a branch that already had
 one.
 
-So the read says whether it was all of them, and where it was not the button
-stops naming the action and says `Check PR` instead. Pressing it does the same
-thing either way — it opens the pull request tab, which asks about _this branch_
-rather than reading the capped list, and is therefore the one authority on what
-the branch has.
+So the read says whether it was all of them, and where it was not the header
+button is hidden. The pull request tab asks about _this branch_ rather than
+reading the capped list, and is therefore the one authority on what the branch
+has; it stays one press away.
 
-The two alternatives were both worse. Hiding the button takes away a shortcut
-over a doubt; leaving it saying `Create PR` is a wrong sentence said with
-confidence. Not `Pull request` either, which is what the tab it opens is already
-called — two buttons of one name is a question for whoever hears them read out.
-The row's mark stays absent, which says nothing rather than something false.
+A relabelled button (`Check PR`) was tried and dropped as unused.
+Leaving it saying `Create PR` is a wrong sentence said with confidence, so
+saying nothing is what remains. The row's mark stays absent likewise.
 
 **And a row says when its worktree is standing on some other branch.** `git
 checkout` is one command in the workspace terminal, which is a shipped tab, and
