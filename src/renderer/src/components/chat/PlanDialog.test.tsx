@@ -202,6 +202,14 @@ describe('the two ways out', () => {
     expect(onKeepPlanning).not.toHaveBeenCalled()
   })
 
+  // jsdom has no layout, so the class is what can be pinned: an inline textarea
+  // leaves a gap under it and the send button lands below the text's line.
+  it('keeps the note field a block so the send button sits on its line', () => {
+    renderDialog()
+
+    expect(screen.getByLabelText('Anything to work out first?')).toHaveClass('block')
+  })
+
   it('sends the note on Enter, and lets shift break the line', async () => {
     const user = userEvent.setup()
     const { onKeepPlanning, onExecute } = renderDialog()

@@ -154,7 +154,10 @@ export function PlanDialog({
             }}
             // Grows with the note, as the composer's own field does, so a
             // sentence gets one line and a list of corrections gets room.
-            className="focus-ring border-line bg-surface field-sizing-content max-h-40 min-h-[2.5rem] w-full resize-none rounded-[var(--radius-control)] border py-1.5 pr-10 pl-2.5 outline-none"
+            // `block`: an inline textarea leaves a descender gap under it, which
+            // makes the wrapper taller than the field and drops the button,
+            // positioned from the wrapper's bottom, below the text's line.
+            className="focus-ring border-line bg-surface field-sizing-content block max-h-40 min-h-[2.5rem] w-full resize-none rounded-[var(--radius-control)] border py-1.5 pr-10 pl-2.5 outline-none"
           />
           {/* Beside the field it answers, as in the composer: the key is not
               the only way to send the note. Never disabled — a plan sent back
