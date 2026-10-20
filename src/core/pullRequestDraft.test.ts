@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { QueryFn } from './agent.js'
 import type { FileDiff, Hunk, WorkspaceDiff } from './diff.js'
+import { agentEnv } from './publishGuard.js'
 import { buildPrompt, draftPullRequest, parseDraft, renderDiff } from './pullRequestDraft.js'
 
 const TITLE_MARKER = '<<<OCTOPUS_TITLE>>>'
@@ -94,7 +95,7 @@ async function refusalOf(captured: Record<string, unknown>, command: string): Pr
   const hooks = captured.hooks as NonNullable<Options['hooks']>
   const [hook] = hooks.PreToolUse?.[0]?.hooks ?? []
   if (!hook) throw new Error('no guard')
-  const output = await hook({ tool_input: { command } } as never, 'tool-1', {
+  const output = await hook({ tool_name: 'Bash', tool_input: { command } } as never, 'tool-1', {
     signal: new AbortController().signal
   })
   return JSON.stringify(output)
@@ -107,7 +108,8 @@ const options = {
   diff: diff(),
   branch: 'feature/thing',
   model: null,
-  settingSources: ['user'] as const
+  settingSources: ['user'] as const,
+  pushTargets: ['https://github.com/o/r.git']
 }
 
 describe('renderDiff', () => {
@@ -342,7 +344,7 @@ describe('draftPullRequest', () => {
     // And it cannot publish, by any of the three layers.
     expect(await refusalOf(captured, 'git push')).toContain('does not let the agent publish')
     expect(captured.disallowedTools).toContain('Bash(git push *)')
-    expect((captured.env as Record<string, string>).GIT_CONFIG_COUNT).toBeDefined()
+    expect(captured.env).toEqual(agentEnv(process.env, options.pushTargets))
   })
 
   // Left out, the SDK loads every source — an unapproved repository's hooks

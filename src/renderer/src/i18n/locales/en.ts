@@ -2023,6 +2023,9 @@ export const en = {
     rewindInProgress: 'This conversation is being rewound. Wait for it to finish.',
     chatClosed: 'That conversation was closed. Reopen it from the history first.',
     autoModeUnavailable: 'Auto mode is not available here: {{reason}}',
+    turnRunning: 'The agent is still working. Wait for it to finish, then press the button again.',
+    pushTargetChanged:
+      '{{branch}} was not pushed: origin now pushes to {{current}}, not where it did when you pressed the button.',
     repoConfigSymlink:
       '{{path}} is a symbolic link. octopus will not read or write through one, because it can point anywhere outside the repository.',
     repoConfigTooLarge: '{{path}} is larger than this kind of file is allowed to be.',

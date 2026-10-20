@@ -2176,10 +2176,12 @@ nothing can reach is a claim nothing tests.
 
 **Three of them end in a push the app makes.** The agent may not push (§12.3 of
 `PROJECT.md`), so fixing the checks, answering the review and resolving the
-conflicts send `publishAfter`, and the branch goes up once that turn has ended
-well. A failed turn, a Stop or a message still queued keeps it back, and a push
-that fails says so in the conversation. The two reviews change nothing and push
-nothing.
+conflicts name themselves when sent, and the branch goes up once that turn has
+ended well. Pressed while the agent is still working, they are refused with a
+message saying to wait. A push that fails, or one refused because `origin` was
+pointed elsewhere during the turn, says so in the conversation. A project's own
+copy of one of these instructions that still says "push" is met by the refusal
+and the agent stops; the shipped wording says to commit and stop.
 
 Three of the five appear only when they would mean something: answering a review
 once somebody has left one, resolving a conflict against one, fixing the checks

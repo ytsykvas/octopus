@@ -40,7 +40,7 @@ import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
-import type { InstructionKind } from '@core/instructions.js'
+import type { InstructionKind, SendOptions } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type {
   SkillDocument,
@@ -247,14 +247,9 @@ const api = {
 
     /**
      * Sends a message. The answer arrives through `onEvent`, not here.
-     * `publishAfter` is the pull request pane's alone: the app pushes once the
-     * turn ends well, since the agent may not.
+     * `sending` names the pull request prompt a pane button sent — `sendToChat`.
      */
-    send: (
-      chatId: string,
-      text: string,
-      sending?: { publishAfter?: boolean }
-    ): Promise<Result<string | null>> =>
+    send: (chatId: string, text: string, sending?: SendOptions): Promise<Result<string | null>> =>
       ipcRenderer.invoke('chats:send', chatId, text, sending) as Promise<Result<string | null>>,
 
     /** Stops the current turn; the session stays open for the next message. */

@@ -22,7 +22,6 @@ import {
 import {
   AutoCompactWindowSchema,
   ChatMessageSchema,
-  SendOptionsSchema,
   ChatTitleSchema,
   EditedPlanSchema,
   EffortChoiceSchema,
@@ -35,7 +34,11 @@ import { RewindScopeSchema } from '../core/rewind.js'
 import { EnvBodySchema } from '../core/env.js'
 import { ProfileNameSchema } from '../core/envProfileNames.js'
 import type { RemoteRepository } from '../core/github.js'
-import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
+import {
+  InstructionBodySchema,
+  InstructionKindSchema,
+  SendOptionsSchema
+} from '../core/instructions.js'
 import {
   CommitMessageSchema,
   MergeMethodSchema,

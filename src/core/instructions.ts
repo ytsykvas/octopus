@@ -41,6 +41,30 @@ export const InstructionKindSchema = z.enum([
 export type InstructionKind = z.infer<typeof InstructionKindSchema>
 
 /**
+ * Whether the turn a kind starts ends in a push the app makes.
+ *
+ * The agent may not push (`publishGuard.ts`), so the prompts that change the
+ * branch tell it to commit and stop, and the push is the app's — the press was
+ * the user asking for it. A record rather than a list so a new kind cannot be
+ * added without deciding.
+ */
+export const PUBLISHES_AFTER: Readonly<Record<InstructionKind, boolean>> = {
+  pullRequest: false,
+  commitMessage: false,
+  fixChecks: true,
+  addressReview: true,
+  review: false,
+  multiAgentReview: false,
+  resolveConflicts: true
+}
+
+/** How a message is sent, as accepted from the renderer: the prompt a pane button sent, if any. */
+export const SendOptionsSchema = z
+  .object({ instruction: InstructionKindSchema.optional() })
+  .optional()
+export type SendOptions = z.infer<typeof SendOptionsSchema>
+
+/**
  * An instruction body as accepted from the renderer.
  *
  * Bounded because it will be prepended to a prompt: an instruction longer than

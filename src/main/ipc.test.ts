@@ -2482,7 +2482,7 @@ describe('the agent chat', () => {
     })
     // What decides whether the app pushes after the turn is not taken on trust either.
     await expect(
-      invoke('chats:send', chatId, 'hi', { publishAfter: 'yes' })
+      invoke('chats:send', chatId, 'hi', { instruction: 'deploy' })
     ).resolves.toMatchObject({ ok: false })
   })
 

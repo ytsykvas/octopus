@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { gitCommand, parseCommand } from './shellCommand.js'
+import { type GitCommand, gitCommand, parseCommand, programs } from './shellCommand.js'
 
 /**
  * Keeps an agent on its workspace's branch.
@@ -30,27 +30,8 @@ function targets(args: readonly string[]): string[] {
   return args.filter((arg) => arg === '-' || !arg.startsWith('-'))
 }
 
-/** The value of `--head x`, `--head=x` or `-H x`, if the command has one. */
-function headOf(args: readonly string[]): string | undefined {
-  for (const [index, arg] of args.entries()) {
-    if (arg.startsWith('--head=')) return arg.slice('--head='.length)
-    if (arg === '--head' || arg === '-H') return args[index + 1]
-  }
-  return undefined
-}
-
-function partLeaves(
-  argv: readonly string[],
-  branch: string,
-  isPath: (arg: string) => boolean
-): boolean {
-  if (argv[0] === 'gh' && argv[1] === 'pr' && argv[2] === 'create') {
-    const head = headOf(argv.slice(3))
-    return head !== undefined && head !== branch
-  }
-
-  const git = gitCommand(argv)
-  switch (git?.command) {
+function leaves(git: GitCommand, branch: string, isPath: (arg: string) => boolean): boolean {
+  switch (git.command) {
     case 'checkout':
       if (git.args.some((arg) => CHECKOUT_LEAVES.has(arg))) return true
       // After `--` everything is a path: this is putting files back.
@@ -70,8 +51,8 @@ function partLeaves(
 }
 
 /**
- * Whether a shell command would take the worktree off `branch`, rename it, or
- * open a pull request from another one.
+ * Whether a shell command would take the worktree off `branch` or rename it,
+ * wherever git starts in it — `env git checkout -b x` included.
  *
  * Going back to `branch` is allowed: that is how a worktree already moved is
  * put right.
@@ -81,7 +62,12 @@ export function leavesBranch(
   branch: string,
   isPath: (arg: string) => boolean
 ): boolean {
-  return parseCommand(command).segments.some((argv) => partLeaves(argv, branch, isPath))
+  return parseCommand(command).segments.some(({ words }) =>
+    programs(words).some(({ at }) => {
+      const git = gitCommand(words, at)
+      return git !== null && leaves(git, branch, isPath)
+    })
+  )
 }
 
 /** What the agent is told, as the reason its command was refused. */

@@ -32,7 +32,13 @@ import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
-import { agentEnv, PUBLISH_DENY_RULES, refusesPublish, refusesPublishTool } from './publishGuard.js'
+import {
+  agentEnv,
+  PUBLISH_DENY_RULES,
+  PUBLISH_REFUSAL,
+  refusesPublish,
+  refusesPublishTool
+} from './publishGuard.js'
 import { readToolOutput } from './toolOutput.js'
 import type { SkillOverride, SkillVisibility } from './skills.js'
 import type { UsageReport } from './usage.js'
@@ -96,6 +102,8 @@ export interface SessionOptions {
    * which is the honest reading of "load nothing" anyway.
    */
   readonly additionalDirectories: readonly string[]
+  /** The workspace's remote URLs and the user's URL rewrites (`pushTargets`), for `agentEnv`. */
+  readonly pushTargets: readonly string[]
   /**
    * What this conversation was told about each skill the record names, by the
    * name the agent knows (`skillOverridesFor`).
@@ -253,10 +261,11 @@ export interface SessionHooks {
    */
   readonly skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
   /**
-   * A refusal for a shell command, or null to let it run (`branchGuard`).
-   * Optional because the account probe runs no commands at all.
+   * A refusal for a shell command, or null to let it run (`branchGuard`) —
+   * beside the publish guard every session carries. Optional because the
+   * account probe works on no branch.
    */
-  readonly refuseBash?: (command: string) => string | null
+  readonly refuseCommand?: (command: string) => string | null
 }
 
 /** What an MCP server wants from the user, once the form has been read. */
@@ -532,10 +541,12 @@ export const DENIED = 'The user declined this action in octopus.'
 /** The tools that run a shell command, each carrying it in `tool_input.command`. */
 const SHELL_TOOLS = 'Bash|Monitor|PowerShell'
 
-/** The one field of a shell call the guards read. */
-const ShellCallSchema = z.object({ tool_input: z.object({ command: z.string() }) })
-/** The one field of an MCP call the guard reads. */
-const ToolCallSchema = z.object({ tool_name: z.string() })
+const ShellCallSchema = z.object({
+  tool_name: z.string(),
+  tool_input: z.object({ command: z.string() })
+})
+const McpCallSchema = z.object({ tool_name: z.string() })
+const AgentCallSchema = z.object({ tool_input: z.object({ isolation: z.string().optional() }) })
 
 /** What the agent is told when a guard itself failed, so nothing it was asked to check ran. */
 export const GUARD_FAILED = 'Octopus could not check this call, so it was not run.'
@@ -569,16 +580,15 @@ function denying(guard: (input: unknown) => string | null): HookCallback {
 }
 
 /**
- * The SDK hooks that keep the agent from publishing, and put `refuse` in front
- * of every shell command as well.
+ * The SDK hooks that keep the agent from publishing, and put `refuseCommand`
+ * in front of every shell command as well.
  *
  * A hook rather than a check in `canUseTool`, which is consulted last: a
  * command the user's own allow rules cover, or one `auto` mode approves, never
  * reaches it. A `PreToolUse` refusal holds in every mode, and inside subagents.
- * `Monitor` is matched beside `Bash` because it runs a shell command too.
  */
-export function refusingBash(
-  refuse?: (command: string) => string | null
+export function toolGuards(
+  refuseCommand?: (command: string) => string | null
 ): NonNullable<Options['hooks']> {
   return {
     PreToolUse: [
@@ -589,7 +599,10 @@ export function refusingBash(
             const call = ShellCallSchema.safeParse(input)
             if (!call.success) return null
             const { command } = call.data.tool_input
-            return refusesPublish(command) ?? refuse?.(command) ?? null
+            // PowerShell escapes with a backtick: ``g`h`` runs gh.
+            const read =
+              call.data.tool_name === 'PowerShell' ? command.replaceAll('`', '') : command
+            return refusesPublish(read) ?? refuseCommand?.(command) ?? null
           })
         ]
       },
@@ -597,8 +610,20 @@ export function refusingBash(
         matcher: '^mcp__',
         hooks: [
           denying((input) => {
-            const call = ToolCallSchema.safeParse(input)
+            const call = McpCallSchema.safeParse(input)
             return call.success ? refusesPublishTool(call.data.tool_name) : null
+          })
+        ]
+      },
+      {
+        // A subagent in the cloud runs where none of these layers reach.
+        matcher: 'Agent',
+        hooks: [
+          denying((input) => {
+            const call = AgentCallSchema.safeParse(input)
+            return call.success && call.data.tool_input.isolation === 'remote'
+              ? PUBLISH_REFUSAL
+              : null
           })
         ]
       }
@@ -608,18 +633,22 @@ export function refusingBash(
 
 /**
  * What every session the app starts carries so its agent cannot publish: the
- * hooks, the CLI's own deny rules, and an environment where `git push` fails.
- * Three layers because none is a boundary on its own — `publishGuard.ts`.
+ * hooks, the CLI's own deny rules, and an environment where a push to any of
+ * `pushTargets` fails. Three layers because none is a boundary on its own —
+ * `publishGuard.ts`.
+ *
+ * `base` is the app's own environment: the SDK replaces the environment
+ * outright when given one, and without it the agent would lose PATH and HOME.
  */
 export function publishLocked(
-  refuse?: (command: string) => string | null
+  refuseCommand: ((command: string) => string | null) | undefined,
+  pushTargets: readonly string[],
+  base: Readonly<Record<string, string | undefined>> = process.env
 ): Pick<Options, 'hooks' | 'disallowedTools' | 'env'> {
   return {
-    hooks: refusingBash(refuse),
+    hooks: toolGuards(refuseCommand),
     disallowedTools: [...PUBLISH_DENY_RULES],
-    // The SDK replaces the environment outright when given one, so the app's
-    // own is the base: without it the agent would lose its PATH and HOME.
-    env: agentEnv(process.env)
+    env: agentEnv(base, pushTargets)
   }
 }
 
@@ -744,7 +773,9 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
       allowedTools: [...options.allowedTools],
-      ...publishLocked(hooks.refuseBash),
+      // These own `hooks`, `disallowedTools` and `env`: a key of the same name
+      // later in this object would take the guard away.
+      ...publishLocked(hooks.refuseCommand, options.pushTargets),
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,

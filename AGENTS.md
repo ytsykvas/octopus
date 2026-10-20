@@ -186,7 +186,7 @@ independent change belongs in another workspace. Agents the app runs are refused
 the branch switch outright (`branchGuard.ts`), and cannot push or open, merge or
 close a pull request at all (`publishGuard.ts`) — even when asked to: commit, and
 the maintainer publishes from the pull request pane. This line is for the agents
-it does not run. The recipe below is for a plain checkout:
+the app does not run. The recipe below is for a plain checkout:
 
 ```bash
 git checkout -b fix/short-description

@@ -21,13 +21,6 @@ import { NewPullRequestForm } from './NewPullRequestForm.js'
 import { PullRequestActions } from './PullRequestActions.js'
 import { PullRequestSummary } from './PullRequestSummary.js'
 
-/** The prompts that change the branch, so the app pushes once the agent is done. */
-const PUBLISHES_AFTER: ReadonlySet<InstructionKind> = new Set([
-  'fixChecks',
-  'addressReview',
-  'resolveConflicts'
-])
-
 interface PullRequestPanelProps {
   readonly workspace: WorkspaceView | null
   /** False while another tab is showing; `gh` is not asked behind one. */
@@ -216,13 +209,11 @@ export function PullRequestPanel({
             })
           : ''
 
-      // The agent may not push, so for the prompts that change the branch the
-      // app pushes once the turn has ended well — pressing the button was the
-      // user asking for it. A review changes nothing, so nothing goes up.
+      // Named so the app can push once a prompt that changes the branch is done.
       const sent = await window.octopus.chats.send(
         conversation,
         [instruction.value.trim(), context, failures].filter((part) => part !== '').join('\n\n'),
-        { publishAfter: PUBLISHES_AFTER.has(kind) }
+        { instruction: kind }
       )
       setSending(null)
       if (!sent.ok) report(sent)

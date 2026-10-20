@@ -4419,42 +4419,34 @@ describe('the agent chat', () => {
       })
   })
 
-  /*
-   * A message sent while the agent works and not folded into that turn — and
-   * after a Stop, always — is run by the CLI as a turn of its own once the
-   * first one has ended. Measured on a live session: the turn's result, then
-   * `completed` or `cancelled` for the message that started it, then `started`
-   * for the one that waited. Only `sendToChat` used to say `running`, so that
-   * second turn ran under an idle tab with no Stop.
-   */
-  /*
-   * The agent may not push (`publishGuard.ts`), so a pull request button that
-   * changes the branch has the app push once the turn it started is over. A
-   * message typed into the chat never does.
-   */
-  describe('a turn a pull request button started', () => {
-    const queued = (command_uuid: string, state: string): SDKMessage =>
-      ({
-        type: 'command_lifecycle',
-        command_uuid,
-        state,
-        uuid: 'frame',
-        session_id: 'sess-1'
-      }) as unknown as SDKMessage
+  const lifecycle = (command_uuid: string, state: string): SDKMessage =>
+    ({
+      type: 'command_lifecycle',
+      command_uuid,
+      state,
+      uuid: 'frame',
+      session_id: 'sess-1'
+    }) as unknown as SDKMessage
 
-    /** A workspace whose git records every push rather than making it. */
+  describe('a turn a pull request button started', () => {
+    const ORIGIN = 'https://github.com/o/r.git'
+
+    /** A workspace whose git records every push rather than making it, with `origin` where the test says. */
     async function recording(push: () => Promise<string> = () => Promise.resolve('')): Promise<
       Awaited<ReturnType<typeof withWorkspace>> & {
         chat: Awaited<ReturnType<OctopusService['openChat']>>
         branch: string | undefined
         pushes: string[][]
+        moveOrigin: (url: string) => void
       }
     > {
       const pushes: string[][] = []
+      let origin = ORIGIN
       const setup = await withWorkspace({
         makeExec: (cwd, options) => {
           const exec = gitIn(cwd, options)
           return (args) => {
+            if (args[0] === 'remote' && args[1] === 'get-url') return Promise.resolve(`${origin}\n`)
             if (args[0] !== 'push') return exec(args)
             pushes.push([...args])
             return push()
@@ -4463,15 +4455,20 @@ describe('the agent chat', () => {
       })
       const chat = await setup.service.openChat(setup.workspaceId)
       const branch = (await setup.service.listWorkspaces(setup.projectId))[0]?.branch
-      return { ...setup, chat, branch, pushes }
+      return {
+        ...setup,
+        chat,
+        branch,
+        pushes,
+        moveOrigin: (url) => {
+          origin = url
+        }
+      }
     }
-
-    /** Long enough for a push the last event started to have been made. */
-    const settled = (): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, 50))
 
     it('is pushed by the app once it ends well', async () => {
       const { service, chat, branch, pushes } = await recording()
-      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
       agent().emit(resultMessage)
 
@@ -4480,113 +4477,130 @@ describe('the agent chat', () => {
       })
     })
 
-    it('is pushed once, for one turn only', async () => {
+    it('is pushed after its own turn, even with a message typed behind it', async () => {
       const { service, chat, pushes } = await recording()
-      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      await service.sendToChat(chat.id, 'answer the review', { instruction: 'addressReview' })
       agent().emit(initMessage)
+      await service.sendToChat(chat.id, 'and something else')
+      agent().emit(lifecycle('typed', 'queued'))
       agent().emit(resultMessage)
+
       await vi.waitFor(() => {
         expect(pushes).toHaveLength(1)
       })
-
-      await service.sendToChat(chat.id, 'and now something else')
+      agent().emit(lifecycle('typed', 'started'))
       agent().emit(resultMessage)
-      await settled()
+      await service.closeChats()
       expect(pushes).toHaveLength(1)
     })
 
-    it('is never pushed for a message typed into the chat', async () => {
+    it('is refused while another turn is running, so the turn that ends is its own', async () => {
       const { service, chat, pushes } = await recording()
       await service.sendToChat(chat.id, 'work')
       agent().emit(initMessage)
+
+      await expect(
+        service.sendToChat(chat.id, 'resolve the conflicts', { instruction: 'resolveConflicts' })
+      ).rejects.toMatchObject({ code: 'turnRunning' })
       agent().emit(resultMessage)
-      await settled()
+      await service.closeChats()
+      expect(pushes).toEqual([])
+    })
+
+    it('is never pushed for a prompt that changes nothing, or a message typed into the chat', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'review it', { instruction: 'review' })
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(resultMessage)
+      await service.closeChats()
       expect(pushes).toEqual([])
     })
 
     it('is not pushed when the turn fails', async () => {
       const { service, chat, pushes } = await recording()
-      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
       agent().emit(abortedResultMessage)
+      // The entry went with the failed turn, so the next one pushes nothing.
       agent().emit(resultMessage)
-      await settled()
+      await service.closeChats()
       expect(pushes).toEqual([])
     })
 
-    // A session that died answers nothing more; the one started in its place
-    // was never asked to push, so a turn of its ending well pushes nothing.
     it('is not pushed by the session that replaced the one it was sent to', async () => {
       const { service, chat, pushes } = await recording()
-      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
       agent().finish(new Error('the process died'))
-      await settled()
+      await vi.waitFor(() => {
+        expect(service.listChats(chat.workspaceId)[0]?.status).toBe('error')
+      })
 
       await service.setChatAutoCompact(chat.id, 400_000)
       expect(agents).toHaveLength(2)
       await service.sendToChat(chat.id, 'something else')
       agents[1]?.emit(initMessage)
       agents[1]?.emit(resultMessage)
-      await settled()
+      await service.closeChats()
       expect(pushes).toEqual([])
     })
 
     it('is not pushed once it was stopped', async () => {
       const { service, chat, pushes } = await recording()
-      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
       await service.interruptChat(chat.id)
       agent().emit(resultMessage)
-      await settled()
+      await service.closeChats()
       expect(pushes).toEqual([])
     })
 
-    it('waits for the messages queued behind it before pushing', async () => {
-      const { service, chat, pushes } = await recording()
-      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+    it('is not pushed when origin was pointed somewhere else during the turn, and says so', async () => {
+      const { service, chat, pushes, events, moveOrigin } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
-      agent().emit(queued('waited', 'queued'))
+      moveOrigin('https://example.com/elsewhere.git')
       agent().emit(resultMessage)
-      await settled()
-      expect(pushes).toEqual([])
+      await service.closeChats()
 
-      agent().emit(queued('waited', 'started'))
-      agent().emit(resultMessage)
-      await vi.waitFor(() => {
-        expect(pushes).toHaveLength(1)
-      })
+      expect(pushes).toEqual([])
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          chatId: chat.id,
+          event: expect.objectContaining({ type: 'error' }) as unknown
+        })
+      )
     })
 
     it('says so in the conversation when the push fails', async () => {
       const { service, chat, events } = await recording(() =>
         Promise.reject(new Error('rejected: non-fast-forward'))
       )
-      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
       agent().emit(resultMessage)
+      await service.closeChats()
 
-      await vi.waitFor(() => {
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            chatId: chat.id,
-            event: expect.objectContaining({ type: 'error' }) as unknown
-          })
-        )
-      })
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          chatId: chat.id,
+          event: expect.objectContaining({ type: 'error' }) as unknown
+        })
+      )
     })
   })
 
+  /*
+   * A message sent while the agent works and not folded into that turn — and
+   * after a Stop, always — is run by the CLI as a turn of its own once the
+   * first one has ended. Measured on a live session: the turn's result, then
+   * `completed` or `cancelled` for the message that started it, then `started`
+   * for the one that waited. Only `sendToChat` used to say `running`, so that
+   * second turn ran under an idle tab with no Stop.
+   */
   describe('a turn the agent starts from its queue', () => {
-    const lifecycle = (command_uuid: string, state: string): SDKMessage =>
-      ({
-        type: 'command_lifecycle',
-        command_uuid,
-        state,
-        uuid: 'frame',
-        session_id: 'sess-1'
-      }) as unknown as SDKMessage
-
     it('is shown as running', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
@@ -4705,7 +4719,7 @@ describe('the agent chat', () => {
     if (!hook) throw new Error('no guard')
     const decide = async (command: string): Promise<string> =>
       JSON.stringify(
-        await hook({ tool_input: { command } } as never, 'tool-1', {
+        await hook({ tool_name: 'Bash', tool_input: { command } } as never, 'tool-1', {
           signal: new AbortController().signal
         })
       )
