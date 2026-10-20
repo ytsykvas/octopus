@@ -14,19 +14,30 @@ import { formatDuration } from './format.js'
  * Without a start — nothing said since the last turn closed — it says only that
  * the agent is working, rather than counting from nowhere.
  */
-export function WorkingLine({ since }: { readonly since: string | null }): React.JSX.Element {
+export function WorkingLine({
+  since,
+  agents = 0
+}: {
+  readonly since: string | null
+  /** Agents still at work after the main agent's turn ended; said instead of a clock. */
+  readonly agents?: number
+}): React.JSX.Element {
   const { t } = useTranslation()
-  const now = useNow()
+  const counting = agents === 0 && since !== null
+  const now = useNow(counting)
 
   const started = since === null ? Number.NaN : Date.parse(since)
-  const label = Number.isNaN(started)
-    ? t('chat.working')
-    : t('chat.workingElapsed', {
-        elapsed: formatDuration(now - started, {
-          minutes: t('usage.minutes'),
-          seconds: t('usage.seconds')
-        })
-      })
+  const label =
+    agents > 0
+      ? t('agents.lineWorking', { count: agents })
+      : Number.isNaN(started)
+        ? t('chat.working')
+        : t('chat.workingElapsed', {
+            elapsed: formatDuration(now - started, {
+              minutes: t('usage.minutes'),
+              seconds: t('usage.seconds')
+            })
+          })
 
   return (
     <p className="text-ink-faint flex items-center gap-2" role="status">

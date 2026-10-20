@@ -66,6 +66,7 @@ import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core
 import type {
   ChatEvent,
   ChatsChangedEvent,
+  TasksEvent,
   ChatStatusEvent,
   OctopusService,
   WorkspaceStatusEvent
@@ -153,6 +154,8 @@ export interface IpcHost {
    * would be asking about conversations it already knows.
    */
   readonly broadcastChatsChanged: (event: ChatsChangedEvent) => void
+  /** A conversation's background agents, gathered into one push per burst. */
+  readonly broadcastTasks: (event: TasksEvent) => void
   /**
    * The config as it now stands, to every window.
    *
@@ -181,6 +184,12 @@ const FilePathSchema = z.string().min(1).max(4096)
 
 /** A message of a conversation, by the id it was sent under. */
 const MessageIdSchema = z.uuid()
+
+/**
+ * A background task, by the id the CLI gave it. Opaque — `a0e3c48…`, `bvdeal1yi`
+ * — so only bounded here; the session is what knows whether it names anything.
+ */
+const TaskIdSchema = z.string().min(1).max(128)
 
 /**
  * Writes the config and tells every window, from the one place that writes it.
@@ -918,6 +927,7 @@ export function registerIpc(
   service.onUsageWindows(host.broadcastUsageWindows)
   service.onChatStatus(host.broadcastChatStatus)
   service.onChatsChanged(host.broadcastChatsChanged)
+  service.onTasks(host.broadcastTasks)
 
   // Listing does not create, opening does. The distinction is what keeps a
   // workspace nobody has spoken to free of a record and a transcript file.
@@ -982,6 +992,14 @@ export function registerIpc(
     attempt(() => service.interruptChat(chatId))
   )
 
+  // The agent map: what every conversation has running, and a Stop for one of
+  // them. The task id reaches the agent's process, so it is parsed.
+  host.handle('tasks:list', () => attempt(() => service.listTasks()))
+
+  host.handle('tasks:stop', (_event, chatId: string, taskId: unknown) =>
+    attempt(() => service.stopTask(chatId, TaskIdSchema.parse(taskId)))
+  )
+
   host.handle('chats:mode', (_event, chatId: string, mode: unknown) =>
     attempt(() => service.setChatWorkingMode(chatId, WorkingModeSchema.parse(mode)))
   )
@@ -1028,7 +1046,7 @@ export function registerIpc(
   )
 
   host.handle('chats:pending', (_event, chatId: string) =>
-    attempt(() => service.pendingPermission(chatId))
+    attempt(() => service.pendingPermissions(chatId))
   )
 
   host.handle('chats:usage', (_event, chatId: string) =>

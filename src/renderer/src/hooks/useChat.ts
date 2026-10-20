@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   type AutoCompactWindow,
@@ -10,13 +10,14 @@ import {
   type PlanExecutionMode,
   type WorkingMode
 } from '@core/chats.js'
-import { isEphemeral } from '@core/events.js'
+import { isEphemeral, isTaskBoundary } from '@core/events.js'
 import type { FormValues } from '@core/elicitation.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
+import { useMainWorking } from './backgroundTasks.js'
 import { onChatEvent } from './chatEvents.js'
 
 /** A tool call the agent is blocked on, waiting to be told whether it may run. */
@@ -55,6 +56,20 @@ export interface PendingPermission {
   readonly requestId: string
   readonly toolName: string
   readonly input: unknown
+  /** The background agent asking, when it is not the turn. */
+  readonly taskId?: string
+}
+
+const NO_REQUESTS: readonly PendingPermission[] = []
+
+/** The list without one request, the same list when it was not there. */
+function without(
+  requests: readonly PendingPermission[],
+  requestId: string
+): readonly PendingPermission[] {
+  return requests.some((request) => request.requestId === requestId)
+    ? requests.filter((request) => request.requestId !== requestId)
+    : requests
 }
 
 /** Prose and reasoning still being written, kept apart so they render apart. */
@@ -109,8 +124,13 @@ export interface ChatController {
    * waiting in the CLI's queue until it folds them in or starts a turn for them.
    */
   readonly waiting: ReadonlySet<string>
-  /** The request the agent is blocked on, or null when it is not blocked. */
+  /** The question the turn itself is blocked on, the newest if several, or null. */
   readonly pending: PendingPermission | null
+  /**
+   * Every question still open, by request id — the turn's and its background
+   * agents'. An agent's outlives the turn, so it can be the only one.
+   */
+  readonly answerable: ReadonlySet<string>
   /**
    * The MCP server's question still open, by request id, or null.
    *
@@ -235,7 +255,7 @@ export function useChat(
   const [waiting, setWaiting] = useState<ReadonlySet<string>>(NOTHING_WAITING)
   /** Messages queued too recently to mark yet, each with the timer that will. */
   const queuing = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const [pending, setPending] = useState<PendingPermission | null>(null)
+  const [requests, setRequests] = useState<readonly PendingPermission[]>(NO_REQUESTS)
   /** The one MCP question a server is holding open, by its request id. */
   const [pendingElicitation, setPendingElicitation] = useState<string | null>(null)
   const [loading, setLoading] = useState(chatId !== null)
@@ -278,7 +298,7 @@ export function useChat(
       setEntries([])
       setStreaming(NOTHING_STREAMING)
       setBusy(false)
-      setPending(null)
+      setRequests(NO_REQUESTS)
       setError(null)
       // Set here rather than in the effect that loads: by the time an effect
       // runs the frame is already on screen, so the pane would flash the empty
@@ -309,11 +329,13 @@ export function useChat(
       // ever with no way to unblock it. Asked after the history so the log is
       // on screen first; a failure here is not worth an error, since the worst
       // case is the state we were already in.
-      const blocked = await window.octopus.chats.pendingPermission(chatId)
-      if (abandoned() || !blocked.ok || blocked.value === null) return
+      const blocked = await window.octopus.chats.pendingPermissions(chatId)
+      if (abandoned() || !blocked.ok || blocked.value.length === 0) return
 
-      setPending(blocked.value)
-      setBusy(true)
+      setRequests(blocked.value)
+      // Only the turn's own question means the main agent is mid-turn; an
+      // agent's can be open long after the turn ended.
+      if (blocked.value.some((request) => request.taskId === undefined)) setBusy(true)
     })()
 
     return () => {
@@ -408,8 +430,10 @@ export function useChat(
       }
 
       // Anything else means the block being streamed has finished, and its
-      // complete form is in the event now arriving.
-      setStreaming(NOTHING_STREAMING)
+      // complete form is in the event now arriving — except a background task
+      // starting or ending, which is said by the CLI between the main agent's
+      // words and would otherwise wipe the sentence being typed out.
+      if (!isTaskBoundary(event)) setStreaming(NOTHING_STREAMING)
       setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
 
       // The core gave up auto mode on its own. This line is the only word of
@@ -436,22 +460,28 @@ export function useChat(
       }
 
       if (event.type === 'permission_request') {
-        setPending({
-          requestId: event.requestId,
-          toolName: event.toolName,
-          input: event.input
-        })
+        const { requestId, toolName, input, taskId } = event
+        setRequests((current) => [
+          ...without(current, requestId),
+          { requestId, toolName, input, ...(taskId !== undefined && { taskId }) }
+        ])
       }
       // Answered somewhere else — the other window on this workspace — or
-      // withdrawn by the bridge. The card here has to stop offering buttons for
-      // a question that is settled.
+      // withdrawn: by the bridge, or with the agent that asked. The card here
+      // has to stop offering buttons for a question that is settled.
       if (event.type === 'question_answered' || event.type === 'permission_withdrawn') {
-        setPending((current) => (current?.requestId === event.requestId ? null : current))
+        setRequests((current) => without(current, event.requestId))
       }
 
       if (event.type === 'result' || event.type === 'error') {
         setBusy(false)
-        setPending(null)
+        // The core's rule: a turn's end refuses the turn's own questions and
+        // leaves its agents' open; a failed session takes every one with it.
+        setRequests((current) =>
+          event.type === 'error'
+            ? NO_REQUESTS
+            : current.filter((request) => request.taskId !== undefined)
+        )
         setPendingElicitation(null)
         // A mark must never outlive the reason for it. A message still queued
         // here is taken by the very next frame, which starts its turn — and one
@@ -560,7 +590,8 @@ export function useChat(
     if (!stopped.ok) setError(describeFailure(stopped))
 
     setBusy(false)
-    setPending(null)
+    // A Stop ends the turn; the agents' questions stay with the agents.
+    setRequests((current) => current.filter((request) => request.taskId !== undefined))
   }, [chat, describeFailure])
 
   const answer = useCallback(
@@ -572,8 +603,8 @@ export function useChat(
     ) => {
       // Cleared first: the agent is unblocked either way, and leaving the card
       // on screen while it works reads as though the click did nothing.
-      const answered = pending
-      setPending(null)
+      const answered = requests.find((request) => request.requestId === requestId)
+      setRequests((current) => without(current, requestId))
 
       // The same rule the core applies when it clears `planMode`, kept here as
       // well because nothing tells a window that a record changed. Without it
@@ -590,7 +621,7 @@ export function useChat(
       const sent = await sendAnswer(requestId, decision, feedback, editedPlan)
       if (!sent.ok) setError(describeFailure(sent))
     },
-    [pending, describeFailure, planExecutionMode]
+    [requests, describeFailure, planExecutionMode]
   )
 
   const answerElicitation = useCallback(
@@ -613,7 +644,7 @@ export function useChat(
       // and leaving the card live while it works reads as though the button did
       // nothing. The card itself stays in the log — it is part of the
       // conversation — and redraws from the `question_answered` event.
-      setPending(null)
+      setRequests((current) => without(current, requestId))
 
       const sent = await window.octopus.chats.answerQuestions(requestId, answers)
       if (!sent.ok) setError(describeFailure(sent))
@@ -750,8 +781,28 @@ export function useChat(
    * workspace, so the one that finished would have reported the other two idle
    * — and taken the stop button away from turns still running.
    */
+  /*
+   * Not while only background agents are at work, though: the conversation is
+   * `running` then and the main agent is not, so a Stop would stop nothing —
+   * the agents are stopped from the map — and a message goes straight in.
+   */
+  const mainWorking = useMainWorking(chat?.id ?? null)
   const working =
-    busy || (chat !== null && (status === 'running' || status === 'waiting_permission'))
+    busy ||
+    (chat !== null &&
+      (status === 'running' || status === 'waiting_permission') &&
+      mainWorking !== false)
+
+  // The newest, as the single slot this was used to hold: a plan offered again
+  // replaces the one before it.
+  const pending = useMemo(
+    () => requests.findLast((request) => request.taskId === undefined) ?? null,
+    [requests]
+  )
+  const answerable = useMemo(
+    () => new Set(requests.map((request) => request.requestId)),
+    [requests]
+  )
 
   return {
     chat,
@@ -760,6 +811,7 @@ export function useChat(
     busy: working,
     waiting,
     pending,
+    answerable,
     loading,
     error,
     send,

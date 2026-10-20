@@ -67,6 +67,11 @@ export function pushChatStatus(targets: readonly PushTarget[], event: unknown): 
   pushAll(targets, 'chats:status', event)
 }
 
+/** A conversation's background agents, whenever they move. */
+export function pushTasks(targets: readonly PushTarget[], event: unknown): void {
+  pushAll(targets, 'tasks:changed', event)
+}
+
 /**
  * Which conversations a workspace has, when that set changes.
  *

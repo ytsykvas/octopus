@@ -280,6 +280,12 @@ a data root of its own is not the same app to either lock, and it starts empty.
 The Scripts tab's Run sets it (`.octopus/scripts/run.sh`), so this trap is for a
 bare `npm run dev` only.
 
+**An agent run by a dev copy inherits its `ELECTRON_RENDERER_URL`.** A copy
+it launches — a built app, a Playwright driver — then loads the _running_ dev
+server's renderer: the main checkout's window over this worktree's core, every
+change to `src/renderer` invisible and nothing reporting why. Strip the
+`ELECTRON_*` variables from the environment of anything you launch.
+
 **The running app holds the state in memory.** Editing `~/.octopus/state.json`
 from the outside while it runs makes the two disagree, and the app will happily
 act on its stale copy. Never reproduce a bug against the user's real state or
@@ -287,10 +293,13 @@ data root: point the service at a temporary directory instead. A repro that
 corrupts the thing being diagnosed is worse than no repro.
 
 The `electron` package's `postinstall` sometimes fails silently to download the
-binary. Symptom: the build succeeds and then `npm run dev` fails with
-`Error: Electron uninstall`, or with `spawn .../Electron.app/... ENOENT` when
-`dist/` survived holding only `LICENSE` and `version` — so check for the app
-itself, not the directory.
+binary. In a fresh worktree it may not run at all: npm's `allow-scripts` holds
+install scripts back (the `npm warn allow-scripts` lines at the end of
+`npm install`), and that skips `node-pty`'s build as well. Run both commands
+below and the one under "Native modules". Symptom: the build succeeds and then
+`npm run dev` fails with `Error: Electron uninstall`, or with
+`spawn .../Electron.app/... ENOENT` when `dist/` survived holding only `LICENSE`
+and `version` — so check for the app itself, not the directory.
 
 ```bash
 ls node_modules/electron/dist/Electron.app   # must exist

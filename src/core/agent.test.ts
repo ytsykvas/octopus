@@ -389,6 +389,279 @@ describe('mapping SDK messages', () => {
   })
 
   /*
+   * Background tasks, in the shapes a live session sent (SDK 0.3.299): two
+   * agents, one nested, a background command and a workflow.
+   */
+  describe('background tasks', () => {
+    it('reports a subagent starting, with what started it', () => {
+      const message = {
+        type: 'system',
+        subtype: 'task_started',
+        task_id: 'a0e3',
+        tool_use_id: 'toolu_1',
+        description: 'List src/a and explore',
+        subagent_type: 'general-purpose',
+        is_backgrounded: true,
+        spawn_depth: 2,
+        parent_task_id: 'a9',
+        task_type: 'local_agent',
+        prompt: 'List the files'
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([
+        {
+          type: 'task_started',
+          taskId: 'a0e3',
+          toolUseId: 'toolu_1',
+          kind: 'agent',
+          description: 'List src/a and explore',
+          subagentType: 'general-purpose',
+          parentTaskId: 'a9',
+          backgrounded: true,
+          ambient: false
+        }
+      ])
+    })
+
+    it('tells a command, a workflow and anything else apart', () => {
+      const kind = (task_type?: string, extra: Record<string, unknown> = {}): unknown =>
+        mapMessage({
+          type: 'system',
+          subtype: 'task_started',
+          task_id: 't',
+          description: 'd',
+          ...(task_type !== undefined && { task_type }),
+          ...extra
+        } as unknown as SDKMessage)[0]
+
+      expect(kind('local_bash')).toMatchObject({ kind: 'shell', backgrounded: false })
+      // Measured: a workflow comes with no flag, and its call returns at once.
+      expect(kind('local_workflow', { workflow_name: 'audit' })).toMatchObject({
+        kind: 'workflow',
+        workflowName: 'audit',
+        backgrounded: true
+      })
+      expect(kind('remote_agent')).toMatchObject({ kind: 'other' })
+      expect(kind()).toMatchObject({ kind: 'other' })
+      expect(kind('local_agent', { ambient: true })).toMatchObject({ ambient: true })
+      expect(kind('local_agent', { skip_transcript: true })).toMatchObject({ ambient: true })
+    })
+
+    // The frame's description is the step under way, not the task's.
+    it("reports a task's progress with the step under way", () => {
+      const message = {
+        type: 'system',
+        subtype: 'task_progress',
+        task_id: 'a1',
+        description: 'Reading src/b/index.ts',
+        usage: { total_tokens: 14328, tool_uses: 1, duration_ms: 1478 },
+        last_tool_name: 'Read',
+        summary: 'Reading the module'
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([
+        {
+          type: 'task_progress',
+          taskId: 'a1',
+          activity: 'Reading src/b/index.ts',
+          summary: 'Reading the module',
+          tokens: 14328,
+          toolUses: 1,
+          durationMs: 1478
+        }
+      ])
+    })
+
+    it('leaves out an empty step and an empty summary', () => {
+      const message = {
+        type: 'system',
+        subtype: 'task_progress',
+        task_id: 'a1',
+        description: '',
+        summary: '',
+        usage: { total_tokens: 0, tool_uses: 0, duration_ms: 0 }
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([
+        { type: 'task_progress', taskId: 'a1', tokens: 0, toolUses: 0, durationMs: 0 }
+      ])
+    })
+
+    /*
+     * Workflow agents raise no task events of their own; this untyped array on
+     * the workflow's progress is the only place they appear.
+     */
+    it("reads a workflow's phases and agents, skipping what it cannot", () => {
+      const message = {
+        type: 'system',
+        subtype: 'task_progress',
+        task_id: 'w1',
+        description: 'read: src/a/index.ts',
+        usage: { total_tokens: 29268, tool_uses: 2, duration_ms: 2945 },
+        workflow_progress: [
+          { type: 'workflow_phase', index: 1, title: 'read' },
+          {
+            type: 'workflow_agent',
+            index: 1,
+            label: 'src/a/index.ts',
+            phaseIndex: 1,
+            phaseTitle: 'read',
+            agentId: 'aabe',
+            model: 'claude-haiku-5-5',
+            state: 'done',
+            lastToolName: 'Read',
+            tokens: 15366,
+            toolCalls: 1,
+            durationMs: 2917
+          },
+          { type: 'workflow_agent', index: 2, label: 'src/b/index.ts', state: 'start' },
+          { type: 'workflow_note', text: 'unknown' },
+          'not even an object'
+        ]
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)[0]).toMatchObject({
+        workflow: {
+          phases: [{ index: 1, title: 'read' }],
+          agents: [
+            {
+              index: 1,
+              label: 'src/a/index.ts',
+              phase: 1,
+              state: 'done',
+              model: 'claude-haiku-5-5',
+              tokens: 15366,
+              toolCalls: 1,
+              durationMs: 2917,
+              lastTool: 'Read'
+            },
+            {
+              index: 2,
+              label: 'src/b/index.ts',
+              phase: null,
+              state: 'start',
+              model: null,
+              tokens: null,
+              toolCalls: null,
+              durationMs: null,
+              lastTool: null
+            }
+          ]
+        }
+      })
+    })
+
+    it('has no workflow for progress with nothing readable in it', () => {
+      const frame = (workflow_progress: unknown): unknown =>
+        mapMessage({
+          type: 'system',
+          subtype: 'task_progress',
+          task_id: 'w1',
+          description: 'x',
+          usage: { total_tokens: 0, tool_uses: 0, duration_ms: 0 },
+          workflow_progress
+        } as unknown as SDKMessage)[0]
+
+      expect(frame([{ type: 'workflow_note' }])).not.toHaveProperty('workflow')
+      expect(frame('nonsense')).not.toHaveProperty('workflow')
+    })
+
+    it('reports an end with its totals and report', () => {
+      const message = {
+        type: 'system',
+        subtype: 'task_notification',
+        task_id: 'a1',
+        status: 'completed',
+        output_file: '/tmp/a1.output',
+        summary: 'The file is two lines long.',
+        usage: { total_tokens: 4800, tool_uses: 5, duration_ms: 3100 }
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([
+        {
+          type: 'task_ended',
+          taskId: 'a1',
+          status: 'completed',
+          summary: 'The file is two lines long.',
+          tokens: 4800,
+          toolUses: 5,
+          durationMs: 3100
+        }
+      ])
+    })
+
+    it('reports an end with nothing more to say', () => {
+      const message = {
+        type: 'system',
+        subtype: 'task_notification',
+        task_id: 'b1',
+        status: 'failed',
+        output_file: '/tmp/b1.output',
+        summary: ''
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([{ type: 'task_ended', taskId: 'b1', status: 'failed' }])
+    })
+
+    // Not every task sends a notification; a terminal patch is an end too.
+    it('reads a patch as an end only when it is one', () => {
+      const patch = (status?: string): AgentEvent[] =>
+        mapMessage({
+          type: 'system',
+          subtype: 'task_updated',
+          task_id: 'a1',
+          patch: status === undefined ? { description: 'x' } : { status }
+        } as unknown as SDKMessage)
+
+      expect(patch('completed')).toEqual([
+        { type: 'task_ended', taskId: 'a1', status: 'completed' }
+      ])
+      expect(patch('failed')).toEqual([{ type: 'task_ended', taskId: 'a1', status: 'failed' }])
+      expect(patch('killed')).toEqual([{ type: 'task_ended', taskId: 'a1', status: 'stopped' }])
+      expect(patch('running')).toEqual([])
+      expect(patch('paused')).toEqual([])
+      expect(patch()).toEqual([])
+    })
+
+    // A resumed task keeps its id; the run is what tells a late frame apart.
+    it('carries the run every frame belongs to', () => {
+      const frame = (subtype: string, extra: Record<string, unknown>): AgentEvent | undefined =>
+        mapMessage({
+          type: 'system',
+          subtype,
+          task_id: 'a1',
+          run_id: 'r2',
+          description: 'd',
+          ...extra
+        } as unknown as SDKMessage)[0]
+
+      expect(frame('task_started', {})).toMatchObject({ runId: 'r2' })
+      expect(
+        frame('task_progress', { usage: { total_tokens: 1, tool_uses: 1, duration_ms: 1 } })
+      ).toMatchObject({ runId: 'r2' })
+      expect(frame('task_notification', { status: 'completed', summary: '' })).toMatchObject({
+        runId: 'r2'
+      })
+      expect(frame('task_updated', { patch: { status: 'killed' } })).toMatchObject({
+        runId: 'r2'
+      })
+    })
+
+    it('reports the set of tasks still alive', () => {
+      const message = {
+        type: 'system',
+        subtype: 'background_tasks_changed',
+        tasks: [
+          { task_id: 'a0', task_type: 'local_agent', description: 'x' },
+          { task_id: 'b1', task_type: 'local_bash', description: 'y' }
+        ]
+      } as unknown as SDKMessage
+
+      expect(mapMessage(message)).toEqual([{ type: 'background_tasks', taskIds: ['a0', 'b1'] }])
+    })
+  })
+
+  /*
    * A compaction, in the shape a live session actually sends.
    *
    * `sdk.d.ts` declares `compact_metadata` with `pre_tokens` and `post_tokens`;

@@ -60,6 +60,11 @@ export function installOctopusStub(): Api {
       onData: vi.fn(subscription),
       onExit: vi.fn(subscription)
     },
+    tasks: {
+      list: vi.fn(() => ok([])),
+      stop: vi.fn(() => ok(undefined)),
+      onChanged: vi.fn(subscription)
+    },
     chats: {
       list: vi.fn(() => ok([])),
       open: vi.fn(() => ok(chatFixture())),
@@ -96,7 +101,7 @@ export function installOctopusStub(): Api {
       models: vi.fn(() => ok([])),
       commands: vi.fn(() => ok([])),
       agents: vi.fn(() => ok([])),
-      pendingPermission: vi.fn(() => ok(null)),
+      pendingPermissions: vi.fn(() => ok([])),
       usage: vi.fn(() => ok({ context: null, autoCompact: null })),
       answerPermission: vi.fn(() => ok(undefined)),
       answerElicitation: vi.fn(() => ok(undefined)),

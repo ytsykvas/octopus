@@ -63,6 +63,23 @@ describe('reading a tool’s structured output', () => {
     expect(readToolOutput(silent)).not.toHaveProperty('report')
   })
 
+  // The call asked for an alias, or for nothing; the CLI says what it ran.
+  it('reads the model a subagent ran on', () => {
+    expect(readToolOutput({ status: 'async_launched', resolvedModel: 'claude-haiku-5-5' })).toEqual(
+      { stats: { background: true, model: 'claude-haiku-5-5' } }
+    )
+    expect(
+      readToolOutput({
+        status: 'completed',
+        content: [],
+        totalToolUseCount: 1,
+        totalTokens: 10,
+        totalDurationMs: 5,
+        resolvedModel: 'claude-opus-5-5'
+      })
+    ).toEqual({ stats: { toolUses: 1, tokens: 10, durationMs: 5, model: 'claude-opus-5-5' } })
+  })
+
   it('marks a subagent sent away to run on its own', () => {
     expect(readToolOutput({ status: 'async_launched', agentId: 'a-1' })).toEqual({
       stats: { background: true }
