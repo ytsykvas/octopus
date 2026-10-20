@@ -899,6 +899,8 @@ export const en = {
     renameTab: 'Rename…',
     forkTab: 'Continue in a new conversation',
     forkTabHint: 'The agent keeps what it remembers of this one.',
+    copyTranscript: 'Copy transcript',
+    copyTranscriptHint: 'To brief another conversation on this one.',
     closeTab: 'Close conversation',
     /* The agent's own task list, pinned above the field while it has work
        left. The progress reads "3 of 7". */

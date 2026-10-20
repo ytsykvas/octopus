@@ -689,6 +689,8 @@ export const uk: Translation = {
     renameTab: 'Перейменувати…',
     forkTab: 'Продовжити в новій розмові',
     forkTabHint: 'Агент збереже те, що пам’ятає з цієї.',
+    copyTranscript: 'Скопіювати транскрипцію',
+    copyTranscriptHint: 'Щоб ввести в курс іншу розмову.',
     closeTab: 'Закрити розмову',
     todos: 'Завдання',
     todosProgress: '{{done}} з {{total}}',

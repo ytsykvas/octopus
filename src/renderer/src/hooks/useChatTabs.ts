@@ -8,6 +8,7 @@ import {
   DEFAULT_AGENT,
   MAX_CHATS_PER_WORKSPACE
 } from '@core/chats.js'
+import { formatHandoff } from '@core/handoff.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
 
@@ -53,6 +54,13 @@ export interface ChatTabsController {
   readonly canCreate: boolean
   readonly create: () => Promise<void>
   readonly fork: (chatId: string) => Promise<void>
+  /**
+   * Puts the conversation on the clipboard as text another one can start from.
+   *
+   * Says whether it got there: the strip is what shows the answer, because the
+   * menu it was asked from has already closed.
+   */
+  readonly copyTranscript: (chatId: string, title: string) => Promise<boolean>
   readonly close: (chatId: string) => Promise<void>
   /**
    * The conversations closed in this workspace, most recently closed first.
@@ -409,6 +417,27 @@ export function useChatTabs(
     [load, select, describeFailure]
   )
 
+  const copyTranscript = useCallback(
+    async (chatId: string, title: string): Promise<boolean> => {
+      report.current(null)
+      const history = await window.octopus.chats.history(chatId)
+
+      if (!history.ok) {
+        report.current(describeFailure(history))
+        return false
+      }
+
+      try {
+        await navigator.clipboard.writeText(formatHandoff(history.value, { title }))
+        return true
+      } catch {
+        // A refused clipboard is real — an unfocused document is enough.
+        return false
+      }
+    },
+    [describeFailure]
+  )
+
   const refreshHistory = useCallback(async () => {
     const id = shown.current
     /* v8 ignore next */
@@ -522,6 +551,7 @@ export function useChatTabs(
     canCreate: tabs.length < MAX_CHATS_PER_WORKSPACE,
     create,
     fork,
+    copyTranscript,
     close,
     history,
     refreshHistory,
