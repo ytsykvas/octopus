@@ -17,6 +17,7 @@ import {
   type PermissionAsk,
   type PermissionOutcome,
   READ_ONLY_TOOLS,
+  GUARD_FAILED,
   refusingBash,
   type SessionOptions,
   promptTokens,
@@ -28,6 +29,7 @@ import {
   toIsoTimestamp
 } from './agent.js'
 import type { AgentEvent } from './events.js'
+import { PUBLISH_DENY_RULES, PUBLISH_REFUSAL } from './publishGuard.js'
 import type { SkillVisibility } from './skills.js'
 
 /**
@@ -1825,14 +1827,59 @@ describe('refusingBash', () => {
   const refuse = (command: string): string | null =>
     command.startsWith('git checkout -b') ? 'Stay on the branch.' : null
 
-  /** Runs the one hook on a call, as the SDK would. */
-  async function decide(input: unknown): Promise<unknown> {
-    const [matcher] = refusingBash(refuse).PreToolUse ?? []
-    expect(matcher?.matcher).toBe('Bash')
+  /** Runs the hook under the matcher at `index` on a call, as the SDK would. */
+  async function decide(
+    input: unknown,
+    guard: ((command: string) => string | null) | undefined = refuse,
+    index = 0
+  ): Promise<unknown> {
+    const matcher = (refusingBash(guard).PreToolUse ?? [])[index]
     const [hook] = matcher?.hooks ?? []
     if (!hook) throw new Error('no hook')
     return hook(input as never, 'tool-1', { signal: new AbortController().signal })
   }
+
+  const denied = (reason: string): unknown => ({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason
+    }
+  })
+
+  it('stands in front of every tool that runs a shell command, and every MCP tool', () => {
+    expect(refusingBash().PreToolUse?.map((matcher) => matcher.matcher)).toEqual([
+      'Bash|Monitor|PowerShell',
+      '^mcp__'
+    ])
+  })
+
+  it('refuses a push before the caller is asked, and with no caller at all', async () => {
+    await expect(decide({ tool_input: { command: 'git push' } })).resolves.toEqual(
+      denied(PUBLISH_REFUSAL)
+    )
+    await expect(decide({ tool_input: { command: 'git push' } }, undefined)).resolves.toEqual(
+      denied(PUBLISH_REFUSAL)
+    )
+    await expect(decide({ tool_input: { command: 'git status' } }, undefined)).resolves.toEqual({})
+  })
+
+  it('refuses an MCP tool that would open a pull request, and lets one that reads', async () => {
+    await expect(
+      decide({ tool_name: 'mcp__github__create_pull_request' }, refuse, 1)
+    ).resolves.toEqual(denied(PUBLISH_REFUSAL))
+    await expect(decide({ tool_name: 'mcp__github__get_issue' }, refuse, 1)).resolves.toEqual({})
+    await expect(decide({}, refuse, 1)).resolves.toEqual({})
+  })
+
+  it('refuses when the guard itself throws, rather than letting the call through', async () => {
+    const broken = (): string | null => {
+      throw new Error('broken')
+    }
+    await expect(decide({ tool_input: { command: 'ls' } }, broken)).resolves.toEqual(
+      denied(GUARD_FAILED)
+    )
+  })
 
   it('denies a command the guard refuses, with its reason', async () => {
     await expect(
@@ -1854,9 +1901,18 @@ describe('refusingBash', () => {
     await expect(decide({ tool_input: {} })).resolves.toEqual({})
   })
 
-  it('reaches the session only when there is a guard', () => {
-    expect(fakeAgent().agent.options().hooks).toBeUndefined()
-    expect(fakeAgent({}, { refuseBash: refuse }).agent.options().hooks).toHaveProperty('PreToolUse')
+  it('reaches every session, locked against publishing with or without a branch guard', () => {
+    for (const options of [
+      fakeAgent().agent.options(),
+      fakeAgent({}, { refuseBash: refuse }).agent.options()
+    ]) {
+      expect(options.hooks).toHaveProperty('PreToolUse')
+      expect(options.disallowedTools).toEqual([...PUBLISH_DENY_RULES])
+      const env = options.env as Record<string, string | undefined> | undefined
+      expect(env?.GIT_CONFIG_COUNT).toBe('7')
+      // The app's own environment underneath, or the agent loses its PATH.
+      expect(env?.PATH).toBe(process.env.PATH)
+    }
   })
 })
 

@@ -245,9 +245,17 @@ const api = {
     history: (chatId: string): Promise<Result<ChatEntry[]>> =>
       ipcRenderer.invoke('chats:history', chatId) as Promise<Result<ChatEntry[]>>,
 
-    /** Sends a message. The answer arrives through `onEvent`, not here. */
-    send: (chatId: string, text: string): Promise<Result<string | null>> =>
-      ipcRenderer.invoke('chats:send', chatId, text) as Promise<Result<string | null>>,
+    /**
+     * Sends a message. The answer arrives through `onEvent`, not here.
+     * `publishAfter` is the pull request pane's alone: the app pushes once the
+     * turn ends well, since the agent may not.
+     */
+    send: (
+      chatId: string,
+      text: string,
+      sending?: { publishAfter?: boolean }
+    ): Promise<Result<string | null>> =>
+      ipcRenderer.invoke('chats:send', chatId, text, sending) as Promise<Result<string | null>>,
 
     /** Stops the current turn; the session stays open for the next message. */
     interrupt: (chatId: string): Promise<Result<void>> =>

@@ -14,6 +14,7 @@
 import type { UUID } from 'node:crypto'
 
 import type {
+  HookCallback,
   ModelInfo,
   Options,
   PermissionUpdate,
@@ -31,6 +32,7 @@ import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
+import { agentEnv, PUBLISH_DENY_RULES, refusesPublish, refusesPublishTool } from './publishGuard.js'
 import { readToolOutput } from './toolOutput.js'
 import type { SkillOverride, SkillVisibility } from './skills.js'
 import type { UsageReport } from './usage.js'
@@ -527,6 +529,100 @@ export function toAgentCommands(commands: readonly SlashCommand[]): AgentCommand
  */
 export const DENIED = 'The user declined this action in octopus.'
 
+/** The tools that run a shell command, each carrying it in `tool_input.command`. */
+const SHELL_TOOLS = 'Bash|Monitor|PowerShell'
+
+/** The one field of a shell call the guards read. */
+const ShellCallSchema = z.object({ tool_input: z.object({ command: z.string() }) })
+/** The one field of an MCP call the guard reads. */
+const ToolCallSchema = z.object({ tool_name: z.string() })
+
+/** What the agent is told when a guard itself failed, so nothing it was asked to check ran. */
+export const GUARD_FAILED = 'Octopus could not check this call, so it was not run.'
+
+/**
+ * A hook that denies when `guard` names a reason — and when `guard` throws.
+ *
+ * An exception escaping a hook is not a decision the SDK promises to treat as a
+ * refusal, and a guard that fails open is not a guard.
+ */
+function denying(guard: (input: unknown) => string | null): HookCallback {
+  return (input) => {
+    let reason: string | null
+    try {
+      reason = guard(input)
+    } catch {
+      reason = GUARD_FAILED
+    }
+    return Promise.resolve(
+      reason === null
+        ? {}
+        : {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'deny' as const,
+              permissionDecisionReason: reason
+            }
+          }
+    )
+  }
+}
+
+/**
+ * The SDK hooks that keep the agent from publishing, and put `refuse` in front
+ * of every shell command as well.
+ *
+ * A hook rather than a check in `canUseTool`, which is consulted last: a
+ * command the user's own allow rules cover, or one `auto` mode approves, never
+ * reaches it. A `PreToolUse` refusal holds in every mode, and inside subagents.
+ * `Monitor` is matched beside `Bash` because it runs a shell command too.
+ */
+export function refusingBash(
+  refuse?: (command: string) => string | null
+): NonNullable<Options['hooks']> {
+  return {
+    PreToolUse: [
+      {
+        matcher: SHELL_TOOLS,
+        hooks: [
+          denying((input) => {
+            const call = ShellCallSchema.safeParse(input)
+            if (!call.success) return null
+            const { command } = call.data.tool_input
+            return refusesPublish(command) ?? refuse?.(command) ?? null
+          })
+        ]
+      },
+      {
+        matcher: '^mcp__',
+        hooks: [
+          denying((input) => {
+            const call = ToolCallSchema.safeParse(input)
+            return call.success ? refusesPublishTool(call.data.tool_name) : null
+          })
+        ]
+      }
+    ]
+  }
+}
+
+/**
+ * What every session the app starts carries so its agent cannot publish: the
+ * hooks, the CLI's own deny rules, and an environment where `git push` fails.
+ * Three layers because none is a boundary on its own — `publishGuard.ts`.
+ */
+export function publishLocked(
+  refuse?: (command: string) => string | null
+): Pick<Options, 'hooks' | 'disallowedTools' | 'env'> {
+  return {
+    hooks: refusingBash(refuse),
+    disallowedTools: [...PUBLISH_DENY_RULES],
+    // The SDK replaces the environment outright when given one, so the app's
+    // own is the base: without it the agent would lose its PATH and HOME.
+    env: agentEnv(process.env)
+  }
+}
+
 /**
  * What a question withdrawn rather than answered says.
  *
@@ -534,45 +630,6 @@ export const DENIED = 'The user declined this action in octopus.'
  * nobody declined anything — the turn the question belonged to ended first, so
  * saying "the user declined" would teach it something untrue about the user.
  */
-/** The one field of a Bash call the guard reads. */
-const BashCallSchema = z.object({ tool_input: z.object({ command: z.string() }) })
-
-/**
- * The SDK hooks that put `refuse` in front of every shell command.
- *
- * A hook rather than a check in `canUseTool`, which is consulted last: a
- * command the user's own allow rules cover, or one `auto` mode approves, never
- * reaches it. A `PreToolUse` refusal holds in every mode.
- */
-export function refusingBash(
-  refuse: (command: string) => string | null
-): NonNullable<Options['hooks']> {
-  return {
-    PreToolUse: [
-      {
-        matcher: 'Bash',
-        hooks: [
-          (input) => {
-            const call = BashCallSchema.safeParse(input)
-            const reason = call.success ? refuse(call.data.tool_input.command) : null
-            return Promise.resolve(
-              reason === null
-                ? {}
-                : {
-                    hookSpecificOutput: {
-                      hookEventName: 'PreToolUse' as const,
-                      permissionDecision: 'deny' as const,
-                      permissionDecisionReason: reason
-                    }
-                  }
-            )
-          }
-        ]
-      }
-    ]
-  }
-}
-
 export const ABANDONED = 'The turn this question belonged to ended before it was answered.'
 
 /**
@@ -687,7 +744,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
       allowedTools: [...options.allowedTools],
-      ...(hooks.refuseBash && { hooks: refusingBash(hooks.refuseBash) }),
+      ...publishLocked(hooks.refuseBash),
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,

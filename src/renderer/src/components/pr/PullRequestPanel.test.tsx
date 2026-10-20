@@ -1301,6 +1301,23 @@ describe('what the tab can do about a request', () => {
     expect(sent).toContain('#7')
     expect(sent).toContain(anna.branch)
     expect(sent).toContain('main')
+    // A review changes nothing, so nothing is pushed after it.
+    expect(vi.mocked(octopus().chats.send).mock.calls[0]?.[2]).toEqual({ publishAfter: false })
+  })
+
+  // The agent may not push, so a button that changes the branch has the app
+  // push once the turn is done — the press was the user asking for it.
+  it('asks the app to push after the checks are fixed', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Fix the checks' }))
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(octopus().chats.send).mock.calls[0]?.[2]).toEqual({ publishAfter: true })
+    })
   })
 
   it('has a button for each of the reviews it can ask for', async () => {

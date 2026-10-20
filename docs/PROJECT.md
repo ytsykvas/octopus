@@ -547,6 +547,8 @@ The config keeps the switch — nothing / `project` / `user + project + local` �
 
 **One workspace is one branch and one pull request.** The request, the Changes tab and the push button are all found by the workspace's branch, so an agent that leaves it — `git checkout -b`, `git switch`, `git branch -m`, `gh pr create --head` elsewhere — empties all three while its work goes to a request the app cannot see. Every session in a worktree, the pull-request draft's included, carries a `PreToolUse` hook on `Bash` (`branchGuard.ts`) that refuses such a command whatever the mode or the user's allow rules say, and tells the agent why; going back to the workspace's branch, and `git checkout` of a file, still run. It is a refusal with its reason, as `DENIED` is, not text put into the agent's context — so it stays inside §4. A command hidden in a script the agent runs is out of its reach; the Changes tab's warning about HEAD is what catches that.
 
+**The agent never publishes; the user does.** Pushing, and opening, merging or closing a pull request, belong to the pull request pane, which runs `git` and `gh` itself (§12.4). An agent that pushed on its own ended a conversation with work on the remote nobody had looked at, and a line in its instructions saying not to was read and then not always kept — reported against the CLI too. Every session carries three layers (`publishGuard.ts`, through `publishLocked` in `agent.ts`), because none of them is a boundary on its own: a `PreToolUse` hook on every tool that runs a shell command and on every MCP tool, which reads the command — inside `bash -c` and `$(…)` as well — and refuses a push, a `gh pr create`/`merge`/`close`, a writing `gh api` call or a GitHub MCP tool that would do the same, failing closed if it throws; the CLI's own deny rules for the plain forms, which hold in every mode; and an environment in which git rewrites every push URL, and only push URLs, to a scheme it cannot open, so a push from a script on disk fails too while `fetch` works. Measured against a live session: with all three, the push was refused and the agent stopped; with the environment alone, `git push`, `git -C . push`, `bash -c 'git push'` and a script that pushed all failed, and the commit and the fetch went through. What is left is deliberate: an agent set on it can clear the environment it was given, and the forms of that which are known — `GIT_CONFIG_COUNT`, `pushInsteadOf`, `pushurl` — are refused by name. Only an OS sandbox would close it, at the price of the network the agent reads CI logs with. The refusal names the pane, so the agent commits and stops rather than looking for another way.
+
 **A repository is asked about before it is believed.** Loading every source means
 a clone can pre-approve tools through `permissions.allow`, run shell commands
 around every tool call through `hooks`, and start servers through `.mcp.json`.
@@ -646,9 +648,14 @@ the app never sees a token (§10.9).
   **Add to chat** puts a remark into the composer beside the diff's own notes,
   so a question can be typed under it rather than the app asking one. A thread
   is replied to, resolved and reopened from the same list.
-- **The four prepared messages** — answer the review, review it, review it with
-  several subagents, resolve the conflicts — each the project's own instruction
-  plus a line naming the request, sent as one visible user message (§4).
+- **The five prepared messages** — fix the checks, answer the review, review it,
+  review it with several subagents, resolve the conflicts — each the project's
+  own instruction plus a line naming the request, sent as one visible user
+  message (§4). The agent may not push (§12.3), so the three that change the
+  branch tell it to commit and stop, and the app pushes once that turn has ended
+  well: not after a failure, a Stop or a message still queued behind it. The
+  press was the user asking for the push; a message typed into the chat never
+  carries one.
 - **Merging**, with the three methods, and never `--delete-branch`: a worktree
   is checked out on that branch. A zero exit is not proof of a merge — `gh`
   enables auto-merge instead when a required check has not passed — so the pane

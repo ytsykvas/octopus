@@ -22,6 +22,7 @@ import {
 import {
   AutoCompactWindowSchema,
   ChatMessageSchema,
+  SendOptionsSchema,
   ChatTitleSchema,
   EditedPlanSchema,
   EffortChoiceSchema,
@@ -946,8 +947,10 @@ export function registerIpc(
     attempt(() => service.chatHistory(chatId))
   )
 
-  host.handle('chats:send', (_event, chatId: string, text: unknown) =>
-    attempt(() => service.sendToChat(chatId, ChatMessageSchema.parse(text)))
+  host.handle('chats:send', (_event, chatId: string, text: unknown, sending: unknown) =>
+    attempt(() =>
+      service.sendToChat(chatId, ChatMessageSchema.parse(text), SendOptionsSchema.parse(sending))
+    )
   )
 
   host.handle('chats:interrupt', (_event, chatId: string) =>

@@ -183,8 +183,10 @@ maintainer asks for each step (the hard rule below):
 branch and one pull request: the app finds both by the workspace's branch
 (`octopus/<name>`), so commit on it. A second
 independent change belongs in another workspace. Agents the app runs are refused
-the branch switch outright (`branchGuard.ts`); this line is for the ones it does
-not run. The recipe below is for a plain checkout:
+the branch switch outright (`branchGuard.ts`), and cannot push or open, merge or
+close a pull request at all (`publishGuard.ts`) — even when asked to: commit, and
+the maintainer publishes from the pull request pane. This line is for the agents
+it does not run. The recipe below is for a plain checkout:
 
 ```bash
 git checkout -b fix/short-description
@@ -298,7 +300,7 @@ Monaco diff, notifications, Linux builds, auth service.
 
 Pull requests are not: the right pane runs the whole loop through `gh` —
 committing, opening, the checks, the review, answering and settling a review
-thread, six prepared prompts and merging (§12.4 of docs/PROJECT.md).
+thread, five prepared prompts and merging (§12.4 of docs/PROJECT.md).
 
 ## Native modules
 

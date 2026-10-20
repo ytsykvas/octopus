@@ -884,6 +884,9 @@ export function isOpenChat(chat: { readonly closedAt: string | null }): boolean 
  */
 export const ChatMessageSchema = z.string().min(1).max(100_000)
 
+/** How a message is sent, as accepted from the renderer — `sendToChat`. */
+export const SendOptionsSchema = z.object({ publishAfter: z.boolean().optional() }).optional()
+
 /**
  * A name as accepted from the renderer.
  *

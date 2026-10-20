@@ -102,9 +102,10 @@ A check on this pull request has failed. Find out why before changing anything.
 - Fix the cause. A test weakened, skipped or deleted to make a run green is a
   failure hidden rather than fixed — if the test itself is wrong, say so rather
   than quietly changing it.
-- Run the same thing locally before pushing. The command the workflow runs is in
-  the workflow file, and a round trip through CI costs minutes.
-- Commit and push, so the checks run again on the fix.
+- Run the same thing locally before committing. The command the workflow runs is
+  in the workflow file, and a round trip through CI costs minutes.
+- Commit the fix and stop. Do not push: Octopus pushes the branch once you are
+  done, and the checks run again on it then.
 `,
 
   addressReview: `# Answering a review
@@ -116,7 +117,8 @@ Read the review on this pull request and deal with it.
 - Where a comment is right, make the change. Where it is not, say so in the
   reply rather than changing the code to end the conversation.
 - Where a comment asks a question, answer it — do not treat it as a request.
-- Leave the branch committed and pushed, so the request carries the answer.
+- Leave the branch committed and stop. Do not push: Octopus pushes it once you
+  are done, so the request carries the answer.
 `,
 
   review: `# Reviewing this change
@@ -157,7 +159,8 @@ This branch conflicts with its base. Merge the base in and settle it.
   Taking one side wholesale is how a change quietly disappears.
 - Build and run the tests afterwards. A file that merged cleanly can still be
   wrong once both changes are in it.
-- Commit and push, so the request stops showing a conflict.
+- Commit the merge and stop. Do not push: Octopus pushes the branch once you are
+  done, and the request stops showing a conflict then.
 `
 }
 

@@ -339,6 +339,10 @@ describe('draftPullRequest', () => {
     expect(captured.allowedTools).not.toContain('Bash')
     // A command one of the user's allow rules lets through still meets the guard.
     expect(await refusalOf(captured, 'git checkout -b other')).toContain('feature/thing')
+    // And it cannot publish, by any of the three layers.
+    expect(await refusalOf(captured, 'git push')).toContain('does not let the agent publish')
+    expect(captured.disallowedTools).toContain('Bash(git push *)')
+    expect((captured.env as Record<string, string>).GIT_CONFIG_COUNT).toBeDefined()
   })
 
   // Left out, the SDK loads every source — an unapproved repository's hooks

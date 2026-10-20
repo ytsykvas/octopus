@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { gitCommand, parseCommand } from './shellCommand.js'
+
 /**
  * Keeps an agent on its workspace's branch.
  *
@@ -22,29 +24,6 @@ const CHECKOUT_LEAVES = new Set(['-b', '-B', '--orphan', '--detach'])
 const SWITCH_LEAVES = new Set(['-c', '-C', '--create', '--force-create', '--orphan', '--detach'])
 /** `git branch` flags that rename — and the branch renamed is the one the app tracks. */
 const BRANCH_RENAMES = new Set(['-m', '-M', '--move'])
-
-/** One shell word per element, quotes dropped; good enough for the forms above. */
-function words(part: string): string[] {
-  return part
-    .trim()
-    .split(/\s+/u)
-    .filter((word) => word !== '')
-    .map((word) => word.replace(/^['"]|['"]$/gu, ''))
-}
-
-/** What follows `git <command>`, past git's own options, or null for anything else. */
-function gitCommand(argv: readonly string[]): { command: string; args: string[] } | null {
-  if (argv[0] !== 'git') return null
-
-  let at = 1
-  for (let word = argv[at]; word?.startsWith('-') === true; word = argv[at]) {
-    // The two that take their value as the next word.
-    at += word === '-C' || word === '-c' ? 2 : 1
-  }
-
-  const command = argv[at]
-  return command === undefined ? null : { command, args: argv.slice(at + 1) }
-}
 
 /** The words that name something to move to: `-` alone is "the previous branch". */
 function targets(args: readonly string[]): string[] {
@@ -102,7 +81,7 @@ export function leavesBranch(
   branch: string,
   isPath: (arg: string) => boolean
 ): boolean {
-  return command.split(/&&|\|\||[;|\n]/u).some((part) => partLeaves(words(part), branch, isPath))
+  return parseCommand(command).segments.some((argv) => partLeaves(argv, branch, isPath))
 }
 
 /** What the agent is told, as the reason its command was refused. */

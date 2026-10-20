@@ -673,6 +673,11 @@ describe('arguments reach main unchanged', () => {
     expect(invoke).toHaveBeenCalledWith('projects:update', 'planner', { name: 'x' })
   })
 
+  it('passes the pull request pane’s publishAfter through with the message', () => {
+    method('chats', 'send')('c' as never, 'hi' as never, { publishAfter: true } as never)
+    expect(invoke).toHaveBeenCalledWith('chats:send', 'c', 'hi', { publishAfter: true })
+  })
+
   it('passes removal options through', () => {
     method('workspaces', 'remove')('planner/anna' as never, { force: true } as never)
     expect(invoke).toHaveBeenCalledWith('workspaces:remove', 'planner/anna', { force: true })

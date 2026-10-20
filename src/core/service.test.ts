@@ -4427,6 +4427,156 @@ describe('the agent chat', () => {
    * for the one that waited. Only `sendToChat` used to say `running`, so that
    * second turn ran under an idle tab with no Stop.
    */
+  /*
+   * The agent may not push (`publishGuard.ts`), so a pull request button that
+   * changes the branch has the app push once the turn it started is over. A
+   * message typed into the chat never does.
+   */
+  describe('a turn a pull request button started', () => {
+    const queued = (command_uuid: string, state: string): SDKMessage =>
+      ({
+        type: 'command_lifecycle',
+        command_uuid,
+        state,
+        uuid: 'frame',
+        session_id: 'sess-1'
+      }) as unknown as SDKMessage
+
+    /** A workspace whose git records every push rather than making it. */
+    async function recording(push: () => Promise<string> = () => Promise.resolve('')): Promise<
+      Awaited<ReturnType<typeof withWorkspace>> & {
+        chat: Awaited<ReturnType<OctopusService['openChat']>>
+        branch: string | undefined
+        pushes: string[][]
+      }
+    > {
+      const pushes: string[][] = []
+      const setup = await withWorkspace({
+        makeExec: (cwd, options) => {
+          const exec = gitIn(cwd, options)
+          return (args) => {
+            if (args[0] !== 'push') return exec(args)
+            pushes.push([...args])
+            return push()
+          }
+        }
+      })
+      const chat = await setup.service.openChat(setup.workspaceId)
+      const branch = (await setup.service.listWorkspaces(setup.projectId))[0]?.branch
+      return { ...setup, chat, branch, pushes }
+    }
+
+    /** Long enough for a push the last event started to have been made. */
+    const settled = (): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, 50))
+
+    it('is pushed by the app once it ends well', async () => {
+      const { service, chat, branch, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(pushes).toEqual([['push', '-u', 'origin', branch]])
+      })
+    })
+
+    it('is pushed once, for one turn only', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(pushes).toHaveLength(1)
+      })
+
+      await service.sendToChat(chat.id, 'and now something else')
+      agent().emit(resultMessage)
+      await settled()
+      expect(pushes).toHaveLength(1)
+    })
+
+    it('is never pushed for a message typed into the chat', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await settled()
+      expect(pushes).toEqual([])
+    })
+
+    it('is not pushed when the turn fails', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      agent().emit(initMessage)
+      agent().emit(abortedResultMessage)
+      agent().emit(resultMessage)
+      await settled()
+      expect(pushes).toEqual([])
+    })
+
+    // A session that died answers nothing more; the one started in its place
+    // was never asked to push, so a turn of its ending well pushes nothing.
+    it('is not pushed by the session that replaced the one it was sent to', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      agent().emit(initMessage)
+      agent().finish(new Error('the process died'))
+      await settled()
+
+      await service.setChatAutoCompact(chat.id, 400_000)
+      expect(agents).toHaveLength(2)
+      await service.sendToChat(chat.id, 'something else')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+      await settled()
+      expect(pushes).toEqual([])
+    })
+
+    it('is not pushed once it was stopped', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      agent().emit(initMessage)
+      await service.interruptChat(chat.id)
+      agent().emit(resultMessage)
+      await settled()
+      expect(pushes).toEqual([])
+    })
+
+    it('waits for the messages queued behind it before pushing', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      agent().emit(initMessage)
+      agent().emit(queued('waited', 'queued'))
+      agent().emit(resultMessage)
+      await settled()
+      expect(pushes).toEqual([])
+
+      agent().emit(queued('waited', 'started'))
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(pushes).toHaveLength(1)
+      })
+    })
+
+    it('says so in the conversation when the push fails', async () => {
+      const { service, chat, events } = await recording(() =>
+        Promise.reject(new Error('rejected: non-fast-forward'))
+      )
+      await service.sendToChat(chat.id, 'fix the checks', { publishAfter: true })
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            chatId: chat.id,
+            event: expect.objectContaining({ type: 'error' }) as unknown
+          })
+        )
+      })
+    })
+  })
+
   describe('a turn the agent starts from its queue', () => {
     const lifecycle = (command_uuid: string, state: string): SDKMessage =>
       ({

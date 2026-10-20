@@ -1303,8 +1303,17 @@ export interface OctopusService {
    * rewound to — or null for one that never reaches the agent. The window
    * draws the message before this returns, and without the id its line could
    * not be rewound until the history was read again.
+   *
+   * `publishAfter` is for the pull request pane's buttons alone: the agent may
+   * not push (`publishGuard.ts`), so when the turn a button started ends well,
+   * the app pushes the branch itself. A message typed into the chat never
+   * carries it.
    */
-  sendToChat(chatId: string, text: string): Promise<string | null>
+  sendToChat(
+    chatId: string,
+    text: string,
+    options?: { readonly publishAfter?: boolean | undefined }
+  ): Promise<string | null>
   /** Stops the current turn; the session stays open. */
   interruptChat(chatId: string): Promise<void>
   /** Sets how freely the chat works once it is working. */
@@ -1701,6 +1710,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * CLI refused — goes that second way, so this cannot grow.
    */
   const clearRequests = new Set<string>()
+
+  /**
+   * Conversations whose running turn a pull request button started, so the app
+   * pushes once it ends — `sendToChat`'s `publishAfter`. Emptied by the turn's
+   * end, a Stop, or the session closing, so an entry outlives no turn.
+   */
+  const publishAfterTurn = new Set<string>()
+
+  /** Pushes a conversation's branch for it, as the pane's own Push button would. */
+  async function publishTurn(chat: Chat): Promise<void> {
+    const workspace = requireWorkspace(chat.workspaceId)
+    await pushBranch(workspace.branch, makeExec(workspace.path))
+  }
 
   /**
    * Chats whose clearing turn has not ended yet.
@@ -2556,6 +2578,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       background(chat, setChatStatus(chat.id, event.ok ? 'idle' : 'error'))
     }
 
+    /*
+     * A turn a pull request button started, ended: the app pushes what it
+     * committed, since the agent may not. Only once the last queued message has
+     * been answered, and only on success — a failed turn's half-made commits are
+     * the user's to look at first, and the reason is already in the log.
+     */
+    if (event.type === 'result' && publishAfterTurn.has(chat.id) && !(event.ok && another)) {
+      publishAfterTurn.delete(chat.id)
+      if (event.ok) background(chat, publishTurn(chat))
+    }
     if (event.type === 'result') {
       background(chat, saveWriters(chat.workspaceId))
 
@@ -3047,8 +3079,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const session = sessions.get(chat.id)
     sessions.delete(chat.id)
     compaction.delete(chat.id)
-    // Its queue goes with its process.
+    // Its queue goes with its process, and so does a push promised for a turn
+    // it will now never finish — the next session's turns were asked nothing.
     heldMessages.delete(chat.id)
+    publishAfterTurn.delete(chat.id)
 
     // A session that ends mid-tool leaves an edit nobody will ever answer
     // for, and a question nobody will ever answer at all. Both go with it,
@@ -5666,7 +5700,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return readTranscript(chatId, dataRoot)
     },
 
-    async sendToChat(chatId, text) {
+    async sendToChat(chatId, text, sending) {
       // Not to a closed one: a window that has not heard it was closed would
       // otherwise start a session no tab and no status shows, editing the
       // worktree with nothing to stop it.
@@ -5830,6 +5864,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         clearRequests.add(chatId)
       }
       session.send(text, messageId)
+      if (sending?.publishAfter === true) publishAfterTurn.add(chatId)
 
       await setChatStatus(chatId, 'running')
       return messageId
@@ -5846,6 +5881,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       abandonPermissions(chatId)
       abandonElicitations(chatId)
       abandonEdits(chatId)
+      // Stopped is not finished: work cut off half way is not pushed.
+      publishAfterTurn.delete(chatId)
 
       // Nothing running is not a failure — the button is simply ahead of the
       // agent, which finished between the render and the click.

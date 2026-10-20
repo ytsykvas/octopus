@@ -2174,6 +2174,13 @@ instruction plus a line naming the request. Drawn twice rather than once around 
 guard: without a conversation the press could not do anything, and a branch
 nothing can reach is a claim nothing tests.
 
+**Three of them end in a push the app makes.** The agent may not push (§12.3 of
+`PROJECT.md`), so fixing the checks, answering the review and resolving the
+conflicts send `publishAfter`, and the branch goes up once that turn has ended
+well. A failed turn, a Stop or a message still queued keeps it back, and a push
+that fails says so in the conversation. The two reviews change nothing and push
+nothing.
+
 Three of the five appear only when they would mean something: answering a review
 once somebody has left one, resolving a conflict against one, fixing the checks
 while one of them is red. Which condition a prompt waits on is a word on its row

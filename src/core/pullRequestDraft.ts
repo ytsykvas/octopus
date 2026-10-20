@@ -17,7 +17,7 @@ import {
   mapMessage,
   type QueryFn,
   READ_ONLY_TOOLS,
-  refusingBash,
+  publishLocked,
   userMessage
 } from './agent.js'
 import { branchGuard } from './branchGuard.js'
@@ -263,7 +263,7 @@ export async function draftPullRequest(
         settingSources: [...options.settingSources],
         // The user's allow rules come in with `settingSources`, and one of
         // them could still run a command that leaves the branch.
-        hooks: refusingBash(branchGuard(() => options.branch, options.cwd)),
+        ...publishLocked(branchGuard(() => options.branch, options.cwd)),
         ...(options.model === null ? {} : { model: options.model })
       }
     })

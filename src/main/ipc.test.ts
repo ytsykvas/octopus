@@ -2480,6 +2480,10 @@ describe('the agent chat', () => {
     await expect(invoke('chats:send', chatId, 'x'.repeat(100_001))).resolves.toMatchObject({
       ok: false
     })
+    // What decides whether the app pushes after the turn is not taken on trust either.
+    await expect(
+      invoke('chats:send', chatId, 'hi', { publishAfter: 'yes' })
+    ).resolves.toMatchObject({ ok: false })
   })
 
   it('rejects a permission mode it does not know', async () => {
