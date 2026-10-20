@@ -57,7 +57,7 @@ describe('useWorkspaceScripts', () => {
     const { result } = renderHook(() => useWorkspaceScripts(['planner/anna'], null))
 
     await waitFor(() => {
-      expect(result.current.failures.size).toBe(1)
+      expect(result.current.failures.has('planner/anna')).toBe(true)
     })
     expect(result.current.scripts.size).toBe(0)
   })
@@ -65,18 +65,24 @@ describe('useWorkspaceScripts', () => {
   it('reads again when a project settings dialog closes', async () => {
     // Where a script is written for the first time, which changes the answer
     // without changing the list.
-    const { rerender } = renderHook(
+    const { result, rerender } = renderHook(
       ({ key }: { key: string | null }) => useWorkspaceScripts(['planner/anna'], key),
       { initialProps: { key: null as string | null } }
     )
 
     await waitFor(() => {
-      expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(1)
+      expect(result.current.scripts.size).toBe(1)
     })
+    expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(1)
 
     rerender({ key: 'planner' })
     await waitFor(() => {
       expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(2)
+    })
+    // The second read's answer has to land before the test ends, or it
+    // is applied to a window that is already gone.
+    await waitFor(() => {
+      expect(result.current.scripts.size).toBe(1)
     })
   })
 
@@ -84,12 +90,18 @@ describe('useWorkspaceScripts', () => {
     const { result } = renderHook(() => useWorkspaceScripts(['planner/anna'], null))
 
     await waitFor(() => {
-      expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(1)
+      expect(result.current.scripts.size).toBe(1)
     })
+    expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(1)
 
-    result.current.refresh()
+    act(() => {
+      result.current.refresh()
+    })
     await waitFor(() => {
       expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(2)
+    })
+    await waitFor(() => {
+      expect(result.current.scripts.size).toBe(1)
     })
   })
 
@@ -139,8 +151,6 @@ describe('useWorkspaceScripts', () => {
     expect(result.current.scripts.has('planner/anna')).toBe(false)
   })
 
-  // Waits for the state, not the call: the answer lands after the call, and a
-  // test that ended first left React a render to run once jsdom was gone.
   it('does not keep an answer that arrived after the list changed', async () => {
     const { result, rerender } = renderHook(
       ({ ids }: { ids: string[] }) => useWorkspaceScripts(ids, null),
@@ -151,6 +161,9 @@ describe('useWorkspaceScripts', () => {
 
     rerender({ ids: ['planner/bob'] })
 
+    // Waits for the answer itself, not for the question: this is the last test
+    // in the file, and an answer still on its way when it ends is applied after
+    // the window has been torn down — an unhandled error `test:race` turns red.
     await waitFor(() => {
       expect(result.current.scripts.has('planner/bob')).toBe(true)
     })
