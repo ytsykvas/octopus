@@ -82,6 +82,11 @@ export const uk: Translation = {
     statusRunning: 'Агент тут працює',
     statusWaiting: 'Чекає на твою відповідь',
     statusError: 'Останній хід завершився помилкою',
+    lineRunning: 'Працює',
+    lineWaiting: 'Чекає на відповідь',
+    lineError: 'Помилка',
+    lineDone: 'Завершено',
+    lineIdle: 'Не розпочато',
     missingHint: 'Прибрано повз застосунок. Запис можна безпечно видалити.',
     headElsewhere:
       'Робоче дерево не на гілці {{branch}}. Робота, зроблена тут, не потрапить у гілку цього воркспейса.',

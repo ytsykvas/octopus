@@ -91,6 +91,13 @@ export const en = {
     statusRunning: 'The agent is working here',
     statusWaiting: 'Waiting for your answer',
     statusError: 'The last turn ended in an error',
+    // The same states in a word, for the second line of a row, where the
+    // sentences above would not fit beside the file count.
+    lineRunning: 'Working',
+    lineWaiting: 'Needs your answer',
+    lineError: 'Error',
+    lineDone: 'Finished',
+    lineIdle: 'Not started',
     missingHint: 'Removed outside the app. Removing the entry is safe.',
     /* The Changes tab and the pull request pane both say this at length; here
        there is room for a tooltip, and it must not contradict them. Names the

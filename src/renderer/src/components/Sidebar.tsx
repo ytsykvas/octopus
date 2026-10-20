@@ -118,7 +118,7 @@ export function Sidebar({
                 {t('workspaces.emptyForProject')}
               </p>
             ) : (
-              <ul className="space-y-px">
+              <ul className="space-y-1.5">
                 {workspaces.map((workspace) => (
                   <li key={workspace.id}>
                     <WorkspaceRow
