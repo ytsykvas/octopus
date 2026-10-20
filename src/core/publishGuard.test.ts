@@ -129,6 +129,7 @@ describe('refusesPublish', () => {
     "$'gi\\x74' push",
     "$'g\\x69\\c@ignored't push",
     "$'\\c' ; git push #'",
+    "$'\\c\\\\' ; git push #'",
     'git config include.path /tmp/more.gitconfig',
     'git config http.extraHeader "Authorization: x"'
   ])('refuses %s', (command) => {

@@ -45,6 +45,8 @@ describe('parseCommand', () => {
     ).toEqual([['gh', 'gh', 'gh', 'gh', 'a\tb', '\\q', "it's", 'a\\']])
     // `\c` before the closing quote does not take the quote with it.
     expect(words(`$'a\\c' b`)).toEqual([['a\\', 'b']])
+    // `\c\\` takes one backslash; the quote after the other closes the string.
+    expect(words(`$'\\c\\\\' x`)).toEqual([['\u001c\\', 'x']])
   })
 
   it("ends a $'…' string at a NUL and keeps an octal escape to one byte, as bash does", () => {

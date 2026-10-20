@@ -42,7 +42,7 @@ const ANSI_ESCAPES: Readonly<Record<string, string>> = {
   "'": "'",
   '"': '"',
   '?': '?',
-  // `\c` with nothing to control before the closing quote: bash keeps the backslash.
+  // `\c` at the end of the string, with nothing to control: bash keeps the backslash.
   c: '\\'
 }
 
@@ -51,18 +51,24 @@ const ANSI_ESCAPES: Readonly<Record<string, string>> = {
  * its closing quote is. `$'\x67h'` is `gh` to the shell, so it is `gh` here.
  */
 function ansiQuoted(text: string, from: number): { value: string; end: number } {
+  // Where the string ends, found first and as bash finds it: a backslash takes
+  // the character after it, whatever that is, so no escape can reach the quote.
+  let end = from
+  while (end < text.length && text.charAt(end) !== "'") end += text.charAt(end) === '\\' ? 2 : 1
+  end = Math.min(end, text.length)
+  const body = text.slice(from, end)
+
   let value = ''
-  let ended = false
-  let at = from
-  while (at < text.length && text.charAt(at) !== "'") {
-    if (text.charAt(at) !== '\\') {
-      if (!ended) value += text.charAt(at)
+  let at = 0
+  while (at < body.length) {
+    if (body.charAt(at) !== '\\') {
+      value += body.charAt(at)
       at += 1
       continue
     }
     const escape =
-      /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c([^'])|(.))/su.exec(
-        text.slice(at + 1)
+      /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c(.)|(.))/su.exec(
+        body.slice(at + 1)
       )
     const [whole = '', hex, unicode, wide, octal, control, single = ''] = escape ?? []
     const code = hex ?? unicode ?? wide
@@ -76,17 +82,13 @@ function ansiQuoted(text: string, from: number): { value: string; end: number } 
             ? // `\cX` is control-X; `\c@` is a NUL.
               control.toUpperCase().charCodeAt(0) & 0x1f
             : null
-    // The shell's string ends at a NUL — what follows never reaches the command —
-    // though the quote that closes it is still found past escapes.
-    if (point === 0) ended = true
-    else if (!ended) {
-      // An escape bash does not know keeps its backslash: `\q` stays `\q`.
-      value +=
-        point === null ? (ANSI_ESCAPES[single] ?? `\\${single}`) : String.fromCodePoint(point)
-    }
+    // The shell's string ends at a NUL: what follows never reaches the command.
+    if (point === 0) break
+    // An escape bash does not know keeps its backslash: `\q` stays `\q`.
+    value += point === null ? (ANSI_ESCAPES[single] ?? `\\${single}`) : String.fromCodePoint(point)
     at += 1 + whole.length
   }
-  return { value, end: at }
+  return { value, end }
 }
 
 interface PendingHeredoc {
