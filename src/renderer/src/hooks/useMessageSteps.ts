@@ -2,28 +2,20 @@ import { type RefObject, useCallback, useState } from 'react'
 
 import { placedMarkers } from './markers.js'
 
-export type StepDirection = 'up' | 'down'
+type StepDirection = 'up' | 'down'
 
 /**
- * How far below the scroller's top edge a stepped-to message lands: clear of
- * the floating row of buttons and the day chip, which would otherwise sit over
- * its first line.
+ * Where a stepped-to message lands below the scroller's top: under the floating
+ * row (`top-2` 8px + `size-7` 28px) with 8px to spare.
  */
 export const STEP_MARGIN = 44
 
-/*
- * A message that has just been stepped to sits on the line give or take a
- * sub-pixel, and the next press has to move on from it rather than land on it
- * again.
- */
+/** A message just stepped to sits on the line give or take a sub-pixel; the next press must move past it. */
 const SLACK = 4
 
 /**
- * Where the message one step away from `line` sits, or null when there is none.
- *
- * `tops` are in document order. Up is the last message above the line, down
- * the first below it — so from the middle of a long answer, up is the message
- * that asked for it and down the one that followed.
+ * Where the message one step from `line` sits, or null. `tops` are in document
+ * order; up is the last above the line, down the first below it.
  */
 export function messageStep(
   tops: readonly number[],
@@ -54,7 +46,7 @@ export function useMessageSteps(scroller: RefObject<HTMLElement | null>): {
   const [canUp, setCanUp] = useState(false)
   const [canDown, setCanDown] = useState(false)
 
-  const measure = useCallback(() => {
+  const read = useCallback(() => {
     const element = scroller.current
     if (!element) return null
 
@@ -66,30 +58,28 @@ export function useMessageSteps(scroller: RefObject<HTMLElement | null>): {
   }, [scroller])
 
   const update = useCallback(() => {
-    const measured = measure()
-    if (measured === null) return
+    const geometry = read()
+    if (geometry === null) return
 
-    const { element, line, tops } = measured
-    // The last messages of a log can never reach the line: the scroller stops
-    // at its end first, and a button that then does nothing is a broken one.
+    const { element, line, tops } = geometry
+    // The scroller stops at either end before the first or last messages can
+    // reach the line, and a button that then does nothing is a broken one.
+    const atStart = element.scrollTop < 1
     const atEnd = element.scrollHeight - element.scrollTop - element.clientHeight < 1
-    setCanUp(messageStep(tops, line, 'up') !== null)
+    setCanUp(!atStart && messageStep(tops, line, 'up') !== null)
     setCanDown(!atEnd && messageStep(tops, line, 'down') !== null)
-  }, [measure])
+  }, [read])
 
   const step = useCallback(
     (direction: StepDirection) => {
-      const measured = measure()
-      // The buttons live inside the scroller, so they cannot be pressed
-      // without one; the guard is for the type.
-      /* v8 ignore next */
-      if (measured === null) return
+      const geometry = read()
+      if (geometry === null) return
 
-      const { element, line, tops } = measured
+      const { element, line, tops } = geometry
       const target = messageStep(tops, line, direction)
       if (target !== null) element.scrollTop += target - line
     },
-    [measure]
+    [read]
   )
 
   return { canUp, canDown, update, step }

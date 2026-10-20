@@ -11,8 +11,6 @@ describe('the message one step away', () => {
     expect(messageStep(tops, 0, 'down')).toBe(300)
   })
 
-  // A message stepped to sits on the line give or take a sub-pixel, on
-  // either side of it.
   it('moves on from a message sitting on the line', () => {
     expect(messageStep(tops, -18.5, 'up')).toBe(-400)
     expect(messageStep(tops, -21.5, 'down')).toBe(300)
@@ -26,9 +24,10 @@ describe('the message one step away', () => {
 })
 
 describe('stepping through the log', () => {
-  /** A 300px scroller over a 2000px log, holding messages at the given tops. */
-  function scrollerWith(tops: readonly number[]): HTMLElement {
+  /** A 300px scroller over a 2000px log, scrolled to `at`, holding messages at the given tops. */
+  function scrollerWith(tops: readonly number[], at = 1000): HTMLElement {
     const scroller = document.createElement('div')
+    scroller.scrollTop = at
     scroller.getBoundingClientRect = () => ({ top: 0 }) as DOMRect
     Object.defineProperty(scroller, 'clientHeight', { value: 300 })
     Object.defineProperty(scroller, 'scrollHeight', { value: 2000 })
@@ -56,9 +55,23 @@ describe('stepping through the log', () => {
     expect(result.current.canDown).toBe(true)
   })
 
+  it('offers neither step at the ends of the log, where no message can reach the line', () => {
+    const top = { current: scrollerWith([-200, 500], 0) }
+    const end = { current: scrollerWith([-200, 500], 1700) }
+    const atTop = renderHook(() => useMessageSteps(top)).result
+    const atEnd = renderHook(() => useMessageSteps(end)).result
+
+    act(() => {
+      atTop.current.update()
+      atEnd.current.update()
+    })
+
+    expect(atTop.current).toMatchObject({ canUp: false, canDown: true })
+    expect(atEnd.current).toMatchObject({ canUp: true, canDown: false })
+  })
+
   it('brings the message to the line under the floating row', () => {
     const ref = { current: scrollerWith([-200, 500]) }
-    ref.current.scrollTop = 1000
     const { result } = renderHook(() => useMessageSteps(ref))
 
     act(() => {
@@ -70,7 +83,6 @@ describe('stepping through the log', () => {
 
   it('stays put with nowhere to go', () => {
     const ref = { current: scrollerWith([500]) }
-    ref.current.scrollTop = 1000
     const { result } = renderHook(() => useMessageSteps(ref))
 
     act(() => {
@@ -80,12 +92,12 @@ describe('stepping through the log', () => {
     expect(ref.current.scrollTop).toBe(1000)
   })
 
-  // Before the log has been drawn there is nothing to measure.
   it('offers nothing while there is no scroller', () => {
     const { result } = renderHook(() => useMessageSteps({ current: null }))
 
     act(() => {
       result.current.update()
+      result.current.step('up')
     })
 
     expect(result.current.canUp).toBe(false)

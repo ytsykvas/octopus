@@ -16,6 +16,7 @@ import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { EnvProfileSwitch } from '../EnvProfileSwitch.js'
+import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { stopTask, useChatTasks, useMainWorking } from '../../hooks/backgroundTasks.js'
@@ -371,10 +372,9 @@ export function ChatSession({
   const [farFromEnd, setFarFromEnd] = useState(false)
   const dayAtTop = useDayAtTop(scroller)
   const steps = useMessageSteps(scroller)
-  // Everything floating over the log that is read off where it has scrolled to.
   const { update: updateDayAtTop } = dayAtTop
   const { update: updateSteps } = steps
-  const measure = useCallback(() => {
+  const measureFloating = useCallback(() => {
     updateDayAtTop()
     updateSteps()
   }, [updateDayAtTop, updateSteps])
@@ -468,6 +468,9 @@ export function ChatSession({
   // Rows grow after they are first laid out — markdown, highlighted code — so
   // the scroll above can land short of the end. Followed here for as long as the
   // reader has not left the end.
+  //
+  // The scroller is watched as well, and both re-read what floats over the log:
+  // a row opened, or the window resized, moves the log without a scroll event.
   useEffect(() => {
     const element = scroller.current
     const content = logContent.current
@@ -475,19 +478,26 @@ export function ChatSession({
 
     const observer = new ResizeObserver(() => {
       if (pinnedToBottom.current) element.scrollTop = element.scrollHeight
+      measureFloating()
     })
     observer.observe(content)
+    observer.observe(element)
     return () => {
       observer.disconnect()
     }
     // The wrapper only exists once there is a log to hold.
-  }, [visible, isEmpty])
+  }, [visible, isEmpty, measureFloating])
 
   // Read again whenever the log can have moved under a still scroller: a turn
   // landing, or the tab coming back. Hidden, there is nothing to measure.
   useEffect(() => {
-    if (visible) measure()
-  }, [visible, chat.entries, measure])
+    if (visible) measureFloating()
+  }, [visible, chat.entries, measureFloating])
+
+  const hasUserMessage = useMemo(
+    () => chat.entries.some((entry) => entry.role === 'user'),
+    [chat.entries]
+  )
 
   return (
     <AgentsContext.Provider value={agentTasks}>
@@ -513,57 +523,59 @@ export function ChatSession({
               // "at the bottom" is rarely exactly zero.
               pinnedToBottom.current = distance < 40
               setFarFromEnd(distance > element.clientHeight)
-              measure()
+              measureFloating()
             }}
             // Never sideways: wide content (code, tables, diffs) scrolls inside its own box.
             className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
           >
-            {/* The day on screen, floating once its own separator has scrolled
-            away. Sticky only works on a child of the scroller itself, and
+            {/* One floating row: "show every step", the day on screen once its
+            own separator has scrolled away, and the steps between the user's
+            messages. Sticky only works on a child of the scroller itself, and
             zero-height so it lays nothing out — it draws over the log rather
-            than pushing it down. `items-start`, or the row's default stretch
-            squeezes the pill to the zero height of its row. */}
-            {dayAtTop.day !== null && (
-              <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-center overflow-visible">
-                <DayChip day={dayAtTop.day} floating />
-              </div>
-            )}
-            {/* "Show every step" at the left and the steps between the user's own
-            messages at the right, in the same floating arrangement as the day:
-            they stay in reach however far up the log has been read. */}
+            than pushing it down. A column each, so the day cannot draw over a
+            button in a narrow pane; `items-start`, or the row's stretch squeezes
+            the pill to the row's zero height. */}
             {chat.entries.length > 0 && (
-              <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-between overflow-visible px-3">
-                <FloatingButton
-                  label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
-                  pressed={expansion.all}
-                  onClick={toggleExpansion}
-                >
-                  {expansion.all ? (
-                    <ChevronsDownUp aria-hidden size={14} />
-                  ) : (
-                    <ChevronsUpDown aria-hidden size={14} />
-                  )}
-                </FloatingButton>
-                <div className="flex gap-1">
-                  <FloatingButton
-                    label={t('chat.previousMessage')}
-                    disabled={!steps.canUp}
-                    onClick={() => {
-                      steps.step('up')
-                    }}
+              <div className="pointer-events-none sticky top-2 z-10 grid h-0 grid-cols-[1fr_auto_1fr] items-start gap-2 overflow-visible px-3">
+                <div className="justify-self-start">
+                  <IconButton
+                    floating
+                    label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
+                    pressed={expansion.all}
+                    onClick={toggleExpansion}
                   >
-                    <ChevronUp aria-hidden size={14} />
-                  </FloatingButton>
-                  <FloatingButton
-                    label={t('chat.nextMessage')}
-                    disabled={!steps.canDown}
-                    onClick={() => {
-                      steps.step('down')
-                    }}
-                  >
-                    <ChevronDown aria-hidden size={14} />
-                  </FloatingButton>
+                    {expansion.all ? (
+                      <ChevronsDownUp aria-hidden size={14} />
+                    ) : (
+                      <ChevronsUpDown aria-hidden size={14} />
+                    )}
+                  </IconButton>
                 </div>
+                <div>{dayAtTop.day !== null && <DayChip day={dayAtTop.day} floating />}</div>
+                {hasUserMessage && (
+                  <div className="flex gap-1 justify-self-end">
+                    <IconButton
+                      floating
+                      label={t('chat.previousMessage')}
+                      disabled={!steps.canUp}
+                      onClick={() => {
+                        steps.step('up')
+                      }}
+                    >
+                      <ChevronUp aria-hidden size={14} />
+                    </IconButton>
+                    <IconButton
+                      floating
+                      label={t('chat.nextMessage')}
+                      disabled={!steps.canDown}
+                      onClick={() => {
+                        steps.step('down')
+                      }}
+                    >
+                      <ChevronDown aria-hidden size={14} />
+                    </IconButton>
+                  </div>
+                )}
               </div>
             )}
             {/* Streaming counts as content even before the first entry lands:
@@ -816,35 +828,5 @@ export function ChatSession({
         </div>
       </AgentLogContext.Provider>
     </AgentsContext.Provider>
-  )
-}
-
-/** A quiet square button floating over the log, clickable through its row. */
-function FloatingButton({
-  label,
-  onClick,
-  pressed,
-  disabled = false,
-  children
-}: {
-  readonly label: string
-  readonly onClick: () => void
-  /** Set only on a toggle; a plain action has no pressed state to announce. */
-  readonly pressed?: boolean
-  readonly disabled?: boolean
-  readonly children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className="border-line bg-surface text-ink-faint hover:text-ink focus-ring pointer-events-auto flex size-7 items-center justify-center rounded-[var(--radius-control)] border transition-colors disabled:pointer-events-none disabled:opacity-40"
-    >
-      {children}
-    </button>
   )
 }

@@ -934,8 +934,8 @@ export const uk: Translation = {
     expandAll: 'Показати всі кроки (⌘O)',
     collapseAll: 'Згорнути всі кроки (⌘O)',
     jumpToEnd: 'До кінця розмови',
-    previousMessage: 'Попереднє ваше повідомлення',
-    nextMessage: 'Наступне ваше повідомлення',
+    previousMessage: 'Ваше попереднє повідомлення',
+    nextMessage: 'Ваше наступне повідомлення',
     workingElapsed: 'Працює… {{elapsed}}',
 
     changeEverywhere: 'замінено всюди',
