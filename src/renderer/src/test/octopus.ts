@@ -46,6 +46,9 @@ export function installOctopusStub(): Api {
       ),
       signOut: vi.fn(() => ok(true))
     },
+    resources: {
+      read: vi.fn(() => ok({ total: { cpu: 0, memory: 0 }, app: { cpu: 0, memory: 0 }, parts: [] }))
+    },
     terminal: {
       create: vi.fn(() => ok('term-1')),
       write: vi.fn(),
@@ -355,6 +358,7 @@ function defaultConfig(): Config {
     theme: 'system' as const,
     language: 'en' as const,
     rightPanelOpen: true,
+    statusBarOpen: true,
     notificationSound: true,
     rightPanelTab: 'diff' as const,
     rightPanelWidth: 360,

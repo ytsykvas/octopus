@@ -32,7 +32,14 @@ function waitingIn(workspace: WorkspaceView, chatId: string): WorkspaceView {
     ...workspace,
     status: 'waiting_permission',
     chats: [
-      { id: chatId, agent: 'claude', title: null, status: 'waiting_permission', started: true }
+      {
+        id: chatId,
+        agent: 'claude',
+        title: null,
+        status: 'waiting_permission',
+        started: true,
+        turnStartedAt: null
+      }
     ]
   }
 }
@@ -161,8 +168,22 @@ describe('the list of notices', () => {
       ...ANNA,
       status: 'running',
       chats: [
-        { id: 'c-1', agent: 'claude', title: null, status: 'running', started: true },
-        { id: 'c-2', agent: 'claude', title: null, status: 'running', started: true }
+        {
+          id: 'c-1',
+          agent: 'claude',
+          title: null,
+          status: 'running',
+          started: true,
+          turnStartedAt: null
+        },
+        {
+          id: 'c-2',
+          agent: 'claude',
+          title: null,
+          status: 'running',
+          started: true,
+          turnStartedAt: null
+        }
       ]
     }
 

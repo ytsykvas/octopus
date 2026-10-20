@@ -39,6 +39,7 @@ import { useCodeNotes } from './hooks/useCodeNotes.js'
 import { useDiffComments } from './hooks/useDiffComments.js'
 import { useFileRevert } from './hooks/useFileRevert.js'
 import { useBranchRequests } from './hooks/useBranchRequests.js'
+import { useResources } from './hooks/useResources.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
 import { useFileTabs } from './hooks/useFileTabs.js'
@@ -49,6 +50,7 @@ import { useWorkspaceScripts } from './hooks/useWorkspaceScripts.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 import { useAttention } from './hooks/useAttention.js'
 import { AttentionToasts } from './components/AttentionToasts.js'
+import { StatusBar, type StatusTarget } from './components/statusBar/StatusBar.js'
 
 /**
  * The project strip's width, `w-15` in `ProjectTabs`.
@@ -67,6 +69,9 @@ const DEFAULT_SIDEBAR_WIDTH = 240
  * than a fresh `[]` per render, which would recompute every conversation's tip.
  */
 const NO_TIPS: readonly string[] = []
+
+/** The status bar folded away watches no other project; one array, not a fresh `[]`. */
+const NO_PROJECTS: readonly string[] = []
 
 /**
  * Whether a keystroke landed somewhere that takes text.
@@ -465,6 +470,22 @@ export function App(): React.JSX.Element {
     showRightPanel(true, { rightPanelTab: 'pullRequest' })
   }, [showRightPanel])
 
+  /*
+   * Takes the window to a workspace of any project — what a notice and every
+   * row of the status bar lead to. The conversation first when one is named: it
+   * is remembered per workspace, and the workspace opens on whichever tab it
+   * remembers.
+   */
+  const openWorkspace = useCallback(
+    (target: StatusTarget) => {
+      if (target.chatId != null) conversations.selectIn(target.workspaceId, target.chatId)
+      setSelectedProjectId(target.projectId)
+      setSelectedWorkspaceId(target.workspaceId)
+      if (target.pullRequest === true) showPullRequests()
+    },
+    [conversations, showPullRequests]
+  )
+
   const removeProject = useCallback(
     async (projectId: string) => {
       const count = (workspaces.byProject.get(projectId) ?? []).length
@@ -708,7 +729,23 @@ export function App(): React.JSX.Element {
      without a network call per row. Below `openProjectId` rather than beside
      the other stores, because that is where the project it is about is worked
      out — and there is no early return between here and them. */
-  const branchRequests = useBranchRequests(openProjectId)
+  const statusBarOpen = config?.statusBarOpen ?? false
+  // Every project rides on the open project's clock while the bar shows them,
+  // and only then: folding the bar away folds the reads away with it.
+  const branchRequests = useBranchRequests(
+    openProjectId,
+    statusBarOpen ? projects.all.map((project) => project.id) : NO_PROJECTS
+  )
+  const resources = useResources(statusBarOpen)
+
+  // The conversation in front of the selected workspace, for the bar's count of
+  // the turn under way.
+  const frontChatId =
+    conversations.tabs.find((tab) => tab.key === conversations.activeKey)?.id ?? null
+  const frontChat =
+    selectedWorkspace === null || frontChatId === null
+      ? null
+      : { workspace: selectedWorkspace, chatId: frontChatId }
 
   /*
    * Whether the header offers to open a request.
@@ -791,7 +828,10 @@ export function App(): React.JSX.Element {
   const dismissedTips = config?.dismissedTips ?? NO_TIPS
 
   return (
-    <div className="bg-canvas text-ink flex h-full flex-col">
+    // The bar's height as a variable, for what floats in the corner above it.
+    <div
+      className={`bg-canvas text-ink flex h-full flex-col ${statusBarOpen ? '[--status-bar-height:22px]' : ''}`}
+    >
       {/* One strip across the window rather than one per pane. The traffic
           lights sit at its left, and nothing behind them belongs to a project:
           a pane's colour reaching up here made the window look like it started
@@ -1172,16 +1212,25 @@ export function App(): React.JSX.Element {
         />
       </div>
 
+      {config && (
+        <StatusBar
+          open={statusBarOpen}
+          onToggle={(open) => void updateConfig({ statusBarOpen: open })}
+          projects={projects.all}
+          workspaces={workspaces.flat}
+          requests={branchRequests.byProject}
+          resources={resources}
+          front={frontChat}
+          onOpen={openWorkspace}
+        />
+      )}
+
       <AttentionToasts
         toasts={attention.toasts}
         projects={projects.all}
         workspaces={workspaces.flat}
         onShow={(notice) => {
-          // The tab first: it is remembered per workspace, and the workspace
-          // opens on whichever tab it remembers.
-          conversations.selectIn(notice.workspaceId, notice.chatId)
-          setSelectedProjectId(notice.projectId)
-          setSelectedWorkspaceId(notice.workspaceId)
+          openWorkspace(notice)
         }}
         onDismiss={attention.dismiss}
       />

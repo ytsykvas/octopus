@@ -32,6 +32,7 @@ import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import { liveAgents } from '@core/backgroundTasks.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
+import { turnStartedAt } from '@core/turns.js'
 
 import { Button } from '../Button.js'
 import { DisclosureButton } from '../Disclosure.js'
@@ -52,8 +53,7 @@ import {
   elicitationsByRequest,
   type LogBlock,
   planCalls,
-  retractedUuids,
-  turnStartedAt
+  retractedUuids
 } from './logBlocks.js'
 import { nameOf } from './agentFormat.js'
 import { AgentsContext } from './agentTasks.js'

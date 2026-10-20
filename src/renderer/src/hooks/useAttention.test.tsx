@@ -65,7 +65,9 @@ describe('useAttention', () => {
     const working = (status: 'running' | 'idle'): WorkspaceView => ({
       ...ANNA,
       status,
-      chats: [{ id: 'c-1', agent: 'claude', title: null, status, started: true }]
+      chats: [
+        { id: 'c-1', agent: 'claude', title: null, status, started: true, turnStartedAt: null }
+      ]
     })
     const { result, rerender } = render(BEN.id, [working('running'), BEN])
 
@@ -140,7 +142,8 @@ describe('useAttention', () => {
           agent: 'claude' as const,
           title: null,
           status: 'waiting_permission' as const,
-          started: true
+          started: true,
+          turnStartedAt: null
         }
       ]
     }

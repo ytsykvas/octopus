@@ -266,7 +266,10 @@ dev server but not the Electron process it spawned, and the next `npm run dev`
 then loses the lock and quits. What you see is the **old build** focused and no
 error at all. Kill it by path — `pkill -f "octopus/node_modules/electron/dist"`
 — and never by `Electron`, which matches every other Electron app running,
-this editor included. Then wait until `pgrep` on that path comes back empty
+this editor included. An agent the dev app runs is the exception: it inherits
+`ELECTRON_EXEC_PATH`, so a copy it starts from a workspace runs the main
+checkout's binary, that path matches the maintainer's own copy too, and its
+copy is stopped by pid (`lsof -a -d cwd -p <pid>` names the worktree). Then wait until `pgrep` on that path comes back empty
 before starting again: it takes a few seconds to exit, and a `sleep 2` was not
 enough — the new copy lost the lock and the old build stayed on screen.
 The packaged `/Applications/Octopus.app` holds the same lock: while it is open,

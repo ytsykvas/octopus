@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next'
 
 import { useNow } from '../../hooks/useNow.js'
-
 import { formatDuration } from './format.js'
 
 /**

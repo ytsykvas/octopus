@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 
@@ -46,82 +46,122 @@ const INTERVAL_MS = 60_000
  */
 export const RUNNING_INTERVAL_MS = 15_000
 
+/** One project's answer: its requests by branch, and whether the list came back full. */
+interface ProjectAnswer {
+  readonly byBranch: ReadonlyMap<string, BranchRequest>
+  readonly capped: boolean
+}
+
+const NONE: ReadonlyMap<string, BranchRequest> = new Map()
+
+export interface BranchRequestsController extends BranchRequestController {
+  /**
+   * Every watched project's requests by branch, the open one's included.
+   *
+   * What the status bar counts across projects. A project that has not
+   * answered yet is absent, which the bar reads as "nothing to count".
+   */
+  readonly byProject: ReadonlyMap<string, ReadonlyMap<string, BranchRequest>>
+}
+
 /**
- * Every branch of a project that has a pull request.
+ * Every branch of a project that has a pull request — the open one, and any
+ * others the caller wants watched.
  *
- * One call for the whole project rather than one per workspace. The mark is
- * wanted on every row of the list at once, and a read per row would be a
- * network call per row on every refresh — which is the reason the pull request
- * tab reads only for the workspace showing.
+ * One call per project rather than one per workspace. The mark is wanted on
+ * every row of the list at once, and a read per row would be a network call
+ * per row on every refresh — which is the reason the pull request tab reads
+ * only for the workspace showing.
+ *
+ * The other projects are the status bar's, and they ride on this one clock
+ * rather than a second poller of its own: two of them would ask `gh` about the
+ * open project twice a minute. The caller passes them only while the bar is
+ * showing, so folding the bar away is folding the cost away with it.
  *
  * A failure is silent. There is no room on a list row to explain one, the tab
  * says it properly when it is opened, and a repository with no GitHub remote is
  * an ordinary thing rather than a fault: what the reader sees is no marks,
  * which is also what a project with no requests looks like.
  */
-export function useBranchRequests(projectId: string | null): BranchRequestController {
-  const [byBranch, setByBranch] = useState<ReadonlyMap<string, BranchRequest>>(new Map())
-  const [capped, setCapped] = useState(false)
-  const [answered, setAnswered] = useState(false)
+export function useBranchRequests(
+  projectId: string | null,
+  alsoWatch: readonly string[] = []
+): BranchRequestsController {
+  /*
+   * Kept per project, so the open project's view is a lookup rather than a
+   * reset: a list showing the previous project's marks for a frame would put a
+   * green branch beside a workspace that has no request at all, and a lookup
+   * by the project now open cannot.
+   */
+  const [answers, setAnswers] = useState<ReadonlyMap<string, ProjectAnswer>>(new Map())
 
   /** Bumped to ask again, which is the whole of what `refresh` does. */
   const [nonce, setNonce] = useState(0)
-
-  /*
-   * Which project the map above describes.
-   *
-   * Compared during render rather than reconciled in an effect: a list showing
-   * the previous project's marks for a frame would be putting a green branch
-   * beside a workspace that has no request at all.
-   */
-  const [shownId, setShownId] = useState(projectId)
-
-  if (projectId !== shownId) {
-    setShownId(projectId)
-    setByBranch(new Map())
-    setCapped(false)
-    setAnswered(false)
-  }
 
   const refresh = useCallback(() => {
     setNonce((count) => count + 1)
   }, [])
 
+  /*
+   * The watched set as one string, so a caller handing a fresh array each
+   * render with the same projects in it does not restart every read.
+   */
+  const watched = [...new Set([...(projectId === null ? [] : [projectId]), ...alsoWatch])].join(
+    '\n'
+  )
+
   useEffect(() => {
-    if (projectId === null) return
+    if (watched === '') return
 
     let stopped = false
-    let timer: ReturnType<typeof setTimeout> | undefined
+    const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
-    const read = async (): Promise<void> => {
-      const result = await window.octopus.projects.pullRequests(projectId)
+    const read = async (id: string): Promise<void> => {
+      const result = await window.octopus.projects.pullRequests(id)
       if (stopped) return
 
-      // A refusal counts too: a repository with no GitHub remote never answers,
-      // and waiting on it would take the header's shortcut away for good.
-      setAnswered(true)
+      // A refusal is an answer too: a repository with no GitHub remote never
+      // gives another, and waiting on it would take the header's shortcut away
+      // for good.
+      const answer: ProjectAnswer = result.ok
+        ? {
+            byBranch: new Map(result.value.requests.map((request) => [request.branch, request])),
+            capped: result.value.capped
+          }
+        : { byBranch: NONE, capped: false }
+      setAnswers((current) => new Map(current).set(id, answer))
 
-      let running = false
-      if (result.ok) {
-        setByBranch(new Map(result.value.requests.map((request) => [request.branch, request])))
-        setCapped(result.value.capped)
-        running = result.value.requests.some((request) => request.checks === 'running')
-      }
+      const running = [...answer.byBranch.values()].some((request) => request.checks === 'running')
 
       // Rescheduled from the answer rather than run on an interval, so a slow
       // reply never has a second read stacked on top of it — and a refusal is
       // retried on the same clock rather than giving up for the session.
-      timer = setTimeout(() => void read(), running ? RUNNING_INTERVAL_MS : INTERVAL_MS)
+      timers.set(
+        id,
+        setTimeout(() => void read(id), running ? RUNNING_INTERVAL_MS : INTERVAL_MS)
+      )
     }
 
-    void read()
+    for (const id of watched.split('\n')) void read(id)
 
     return () => {
       stopped = true
-      clearTimeout(timer)
+      for (const timer of timers.values()) clearTimeout(timer)
     }
     // `nonce` is not read in here; it is what makes a refresh re-run the effect.
-  }, [projectId, nonce])
+  }, [watched, nonce])
 
-  return { byBranch, capped, answered, refresh }
+  const open = projectId === null ? undefined : answers.get(projectId)
+  const byProject = useMemo(
+    () => new Map([...answers].map(([id, answer]) => [id, answer.byBranch])),
+    [answers]
+  )
+
+  return {
+    byBranch: open?.byBranch ?? NONE,
+    capped: open?.capped ?? false,
+    answered: open !== undefined,
+    refresh,
+    byProject
+  }
 }

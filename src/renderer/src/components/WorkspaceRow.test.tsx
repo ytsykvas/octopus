@@ -122,21 +122,24 @@ describe('WorkspaceRow', () => {
             agent: 'claude' as const,
             title: null,
             status: 'running' as const,
-            started: true
+            started: true,
+            turnStartedAt: null
           },
           {
             id: 'chat-2',
             agent: 'claude' as const,
             title: null,
             status: 'waiting_permission' as const,
-            started: true
+            started: true,
+            turnStartedAt: null
           },
           {
             id: 'chat-3',
             agent: 'claude' as const,
             title: null,
             status: 'idle' as const,
-            started: true
+            started: true,
+            turnStartedAt: null
           }
         ]
       })
@@ -158,8 +161,22 @@ describe('WorkspaceRow', () => {
       workspace: workspaceView('anna', {
         status: 'idle',
         chats: [
-          { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle', started: true },
-          { id: 'chat-2', agent: 'claude' as const, title: null, status: 'idle', started: false }
+          {
+            id: 'chat-1',
+            agent: 'claude' as const,
+            title: null,
+            status: 'idle',
+            started: true,
+            turnStartedAt: null
+          },
+          {
+            id: 'chat-2',
+            agent: 'claude' as const,
+            title: null,
+            status: 'idle',
+            started: false,
+            turnStartedAt: null
+          }
         ]
       })
     })
@@ -175,8 +192,22 @@ describe('WorkspaceRow', () => {
       workspace: workspaceView('anna', {
         status: 'error',
         chats: [
-          { id: 'chat-1', agent: 'claude' as const, title: null, status: 'error', started: true },
-          { id: 'chat-2', agent: 'claude' as const, title: null, status: 'running', started: false }
+          {
+            id: 'chat-1',
+            agent: 'claude' as const,
+            title: null,
+            status: 'error',
+            started: true,
+            turnStartedAt: null
+          },
+          {
+            id: 'chat-2',
+            agent: 'claude' as const,
+            title: null,
+            status: 'running',
+            started: false,
+            turnStartedAt: null
+          }
         ]
       })
     })
@@ -195,14 +226,16 @@ describe('WorkspaceRow', () => {
             agent: 'claude' as const,
             title: null,
             status: 'error' as const,
-            started: true
+            started: true,
+            turnStartedAt: null
           },
           {
             id: 'chat-2',
             agent: 'claude' as const,
             title: null,
             status: 'idle' as const,
-            started: true
+            started: true,
+            turnStartedAt: null
           }
         ]
       })
@@ -222,7 +255,8 @@ describe('WorkspaceRow', () => {
             agent: 'claude' as const,
             title: null,
             status: 'running' as const,
-            started: true
+            started: true,
+            turnStartedAt: null
           }
         ]
       })
@@ -412,7 +446,14 @@ describe('WorkspaceRow', () => {
         workspace: workspaceView('anna', {
           status: 'idle',
           chats: [
-            { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle', started: true }
+            {
+              id: 'chat-1',
+              agent: 'claude' as const,
+              title: null,
+              status: 'idle',
+              started: true,
+              turnStartedAt: null
+            }
           ]
         })
       })
@@ -426,7 +467,14 @@ describe('WorkspaceRow', () => {
         workspace: workspaceView('anna', {
           status: 'idle',
           chats: [
-            { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle', started: false }
+            {
+              id: 'chat-1',
+              agent: 'claude' as const,
+              title: null,
+              status: 'idle',
+              started: false,
+              turnStartedAt: null
+            }
           ]
         })
       })

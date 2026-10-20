@@ -48,7 +48,15 @@ export const testEnv = {
    * `homedir()` reads `HOME` on macOS and Linux, so pointing it at a scratch
    * directory turns that class of mistake from damage into a missing file.
    */
-  HOME: join(tmpdir(), 'octopus-tests-home')
+  HOME: join(tmpdir(), 'octopus-tests-home'),
+  /*
+   * The identity a commit falls back to once `HOME` has taken `~/.gitconfig`
+   * away. Without it git guesses one from the host name, which works on a CI
+   * runner and fails as "Author identity unknown" on a Mac whose name has no
+   * domain. `EMAIL` is git's last resort, below every `-c user.email` a test
+   * passes, so it fills the gap without overriding anything.
+   */
+  EMAIL: 'test@example.com'
 }
 
 export const thresholds = {

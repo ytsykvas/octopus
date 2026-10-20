@@ -48,8 +48,22 @@ const anna = workspaceView('anna')
 /** The same workspace with two conversations, one of which wrote the file. */
 const attributed = workspaceView('anna', {
   chats: [
-    { id: 'chat-1', agent: 'claude', title: null, status: 'idle', started: true },
-    { id: 'chat-2', agent: 'claude', title: null, status: 'idle', started: true }
+    {
+      id: 'chat-1',
+      agent: 'claude',
+      title: null,
+      status: 'idle',
+      started: true,
+      turnStartedAt: null
+    },
+    {
+      id: 'chat-2',
+      agent: 'claude',
+      title: null,
+      status: 'idle',
+      started: true,
+      turnStartedAt: null
+    }
   ],
   writers: { [FILE]: ['chat-1'] }
 })

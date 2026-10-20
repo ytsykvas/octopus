@@ -533,6 +533,10 @@ export interface BranchRequest {
   readonly state: PullRequestState
   readonly checks: ChecksSummary
   readonly url: string
+  readonly draft: boolean
+  readonly decision: ReviewDecision | null
+  readonly mergeable: Mergeable
+  readonly mergeState: MergeState
 }
 
 export const BranchListSchema = z.array(
@@ -541,7 +545,12 @@ export const BranchListSchema = z.array(
     number: z.number().int(),
     state: RemoteStateSchema,
     url: z.string(),
-    statusCheckRollup: RollupSchema
+    statusCheckRollup: RollupSchema,
+    isDraft: z.boolean(),
+    mergeable: z.string(),
+    mergeStateStatus: z.string(),
+    // `""` where there is none, as in the detail.
+    reviewDecision: z.string()
   })
 )
 
@@ -567,9 +576,46 @@ export function toBranchRequests(payload: BranchListPayload): BranchRequest[] {
       number: entry.number,
       state: STATES[entry.state],
       checks: summariseChecks(toChecks(entry.statusCheckRollup)),
-      url: entry.url
+      url: entry.url,
+      draft: entry.isDraft,
+      decision: DECISIONS[entry.reviewDecision] ?? null,
+      mergeable: MERGEABLE[entry.mergeable] ?? 'unknown',
+      mergeState: MERGE_STATES[entry.mergeStateStatus] ?? 'unknown'
     })
   }
 
   return requests
+}
+
+/** What stands between an open request and its merge, each a thing to go and fix. */
+export type StandingReason = 'checksFailed' | 'changesRequested' | 'conflict'
+
+/**
+ * Where an open request stands, as the status bar counts it.
+ *
+ * Three answers, because there are three things a reader does about one: go
+ * and fix it, go and merge it, or leave it alone while CI or a reviewer is
+ * still at work. "Ready" is strict on purpose — GitHub must say `clean` — so a
+ * request counted there is one the merge button would take now; anything it
+ * is unsure of waits under "pending" rather than being promised.
+ */
+export type Standing =
+  | { readonly kind: 'needsAction'; readonly reasons: readonly StandingReason[] }
+  | { readonly kind: 'ready' }
+  | { readonly kind: 'pending' }
+
+export function pullRequestStanding(request: BranchRequest): Standing {
+  const reasons: StandingReason[] = []
+  if (request.checks === 'failed') reasons.push('checksFailed')
+  if (request.decision === 'changesRequested') reasons.push('changesRequested')
+  if (request.mergeable === 'conflicting') reasons.push('conflict')
+  if (reasons.length > 0) return { kind: 'needsAction', reasons }
+
+  const ready =
+    !request.draft &&
+    request.checks !== 'running' &&
+    request.decision !== 'reviewRequired' &&
+    request.mergeable === 'mergeable' &&
+    request.mergeState === 'clean'
+  return ready ? { kind: 'ready' } : { kind: 'pending' }
 }
