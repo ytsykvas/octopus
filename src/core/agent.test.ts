@@ -671,9 +671,39 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)).toEqual([
       {
         type: 'commands_changed',
-        commands: [{ name: 'deploy', description: 'Ship it', argumentHint: '<env>', aliases: [] }]
+        commands: [
+          {
+            name: 'deploy',
+            description: 'Ship it',
+            argumentHint: '<env>',
+            aliases: [],
+            skill: false
+          }
+        ]
       }
     ])
+  })
+
+  // The skills come from the session's `init`, which `startSession` hands in.
+  it('marks the commands that are skills in a new command list', () => {
+    const message = {
+      type: 'system',
+      subtype: 'commands_changed',
+      commands: [
+        { name: 'review', description: '', argumentHint: '' },
+        { name: 'clear', description: '', argumentHint: '' }
+      ]
+    } as unknown as SDKMessage
+
+    const [event] = mapMessage(message, new Set(['review']))
+
+    expect(event).toEqual({
+      type: 'commands_changed',
+      commands: [
+        expect.objectContaining({ name: 'review', skill: true }),
+        expect.objectContaining({ name: 'clear', skill: false })
+      ]
+    })
   })
 
   // One assistant message carries several blocks, and each is an event: the
@@ -2338,6 +2368,16 @@ describe('how large the prompt was', () => {
 })
 
 describe('the commands a session offers', () => {
+  /** The message every turn opens with, naming the skills the session holds. */
+  const init = (skills: string[]): SDKMessage =>
+    ({
+      type: 'system',
+      subtype: 'init',
+      session_id: 'sess-1',
+      permissionMode: 'default',
+      skills
+    }) as unknown as SDKMessage
+
   it('asks the running session, since that is the only thing that knows', async () => {
     const { agent } = fakeAgent(
       {},
@@ -2352,15 +2392,106 @@ describe('the commands a session offers', () => {
         ]
       }
     )
+    agent.emit(init([]))
 
     await expect(agent.session.commands()).resolves.toEqual([
       {
         name: 'clear',
         description: 'Start a new session with empty context',
         argumentHint: '[name]',
-        aliases: ['reset', 'new']
+        aliases: ['reset', 'new'],
+        skill: false
       }
     ])
+  })
+
+  /*
+   * Asked before the first `init` had been read, every command would come back
+   * as not a skill, and the composer would offer nothing mid-sentence for the
+   * whole session. So the answer waits for it.
+   */
+  it('waits for the first init, so it can say which commands are skills', async () => {
+    const { agent } = fakeAgent(
+      {},
+      { commands: [{ name: 'review', description: '', argumentHint: '' }] }
+    )
+
+    const answer = agent.session.commands()
+    agent.emit(init(['review']))
+
+    await expect(answer).resolves.toEqual([
+      expect.objectContaining({ name: 'review', skill: true })
+    ])
+  })
+
+  // A synced skill is typed by its short name and listed by it, while its
+  // qualified name rides along as an alias — and either is the same skill.
+  it('recognises a skill the init names by one of its aliases', async () => {
+    const { agent } = fakeAgent(
+      {},
+      {
+        commands: [
+          {
+            name: 'xibo-hylab-support',
+            description: '',
+            argumentHint: '',
+            aliases: ['anthropic-skills:xibo-hylab-support']
+          }
+        ]
+      }
+    )
+    agent.emit(init(['anthropic-skills:xibo-hylab-support']))
+
+    await expect(agent.session.commands()).resolves.toEqual([
+      expect.objectContaining({ skill: true })
+    ])
+  })
+
+  // The latest init is the one that counts: a skill written while the session
+  // was open joins the list at the next turn.
+  it('reads the skills from the latest init', async () => {
+    const { agent } = fakeAgent(
+      {},
+      { commands: [{ name: 'review', description: '', argumentHint: '' }] }
+    )
+    agent.emit(init([]))
+    agent.emit(init(['review']))
+    await settle()
+
+    await expect(agent.session.commands()).resolves.toEqual([
+      expect.objectContaining({ skill: true })
+    ])
+  })
+
+  // A session that dies before saying anything must not leave the question
+  // hanging for ever: it is answered late, without skills, rather than never.
+  it('answers once the stream ends, even with no init at all', async () => {
+    const { agent } = fakeAgent(
+      {},
+      { commands: [{ name: 'review', description: '', argumentHint: '' }] }
+    )
+
+    const answer = agent.session.commands()
+    agent.finish()
+
+    await expect(answer).resolves.toEqual([expect.objectContaining({ skill: false })])
+  })
+
+  // And a list announced mid-session is marked against the same init.
+  it('marks the skills in a list the session announces', async () => {
+    const { agent, events } = fakeAgent()
+    agent.emit(init(['review']))
+    agent.emit({
+      type: 'system',
+      subtype: 'commands_changed',
+      commands: [{ name: 'review', description: '', argumentHint: '' }]
+    } as unknown as SDKMessage)
+    await settle()
+
+    expect(events).toContainEqual({
+      type: 'commands_changed',
+      commands: [expect.objectContaining({ name: 'review', skill: true })]
+    })
   })
 
   // Most commands have no other name, and the SDK simply leaves the field out.

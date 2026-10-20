@@ -832,14 +832,16 @@ describe('suggesting a command', () => {
     name: 'clear',
     description: 'Start a new session with empty context',
     argumentHint: '[name]',
-    aliases: ['reset']
+    aliases: ['reset'],
+    skill: false
   }
 
   const COMPACT: AgentCommand = {
     name: 'compact',
     description: 'Summarise the conversation so far',
     argumentHint: '',
-    aliases: []
+    aliases: [],
+    skill: false
   }
 
   const options = (): HTMLElement[] => screen.queryAllByRole('option')
@@ -1025,6 +1027,93 @@ describe('suggesting a command', () => {
     await user.hover(screen.getByRole('option', { name: /compact/ }))
 
     expect(screen.getByRole('option', { name: /compact/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  describe('in the middle of a sentence', () => {
+    const REVIEW: AgentCommand = {
+      name: 'review',
+      description: 'Review the change',
+      argumentHint: '',
+      aliases: [],
+      skill: true
+    }
+
+    /*
+     * A skill named after plain text is permission for Claude to run it, which
+     * is worth offering. A built-in there does nothing at all — `/clear` in a
+     * sentence clears nothing — so offering it would be offering a mistake.
+     */
+    it('offers only the skills', async () => {
+      const user = userEvent.setup()
+      renderComposer({ commands: [CLEAR, COMPACT, REVIEW] })
+
+      await user.type(field(), 'please use /')
+
+      expect(options()).toHaveLength(1)
+      expect(screen.getByText('/review')).toBeVisible()
+    })
+
+    it('still offers every command at the start', async () => {
+      const user = userEvent.setup()
+      renderComposer({ commands: [CLEAR, COMPACT, REVIEW] })
+
+      await user.type(field(), '/')
+
+      expect(options()).toHaveLength(3)
+    })
+
+    // The sentence carries on after the name, so it gets its space, and nothing
+    // around it is touched.
+    it('puts the pick where the word was, and keeps the rest of the sentence', async () => {
+      const user = userEvent.setup()
+      const { onSend } = renderComposer({ commands: [CLEAR, REVIEW] })
+
+      await user.type(field(), 'please /re')
+      await user.keyboard('{Enter}')
+      await user.type(field(), 'this change')
+      await user.keyboard('{Enter}')
+
+      expect(onSend).toHaveBeenCalledExactlyOnceWith('please /review this change')
+    })
+
+    // Read at the caret: a word typed in front of text that is already there.
+    it('completes a word typed before existing text', async () => {
+      const user = userEvent.setup()
+      renderComposer({ commands: [REVIEW], initialDraft: 'use  on this' })
+
+      await user.click(field())
+      await user.keyboard('{Home}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}/re')
+      await user.keyboard('{Enter}')
+
+      expect(field()).toHaveValue('use /review  on this')
+    })
+
+    /*
+     * Escape sends away the list for the word it was open on, not for every
+     * word after it: moving to another `/` is asking again, and finding the
+     * list gone there would read as the feature having stopped working.
+     */
+    it('closes when a click lands outside', async () => {
+      const user = userEvent.setup()
+      renderComposer({ commands: [REVIEW] })
+
+      await user.type(field(), 'use /')
+      await user.click(document.body)
+
+      expect(options()).toEqual([])
+    })
+
+    it('dismisses for one word only', async () => {
+      const user = userEvent.setup()
+      renderComposer({ commands: [REVIEW], initialDraft: '/re and /re' })
+
+      await user.click(field())
+      await user.keyboard('{End}{Escape}')
+      expect(options()).toEqual([])
+
+      await user.keyboard('{Home}{ArrowRight}{ArrowRight}{ArrowRight}')
+      expect(options()).toHaveLength(1)
+    })
   })
 })
 
@@ -1495,8 +1584,8 @@ describe('mentioning a file', () => {
 
 describe('stopping with Escape', () => {
   const COMMANDS: AgentCommand[] = [
-    { name: 'clear', description: '', argumentHint: '', aliases: [] },
-    { name: 'compact', description: '', argumentHint: '', aliases: [] }
+    { name: 'clear', description: '', argumentHint: '', aliases: [], skill: false },
+    { name: 'compact', description: '', argumentHint: '', aliases: [], skill: false }
   ]
 
   it('stops a turn that is running', async () => {

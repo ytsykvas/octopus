@@ -376,7 +376,9 @@ fact about the **account**, while which slash commands exist is a fact about a
 `.claude/commands/`, and two workspaces of one project sit on two branches.
 Remembered globally, a command from one workspace would be suggested in another
 that does not have it. The cost is that a fresh chat suggests nothing until its
-first message has started a session.
+first message has started a session. Each command carries `skill`, marked from
+the session's `init` and defaulted to `false`, so a list remembered before the
+field existed loads and offers nothing mid-sentence until the next session.
 
 Custom commands only appear at all when `settingSources` includes `project`.
 The setting is described as controlling `CLAUDE.md` and settings files, and it

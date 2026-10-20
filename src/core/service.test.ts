@@ -5920,6 +5920,8 @@ describe('the agent chat', () => {
       // The list is only learned once a session has run, so the first message
       // teaches it and the second is the one under test.
       await service.sendToChat(chat.id, 'work')
+      // Which commands are skills is read from the init, and the list waits for it.
+      agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.knownCommands).toHaveLength(1)
       })
@@ -6133,6 +6135,8 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
+      // Which commands are skills is read from the init, and the list waits for it.
+      agent().emit(initMessage)
 
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
@@ -6141,7 +6145,8 @@ describe('the agent chat', () => {
         name: 'deploy',
         description: 'Ship it',
         argumentHint: '<env>',
-        aliases: []
+        aliases: [],
+        skill: false
       })
     })
 
@@ -6151,6 +6156,8 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
+      // Which commands are skills is read from the init, and the list waits for it.
+      agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
       })
@@ -6167,6 +6174,8 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
+      // Which commands are skills is read from the init, and the list waits for it.
+      agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
       })
@@ -6188,6 +6197,8 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
+      // Which commands are skills is read from the init, and the list waits for it.
+      agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
       })
@@ -6522,6 +6533,8 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
+      // Which commands are skills is read from the init, and the list waits for it.
+      agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
       })

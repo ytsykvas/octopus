@@ -941,6 +941,21 @@ describe('the remembered model list', () => {
     const state = await loadState(file)
     expect(state.chats[0]?.resumeAt).toBeNull()
   })
+
+  // Remembered before a command could be marked a skill: it reads as not one
+  // until the next session says otherwise — and the file must still open.
+  it('loads a remembered command written before skills were marked', async () => {
+    const older = {
+      ...storedChat(),
+      knownCommands: [{ name: 'deploy', description: '', argumentHint: '', aliases: [] }]
+    }
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [older] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.knownCommands).toEqual([
+      { name: 'deploy', description: '', argumentHint: '', aliases: [], skill: false }
+    ])
+  })
 })
 
 /*
@@ -953,7 +968,8 @@ describe('the commands a chat remembers', () => {
     name: 'deploy',
     description: 'Ship it',
     argumentHint: '<env>',
-    aliases: []
+    aliases: [],
+    skill: false
   }
 
   const chat: Chat = {

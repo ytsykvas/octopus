@@ -318,7 +318,8 @@ describe('a command the agent reported', () => {
       name: 'deploy',
       description: '',
       argumentHint: '',
-      aliases: []
+      aliases: [],
+      skill: false
     })
   })
 
@@ -339,7 +340,8 @@ describe('recognising the command that clears', () => {
     name: 'clear',
     description: 'Start a new session with empty context',
     argumentHint: '[name]',
-    aliases: ['reset', 'new']
+    aliases: ['reset', 'new'],
+    skill: false
   }
 
   it('knows the command by name, with or without arguments', () => {
@@ -400,7 +402,8 @@ describe('recognising the command that reports usage', () => {
     name: 'usage',
     description: 'Show plan usage limits',
     argumentHint: '',
-    aliases: ['cost', 'stats']
+    aliases: ['cost', 'stats'],
+    skill: false
   }
 
   it('knows the command by name', () => {
@@ -751,7 +754,9 @@ describe('a conversation continuing another', () => {
     workingMode: 'acceptEdits',
     planMode: true,
     autoCompactWindow: 500_000,
-    knownCommands: [{ name: 'deploy', description: '', argumentHint: '', aliases: [] }],
+    knownCommands: [
+      { name: 'deploy', description: '', argumentHint: '', aliases: [], skill: false }
+    ],
     skillOverrides: {},
     closedAt: null,
     createdAt: '2026-08-11T09:00:00.000Z'
@@ -937,7 +942,8 @@ describe('reading /model opusplan as a split', () => {
       name: 'model',
       description: 'Set the model',
       argumentHint: '[model]',
-      aliases: ['m']
+      aliases: ['m'],
+      skill: false
     }
 
     expect(opusPlanSplit('/m opusplan', [model], CATALOGUE)).not.toBeNull()

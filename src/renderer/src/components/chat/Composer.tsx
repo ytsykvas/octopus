@@ -21,7 +21,6 @@ import type { MentionFile } from '@core/fileSearch.js'
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { useFileMentions } from '../../hooks/useFileMentions.js'
 import { CommandMenu } from './CommandMenu.js'
-import { completeCommand, matchCommands, readCommandQuery } from './commandMatch.js'
 import { type ChatNote, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
@@ -31,6 +30,7 @@ import { type Mention, readMention, withoutMention } from './mentionMatch.js'
 import { modelRows } from './modelRows.js'
 import { ModelPicker } from './ModelPicker.js'
 import { SendButton } from './SendButton.js'
+import { commandText, rankByName, readTrigger, replaceToken, type Trigger } from './suggest.js'
 
 interface ComposerProps {
   /**
@@ -336,13 +336,15 @@ export function Composer({
   /** Which suggestion Enter would take. */
   const [active, setActive] = useState(0)
   /**
-   * Whether the list was sent away for this draft.
+   * Where the command list was sent away, or null.
    *
-   * Needed because "is the draft a command being typed" is derived from the
-   * text, and Escape does not change the text. Reset by the next keystroke:
-   * dismissing is about this moment, not about the word.
+   * Needed because "is a command being typed" is derived from the text, and
+   * Escape does not change the text. Held as the token's position rather than
+   * a flag, so the dismissal belongs to that one word: the caret moving on to
+   * another `/` brings the list back for it. Reset by the next keystroke, since
+   * dismissing is about this moment, not about the word for good.
    */
-  const [dismissed, setDismissed] = useState(false)
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null)
   /* Only so the frame can say a drop would land. Nothing else reads it, and it
      is cleared by the drop as well as by leaving. */
   const [dragging, setDragging] = useState(false)
@@ -397,22 +399,35 @@ export function Composer({
 
   const trimmed = draft.trim()
 
-  const query = readCommandQuery(draft)
-  const matches = query === null ? [] : matchCommands(commands, query)
+  /*
+   * A command or skill being typed, read at the caret. At the very start of the
+   * message every command is offered, since that is where one runs; anywhere
+   * else only skills are — a skill named mid-sentence is permission for Claude
+   * to run it, while a built-in such as `/clear` there would do nothing.
+   */
+  const command = readTrigger(draft, caret, '/')
+  const matches =
+    command === null
+      ? []
+      : rankByName(
+          command.start === 0 ? commands : commands.filter((offered) => offered.skill),
+          command.query
+        )
   // `matches.length > 0` is what stops a lone `/` from swallowing Enter: with
   // no suggestions there is nothing to complete, so the key means what it
-  // always means.
-  const suggesting = !dismissed && query !== null && matches.length > 0
+  // always means. The token itself rather than a flag, like `shownMention`.
+  const commandAt = command?.start ?? null
+  const shownCommand =
+    command !== null && commandAt !== dismissedAt && matches.length > 0 ? command : null
 
-  useDismiss(suggesting, field, () => {
-    setDismissed(true)
+  useDismiss(shownCommand !== null, field, () => {
+    setDismissedAt(commandAt)
   })
 
   /*
-   * A file being mentioned. Read at the caret rather than at the end of the
-   * draft, because it may sit anywhere in a sentence — and the two lists cannot
-   * both be open: a command is the *whole* draft starting with a slash, while a
-   * mention is a word with an `@` on it.
+   * A file being mentioned, read at the caret like a command — and the two
+   * lists cannot both be open: each is the word the caret ends, and a word
+   * starts with one sigil or the other.
    */
   const mention = readMention(draft, caret)
   const found = useFileMentions(mention?.query ?? null, onSearchFiles)
@@ -452,7 +467,7 @@ export function Composer({
 
     // The suggestion list closes at once: it is about the keystroke, not about
     // the message, and leaving it open over a send in flight reads as stuck.
-    setDismissed(false)
+    setDismissedAt(null)
     setActive(0)
 
     /*
@@ -490,9 +505,14 @@ export function Composer({
    * chose and ran would leave no way to type them. It also means no command
    * ever runs from one keystroke aimed at a list that had just moved.
    */
-  const complete = (command: AgentCommand): void => {
-    write(completeCommand(command))
-    setDismissed(true)
+  const complete = (taken: Trigger, chosen: AgentCommand): void => {
+    const next = replaceToken(draft, taken, caret, commandText(chosen, taken.start === 0))
+    write(next.draft)
+    setCaret(next.caret)
+    caretAfterWrite.current = next.caret
+    // Closed over what it just wrote: a command that takes no arguments is
+    // still a `/word` at the caret, and the list would open again on it.
+    setDismissedAt(taken.start)
   }
 
   return (
@@ -540,8 +560,15 @@ export function Composer({
             turning it repaints an edge rather than the whole frame. First, so
             the menus that open out of the frame draw over it. */}
         {!dragging && <span aria-hidden className="composer-ring-line" />}
-        {suggesting && (
-          <CommandMenu commands={matches} active={active} onActive={setActive} onPick={complete} />
+        {shownCommand !== null && (
+          <CommandMenu
+            commands={matches}
+            active={active}
+            onActive={setActive}
+            onPick={(chosen) => {
+              complete(shownCommand, chosen)
+            }}
+          />
         )}
 
         {shownMention !== null && (
@@ -587,13 +614,13 @@ export function Composer({
             // Typing brings the list back — dismissing was about the draft as
             // it stood — and returns the highlight to the top, since filtering
             // has moved what sits at each index.
-            setDismissed(false)
+            setDismissedAt(null)
             setActive(0)
             setMentionDismissed(false)
             setMentionActive(0)
           }}
           // The caret also moves without the text changing — arrows, a click —
-          // and the mention is read at it.
+          // and both lists are read at it.
           onSelect={(event) => {
             setCaret(event.currentTarget.selectionStart)
           }}
@@ -651,7 +678,7 @@ export function Composer({
             // The list gets first refusal on the keys it uses, because it is
             // the thing the user is looking at. When it is closed every one of
             // these falls through to the field's own behaviour.
-            if (suggesting) {
+            if (shownCommand !== null) {
               if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                 event.preventDefault()
                 const step = event.key === 'ArrowDown' ? 1 : -1
@@ -668,14 +695,15 @@ export function Composer({
                 // inside the list — every keystroke that could move it out
                 // resets it — but the index signature says otherwise, and one
                 // element is exactly what this walks.
-                for (const chosen of matches.slice(active, active + 1)) complete(chosen)
+                for (const chosen of matches.slice(active, active + 1))
+                  complete(shownCommand, chosen)
                 return
               }
 
               if (event.key === 'Escape') {
                 // The draft is left alone. Escape here means "stop suggesting",
                 // not "undo what I typed".
-                setDismissed(true)
+                setDismissedAt(shownCommand.start)
                 return
               }
             }

@@ -12,6 +12,7 @@
  */
 
 import type { UUID } from 'node:crypto'
+import { EventEmitter, once } from 'node:events'
 
 import type {
   HookCallback,
@@ -507,6 +508,9 @@ export function toAgentModels(models: readonly ModelInfo[]): AgentModel[] {
   }))
 }
 
+/** What a message is read against before the session has said which skills it has. */
+const NO_SKILLS: ReadonlySet<string> = new Set()
+
 /**
  * The SDK's command descriptions, narrowed to what a suggestion list needs.
  *
@@ -519,14 +523,27 @@ export function toAgentModels(models: readonly ModelInfo[]): AgentModel[] {
  * required strings are taken at their word, exactly as `toAgentModels` does —
  * and the stored schema defaults them anyway, so a CLI that omits one loads
  * back as empty rather than as a record that will not parse.
+ *
+ * `skills` is the session's `init` list, which is the only place that says
+ * which commands are skills. Matched on aliases too: a skill synced from
+ * claude.ai is listed by the name it is typed as and may carry its qualified
+ * name as an alias.
  */
-export function toAgentCommands(commands: readonly SlashCommand[]): AgentCommand[] {
-  return commands.map((command) => ({
-    name: command.name,
-    description: command.description,
-    argumentHint: command.argumentHint,
-    aliases: command.aliases ? [...command.aliases] : []
-  }))
+export function toAgentCommands(
+  commands: readonly SlashCommand[],
+  skills: ReadonlySet<string> = NO_SKILLS
+): AgentCommand[] {
+  return commands.map((command) => {
+    const aliases = command.aliases ? [...command.aliases] : []
+
+    return {
+      name: command.name,
+      description: command.description,
+      argumentHint: command.argumentHint,
+      aliases,
+      skill: [command.name, ...aliases].some((name) => skills.has(name))
+    }
+  })
 }
 
 /**
@@ -873,6 +890,21 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   // SDK reports as a failure like any other.
   const closing = new AbortController()
 
+  /*
+   * The skills this session holds, as its latest `init` listed them.
+   *
+   * Nothing else says which commands are skills, and `commands()` waits for the
+   * first `init` before it answers: asked any earlier, every command would read
+   * as not a skill and the composer would offer nothing mid-sentence. A stream
+   * that ends before any `init` releases the wait too, so the answer is late
+   * rather than never.
+   */
+  let heldSkills: ReadonlySet<string> = NO_SKILLS
+  // Listened for from the start, so an `init` that lands before anyone asks
+  // still counts; a second signal finds no listener and does nothing.
+  const lifecycle = new EventEmitter()
+  const firstInit = once(lifecycle, 'initialised')
+
   // Started and never awaited. `close` is what actually ends the session —
   // it kills the process the SDK spawned, and the loop then falls out on its
   // own. Waiting for it there would make closing depend on a stream ending,
@@ -889,7 +921,11 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
         if (message.type === 'result') {
           for (const [model, window] of windowsIn(message)) modelWindows.set(model, window)
         }
-        for (const event of mapMessage(message)) hooks.onEvent(event)
+        if (message.type === 'system' && message.subtype === 'init') {
+          heldSkills = new Set(message.skills)
+          lifecycle.emit('initialised')
+        }
+        for (const event of mapMessage(message, heldSkills)) hooks.onEvent(event)
       }
     } catch (error) {
       // The SDK throws for a failed spawn, a lost subscription or an aborted
@@ -899,6 +935,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // with code 143" above an answer from its successor.
       if (closing.signal.aborted) return
       hooks.onEvent({ type: 'error', message: describeError(error) })
+    } finally {
+      lifecycle.emit('initialised')
     }
   })()
 
@@ -939,7 +977,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     },
 
     async commands() {
-      return toAgentCommands(await conversation.supportedCommands())
+      await firstInit
+      return toAgentCommands(await conversation.supportedCommands(), heldSkills)
     },
 
     contextUsage() {
@@ -1086,7 +1125,10 @@ function fromLifecycle(message: unknown): AgentEvent[] {
   ]
 }
 
-export function mapMessage(message: SDKMessage): AgentEvent[] {
+export function mapMessage(
+  message: SDKMessage,
+  skills: ReadonlySet<string> = NO_SKILLS
+): AgentEvent[] {
   switch (message.type) {
     case 'system':
       switch (message.subtype) {
@@ -1124,7 +1166,7 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
           ]
 
         case 'commands_changed':
-          return [{ type: 'commands_changed', commands: toAgentCommands(message.commands) }]
+          return [{ type: 'commands_changed', commands: toAgentCommands(message.commands, skills) }]
 
         case 'compact_boundary':
           return [compactionFrom(message)]

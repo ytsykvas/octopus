@@ -537,7 +537,21 @@ export const AgentCommandSchema = z.object({
   /** What the arguments are, e.g. `<file>`. Empty when it takes none. */
   argumentHint: z.string().default(''),
   /** Other names for the same command — `/cost` and `/stats` both reach `/usage`. */
-  aliases: z.array(z.string()).default([])
+  aliases: z.array(z.string()).default([]),
+  /**
+   * Whether it is a skill rather than one of Claude Code's own commands.
+   *
+   * The difference decides where it may be offered. A command runs only at the
+   * start of a message, while a skill named after plain text still means
+   * something — permission for Claude to run it in that reply — so only skills
+   * are suggested mid-sentence. `SlashCommand.builtin` cannot tell the two
+   * apart, since the bundled skills are Claude Code's own as well; the session's
+   * `init` lists the skills, and `startSession` marks them from that.
+   *
+   * Defaulted, because it is stored: a list remembered before the field
+   * existed has to load, and reads as no skills until the next session.
+   */
+  skill: z.boolean().default(false)
 })
 
 export type AgentCommand = z.infer<typeof AgentCommandSchema>

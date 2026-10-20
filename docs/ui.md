@@ -885,6 +885,21 @@ back to where the token was. A refused search is no suggestions rather than an
 error banner: the list is a convenience. Line ranges (`@file#10-20`) are not
 supported yet; a file is attached whole.
 
+**Typing `/` offers commands, and where it is typed decides which.** The word
+is read at the caret, like a mention, and only when the slash starts a word —
+so `src/core/`, a date or a pasted path opens nothing (`components/chat/suggest.ts`).
+At the very start of the message every command is offered, since that is the
+one place Claude Code runs one. Anywhere else only **skills** are: a skill named
+after plain text is permission for Claude to run it in that reply, while a
+built-in such as `/clear` mid-sentence does nothing, and offering it would be
+offering a mistake. Which commands are skills is not in the command list —
+`SlashCommand.builtin` marks the bundled skills as Claude Code's own too — so
+the session marks them from its `init` message's `skills`, and `commands()`
+waits for that first `init` before it answers. A pick replaces the word and
+keeps the sentence around it; mid-sentence it always gets a trailing space, at
+the start only when the command takes arguments. Escape dismisses the list for
+that one word: the caret moving on to another `/` brings it back.
+
 **A command name is not unique**, and both places that use one had assumed it
 was. The agent can report two under one name — seen live, twice for
 `code-review` — so the menu keys a row by its name _and_ its place in the list,
