@@ -377,7 +377,7 @@ describe('Settings', () => {
       const user = userEvent.setup()
       const props = await withCatalogue()
 
-      await openSection(user, 'Agent')
+      await openSection(user, 'Claude')
       await user.click(await rowIn('coding', /^Sonnet/))
 
       expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: 'sonnet' })
@@ -387,7 +387,7 @@ describe('Settings', () => {
       const user = userEvent.setup()
       const props = await withCatalogue({ config: config({ model: 'sonnet' }) })
 
-      await openSection(user, 'Agent')
+      await openSection(user, 'Claude')
       await user.click(await rowIn('coding', /^Opus \(1M context\)by default/))
 
       expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: null })
@@ -399,7 +399,7 @@ describe('Settings', () => {
       const user = userEvent.setup()
       const props = await withCatalogue({ config: config({ planModel: 'sonnet' }) })
 
-      await openSection(user, 'Agent')
+      await openSection(user, 'Claude')
       await user.click(await rowIn('planning', /^Opus \(1M context\)by default/))
 
       expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ planModel: 'default' })
@@ -409,10 +409,21 @@ describe('Settings', () => {
       const user = userEvent.setup()
       const props = await withCatalogue({ config: config({ planModel: 'sonnet' }) })
 
-      await openSection(user, 'Agent')
+      await openSection(user, 'Claude')
       await user.click(await screen.findByRole('button', { name: 'Same as writing code' }))
 
       expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ planModel: null })
+    })
+
+    // They sit with the account the agent runs on, not among the behaviour
+    // settings: the Agent section is where they were first, and no longer is.
+    it('does not repeat them in the Agent section', async () => {
+      const user = userEvent.setup()
+      await withCatalogue()
+
+      await openSection(user, 'Agent')
+
+      expect(screen.queryByRole('button', { name: 'Same as writing code' })).toBeNull()
     })
   })
 

@@ -158,6 +158,26 @@ describe('ClaudeSection', () => {
     expect(accounts.endSession).toHaveBeenCalledTimes(1)
   })
 
+  it('shows what it is given under the account, but not over the sign-in terminal', () => {
+    const { rerender } = render(
+      <ClaudeSection accounts={controller()}>
+        <p>Models</p>
+      </ClaudeSection>
+    )
+    expect(screen.getByText('Models')).toBeInTheDocument()
+
+    rerender(
+      <ClaudeSection
+        accounts={controller({
+          session: { kind: 'claude', label: 'Claude', command: ['claude', 'auth', 'login'] }
+        })}
+      >
+        <p>Models</p>
+      </ClaudeSection>
+    )
+    expect(screen.queryByText('Models')).not.toBeInTheDocument()
+  })
+
   // The session is shared with the Git section, which hosts its own terminal.
   it('keeps showing the account while GitHub is the one signing in', () => {
     const accounts = controller({

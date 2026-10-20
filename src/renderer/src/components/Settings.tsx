@@ -154,7 +154,11 @@ export function Settings({
             </>
           )}
           {section === 'instructions' && <InstructionsSection />}
-          {section === 'accounts' && <ClaudeSection accounts={accounts} />}
+          {section === 'accounts' && (
+            <ClaudeSection accounts={accounts}>
+              <DefaultModels config={config} onChange={onChange} />
+            </ClaudeSection>
+          )}
           {section === 'about' && <AboutSection config={config} />}
         </div>
       </div>
@@ -401,8 +405,6 @@ function AgentSection({
           />
         </Field>
       </div>
-
-      <DefaultModels config={config} onChange={onChange} />
 
       <AlwaysAllowed tools={config.alwaysAllowedTools} onEdit={onEdit} />
     </div>
