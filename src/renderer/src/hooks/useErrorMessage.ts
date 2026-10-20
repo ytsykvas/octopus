@@ -172,6 +172,12 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.autoModeUnavailable', { reason: failure.params?.reason ?? '' })
         case 'turnRunning':
           return t('errors.turnRunning')
+        case 'sideQuestionUnsupported':
+          return t('errors.sideQuestionUnsupported')
+        case 'sideQuestionFailed':
+          return t('errors.sideQuestionFailed', { reason: failure.params?.reason ?? '' })
+        case 'sideQuestionTimedOut':
+          return t('errors.sideQuestionTimedOut')
         case 'rewindUnavailable':
           // The agent's own reason, when it gave one: "no checkpoint for that
           // message" is the answer to *why*, and the generic line is not.

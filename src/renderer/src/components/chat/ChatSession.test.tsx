@@ -12,6 +12,7 @@ import type { Result } from '../../../../preload/index.js'
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
 import { useCodeNotes } from '../../hooks/useCodeNotes.js'
+import { useSideQuestions } from '../../hooks/useSideQuestions.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { CHAT_ID, emitAgentEvent, emitChatStatus, givenChat } from '../../test/chat.js'
@@ -74,6 +75,7 @@ function ChatPane({
   const tabs = useChatTabs(target.id, vi.fn(), onError)
   const files = useFileTabs(target.id)
   const codeNotes = useCodeNotes(target.id)
+  const sideQuestions = useSideQuestions()
 
   return (
     <Chat
@@ -89,6 +91,7 @@ function ChatPane({
       comments={comments}
       quotes={quotes}
       codeNotes={codeNotes}
+      sideQuestions={sideQuestions}
       color={color}
       defaultWorkingMode={defaultWorkingMode}
       planExecutionMode={planExecutionMode}
@@ -328,6 +331,101 @@ describe('the project it belongs to', () => {
     })
 
     expect(container.firstElementChild).toHaveStyle({ '--project-color': 'var(--project-teal)' })
+  })
+})
+
+describe('a /btw typed into the main field', () => {
+  const answering = (text: string): void => {
+    vi.mocked(octopus().chats.sideQuestion).mockResolvedValue({
+      ok: true,
+      value: { text, synthetic: false }
+    })
+  }
+  const drawer = (): HTMLElement | null => screen.queryByRole('region', { name: 'Side questions' })
+
+  it('is answered in the side drawer and never sent to the conversation', async () => {
+    const user = userEvent.setup()
+    answering('It uses Kyiv.')
+    await openChat()
+
+    await user.type(field(), '/btw which city?{Enter}')
+
+    expect(await screen.findByText('It uses Kyiv.')).toBeInTheDocument()
+    expect(octopus().chats.sideQuestion).toHaveBeenCalledWith('chat-1', 'which city?', [])
+    expect(octopus().chats.send).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText(/Ask the agent/)).toHaveValue('')
+  })
+
+  it('opens the drawer on the thread so far when bare', async () => {
+    const user = userEvent.setup()
+    await openChat()
+
+    await user.type(field(), '/btw{Enter}')
+
+    await waitFor(() => {
+      expect(drawer()).toBeInTheDocument()
+    })
+    expect(octopus().chats.sideQuestion).not.toHaveBeenCalled()
+    expect(octopus().chats.send).not.toHaveBeenCalled()
+  })
+
+  it('opens, asks and clears from the drawer itself', async () => {
+    const user = userEvent.setup()
+    answering('Because.')
+    await openChat()
+
+    await user.click(screen.getByRole('button', { name: 'Ask a side question' }))
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Your side question' }),
+      'why?{Enter}'
+    )
+    expect(await screen.findByText('Because.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Clear side questions' }))
+    expect(screen.queryByText('Because.')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Close side questions', expanded: true }))
+    expect(drawer()).toBeNull()
+  })
+
+  it('asks nothing when the conversation could not be opened', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: false, error: 'no such workspace' })
+    await openChat()
+
+    await user.type(field(), '/btw why?{Enter}')
+    await user.click(screen.getByRole('button', { name: 'Ask a side question' }))
+
+    expect(await screen.findByText(/no such workspace/)).toBeInTheDocument()
+    expect(octopus().chats.sideQuestion).not.toHaveBeenCalled()
+    expect(drawer()).toBeNull()
+  })
+
+  it.each([
+    ['cleared', { type: 'conversation_reset', cleared: true }],
+    ['rewound', { type: 'conversation_rewound', messageId: 'm-1' }]
+  ] as const)('forgets the thread once the conversation is %s', async (_name, event) => {
+    const user = userEvent.setup()
+    answering('Kyiv.')
+    await openChat()
+    await user.type(field(), '/btw which city?{Enter}')
+    expect(await screen.findByText('Kyiv.')).toBeInTheDocument()
+
+    emitAgentEvent(event)
+
+    expect(screen.queryByText('Kyiv.')).toBeNull()
+  })
+
+  it('keeps the thread when the reset only left plan mode', async () => {
+    const user = userEvent.setup()
+    answering('Kyiv.')
+    await openChat()
+    await user.type(field(), '/btw which city?{Enter}')
+    expect(await screen.findByText('Kyiv.')).toBeInTheDocument()
+
+    emitAgentEvent({ type: 'conversation_reset', cleared: false })
+
+    expect(screen.getByText('Kyiv.')).toBeInTheDocument()
   })
 })
 

@@ -18,6 +18,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import { EnvProfileSwitch } from '../EnvProfileSwitch.js'
 import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
+import { onChatEvent } from '../../hooks/chatEvents.js'
 import { stopTask, useChatTasks, useMainWorking } from '../../hooks/backgroundTasks.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
@@ -34,6 +35,7 @@ import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
 import { useRewindChoice } from '../../hooks/useRewindChoice.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
+import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
 import { useSkills } from '../../hooks/useSkills.js'
 import { shortModel } from './agentFormat.js'
 import { AgentLogContext, type Agents, AgentsContext } from './agentTasks.js'
@@ -44,6 +46,7 @@ import { Composer } from './Composer.js'
 import { HeadsUp } from './HeadsUp.js'
 import { PlanDialog } from './PlanDialog.js'
 import { PlanWaiting } from './PlanWaiting.js'
+import { SideQuestions } from './SideQuestions.js'
 import { TodoPanel } from './TodoPanel.js'
 import { currentTip } from './tips.js'
 import { planTitle, readPlan } from './toolSummary.js'
@@ -84,6 +87,8 @@ interface ChatSessionProps {
    * this conversation shows and sends only the ones addressed to its tab.
    */
   readonly codeNotes: CodeNoteController
+  /** Each conversation's `/btw` thread, held by `App` so it outlives this pane. */
+  readonly sideQuestions: SideQuestionController
   /**
    * What the settings say a new conversation starts with.
    *
@@ -133,6 +138,7 @@ export function ChatSession({
   comments,
   quotes,
   codeNotes,
+  sideQuestions,
   defaultWorkingMode,
   planExecutionMode,
   defaultEffort,
@@ -276,6 +282,51 @@ export function ChatSession({
   }
   const usage = useSessionUsage(chat.chat?.id ?? null, sessionMoves)
   const skills = useSkills(chat.chat?.id ?? null, workspace.id, chat.ensure)
+
+  const sideChatId = chat.chat?.id ?? null
+  const { ensure } = chat
+  const {
+    ask: askAside,
+    setOpen: setSideOpen,
+    clear: clearSide,
+    forget: forgetSide
+  } = sideQuestions
+  // A record-less conversation gets one first: the question needs it.
+  const withRecord = useCallback(
+    async (act: (chatId: string) => unknown) => {
+      const record = await ensure()
+      if (record !== null) await act(record.id)
+    },
+    [ensure]
+  )
+  const openSide = useCallback(
+    (open: boolean) => {
+      void withRecord((chatId) => {
+        setSideOpen(chatId, open)
+      })
+    },
+    [setSideOpen, withRecord]
+  )
+  const askSide = useCallback(
+    (question: string) => {
+      if (question === '') openSide(true)
+      else void withRecord((chatId) => askAside(chatId, question))
+    },
+    [openSide, askAside, withRecord]
+  )
+  // A thread about a conversation that was cleared or cut back would be
+  // replayed to the agent as context it no longer has.
+  useEffect(() => {
+    if (sideChatId === null) return
+    return onChatEvent(({ event }) => {
+      if (
+        (event.type === 'conversation_reset' && event.cleared) ||
+        event.type === 'conversation_rewound'
+      ) {
+        forgetSide(sideChatId)
+      }
+    }, sideChatId)
+  }, [sideChatId, forgetSide])
 
   /*
    * `/model opusplan` is the one `/model` the record follows.
@@ -722,69 +773,82 @@ export function ChatSession({
             </div>
           )}
 
-          <Composer
-            initialDraft={draft}
-            seed={seed}
-            onDraftLeave={onDraftLeave}
-            focusOnMount={focusComposer}
-            busy={chat.busy}
-            workingMode={workingMode}
-            planMode={record?.planMode ?? true}
-            onMode={(mode) => void chat.setMode(mode).then(moved)}
-            effort={effort}
-            onEffort={(level) => void chat.setEffort(level)}
-            planEffort={planEffort}
-            onPlanEffort={(level) => void chat.setPlanEffort(level)}
-            onAutoCompact={(window) => {
-              void chat.setAutoCompact(window).then(moved)
-            }}
-            model={model}
-            onModel={(chosen) => void chat.setModel(chosen).then(moved)}
-            planModel={planModel}
-            onPlanModel={(chosen) => void chat.setPlanModel(chosen).then(moved)}
-            models={models}
-            // What the session reports it is running, which the chip shows when it
-            // differs from what was chosen here. It rides in with the context
-            // reading, so it refreshes on the same `result` the token count does.
-            activeModel={usage.context?.model ?? null}
-            commands={commands}
-            agents={agents}
-            usage={usage}
-            limit={rateLimit}
-            skills={skills.skills}
-            onToggleSkill={skills.toggle}
-            onRefreshSkills={skills.refresh}
-            onOpenSettings={onOpenSkillSettings}
-            onSend={send}
-            onStop={() => void chat.interrupt()}
-            /* The two queues become one list here rather than in the composer:
+          <div className="relative">
+            <Composer
+              initialDraft={draft}
+              seed={seed}
+              onDraftLeave={onDraftLeave}
+              focusOnMount={focusComposer}
+              busy={chat.busy}
+              workingMode={workingMode}
+              planMode={record?.planMode ?? true}
+              onMode={(mode) => void chat.setMode(mode).then(moved)}
+              effort={effort}
+              onEffort={(level) => void chat.setEffort(level)}
+              planEffort={planEffort}
+              onPlanEffort={(level) => void chat.setPlanEffort(level)}
+              onAutoCompact={(window) => {
+                void chat.setAutoCompact(window).then(moved)
+              }}
+              model={model}
+              onModel={(chosen) => void chat.setModel(chosen).then(moved)}
+              planModel={planModel}
+              onPlanModel={(chosen) => void chat.setPlanModel(chosen).then(moved)}
+              models={models}
+              // What the session reports it is running, which the chip shows when it
+              // differs from what was chosen here. It rides in with the context
+              // reading, so it refreshes on the same `result` the token count does.
+              activeModel={usage.context?.model ?? null}
+              commands={commands}
+              agents={agents}
+              usage={usage}
+              limit={rateLimit}
+              skills={skills.skills}
+              onToggleSkill={skills.toggle}
+              onRefreshSkills={skills.refresh}
+              onOpenSettings={onOpenSkillSettings}
+              onSend={send}
+              onStop={() => void chat.interrupt()}
+              /* The two queues become one list here rather than in the composer:
            this is already the layer that adapts a controller to a prop, and the
            composer has no business knowing there are two places a note can come
            from. */
-            notes={mergeNotes(comments.pending, quotes.pending, codeNotes.pendingFor(tab.key))}
-            onRemoveNote={(note: ChatNote) => {
-              if (note.kind === 'diff') comments.remove(note)
-              else if (note.kind === 'code') codeNotes.remove(tab.key, note)
-              else quotes.remove(note)
-            }}
-            onNotesSent={() => {
-              comments.clear()
-              quotes.clear()
-              codeNotes.clear(tab.key)
-              attachments.clear()
-            }}
-            files={attachments.files}
-            onRemoveFile={attachments.remove}
-            onAttachFiles={() => {
-              setNotice(null)
-              void attachments.choose(t('chat.attach'))
-            }}
-            onDropFiles={attachments.drop}
-            onPasteImage={(image) => {
-              setNotice(null)
-              void attachments.paste(image)
-            }}
-          />
+              notes={mergeNotes(comments.pending, quotes.pending, codeNotes.pendingFor(tab.key))}
+              onRemoveNote={(note: ChatNote) => {
+                if (note.kind === 'diff') comments.remove(note)
+                else if (note.kind === 'code') codeNotes.remove(tab.key, note)
+                else quotes.remove(note)
+              }}
+              onNotesSent={() => {
+                comments.clear()
+                quotes.clear()
+                codeNotes.clear(tab.key)
+                attachments.clear()
+              }}
+              files={attachments.files}
+              onRemoveFile={attachments.remove}
+              onAttachFiles={() => {
+                setNotice(null)
+                void attachments.choose(t('chat.attach'))
+              }}
+              onDropFiles={attachments.drop}
+              onPasteImage={(image) => {
+                setNotice(null)
+                void attachments.paste(image)
+              }}
+              onSideQuestion={askSide}
+            />
+
+            <SideQuestions
+              thread={sideQuestions.threadFor(sideChatId)}
+              visible={visible}
+              onOpenChange={openSide}
+              onAsk={askSide}
+              onClear={() => {
+                void withRecord(clearSide)
+              }}
+            />
+          </div>
 
           {rewindDialog}
         </div>

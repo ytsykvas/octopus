@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
 import { useCodeNotes } from '../../hooks/useCodeNotes.js'
+import { useSideQuestions } from '../../hooks/useSideQuestions.js'
 import { chat, emitAgentEvent, givenChats } from '../../test/chat.js'
 import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
@@ -24,10 +25,24 @@ beforeAll(stubDialogElement)
 const WORKSPACE = workspaceView('anna')
 
 /** The pane as `App` assembles it, tab strip and all. */
-function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.JSX.Element {
+function Pane({
+  workspace = WORKSPACE,
+  onForget
+}: {
+  workspace?: WorkspaceView
+  onForget?: (chatId: string) => void
+}): React.JSX.Element {
   const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
   const files = useFileTabs(workspace.id)
   const codeNotes = useCodeNotes(workspace.id)
+  const held = useSideQuestions()
+  const sideQuestions = {
+    ...held,
+    forget: (chatId: string) => {
+      onForget?.(chatId)
+      held.forget(chatId)
+    }
+  }
 
   return (
     <>
@@ -41,6 +56,7 @@ function Pane({ workspace = WORKSPACE }: { workspace?: WorkspaceView }): React.J
         comments={commentController()}
         quotes={quoteController()}
         codeNotes={codeNotes}
+        sideQuestions={sideQuestions}
         color="blue"
         defaultWorkingMode="default"
         planExecutionMode="acceptEdits"
@@ -109,6 +125,25 @@ describe('the pane', () => {
  * scroll position and the answer half-streamed into it each time you looked at
  * another — which, with several agents at work, is most of the time.
  */
+describe('closing a conversation', () => {
+  it('forgets its side questions', async () => {
+    const user = userEvent.setup()
+    const onForget = vi.fn()
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    render(<Pane onForget={onForget} />)
+    await waitFor(() => {
+      expect(screen.getByText('Claude 2')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Claude 1' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Close conversation' }))
+
+    await waitFor(() => {
+      expect(onForget).toHaveBeenCalledWith('chat-1')
+    })
+  })
+})
+
 describe('a file in front of the conversations', () => {
   // Only the pane on screen may raise a dialog (§10.8), and with a file in
   // front no conversation is on screen.

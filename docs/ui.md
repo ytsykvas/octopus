@@ -919,6 +919,34 @@ reading and never reaches the CLI, because the CLI's own answer is a paragraph
 of prose about percentages. It is drawn by `UsageCard`, the only place in the
 app that shows the session's cost.
 
+`/btw` is taken before either of them, by the composer itself
+(`Composer.submit`, through `parseBtw`) and on the typed text, before the notes
+are wrapped around it — wrapped, `/btw` would no longer lead the message. The
+question goes to the side drawer, the field clears and the notes stay for the
+next real message. Bare, it opens the drawer on the thread so far.
+
+### Side questions
+
+The bump on the edge between the chat and the right panel, level with the top
+of the composer, pulls out a drawer of side questions (`SideQuestions.tsx`). It
+is placed by the composer's wrapper rather than the whole pane, so it never
+covers the log's scrollbar. The bump is drawn in the project's colour and bends
+the separator into the chat; it sits on the chat's side of the line, so it stays
+when the right panel is folded. The drawer lies over the chat — nothing under it
+moves — and closes on a click anywhere else or Escape, but only for the
+conversation on screen and not while a dialog is open. Focus returns to where it
+was unless the click that closed it moved it. It has a field and a send button
+and nothing else: no model, no effort, no mode, because a side question uses the
+session as it is.
+
+Each conversation has its own thread, held for the window by `App`
+(`useSideQuestions`) so it survives the pane being rebuilt, and lost when the
+app quits, as the CLI's is. A thread is dropped when its conversation is cleared,
+rewound or closed: replayed, it would hand the agent context it no longer has.
+Questions do not wait for each other. An answer that lands with the drawer shut
+marks the bump and its name, and what the CLI wrote itself rather than the model
+("no answer available") is drawn quieter.
+
 Three things about that menu:
 
 - **`/clear` asks first**, and is the row drawn in `danger`. Typing the command

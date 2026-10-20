@@ -909,6 +909,21 @@ export const en = {
        does not need these lines rewritten. */
     tabs: 'Conversations',
     tab: '{{agent}} {{number}}',
+    /* The /btw drawer. The hint says nothing enters the chat: that is what
+       makes it safe to ask mid-turn. */
+    side: {
+      title: 'Side questions',
+      open: 'Ask a side question',
+      close: 'Close side questions',
+      clear: 'Clear side questions',
+      hint: 'Ask about the conversation without interrupting it. The agent answers from what it already knows, with no tools, and nothing here enters the chat.',
+      placeholder: 'Ask a side question',
+      field: 'Your side question',
+      send: 'Ask',
+      answering: 'Answering…',
+      empty: 'The agent had no answer for this one.',
+      unread: 'An answer is waiting'
+    },
     /* What a tab says aloud, and what its tooltip shows. Takes the resolved
        name — the one the user gave it, or the automatic one above — because a
        renamed conversation should read as itself here too. */
@@ -2170,6 +2185,10 @@ export const en = {
     chatClosed: 'That conversation was closed. Reopen it from the history first.',
     autoModeUnavailable: 'Auto mode is not available here: {{reason}}',
     turnRunning: 'The agent is still working. Wait for it to finish, then press the button again.',
+    sideQuestionUnsupported:
+      'This version of Claude Code cannot answer side questions. Update it and try again.',
+    sideQuestionFailed: 'The side question could not be answered: {{reason}}',
+    sideQuestionTimedOut: 'The side question took too long and was given up. Try again.',
     pushTargetChanged:
       '{{branch}} was not pushed: origin now pushes to {{current}}, not where it did when you pressed the button.',
     repoConfigSymlink:

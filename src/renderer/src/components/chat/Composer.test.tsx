@@ -14,6 +14,7 @@ const planColumn = (): HTMLElement => screen.getByRole('radiogroup', { name: 'Pl
 
 function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onSend: ReturnType<typeof vi.fn>
+  onSideQuestion: ReturnType<typeof vi.fn>
   onStop: ReturnType<typeof vi.fn>
   onMode: ReturnType<typeof vi.fn>
   onEffort: ReturnType<typeof vi.fn>
@@ -28,6 +29,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   // mock that answered nothing would model a send that failed, and every test
   // about clearing would be asserting the failure path by accident.
   const onSend = vi.fn<(text: string) => Promise<boolean>>().mockResolvedValue(true)
+  const onSideQuestion = vi.fn()
   const onStop = vi.fn()
   const onMode = vi.fn()
   const onEffort = vi.fn()
@@ -73,6 +75,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       onRemoveNote={vi.fn()}
       onNotesSent={vi.fn()}
       onSend={onSend}
+      onSideQuestion={onSideQuestion}
       onStop={onStop}
       {...props}
     />
@@ -82,6 +85,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
 
   return {
     onSend,
+    onSideQuestion,
     onStop,
     onMode,
     onEffort,
@@ -371,6 +375,19 @@ describe('review notes riding with the message', () => {
 
     expect(onSend).toHaveBeenCalledWith(expect.stringContaining('src/core/diff.ts:42'))
     expect(onSend).toHaveBeenCalledWith(expect.stringContaining('fix these'))
+  })
+
+  it('takes a /btw aside and leaves the notes for the next message', async () => {
+    const user = userEvent.setup()
+    const onNotesSent = vi.fn()
+    const { onSend, onSideQuestion } = renderComposer({ notes: [NOTE], onNotesSent })
+
+    await user.type(screen.getByRole('textbox'), '/btw why is this here?{Enter}')
+
+    expect(onSideQuestion).toHaveBeenCalledWith('why is this here?')
+    expect(onSend).not.toHaveBeenCalled()
+    expect(onNotesSent).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox')).toHaveValue('')
   })
 
   // The review can be the whole message.

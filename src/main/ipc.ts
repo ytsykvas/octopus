@@ -71,6 +71,7 @@ import type {
   OctopusService,
   WorkspaceStatusEvent
 } from '../core/service.js'
+import { SideHistorySchema, SideQuestionSchema } from '../core/sideQuestions.js'
 import { ProjectEditSchema, ProjectPatchSchema } from '../core/store.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
@@ -1051,6 +1052,16 @@ export function registerIpc(
 
   host.handle('chats:usage', (_event, chatId: string) =>
     attempt(() => service.sessionUsage(chatId))
+  )
+
+  host.handle('chats:sideQuestion', (_event, chatId: string, question: unknown, history: unknown) =>
+    attempt(() =>
+      service.askSideQuestion(
+        chatId,
+        SideQuestionSchema.parse(question),
+        SideHistorySchema.parse(history)
+      )
+    )
   )
 
   host.handle(

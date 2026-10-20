@@ -103,6 +103,7 @@ export function installOctopusStub(): Api {
       agents: vi.fn(() => ok([])),
       pendingPermissions: vi.fn(() => ok([])),
       usage: vi.fn(() => ok({ context: null, autoCompact: null })),
+      sideQuestion: vi.fn(() => ok(null)),
       answerPermission: vi.fn(() => ok(undefined)),
       answerElicitation: vi.fn(() => ok(undefined)),
       answerQuestions: vi.fn(() => ok(undefined)),

@@ -14,6 +14,7 @@ import {
 } from '@core/chats.js'
 
 import type { RateLimit, SessionUsage } from '@core/service.js'
+import { parseBtw } from '@core/sideQuestions.js'
 import type { SkillListing } from '@core/skills.js'
 
 import type { ChatMode } from '../../hooks/useChat.js'
@@ -26,6 +27,7 @@ import { EffortPicker } from './EffortPicker.js'
 import { modelRows } from './modelRows.js'
 import { ModelPicker } from './ModelPicker.js'
 import { SendButton } from './SendButton.js'
+import { isSubmitEnter } from './submitKey.js'
 import { commandText, rankByName, readTrigger, replaceToken, type Trigger } from './suggest.js'
 import { type Suggestion, SuggestionMenu } from './SuggestionMenu.js'
 
@@ -125,6 +127,8 @@ interface ComposerProps {
   readonly onOpenSettings: () => void
   /** Answers whether the message went; the field and the notes clear only then. */
   readonly onSend: (text: string) => Promise<boolean>
+  /** A `/btw`, taken aside before the notes are wrapped around it. */
+  readonly onSideQuestion: (question: string) => void
   readonly onStop: () => void
   /**
    * Notes waiting to go out with this message — from the diff, from a review,
@@ -245,6 +249,7 @@ export function Composer({
   onRefreshSkills,
   onOpenSettings,
   onSend,
+  onSideQuestion,
   onStop,
   notes,
   onRemoveNote,
@@ -458,6 +463,15 @@ export function Composer({
     setDismissedAt(null)
     setActive(0)
 
+    // On the typed text: wrapped, the notes come first and `/btw` is no longer
+    // at the start. The notes stay for the next real message.
+    const btw = parseBtw(trimmed)
+    if (btw !== null) {
+      onSideQuestion(btw.question)
+      write('')
+      return
+    }
+
     /*
      * Cleared only once the message is known to have gone.
      *
@@ -670,11 +684,7 @@ export function Composer({
               return
             }
 
-            // `isComposing` is the Enter that confirms an IME candidate — how
-            // Japanese, Chinese and Korean are typed, among others — and it is
-            // not the Enter that sends. Without this every committed word went
-            // out as a message, and it read as the app sending on its own.
-            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+            if (!isSubmitEnter(event)) return
             event.preventDefault()
             submit()
           }}

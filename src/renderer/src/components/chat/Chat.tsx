@@ -10,6 +10,7 @@ import type { FileTabsController } from '../../hooks/useFileTabs.js'
 import { Button } from '../Button.js'
 import { RepoTrustReview } from '../RepoTrustReview.js'
 import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
+import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { ChatSession } from './ChatSession.js'
@@ -51,6 +52,7 @@ interface ChatProps {
   readonly quotes: PullRequestQuoteController
   /** Notes from the file viewer, each held by the conversation it was sent to. */
   readonly codeNotes: CodeNoteController
+  readonly sideQuestions: SideQuestionController
   /**
    * The project's colour, for the messages you sent and the active tab's rule.
    *
@@ -107,6 +109,7 @@ export function Chat({
   comments,
   quotes,
   codeNotes,
+  sideQuestions,
   color,
   defaultWorkingMode,
   planExecutionMode,
@@ -179,7 +182,13 @@ export function Chat({
             where the work lands, which is a fact about the window rather than
             about any one conversation. */}
         <ChatTabs
-          tabs={tabs}
+          tabs={{
+            ...tabs,
+            close: async (chatId) => {
+              await tabs.close(chatId)
+              sideQuestions.forget(chatId)
+            }
+          }}
           filesInFront={files.active !== null}
           notesWaiting={(tabKey) => codeNotes.pendingFor(tabKey).length}
         />
@@ -239,6 +248,7 @@ export function Chat({
           comments={comments}
           quotes={quotes}
           codeNotes={codeNotes}
+          sideQuestions={sideQuestions}
           defaultWorkingMode={defaultWorkingMode}
           planExecutionMode={planExecutionMode}
           defaultEffort={defaultEffort}

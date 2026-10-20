@@ -413,6 +413,11 @@ describe('channel names', () => {
     ],
     ['chats.usage', () => method('chats', 'usage')('c' as never), 'chats:usage'],
     [
+      'chats.sideQuestion',
+      () => method('chats', 'sideQuestion')('c' as never, 'q' as never, [] as never),
+      'chats:sideQuestion'
+    ],
+    [
       'chats.answerPermission',
       () => method('chats', 'answerPermission')('r' as never, 'allow' as never),
       'chats:permission'
