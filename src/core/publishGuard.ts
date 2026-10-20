@@ -99,6 +99,34 @@ const CONFIG_VALUE_OPTIONS = new Set([
   '--value'
 ])
 
+/** `git config` flags that change nothing about what is written, or only read. */
+const CONFIG_READ_FLAGS = new Set([
+  '--get',
+  '--get-all',
+  '--get-regexp',
+  '--get-urlmatch',
+  '--list',
+  '-l',
+  '--global',
+  '--local',
+  '--system',
+  '--worktree',
+  '--show-origin',
+  '--show-scope',
+  '--null',
+  '-z',
+  '--name-only',
+  '--includes',
+  '--no-includes',
+  '--bool',
+  '--int',
+  '--bool-or-int',
+  '--path',
+  '--expiry-date',
+  '--no-type',
+  '--fixed-value'
+])
+
 /** The prefix of the environment variables git reads `agentEnv`'s rewrite from. */
 const GIT_CONFIG_VARIABLE = 'GIT_CONFIG'
 
@@ -173,11 +201,15 @@ function gitTampers(options: readonly string[], command: string, args: readonly 
     else positional.push(arg)
   }
   // From the flags left after the scan: `--file --get` names a file called `--get`.
+  // A flag this does not know — git takes `--fi` for `--file` — makes it a write.
+  const known = (flag: string): boolean =>
+    CONFIG_READ_FLAGS.has(flag) || CONFIG_VALUE_OPTIONS.has(flag.replace(/=.*$/su, ''))
   const reads =
-    flags.some((flag) => /^(?:--get.*|--list|-l)$/u.test(flag)) ||
-    positional[0] === 'get' ||
-    positional[0] === 'list' ||
-    (positional.length === 1 && !flags.some((flag) => /^--(?:unset|add|replace)/u.test(flag)))
+    flags.every(known) &&
+    (flags.some((flag) => /^(?:--get.*|--list|-l)$/u.test(flag)) ||
+      positional[0] === 'get' ||
+      positional[0] === 'list' ||
+      (positional.length === 1 && !flags.some((flag) => /^--(?:unset|add|replace)/u.test(flag))))
   // Any word shaped like a refused key: which word git takes for the key is
   // what a reading of the options would have to get right, and need not.
   return !reads && args.some((arg) => TAMPERED_KEY.test(arg))

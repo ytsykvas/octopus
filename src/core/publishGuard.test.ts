@@ -124,8 +124,11 @@ describe('refusesPublish', () => {
     'git config --add user.name remote.origin.url',
     // An option's value is not a flag: this names a file called `--get`.
     'git config --file --get remote.origin.url https://example.com/r.git',
+    // git takes an unambiguous prefix of a long option: `--fi` is `--file`.
+    'git config --fi --get remote.origin.url https://example.com/r.git',
     "$'gi\\x74' push",
     "$'g\\x69\\c@ignored't push",
+    "$'\\c' ; git push #'",
     'git config include.path /tmp/more.gitconfig',
     'git config http.extraHeader "Authorization: x"'
   ])('refuses %s', (command) => {

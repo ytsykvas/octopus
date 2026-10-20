@@ -42,7 +42,9 @@ describe('parseCommand', () => {
   it("resolves the escapes $'…' allows, as the shell would", () => {
     expect(
       words(`$'\\x67h' $'\\147h' $'\\u0067h' $'\\U00000067h' $'a\\tb' $'\\q' $'it\\'s' $'a\\`)
-    ).toEqual([['gh', 'gh', 'gh', 'gh', 'a\tb', 'q', "it's", 'a']])
+    ).toEqual([['gh', 'gh', 'gh', 'gh', 'a\tb', '\\q', "it's", 'a\\']])
+    // `\c` before the closing quote does not take the quote with it.
+    expect(words(`$'a\\c' b`)).toEqual([['a\\', 'b']])
   })
 
   it("ends a $'…' string at a NUL and keeps an octal escape to one byte, as bash does", () => {

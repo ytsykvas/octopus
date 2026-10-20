@@ -33,10 +33,17 @@ const ANSI_ESCAPES: Readonly<Record<string, string>> = {
   t: '\t',
   r: '\r',
   e: '\u001b',
+  E: '\u001b',
   a: '\u0007',
   b: '\b',
   f: '\f',
-  v: '\v'
+  v: '\v',
+  '\\': '\\',
+  "'": "'",
+  '"': '"',
+  '?': '?',
+  // `\c` with nothing to control before the closing quote: bash keeps the backslash.
+  c: '\\'
 }
 
 /**
@@ -54,7 +61,7 @@ function ansiQuoted(text: string, from: number): { value: string; end: number } 
       continue
     }
     const escape =
-      /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c(.)|(.))/su.exec(
+      /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c([^'])|(.))/su.exec(
         text.slice(at + 1)
       )
     const [whole = '', hex, unicode, wide, octal, control, single = ''] = escape ?? []
@@ -73,7 +80,9 @@ function ansiQuoted(text: string, from: number): { value: string; end: number } 
     // though the quote that closes it is still found past escapes.
     if (point === 0) ended = true
     else if (!ended) {
-      value += point === null ? (ANSI_ESCAPES[single] ?? single) : String.fromCodePoint(point)
+      // An escape bash does not know keeps its backslash: `\q` stays `\q`.
+      value +=
+        point === null ? (ANSI_ESCAPES[single] ?? `\\${single}`) : String.fromCodePoint(point)
     }
     at += 1 + whole.length
   }
