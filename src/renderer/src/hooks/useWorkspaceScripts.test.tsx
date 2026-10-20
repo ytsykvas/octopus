@@ -57,7 +57,7 @@ describe('useWorkspaceScripts', () => {
     const { result } = renderHook(() => useWorkspaceScripts(['planner/anna'], null))
 
     await waitFor(() => {
-      expect(octopus().workspaces.scripts).toHaveBeenCalled()
+      expect(result.current.failures.size).toBe(1)
     })
     expect(result.current.scripts.size).toBe(0)
   })
@@ -139,8 +139,10 @@ describe('useWorkspaceScripts', () => {
     expect(result.current.scripts.has('planner/anna')).toBe(false)
   })
 
+  // Waits for the state, not the call: the answer lands after the call, and a
+  // test that ended first left React a render to run once jsdom was gone.
   it('does not keep an answer that arrived after the list changed', async () => {
-    const { rerender } = renderHook(
+    const { result, rerender } = renderHook(
       ({ ids }: { ids: string[] }) => useWorkspaceScripts(ids, null),
       {
         initialProps: { ids: ['planner/anna'] }
@@ -150,7 +152,8 @@ describe('useWorkspaceScripts', () => {
     rerender({ ids: ['planner/bob'] })
 
     await waitFor(() => {
-      expect(octopus().workspaces.scripts).toHaveBeenCalledWith('planner/bob')
+      expect(result.current.scripts.has('planner/bob')).toBe(true)
     })
+    expect(result.current.scripts.has('planner/anna')).toBe(false)
   })
 })
