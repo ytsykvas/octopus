@@ -22,8 +22,22 @@ function entry(overrides: Partial<SkillEntry> = {}): SkillEntry {
   }
 }
 
+// Answered a task later, as the real round trip to core is: a test that reads
+// the list before the answer has landed then fails every time, not only on a
+// loaded machine.
+/** What `holding` last put in the store, which `renderSection` waits to see. */
+let listed: readonly SkillEntry[] = []
+
 const holding = (skills: readonly SkillEntry[]): void => {
-  vi.mocked(octopus().skills.list).mockResolvedValue({ ok: true, value: [...skills] })
+  listed = skills
+  vi.mocked(octopus().skills.list).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({ ok: true, value: [...skills] })
+        })
+      })
+  )
 }
 
 interface Rendered {
@@ -53,9 +67,10 @@ async function renderSection(
     />
   )
 
-  await waitFor(() => {
-    expect(octopus().skills.list).toHaveBeenCalled()
-  })
+  // The list on screen, not merely asked for: its answer lands outside `act`,
+  // so React draws it on its own schedule, and a test that read the section
+  // before then found nothing to click.
+  await screen.findAllByText(listed[0]?.name ?? 'No skills here yet.')
 
   return { onDefault, onCopyToGlobal }
 }

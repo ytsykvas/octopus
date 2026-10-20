@@ -108,6 +108,10 @@ export type GitHubErrorCode =
   | 'createFailed'
   | 'mergeFailed'
   | 'closeFailed'
+  // Restarting CI, which is the button beside a red check rather than a
+  // round trip through the browser.
+  | 'nothingToRerun'
+  | 'rerunFailed'
   // Answering a review, which is the other half of reading one: saying why
   // something was left as it is has no home in a commit.
   | 'replyFailed'

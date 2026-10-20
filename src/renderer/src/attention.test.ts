@@ -55,14 +55,20 @@ const RESULT = {
 } satisfies AgentEvent
 
 describe('the notice an event amounts to', () => {
-  it('reads a finished turn as done and a failed one as an error', () => {
-    expect(from(RESULT)).toEqual(notice({ at: 7 }))
+  it('reads the conversation coming to rest as done and a failed turn as an error', () => {
+    expect(from({ type: 'finished' })).toEqual(notice({ at: 7 }))
     expect(from({ ...RESULT, ok: false })?.kind).toBe('error')
     expect(from({ type: 'error', message: 'gone' })?.kind).toBe('error')
   })
 
+  // The CLI opens a turn of its own to hand over each finished agent's report:
+  // a turn ending is not the work being done.
+  it('is nothing for a turn that ended well', () => {
+    expect(from(RESULT)).toBeNull()
+  })
+
   it('names the project from the workspace it happened in', () => {
-    expect(from(RESULT, OTHER.id)?.projectId).toBe('tracker')
+    expect(from({ type: 'finished' }, OTHER.id)?.projectId).toBe('tracker')
   })
 
   // A question and a plan come as permission requests, and are asked about

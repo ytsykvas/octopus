@@ -21,15 +21,7 @@ const PLANNER = { id: 'planner' } as Project
 const ANNA = workspaceView('anna')
 const BEN = workspaceView('ben')
 
-const DONE: AgentEvent = {
-  type: 'result',
-  ok: true,
-  costUsd: null,
-  durationMs: 1,
-  inputTokens: null,
-  outputTokens: null,
-  terminalReason: null
-}
+const DONE: AgentEvent = { type: 'finished' }
 
 interface Props {
   readonly openId: string | null

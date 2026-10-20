@@ -51,10 +51,18 @@ workspace, or a chat that finished would wipe out another still waiting. A
 green one is withheld while its conversation is running again (`settle`): a
 message left in the agent's queue runs as a turn of its own once the last one
 ended — after a Stop, always — and "finished" over a working tab is the one
-thing the dot must not say. Withheld rather than dropped: the result reaches
-the window before the chat's `idle` does, so an ordinary turn's notice appears
-a state write later. The chime has already rung by then; the dot and the toast
+thing the dot must not say. Withheld rather than dropped: the news reaches the
+window before the chat's `idle` does, so an ordinary turn's notice appears a
+state write later. The chime has already rung by then; the dot and the toast
 wait for the turn that is really last. A red one stays.
+
+**Green is the conversation coming to rest, not a turn ending.** It is read
+from `finished`, which the core sends once the conversation has stayed at rest
+for a moment — every background agent it sent off ended and its report handed
+over — and not from a turn's `result`. The CLI opens a turn of its own to hand
+over each finished agent's report, so one piece of work can end in several
+results, and a chime for each said "done" over work still going. A failed result
+is still news at once.
 
 Kept in the window (`useAttention`, `attention.ts`) rather than in
 `state.json`: "seen" is one person looking at one window, and a field under
@@ -2219,6 +2227,15 @@ which run went red. The log itself is not pasted in: a message is capped at
 to truncate it — possibly past the error. The agent reads it where it lives, and
 can read it again after it pushes.
 
+**Re-running the checks is two buttons**, beside the heading of the checks and
+only while one is red: _Failed_ restarts the failed jobs of each run that has
+one (`gh run rerun --failed`), _All_ restarts every run whole. The run id comes
+from the job's link, the only place the rollup carries it, so a status from
+outside Actions has none and is left alone. `all` skips a run still in progress,
+because GitHub refuses to restart one and that refusal would stop the rest.
+The rollup is read again in core rather than taken from the pane, in the same
+call that checks the number is this branch's request.
+
 **A branch says where its pull request stands**, in a glyph beside the workspace
 name: green once the checks pass, a spinning green ring while they run, orange
 when one has failed, accent while the repository has run nothing, red once it is
@@ -2841,7 +2858,8 @@ which is what makes it the legend for the rows rather than a second vocabulary.
 It is meant to fit one line, so everything else on it is short: a red cloud with
 the number of files out of date in the request, a faint "not on GitHub" when the
 branch has no copy there, and **Push**, offered only where there is a commit to
-send, with how many in its tooltip. The full sentences are the tooltips. Pushing publishes nothing uncommitted, and a
+send, with how many in its tooltip. The full sentences are the tooltips; the
+cloud's also says what being out of date means and that pushing settles it. Pushing publishes nothing uncommitted, and a
 button here that committed on the reader's behalf would be choosing a commit
 message for them; that decision belongs to the pull request tab, which has a
 field for it. The counts are taken over the whole branch and not over what a

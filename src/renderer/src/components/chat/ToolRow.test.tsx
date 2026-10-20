@@ -2,6 +2,10 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { TaskView } from '@core/backgroundTasks.js'
+
+import { agentsOf, NOW, task } from '../../test/tasks.js'
+import { AgentsContext } from './agentTasks.js'
 import { readChange } from './changeSummary.js'
 import { COLLAPSED, ExpandContext, type Expansion, FileLinkContext } from './expansion.js'
 import type { ToolCall, ToolResult } from './logBlocks.js'
@@ -233,18 +237,42 @@ describe('an opened row', () => {
   it('follows the log’s “show everything”, and a click after it', async () => {
     const user = userEvent.setup()
     const { rerender } = renderRow(called({ name: 'Bash', input: { command: 'ls' } }), {
-      expansion: { all: true, generation: 1 }
+      expansion: { ...COLLAPSED, all: true, generation: 1 }
     })
 
     expect(screen.getByRole('region', { name: 'Input' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Bash/ }))
     expect(screen.queryByRole('region', { name: 'Input' })).not.toBeInTheDocument()
 
-    rerender({ all: true, generation: 2 })
+    rerender({ ...COLLAPSED, all: true, generation: 2 })
     expect(screen.getByRole('region', { name: 'Input' })).toBeInTheDocument()
 
-    rerender({ all: false, generation: 3 })
+    rerender({ ...COLLAPSED, all: false, generation: 3 })
     expect(screen.queryByRole('region', { name: 'Input' })).not.toBeInTheDocument()
+  })
+
+  /*
+   * "Show in conversation" opens the rows above a nested agent, and only
+   * those, without touching a choice the reader made elsewhere — and a click
+   * afterwards still works on the row it hits.
+   */
+  it('opens when a reveal names it, and a click after it still counts', async () => {
+    const user = userEvent.setup()
+    const call = called({ toolUseId: 'c-1', name: 'Bash', input: { command: 'ls' } })
+    const { rerender } = renderRow(call)
+    expect(screen.queryByRole('region', { name: 'Input' })).not.toBeInTheDocument()
+
+    rerender({ ...COLLAPSED, reveal: new Set(['other']), revealed: 1 })
+    expect(screen.queryByRole('region', { name: 'Input' })).not.toBeInTheDocument()
+
+    rerender({ ...COLLAPSED, reveal: new Set(['c-1']), revealed: 2 })
+    expect(screen.getByRole('region', { name: 'Input' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Bash/ }))
+    expect(screen.queryByRole('region', { name: 'Input' })).not.toBeInTheDocument()
+
+    rerender({ ...COLLAPSED, reveal: new Set(['c-1']), revealed: 3 })
+    expect(screen.getByRole('region', { name: 'Input' })).toBeInTheDocument()
   })
 })
 
@@ -313,5 +341,168 @@ describe('a subagent’s row', () => {
     expect(screen.queryByText('hmm')).not.toBeInTheDocument()
     expect(screen.queryByText('never drawn')).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Report' })).toHaveTextContent('Done digging.')
+  })
+})
+
+/*
+ * A call that started a background task answers at once — `async_launched` —
+ * and goes on working. The row follows the task rather than the answer.
+ */
+describe('a row that started a background task', () => {
+  const launched = answer({ content: 'Async agent launched', stats: { background: true } })
+
+  function renderTask(
+    current: TaskView,
+    call: ToolCall = called({
+      name: 'Agent',
+      input: { description: 'Audit', prompt: 'p' },
+      toolUseId: 'call-1',
+      result: launched
+    })
+  ): void {
+    render(
+      <AgentsContext.Provider value={agentsOf([current])}>
+        <ToolRow call={call} busy={false} />
+      </AgentsContext.Provider>
+    )
+  }
+
+  it('spins while the task works, saying what it is doing, its model and its time', () => {
+    vi.useFakeTimers({ now: NOW })
+    renderTask(task())
+    vi.useRealTimers()
+
+    expect(screen.getByText('Running', { selector: '.sr-only' })).toBeInTheDocument()
+    expect(screen.getByText('Reading src/routes/auth.ts')).toBeInTheDocument()
+    expect(screen.getByText('Haiku 5.5 · 1:42 · 18k tokens')).toBeInTheDocument()
+  })
+
+  // Nothing from the CLI yet: its own latest step in the log, then the plain fact.
+  it('falls back to the latest step, and then to saying it works in the background', () => {
+    renderTask(
+      task({ activity: null, model: null, tokens: 0 }),
+      called({
+        name: 'Agent',
+        toolUseId: 'call-1',
+        result: launched,
+        steps: [
+          {
+            kind: 'tool',
+            at: 1,
+            call: called({ toolUseId: 's-1', name: 'Grep', input: { pattern: 'auth' } })
+          },
+          {
+            kind: 'tool',
+            at: 2,
+            call: called({ toolUseId: 's-2', name: 'TodoWrite', input: { todos: [] } })
+          }
+        ]
+      })
+    )
+    expect(screen.getByText(/^TodoWrite|Update todos/)).toBeInTheDocument()
+  })
+
+  it('names the latest step with what it acted on', () => {
+    renderTask(
+      task({ activity: null }),
+      called({
+        name: 'Agent',
+        toolUseId: 'call-1',
+        result: launched,
+        steps: [
+          {
+            kind: 'tool',
+            at: 1,
+            call: called({ toolUseId: 's-1', name: 'Read', input: { file_path: 'src/a.ts' } })
+          }
+        ]
+      })
+    )
+    expect(screen.getByText(/src\/a\.ts$/)).toBeInTheDocument()
+  })
+
+  it('says it works in the background with nothing else to say', () => {
+    renderTask(task({ activity: null }))
+    expect(screen.getByText('Running in the background')).toBeInTheDocument()
+  })
+
+  it('says it is waiting on an answer', () => {
+    renderTask(task({ waiting: true }))
+    expect(screen.getAllByText('Needs your answer')).not.toHaveLength(0)
+  })
+
+  it('says how it ended and how many calls it took', () => {
+    renderTask(task({ status: 'completed', toolUses: 5, durationMs: 12_000 }))
+
+    expect(screen.getByText('Done · 5 tool calls')).toBeInTheDocument()
+    expect(screen.getByText('Haiku 5.5 · 0:12 · 18k tokens')).toBeInTheDocument()
+    expect(screen.getByText('Done', { selector: '.sr-only' })).toBeInTheDocument()
+  })
+
+  it('says a failure and a stop in their own words', () => {
+    renderTask(task({ status: 'failed', toolUses: 0 }))
+    expect(screen.getAllByText('Failed')).toHaveLength(2)
+  })
+
+  it('says a stopped task was stopped', () => {
+    renderTask(task({ status: 'stopped', toolUses: 0 }))
+    expect(screen.getByText('Stopped')).toBeInTheDocument()
+  })
+
+  // A foreground subagent's call came back with the work: the row says what
+  // came back, as any call does, and the task adds only its model and time.
+  it('says what a foreground agent came back with once it is over', () => {
+    renderTask(
+      task({ status: 'completed', backgrounded: false, durationMs: 12_000 }),
+      called({
+        name: 'Agent',
+        input: { description: 'Audit', prompt: 'p' },
+        toolUseId: 'call-1',
+        result: answer({ content: 'All read.', stats: { toolUses: 4 } })
+      })
+    )
+
+    expect(screen.getByText('4 tool uses')).toBeInTheDocument()
+    expect(screen.queryByText(/^Done ·/)).not.toBeInTheDocument()
+    expect(screen.getByText('Haiku 5.5 · 0:12 · 18k tokens')).toBeInTheDocument()
+  })
+
+  // Its steps run on after the turn that started it, so a step without an
+  // answer yet is under way rather than cut off.
+  it('draws the steps of an agent still at work as running', async () => {
+    const user = userEvent.setup()
+    renderTask(
+      task(),
+      called({
+        name: 'Agent',
+        input: { description: 'Audit', prompt: 'p' },
+        toolUseId: 'call-1',
+        result: launched,
+        steps: [
+          {
+            kind: 'tool',
+            at: 1,
+            call: called({ toolUseId: 's-1', name: 'Grep', input: { pattern: 'auth' } })
+          }
+        ]
+      })
+    )
+
+    await user.click(screen.getByRole('button', { name: /Agent/ }))
+
+    expect(screen.getAllByText('Running', { selector: '.sr-only' })).toHaveLength(2)
+  })
+
+  // A launch the CLI refused is a failure of the call, whatever the task says.
+  it('reads a failed call as failed', () => {
+    renderTask(
+      task(),
+      called({
+        name: 'Agent',
+        toolUseId: 'call-1',
+        result: answer({ ok: false, content: 'Concurrent subagent limit reached' })
+      })
+    )
+    expect(screen.getByText('Failed', { selector: '.sr-only' })).toBeInTheDocument()
   })
 })

@@ -115,8 +115,10 @@ describe('listRemotes', () => {
 })
 
 describe('pushTargets', () => {
+  // Inside an agent's session the publish guard's rules are in the environment,
+  // and git would report them instead of finding nothing.
   it('answers nothing when nothing is configured', async () => {
-    expect(await pushTargets(gitIn(dir))).toEqual([])
+    expect(await pushTargets(gitIn(dir, { env: { GIT_CONFIG_COUNT: '0' } }))).toEqual([])
   })
 
   it('reads every remote URL and every URL rewrite the user wrote', async () => {

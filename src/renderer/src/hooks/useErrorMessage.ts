@@ -96,6 +96,13 @@ export function useErrorMessage(): (failure: Failure) => string {
             number: failure.params?.number ?? '',
             reason: failure.params?.reason ?? ''
           })
+        case 'nothingToRerun':
+          return t('errors.nothingToRerun', { number: failure.params?.number ?? '' })
+        case 'rerunFailed':
+          return t('errors.rerunFailed', {
+            number: failure.params?.number ?? '',
+            reason: failure.params?.reason ?? ''
+          })
         case 'attachmentTooLarge':
           return t('errors.attachmentTooLarge', { limit: failure.params?.limit ?? '' })
         case 'attachmentType':

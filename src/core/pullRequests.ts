@@ -25,10 +25,14 @@ import {
   type PullRequestDetail,
   type PullRequestState,
   RemoteStateSchema,
+  RerunPayloadSchema,
+  type RerunScope,
+  runsToRerun,
   ThreadsPayloadSchema,
   toBranchRequests,
   toPullRequestDetail,
-  toPullRequestState
+  toPullRequestState,
+  toRerunPayload
 } from './pullRequestShapes.js'
 import { commitAll, hasUncommittedChanges } from './worktree.js'
 import { allOf } from './parallel.js'
@@ -492,6 +496,9 @@ export const ReplyBodySchema = z.string().min(1).max(65_536)
 export const MergeMethodSchema = z.enum(['merge', 'squash', 'rebase'])
 export type MergeMethod = z.infer<typeof MergeMethodSchema>
 
+/** Which checks a re-run restarts; the type itself lives with the pure half. */
+export const RerunScopeSchema = z.enum(['failed', 'all']) satisfies z.ZodType<RerunScope>
+
 const MERGE_FLAGS: Record<MergeMethod, string> = {
   merge: '--merge',
   squash: '--squash',
@@ -525,6 +532,11 @@ async function refuseAnotherBranch(number: number, branch: string, gh: GhExec): 
     parsed(await asked(() => gh(['pr', 'view', String(number), '--json', 'headRefName'])))
   )
 
+  assertOnBranch(number, branch, headRefName)
+}
+
+/** The refusal itself, shared by the guard above and a read that already has the head. */
+function assertOnBranch(number: number, branch: string, headRefName: string): void {
   if (headRefName === branch) return
 
   throw new GitHubError(
@@ -585,6 +597,57 @@ export async function closePullRequest(number: number, branch: string, gh: GhExe
       { number: String(number), reason: reasonFrom(error) },
       'GitHub would not close the pull request.'
     )
+  }
+}
+
+/**
+ * Restarts the request's Actions runs — only their failed jobs, or all of them.
+ *
+ * The rollup is read here rather than taken from the pane: what arrives over
+ * IPC guarantees nothing (§11.3), and the read that checks the branch can carry
+ * the checks in the same call.
+ *
+ * One run after another, stopping at the first refusal. The ones already
+ * restarted stay restarted, which is harmless — the pane reads again either way
+ * and shows what is actually running.
+ */
+export async function rerunChecks(
+  number: number,
+  scope: RerunScope,
+  branch: string,
+  gh: GhExec
+): Promise<void> {
+  const { headRefName, checks } = toRerunPayload(
+    shaped(
+      RerunPayloadSchema,
+      parsed(
+        await asked(() =>
+          gh(['pr', 'view', String(number), '--json', 'headRefName,url,statusCheckRollup'])
+        )
+      )
+    )
+  )
+  assertOnBranch(number, branch, headRefName)
+
+  const runs = runsToRerun(checks, scope)
+  if (runs.length === 0) {
+    throw new GitHubError(
+      'nothingToRerun',
+      { number: String(number) },
+      'No GitHub Actions run of this pull request can be re-run.'
+    )
+  }
+
+  for (const run of runs) {
+    try {
+      await gh(['run', 'rerun', run, ...(scope === 'failed' ? ['--failed'] : [])])
+    } catch (error) {
+      throw new GitHubError(
+        'rerunFailed',
+        { number: String(number), reason: reasonFrom(error) },
+        'GitHub would not re-run the checks.'
+      )
+    }
   }
 }
 

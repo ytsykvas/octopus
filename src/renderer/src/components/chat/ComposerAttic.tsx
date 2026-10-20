@@ -12,6 +12,7 @@ import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
+import { AgentsChip } from './AgentsChip.js'
 import { DropdownMenu, type MenuAction, type MenuSection } from '../DropdownMenu.js'
 import { formatTokens, usageTone } from './format.js'
 import { SkillsPanel } from './SkillsPanel.js'
@@ -315,6 +316,10 @@ export function ComposerAttic({
             )}
           />
         )}
+
+        {/* Beside the context reading: both say what the conversation is
+            carrying right now, and the count is gone when nothing has run. */}
+        <AgentsChip />
 
         {/* The right-hand group, held apart by `ml-auto` on the group rather
             than on the refusal — which used to own it alone, back when there

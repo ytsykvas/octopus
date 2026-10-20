@@ -9,6 +9,7 @@ import type { Failure, Result } from '../../../preload/index.js'
 import { chat, emitAgentEvent, givenChat } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
+import { task } from '../test/tasks.js'
 import { useChat } from './useChat.js'
 
 /** The English fallback is enough here; the mapping is `useErrorMessage`'s job. */
@@ -59,7 +60,7 @@ describe('a conversation that is already waiting on an answer', () => {
    */
   it('finds out what the agent is blocked on when the chat is opened', async () => {
     givenChat()
-    vi.mocked(octopus().chats.pendingPermission).mockResolvedValue({ ok: true, value: request })
+    vi.mocked(octopus().chats.pendingPermissions).mockResolvedValue({ ok: true, value: [request] })
 
     const { result } = renderHook(() => useChat(...open()))
 
@@ -86,7 +87,7 @@ describe('a conversation that is already waiting on an answer', () => {
   // conversation that opened perfectly well would be worse than that.
   it('says nothing when the question cannot be asked for', async () => {
     givenChat()
-    vi.mocked(octopus().chats.pendingPermission).mockResolvedValue({
+    vi.mocked(octopus().chats.pendingPermissions).mockResolvedValue({
       ok: false,
       error: 'no such chat'
     })
@@ -157,6 +158,35 @@ describe('a reading that belongs to the account rather than the conversation', (
 
     expect(result.current.streaming.text).toBe('Look')
     expect(result.current.entries).toEqual([])
+  })
+})
+
+/*
+ * An agent the turn sent off starting or ending is said by the CLI between the
+ * main agent's words. It is a record — the log keeps it — but it is not the
+ * end of the sentence being typed out, which it used to wipe.
+ */
+describe('a background agent starting or ending', () => {
+  it('is kept in the log without wiping the answer being written', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({ type: 'text_delta', text: 'Look' })
+    emitAgentEvent({ type: 'task_ended', taskId: 't-1', status: 'completed' })
+    emitAgentEvent({
+      type: 'task_started',
+      taskId: 't-2',
+      kind: 'agent',
+      description: 'd',
+      backgrounded: true,
+      ambient: false
+    })
+
+    expect(result.current.streaming.text).toBe('Look')
+    expect(result.current.entries).toHaveLength(2)
   })
 })
 
@@ -1042,5 +1072,128 @@ describe('a turn already in flight when the pane opens', () => {
       expect(result.current.loading).toBe(false)
     })
     expect(result.current.busy).toBe(false)
+  })
+})
+
+/*
+ * A background agent's question belongs to the agent, not to the turn that
+ * launched it: the core keeps it open past the turn's end, so the card has to
+ * stay answerable too — and several agents can be asking at once.
+ */
+describe('questions from the agents a turn sent off', () => {
+  const ask = (requestId: string, taskId?: string): AgentEvent => ({
+    type: 'permission_request',
+    requestId,
+    toolName: 'Bash',
+    input: { command: requestId },
+    ...(taskId !== undefined && { taskId })
+  })
+
+  const RESULT: AgentEvent = {
+    type: 'result',
+    ok: true,
+    costUsd: null,
+    durationMs: 1,
+    inputTokens: null,
+    outputTokens: null,
+    terminalReason: null
+  }
+
+  async function opened(): Promise<{ readonly current: ReturnType<typeof useChat> }> {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+    return result
+  }
+
+  it('keeps every agent’s question answerable once the turn has ended', async () => {
+    const result = await opened()
+
+    emitAgentEvent(ask('turn'))
+    emitAgentEvent(ask('first', 't-1'))
+    emitAgentEvent(ask('second', 't-2'))
+    expect([...result.current.answerable]).toEqual(['turn', 'first', 'second'])
+    expect(result.current.pending?.requestId).toBe('turn')
+
+    emitAgentEvent(RESULT)
+
+    expect([...result.current.answerable]).toEqual(['first', 'second'])
+    expect(result.current.pending).toBeNull()
+  })
+
+  it('lets one go when it is withdrawn or answered, and every one when the session fails', async () => {
+    const result = await opened()
+    emitAgentEvent(ask('first', 't-1'))
+    emitAgentEvent(ask('second', 't-2'))
+    emitAgentEvent(ask('third', 't-3'))
+
+    emitAgentEvent({ type: 'permission_withdrawn', requestId: 'first' })
+    await act(async () => {
+      await result.current.answer('second', 'allow')
+    })
+    expect([...result.current.answerable]).toEqual(['third'])
+
+    emitAgentEvent({ type: 'error', message: 'exited' })
+    expect(result.current.answerable.size).toBe(0)
+  })
+
+  it('leaves the agents’ questions when the turn is stopped', async () => {
+    const result = await opened()
+    emitAgentEvent(ask('turn'))
+    emitAgentEvent(ask('first', 't-1'))
+
+    await act(async () => {
+      await result.current.interrupt()
+    })
+
+    expect([...result.current.answerable]).toEqual(['first'])
+  })
+
+  // The turn may be long over: an agent asking is not the main agent working.
+  it('is not busy on opening a conversation whose only question is an agent’s', async () => {
+    givenChat()
+    vi.mocked(octopus().chats.pendingPermissions).mockResolvedValue({
+      ok: true,
+      value: [{ requestId: 'r-1', toolName: 'Bash', input: {}, taskId: 't-1' }]
+    })
+
+    const { result } = renderHook(() => useChat(...open()))
+
+    await waitFor(() => {
+      expect(result.current.answerable.has('r-1')).toBe(true)
+    })
+    expect(result.current.busy).toBe(false)
+  })
+})
+
+/*
+ * With the turn over and its agents still at work, the conversation is
+ * `running` and the main agent is not: a Stop there would stop nothing — the
+ * agents are stopped from the map — and a message goes straight in.
+ */
+describe('a conversation whose agents alone are at work', () => {
+  function pushTasks(mainWorking: boolean): void {
+    const [push] = vi.mocked(octopus().tasks.onChanged).mock.calls.at(-1) ?? []
+    if (!push) throw new Error('nothing subscribed')
+    act(() => {
+      push({ chatId: chat().id, workspaceId: 'planner/anna', tasks: [task()], mainWorking })
+    })
+  }
+
+  it('offers Send rather than a Stop, and Stop again once the main agent works', async () => {
+    const { result } = renderHook(() =>
+      useChat(chat(), 'planner/anna', 'running', describeFailure, noted)
+    )
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+
+    pushTasks(false)
+    expect(result.current.busy).toBe(false)
+
+    pushTasks(true)
+    expect(result.current.busy).toBe(true)
   })
 })

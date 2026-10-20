@@ -18,6 +18,7 @@ import { CHAT_ID, emitAgentEvent, emitChatStatus, givenChat } from '../../test/c
 import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
+import { task } from '../../test/tasks.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { Chat } from './Chat.js'
 
@@ -2691,5 +2692,121 @@ describe('showing every step', () => {
     await waitFor(() => {
       expect(octopus().files.read).toHaveBeenCalledWith(workspaceView('anna').id, 'src/App.tsx')
     })
+  })
+})
+
+/*
+ * The agents a conversation sent off, read from its log after a restart and
+ * from the core while they run. The count opens the map, and the map takes
+ * the reader to the row that started an agent.
+ */
+describe('the agents of a conversation', () => {
+  const SENT_ONE_OFF: ChatEntry[] = [
+    {
+      role: 'agent',
+      at: '2026-08-13T09:00:00.000Z',
+      event: {
+        type: 'tool_use',
+        toolUseId: 'call-1',
+        name: 'Agent',
+        input: { description: 'Look around', prompt: 'Read everything.' }
+      }
+    },
+    {
+      role: 'agent',
+      at: '2026-08-13T09:00:01.000Z',
+      event: {
+        type: 'task_started',
+        taskId: 't-1',
+        toolUseId: 'call-1',
+        kind: 'agent',
+        description: 'Look around',
+        backgrounded: true,
+        ambient: false
+      }
+    }
+  ]
+
+  // Nothing is live after a restart, so one with no end was cut off.
+  it('reads an agent a restart cut off as stopped', async () => {
+    givenChat(SENT_ONE_OFF)
+    await openLoadedChat()
+
+    await userEvent.click(
+      await screen.findByTitle('The agents this conversation ran — show what they did')
+    )
+
+    expect(screen.getByRole('button', { name: 'Look around, Stopped' })).toBeInTheDocument()
+  })
+
+  it('takes the reader from the map to the row that started the agent', async () => {
+    givenChat(SENT_ONE_OFF)
+    vi.mocked(octopus().tasks.onChanged).mockImplementation((push) => {
+      push({
+        chatId: CHAT_ID,
+        workspaceId: 'planner/anna',
+        tasks: [task({ taskId: 't-1' })],
+        mainWorking: false
+      })
+      return vi.fn()
+    })
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView')
+    await openLoadedChat()
+
+    await userEvent.click(await screen.findByTitle('1 agent working — show what it is doing'))
+    await userEvent.click(screen.getByRole('button', { name: 'Audit route handlers, Working' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
+
+    expect(scrolled).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stop agent' }))
+    expect(octopus().tasks.stop).toHaveBeenCalledWith(CHAT_ID, 't-1')
+  })
+
+  // A nested agent's row is drawn only inside its parent's opened row, so the
+  // parent is opened on the way to it.
+  it('opens the row an agent was started inside to reach it', async () => {
+    givenChat([
+      ...SENT_ONE_OFF,
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:02.000Z',
+        event: {
+          type: 'tool_use',
+          toolUseId: 'call-2',
+          name: 'Agent',
+          input: { description: 'Look deeper', prompt: 'Read more.' },
+          parentToolUseId: 'call-1'
+        }
+      }
+    ])
+    vi.mocked(octopus().tasks.onChanged).mockImplementation((push) => {
+      push({
+        chatId: CHAT_ID,
+        workspaceId: 'planner/anna',
+        tasks: [
+          task({ taskId: 't-1', toolUseId: 'call-1', description: 'Look around' }),
+          task({
+            taskId: 't-2',
+            toolUseId: 'call-2',
+            parentTaskId: 't-1',
+            description: 'Look deeper'
+          })
+        ],
+        mainWorking: false
+      })
+      return vi.fn()
+    })
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView')
+    await openLoadedChat()
+    const nested = (): Element | null => document.querySelector('[data-tool-use-id="call-2"]')
+    expect(nested()).toBeNull()
+
+    await userEvent.click(await screen.findByTitle('2 agents working — show what they are doing'))
+    await userEvent.click(screen.getByRole('button', { name: 'Look deeper, Working' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
+
+    expect(nested()).not.toBeNull()
+    expect(scrolled.mock.contexts.at(-1)).toBe(nested())
   })
 })

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { countLines, type ToolStats } from '@core/events.js'
 
-import type { ToolCall, ToolResult } from './logBlocks.js'
+import type { LogBlock, ToolCall, ToolResult } from './logBlocks.js'
 import { readFailure } from './toolFailure.js'
 import { describeToolInput } from './toolSummary.js'
 
@@ -107,8 +107,10 @@ function firstLine(result: ToolResult): ResultSummary {
   return { kind: 'line', text: first.length > 120 ? `${first.slice(0, 120)}…` : first }
 }
 
-const stat = (result: ToolResult, key: keyof Omit<ToolStats, 'background'>): number | null =>
-  result.stats?.[key] ?? null
+const stat = (
+  result: ToolResult,
+  key: keyof Omit<ToolStats, 'background' | 'model'>
+): number | null => result.stats?.[key] ?? null
 
 /*
  * The inputs each label reads. Validated rather than read straight off the
@@ -329,6 +331,18 @@ export function kindOf(name: string): ToolKind {
 
 export function viewOf(name: string): ToolView {
   return TOOL_VIEWS[kindOf(name)]
+}
+
+/** A call in one line, the way a `⎿` line or a list of steps names it. */
+export function stepText(name: string, input: unknown): string {
+  const label = viewOf(name).label(name, input)
+  return label.target === null ? label.name : `${label.name} ${label.target}`
+}
+
+/** A subagent's latest call in one line, or null before it has made one. */
+export function latestStep(steps: readonly LogBlock[] | null): string | null {
+  const latest = steps?.findLast((block) => block.kind === 'tool')
+  return latest?.kind === 'tool' ? stepText(latest.call.name, latest.call.input) : null
 }
 
 /** A URL's host, or the URL itself when it does not parse as one. */

@@ -11,6 +11,7 @@ import {
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
+  pushTasks,
   pushConfig,
   pushSettingsOpen,
   pushTheme,
@@ -225,6 +226,9 @@ async function start(): Promise<void> {
     },
     broadcastChatsChanged: (event) => {
       pushChatsChanged(BrowserWindow.getAllWindows(), event)
+    },
+    broadcastTasks: (event) => {
+      pushTasks(BrowserWindow.getAllWindows(), event)
     },
     broadcastConfig: (config) => {
       pushConfig(BrowserWindow.getAllWindows(), config)

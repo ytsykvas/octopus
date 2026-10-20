@@ -30,6 +30,7 @@ import type {
   ChatEvent,
   ChatsChangedEvent,
   ChatStatusEvent,
+  TasksEvent,
   WorkspaceStatusEvent
 } from '../core/service.js'
 import type { Workspace } from '../core/store.js'
@@ -69,6 +70,8 @@ interface Harness {
   readonly chatStatusEvents: ChatStatusEvent[]
   /** Every announcement that a workspace's set of conversations moved. */
   readonly chatsChangedEvents: ChatsChangedEvent[]
+  /** Every push of a conversation's background agents. */
+  readonly taskEvents: TasksEvent[]
   /** Every config a write announced, so a window that made no call can learn. */
   readonly configBroadcasts: Config[]
   /** Paths handed to the system, in order. */
@@ -92,6 +95,7 @@ function harness(): Harness {
   const statusEvents: WorkspaceStatusEvent[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
   const chatsChangedEvents: ChatsChangedEvent[] = []
+  const taskEvents: TasksEvent[] = []
   const configBroadcasts: Config[] = []
   const opened: string[] = []
   const dialogOptions: OpenDialogOptions[] = []
@@ -104,6 +108,7 @@ function harness(): Harness {
     statusEvents,
     chatStatusEvents,
     chatsChangedEvents,
+    taskEvents,
     configBroadcasts,
     opened,
     dialogOptions,
@@ -128,6 +133,7 @@ function harness(): Harness {
       broadcastUsageWindows: (windows) => usageBroadcasts.push(windows),
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
       broadcastChatsChanged: (event) => chatsChangedEvents.push(event),
+      broadcastTasks: (event) => taskEvents.push(event),
       broadcastConfig: (config) => configBroadcasts.push(config),
       openPath: (path) => {
         opened.push(path)
@@ -434,6 +440,7 @@ describe('channel table', () => {
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
     'workspaces:closePullRequest',
+    'workspaces:rerunChecks',
     'workspaces:replyToReviewThread',
     'workspaces:resolveReviewThread',
     'files:open',
@@ -453,6 +460,8 @@ describe('channel table', () => {
     'chats:history',
     'chats:send',
     'chats:interrupt',
+    'tasks:list',
+    'tasks:stop',
     'chats:mode',
     'chats:planMode',
     'chats:effort',
@@ -2025,6 +2034,49 @@ describe('workspaces of a real project', () => {
     ).resolves.toMatchObject({ ok: false })
   })
 
+  it('re-runs the failed checks, and refuses a scope that is not one', async () => {
+    const projectId = await addProject('rerunning')
+    const asked: string[][] = []
+    let branch = ''
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve(
+          args[1] === 'view'
+            ? JSON.stringify({
+                headRefName: branch,
+                url: 'https://github.com/o/p/pull/7',
+                statusCheckRollup: [
+                  {
+                    __typename: 'CheckRun',
+                    name: 'check',
+                    workflowName: 'check',
+                    status: 'COMPLETED',
+                    conclusion: 'FAILURE',
+                    startedAt: '2026-08-20T11:00:00Z',
+                    completedAt: '2026-08-20T11:02:00Z',
+                    detailsUrl: 'https://github.com/o/p/actions/runs/123/job/456'
+                  }
+                ]
+              })
+            : ''
+        )
+      }
+    })
+    const workspace = await createWorkspace(projectId)
+    branch = workspace.branch
+
+    await expect(
+      invoke('workspaces:rerunChecks', workspace.id, 7, 'failed')
+    ).resolves.toMatchObject({ ok: true })
+    expect(asked[1]).toEqual(['run', 'rerun', '123', '--failed'])
+
+    await expect(
+      invoke('workspaces:rerunChecks', workspace.id, 7, 'everything')
+    ).resolves.toMatchObject({ ok: false })
+    expect(asked).toHaveLength(2)
+  })
+
   it('answers a review thread, and refuses an id that is not a node id', async () => {
     const projectId = await addProject('replying')
     const asked: string[][] = []
@@ -2733,7 +2785,7 @@ describe('the agent chat', () => {
 
     await expect(invoke('chats:pending', chatIdOf(opened))).resolves.toEqual({
       ok: true,
-      value: null
+      value: []
     })
   })
 
@@ -2861,6 +2913,79 @@ describe('the agent chat', () => {
         // to point at on the other side of the bridge too.
         uuid: 'u-1'
       })
+    })
+  })
+
+  describe('the agent map', () => {
+    /** An SDK whose turn sent one agent off, and which records what it is told to stop. */
+    function agentAwayQuery(stopped: string[]): QueryFn {
+      return () => {
+        async function* stream(): AsyncGenerator<SDKMessage> {
+          await Promise.resolve()
+          yield {
+            type: 'system',
+            subtype: 'task_started',
+            task_id: 'task-1',
+            tool_use_id: 'call-1',
+            description: 'Look around',
+            task_type: 'local_agent',
+            is_backgrounded: true,
+            uuid: 'frame',
+            session_id: 'sess-1'
+          } as unknown as SDKMessage
+        }
+
+        return Object.assign(stream(), {
+          interrupt: () => Promise.resolve(undefined),
+          setPermissionMode: () => Promise.resolve(),
+          stopTask: (taskId: string) => {
+            stopped.push(taskId)
+            return Promise.resolve()
+          }
+        }) as unknown as Query
+      }
+    }
+
+    it('lists nothing before any agent has run', async () => {
+      await expect(invoke('tasks:list')).resolves.toEqual({ ok: true, value: [] })
+    })
+
+    // The same wiring the set of conversations needed a test for: that a push
+    // reaches the sender at all, and that the list answers what was pushed.
+    it('broadcasts an agent starting, lists it and stops it', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      const stopped: string[] = []
+      await useService({ query: agentAwayQuery(stopped) })
+
+      const chatId = chatIdOf(await invoke('chats:open', workspace.id))
+      await invoke('chats:send', chatId, 'look around')
+
+      await vi.waitFor(() => {
+        expect(bench.taskEvents.at(-1)?.tasks).toEqual([
+          expect.objectContaining({ taskId: 'task-1', status: 'running' })
+        ])
+      })
+      await expect(invoke('tasks:list')).resolves.toMatchObject({
+        ok: true,
+        value: [{ chatId, tasks: [{ taskId: 'task-1' }] }]
+      })
+
+      await expect(invoke('tasks:stop', chatId, 'task-1')).resolves.toEqual({
+        ok: true,
+        value: undefined
+      })
+      expect(stopped).toEqual(['task-1'])
+    })
+
+    // The id goes on to the agent's process, so it is bounded on the way in.
+    it('refuses a task id that is not one', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      const chatId = chatIdOf(await invoke('chats:open', workspace.id))
+
+      await expect(invoke('tasks:stop', chatId, '')).resolves.toMatchObject({ ok: false })
+      await expect(invoke('tasks:stop', chatId, 7)).resolves.toMatchObject({ ok: false })
     })
   })
 
