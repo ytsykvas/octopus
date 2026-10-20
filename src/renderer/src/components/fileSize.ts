@@ -8,16 +8,17 @@
  */
 export function fileSize(bytes: number): string {
   const kilobytes = bytes / 1024
+  const megabytes = kilobytes / 1024
 
-  return kilobytes < 1024
-    ? new Intl.NumberFormat(undefined, {
-        style: 'unit',
-        unit: 'kilobyte',
-        maximumFractionDigits: 0
-      }).format(kilobytes)
-    : new Intl.NumberFormat(undefined, {
-        style: 'unit',
-        unit: 'megabyte',
-        maximumFractionDigits: 1
-      }).format(kilobytes / 1024)
+  // Gigabytes too, for the memory the status bar reports: "3 172,4 MB" is a
+  // number to read, "3,1 GB" one to see.
+  if (kilobytes < 1024) return inUnit(kilobytes, 'kilobyte', 0)
+  if (megabytes < 1024) return inUnit(megabytes, 'megabyte', 1)
+  return inUnit(megabytes / 1024, 'gigabyte', 1)
+}
+
+function inUnit(value: number, unit: string, maximumFractionDigits: number): string {
+  return new Intl.NumberFormat(undefined, { style: 'unit', unit, maximumFractionDigits }).format(
+    value
+  )
 }

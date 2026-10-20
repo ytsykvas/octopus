@@ -1107,14 +1107,24 @@ describe('reconcile', () => {
         conversation({ id: 'chat-2', status: 'waiting_permission', title: 'auth refactor' })
       ]
 
-      expect(reconcile([workspace], [], new Map(), chats)[0]?.chats).toEqual([
-        { id: 'chat-1', agent: 'claude', title: null, status: 'running', started: true },
+      expect(
+        reconcile([workspace], [], new Map(), chats, new Map([['chat-1', '09:00']]))[0]?.chats
+      ).toEqual([
+        {
+          id: 'chat-1',
+          agent: 'claude',
+          title: null,
+          status: 'running',
+          started: true,
+          turnStartedAt: '09:00'
+        },
         {
           id: 'chat-2',
           agent: 'claude',
           title: 'auth refactor',
           status: 'waiting_permission',
-          started: false
+          started: false,
+          turnStartedAt: null
         }
       ])
     })
@@ -1164,7 +1174,14 @@ describe('reconcile', () => {
       const chats = [conversation({ id: 'chat-1', title: 'auth refactor' })]
 
       expect(reconcile([workspace], null, new Map(), chats)[0]?.chats).toEqual([
-        { id: 'chat-1', agent: 'claude', title: 'auth refactor', status: 'idle', started: false }
+        {
+          id: 'chat-1',
+          agent: 'claude',
+          title: 'auth refactor',
+          status: 'idle',
+          started: false,
+          turnStartedAt: null
+        }
       ])
     })
   })

@@ -69,6 +69,7 @@ function config(overrides: Partial<Config> = {}): Config {
     language: 'en',
     rightPanelWidth: 360,
     rightPanelOpen: true,
+    statusBarOpen: true,
     notificationSound: true,
     rightPanelTab: 'diff',
     diffView: 'unified',
@@ -2941,7 +2942,11 @@ describe('App', () => {
             number: 812,
             state: 'open',
             checks: 'passed',
-            url: 'https://github.com/o/p/pull/812'
+            url: 'https://github.com/o/p/pull/812',
+            draft: false,
+            decision: null,
+            mergeable: 'mergeable',
+            mergeState: 'clean'
           }
         ]
       }
@@ -3064,7 +3069,11 @@ describe('App', () => {
             number: 812,
             state: 'open',
             checks,
-            url: 'https://github.com/o/p/pull/812'
+            url: 'https://github.com/o/p/pull/812',
+            draft: false,
+            decision: null,
+            mergeable: 'mergeable',
+            mergeState: 'clean'
           }
         ]
       }
@@ -3198,7 +3207,11 @@ describe('a branch list that came back full', () => {
             number: 812,
             state: 'merged',
             checks: 'passed',
-            url: 'https://github.com/o/p/pull/812'
+            url: 'https://github.com/o/p/pull/812',
+            draft: false,
+            decision: null,
+            mergeable: 'mergeable',
+            mergeState: 'clean'
           }
         ]
       }
@@ -3286,5 +3299,116 @@ describe('news from agents out of sight', () => {
     expect(await screen.findByRole('button', { name: /^Two/, current: 'page' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Finished' })).not.toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /finished here/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('the status bar along the foot', () => {
+  // The tab strip hands its list down without the turn's start, which only the
+  // core knows; the bar must still have it for the conversation in front.
+  it('counts the turn of the conversation in front', async () => {
+    const started = new Date(Date.now() - 65_000).toISOString()
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [
+        workspaceView('anna', {
+          status: 'running',
+          chats: [
+            {
+              id: 'c-1',
+              agent: 'claude',
+              title: null,
+              status: 'running',
+              started: true,
+              turnStartedAt: started
+            }
+          ]
+        })
+      ]
+    })
+    givenChats([chat({ id: 'c-1', status: 'running', sessionId: 's-1' })])
+    const user = await openApp()
+
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(await screen.findByRole('timer')).toHaveTextContent(/^Claude 1 · 1m \d+s$/)
+  })
+
+  it('folds away and remembers it', async () => {
+    const user = await openApp()
+
+    await user.click(await screen.findByRole('button', { name: 'Hide the status bar' }))
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({ statusBarOpen: false })
+  })
+
+  // Folded, it reads nothing: no `ps` for a figure nobody is shown, and only
+  // the open project's requests rather than every project's.
+  it('opens folded when it was left that way, and measures nothing', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ statusBarOpen: false })
+    })
+
+    await openApp()
+
+    expect(await screen.findByRole('button', { name: 'Show the status bar' })).toBeInTheDocument()
+    expect(window.octopus.resources.read).not.toHaveBeenCalled()
+    expect(window.octopus.projects.pullRequests).not.toHaveBeenCalled()
+  })
+
+  // The bar counts across projects, so every project's requests are read
+  // without any of them being opened.
+  it('watches every project’s requests while it shows', async () => {
+    givenTwoProjects()
+
+    await openApp()
+
+    await waitFor(() => {
+      expect(window.octopus.projects.pullRequests).toHaveBeenCalledWith('planner')
+      expect(window.octopus.projects.pullRequests).toHaveBeenCalledWith('ledger')
+    })
+    expect(window.octopus.resources.read).toHaveBeenCalled()
+  })
+
+  it('takes a request that needs action to its workspace, with the request pane open', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna'), workspaceView('bob')]
+    })
+    vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
+      ok: true,
+      value: {
+        capped: false,
+        requests: [
+          {
+            branch: 'ytsykvas/anna',
+            number: 812,
+            state: 'open',
+            checks: 'failed',
+            url: 'https://github.com/o/p/pull/812',
+            draft: false,
+            decision: null,
+            mergeable: 'mergeable',
+            mergeState: 'clean'
+          }
+        ]
+      }
+    })
+    const user = await openApp()
+
+    await user.click(await screen.findByRole('button', { name: /1 needs action/ }))
+    const list = screen.getByRole('dialog', { name: 'Pull requests that need action' })
+    await user.click(within(list).getByRole('button', { name: /planner · anna/ }))
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({
+      rightPanelTab: 'pullRequest',
+      rightPanelOpen: true
+    })
+    // The header speaks for the workspace now selected, and it has a request.
+    expect(await screen.findByRole('button', { name: 'Merge' })).toBeInTheDocument()
   })
 })

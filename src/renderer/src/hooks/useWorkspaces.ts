@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next'
 import type { Project } from '@core/store.js'
 import type { WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
+/** A conversation as the tab strip knows it: everything but the turn's start. */
+export type TabChat = Omit<WorkspaceChat, 'turnStartedAt'>
+
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useErrorMessage } from './useErrorMessage.js'
 import { onChatEvent } from './chatEvents.js'
@@ -32,7 +35,7 @@ interface UseWorkspaces {
    * of the project to learn something this window already decided. The dots on
    * the row would otherwise only catch up when the next turn ended.
    */
-  readonly setChats: (workspaceId: string, chats: readonly WorkspaceChat[]) => void
+  readonly setChats: (workspaceId: string, chats: readonly TabChat[]) => void
   /**
    * Makes a workspace in a project, answering with its id — or null where
    * nothing was made, a second press included, so the caller can open it.
@@ -122,8 +125,16 @@ export function useWorkspaces(
   )
 
   const setChats = useCallback(
-    (workspaceId: string, chats: readonly WorkspaceChat[]) => {
-      patchWorkspace(workspaceId, (workspace) => ({ ...workspace, chats }))
+    (workspaceId: string, chats: readonly TabChat[]) => {
+      // The strip knows the tabs but not when a turn began, which only the core
+      // says — so a conversation keeps the start this list already had for it.
+      patchWorkspace(workspaceId, (workspace) => {
+        const started = new Map(workspace.chats.map((chat) => [chat.id, chat.turnStartedAt]))
+        return {
+          ...workspace,
+          chats: chats.map((chat) => ({ ...chat, turnStartedAt: started.get(chat.id) ?? null }))
+        }
+      })
     },
     [patchWorkspace]
   )
@@ -220,10 +231,12 @@ export function useWorkspaces(
    */
   useEffect(
     () =>
-      window.octopus.chats.onStatus(({ chatId, workspaceId, status }) => {
+      window.octopus.chats.onStatus(({ chatId, workspaceId, status, turnStartedAt }) => {
         patchWorkspace(workspaceId, (workspace) => ({
           ...workspace,
-          chats: workspace.chats.map((chat) => (chat.id === chatId ? { ...chat, status } : chat))
+          chats: workspace.chats.map((chat) =>
+            chat.id === chatId ? { ...chat, status, turnStartedAt } : chat
+          )
         }))
       }),
     [patchWorkspace]

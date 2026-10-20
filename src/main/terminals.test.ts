@@ -510,6 +510,13 @@ describe('what is still running', () => {
     expect(manager.list()).toHaveLength(2)
   })
 
+  it('gives each session\u2019s group leader beside its owner', () => {
+    const owner = { workspaceId: 'planner/anna', purpose: 'run' } as const
+    manager.create({ ...SPEC, owner }, renderer as never)
+
+    expect(manager.leaders()).toEqual([{ pid: spawned[0]?.pid, owner }])
+  })
+
   it('has nothing to say before anything is started', () => {
     expect(manager.list()).toEqual([])
   })

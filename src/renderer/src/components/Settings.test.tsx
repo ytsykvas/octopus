@@ -29,6 +29,7 @@ function config(overrides: Partial<Config> = {}): Config {
     language: 'en',
     rightPanelWidth: 360,
     rightPanelOpen: true,
+    statusBarOpen: true,
     notificationSound: true,
     rightPanelTab: 'diff',
     diffView: 'unified',

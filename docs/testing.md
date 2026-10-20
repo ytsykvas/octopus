@@ -232,6 +232,12 @@ have convinced the migration it had already run and stranded that project's
 variables for good. `homedir()` reads `HOME` on macOS and Linux, so pointing it
 somewhere harmless turns that whole class of mistake into a missing file.
 
+The scratch `HOME` takes `~/.gitconfig` with it, so `testEnv` also sets
+**`EMAIL`**. A commit made without `-c user.email` otherwise asks git to guess an
+identity from the host name, which works on a CI runner and fails as "Author
+identity unknown" on a Mac whose name has no domain. `EMAIL` is git's last
+resort, below any `-c` a test passes, so it overrides nothing.
+
 ## Renderer tests
 
 `src/renderer/src/test/setup.ts` runs before each: it installs a stub on

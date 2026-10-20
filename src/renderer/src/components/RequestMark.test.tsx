@@ -11,6 +11,10 @@ const request = (overrides: Partial<BranchRequest> = {}): BranchRequest => ({
   state: 'open',
   checks: 'passed',
   url: 'https://github.com/o/p/pull/812',
+  draft: false,
+  decision: null,
+  mergeable: 'mergeable',
+  mergeState: 'clean',
   ...overrides
 })
 

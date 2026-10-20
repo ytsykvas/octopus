@@ -798,7 +798,7 @@ export async function readBranchRequests(
           '--limit',
           String(limit),
           '--json',
-          'headRefName,number,state,url,statusCheckRollup'
+          'headRefName,number,state,url,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision'
         ])
       )
     )

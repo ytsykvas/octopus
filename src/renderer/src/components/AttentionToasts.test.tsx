@@ -87,3 +87,11 @@ describe('AttentionToasts', () => {
     expect(status.parentElement).toBe(document.body)
   })
 })
+
+// The status bar runs along the foot; the notices rise by its height while it
+// shows, or the newest one covers its right end.
+it('sits above the status bar by its height', () => {
+  renderToasts([notice()])
+
+  expect(screen.getByRole('status')).toHaveClass('bottom-[calc(1rem+var(--status-bar-height,0px))]')
+})

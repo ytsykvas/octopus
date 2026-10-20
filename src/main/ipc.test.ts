@@ -171,6 +171,7 @@ function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } 
         return id
       }),
       list: vi.fn(() => [...live]),
+      leaders: vi.fn(() => live.map(({ owner }, index) => ({ pid: 500 + index, owner }))),
       ...sessions,
       disposeAll: vi.fn(),
       disposeFor: vi.fn(() => Promise.resolve()),
@@ -378,6 +379,7 @@ describe('channel table', () => {
     'scripts:approve',
     'workspace:env',
     'workspaces:serving',
+    'resources:read',
     'workspaces:port',
     'workspaces:strays',
     'workspaces:stopStrays',
@@ -1322,6 +1324,26 @@ describe('scripts and instructions of a real project', () => {
     })
   })
 
+  // The root is this process and the terminals are the ones it spawned; the
+  // renderer has nothing to say about either.
+  it('measures the tree under this process, terminals charged to their workspaces', async () => {
+    const measure = vi.spyOn(service, 'measureResources').mockResolvedValue({
+      total: { cpu: 0, memory: 0 },
+      app: { cpu: 0, memory: 0 },
+      parts: []
+    })
+    await invoke('terminal:create', {
+      cwd: dir,
+      owner: { workspaceId: 'planner/anna', purpose: 'run' }
+    })
+    await invoke('terminal:create', { cwd: dir, owner: { workspaceId: null, purpose: 'auth' } })
+
+    await expect(invoke('resources:read')).resolves.toMatchObject({ ok: true })
+    expect(measure).toHaveBeenCalledWith(process.pid, [
+      { pid: 500, workspaceId: 'planner/anna', kind: 'server' }
+    ])
+  })
+
   // The port is ours to decide, so the channel takes a workspace rather than a
   // number to connect to.
   it('reports whether a workspace\u2019s own port is answering', async () => {
@@ -2117,7 +2139,11 @@ describe('workspaces of a real project', () => {
               number: 7,
               state: 'OPEN',
               url: 'https://github.com/o/p/pull/7',
-              statusCheckRollup: []
+              statusCheckRollup: [],
+              isDraft: false,
+              mergeable: 'MERGEABLE',
+              mergeStateStatus: 'CLEAN',
+              reviewDecision: ''
             }
           ])
         )

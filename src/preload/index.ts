@@ -28,6 +28,7 @@ import type {
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
 import type { StrayServer } from '@core/strayServers.js'
 import type { QuestionAnswer } from '@core/questions.js'
+import type { ResourceReading } from '@core/resources.js'
 import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
 import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
@@ -144,6 +145,12 @@ const api = {
     /** Signs out silently and reports whether the account is really gone. */
     signOut: (kind: AccountKind, login: string | null): Promise<Result<boolean>> =>
       ipcRenderer.invoke('accounts:signOut', kind, login) as Promise<Result<boolean>>
+  },
+
+  resources: {
+    /** What the application and every workspace's processes cost the machine now. */
+    read: (): Promise<Result<ResourceReading>> =>
+      ipcRenderer.invoke('resources:read') as Promise<Result<ResourceReading>>
   },
 
   terminal: {
