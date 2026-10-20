@@ -29,6 +29,7 @@ import { useTranslation } from 'react-i18next'
 import type { FormValues } from '@core/elicitation.js'
 import { type AgentEvent, type TurnOutcome, turnOutcome } from '@core/events.js'
 import { type QuestionAnswer, readQuestions } from '@core/questions.js'
+import { liveAgents } from '@core/backgroundTasks.js'
 import type { PermissionAnswer } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
@@ -54,6 +55,8 @@ import {
   retractedUuids,
   turnStartedAt
 } from './logBlocks.js'
+import { nameOf } from './agentFormat.js'
+import { AgentsContext } from './agentTasks.js'
 import { ToolRow } from './ToolRow.js'
 import { WorkingLine } from './WorkingLine.js'
 import { readFailure } from './toolFailure.js'
@@ -85,7 +88,8 @@ interface ChatLogProps {
   readonly entries: readonly ChatEntry[]
   readonly streaming: Streaming
   readonly busy: boolean
-  readonly pendingRequestId: string | null
+  /** Every question still open, by request id — the turn's and its agents'. */
+  readonly answerable: ReadonlySet<string>
   /** The one MCP question a server is still holding open, if any. */
   readonly pendingElicitationId: string | null
   readonly onAnswer: (requestId: string, answer: PermissionAnswer) => void
@@ -128,7 +132,7 @@ export function ChatLog({
   entries,
   streaming,
   busy,
-  pendingRequestId,
+  answerable,
   pendingElicitationId,
   onAnswer,
   onAnswerElicitation,
@@ -165,6 +169,7 @@ export function ChatLog({
   // What the agent took back, so the rows it names can say so rather than
   // standing above their own replacement as though they still held.
   const retracted = useMemo(() => retractedUuids(entries), [entries])
+  const agentsAway = liveAgents(useContext(AgentsContext).tasks)
 
   // The turns as the library's runtime holds them. Held against the blocks:
   // it caches each message by the object it was handed, and a list rebuilt on
@@ -193,7 +198,7 @@ export function ChatLog({
                 retracted,
                 waiting,
                 busy,
-                pendingRequestId,
+                answerable,
                 pendingElicitationId,
                 elicitationAnswers,
                 onAnswerElicitation,
@@ -217,7 +222,12 @@ export function ChatLog({
       </ExpandContext.Provider>
       {streaming.text !== '' && <Prose text={streaming.text} />}
 
-      {busy && <WorkingLine since={turnStart} />}
+      {/* With the main agent's turn over, what is still at work is the agents it
+          sent off, and a clock from the turn's start would be counting the
+          wrong thing. */}
+      {(busy || agentsAway > 0) && (
+        <WorkingLine since={busy ? turnStart : null} agents={busy ? 0 : agentsAway} />
+      )}
     </div>
   )
 }
@@ -287,7 +297,7 @@ const renderTurn = (): React.JSX.Element => (
 /** What every row needs to answer whatever the agent is waiting on. */
 interface AnswerProps {
   busy: boolean
-  pendingRequestId: string | null
+  answerable: ReadonlySet<string>
   pendingElicitationId: string | null
   elicitationAnswers: Map<string, 'accept' | 'decline' | 'cancel'>
   onAnswerElicitation: (
@@ -371,7 +381,7 @@ function AgentRow({
   event,
   plans,
   busy,
-  pendingRequestId,
+  answerable,
   pendingElicitationId,
   elicitationAnswers,
   onAnswerElicitation,
@@ -459,7 +469,7 @@ function AgentRow({
         return (
           <QuestionCard
             questions={asked}
-            answerable={event.requestId === pendingRequestId}
+            answerable={answerable.has(event.requestId)}
             answered={answers.get(event.requestId) ?? null}
             onAnswer={(given) => {
               onAnswerQuestions(event.requestId, given)
@@ -480,10 +490,11 @@ function AgentRow({
           input={event.input}
           reason={event.reason ?? null}
           suppressAlways={event.suppressAlways === true}
+          taskId={event.taskId ?? null}
           // A request read back from the transcript is history: the session it
           // belonged to answered it long ago, and offering buttons would let
           // the user answer a question nobody is waiting on.
-          answerable={event.requestId === pendingRequestId}
+          answerable={answerable.has(event.requestId)}
           onAnswer={(answer) => {
             onAnswer(event.requestId, answer)
           }}
@@ -860,10 +871,13 @@ function PermissionCard({
   input,
   reason,
   suppressAlways,
+  taskId,
   answerable,
   onAnswer
 }: {
   toolName: string
+  /** The background agent asking, when it is one of those and not the conversation. */
+  taskId: string | null
   input: unknown
   /** The bridge's explanation, where it sent one. Null is the ordinary case. */
   reason: string | null
@@ -877,6 +891,9 @@ function PermissionCard({
 }): React.JSX.Element {
   const { t } = useTranslation()
   const target = describeToolInput(input)
+  // Several agents can ask at once, and "may it run Bash" is a different
+  // question depending on which of them wants to.
+  const asker = useContext(AgentsContext).byId.get(taskId ?? '')
 
   return (
     <div className="border-warning/30 bg-warning-bg rounded-[var(--radius-panel)] border px-3 py-2.5">
@@ -884,6 +901,11 @@ function PermissionCard({
         <ShieldAlert aria-hidden className="text-warning shrink-0" size={14} />
         {t('chat.permissionTitle', { tool: toolName })}
       </p>
+      {asker !== undefined && (
+        <p className="text-ink-soft mt-0.5 pl-[22px] text-[11px]">
+          {t('agents.asking', { name: shown(nameOf(asker)) })}
+        </p>
+      )}
 
       {/* The one place somebody authorises a command to run against their
           working tree, and it has to show the command that will run. An

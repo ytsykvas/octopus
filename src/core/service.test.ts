@@ -40,6 +40,7 @@ import {
   type ChatEvent,
   type ChatsChangedEvent,
   type ChatStatusEvent,
+  type TasksEvent,
   createService as makeService,
   sameWindows,
   SHUTDOWN_GRACE_MS,
@@ -4055,7 +4056,7 @@ describe('the agent chat', () => {
       input?: unknown,
       decisionReason?: string,
       suggestions?: readonly PermissionUpdate[],
-      extra?: { signal?: AbortSignal; suppressAlwaysAllowRule?: boolean }
+      extra?: { signal?: AbortSignal; suppressAlwaysAllowRule?: boolean; agentID?: string }
     ) => Promise<unknown>
     /** Calls the SDK's `onElicitation`, which is what an MCP server blocks on. */
     readonly elicit: (request: Record<string, unknown>) => Promise<{ action: string }>
@@ -4065,6 +4066,8 @@ describe('the agent chat', () => {
     /** Every `rewindFiles` the session was asked for. */
     readonly rewinds: () => { messageId: string; dryRun: boolean }[]
     readonly interrupted: () => number
+    /** Every background task the session was told to stop, in order. */
+    readonly stoppedTasks: () => string[]
     readonly closed: () => number
     /** How many times this session was asked what `/usage` answers. */
     readonly usageAsked: () => number
@@ -4152,6 +4155,7 @@ describe('the agent chat', () => {
       const flagSettings: { effortLevel?: string; skillOverrides?: Record<string, string> }[] = []
       const requestedModels: (string | undefined)[] = []
       let interrupted = 0
+      const stoppedTasks: string[] = []
       let closed = 0
       let usageAsked = 0
       let pluginReloads = 0
@@ -4221,6 +4225,7 @@ describe('the agent chat', () => {
                 decisionReason?: string
                 suggestions?: readonly PermissionUpdate[]
                 suppressAlwaysAllowRule?: boolean
+                agentID?: string
               }
             ) => Promise<unknown>
           )(toolName, input, {
@@ -4229,7 +4234,8 @@ describe('the agent chat', () => {
             ...(suggestions !== undefined && { suggestions }),
             ...(extra.suppressAlwaysAllowRule !== undefined && {
               suppressAlwaysAllowRule: extra.suppressAlwaysAllowRule
-            })
+            }),
+            ...(extra.agentID !== undefined && { agentID: extra.agentID })
           })
         },
         elicit: (request) => {
@@ -4244,6 +4250,7 @@ describe('the agent chat', () => {
           )(request, { signal: new AbortController().signal })
         },
         interrupted: () => interrupted,
+        stoppedTasks: () => stoppedTasks,
         closed: () => closed,
         usageAsked: () => usageAsked,
         usageOptions: () => usageOptions,
@@ -4258,6 +4265,10 @@ describe('the agent chat', () => {
         interrupt: () => {
           interrupted++
           return Promise.resolve(undefined)
+        },
+        stopTask: (taskId: string) => {
+          stoppedTasks.push(taskId)
+          return Promise.resolve()
         },
         applyFlagSettings: (settings: {
           effortLevel?: string
@@ -4531,6 +4542,652 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'more')
       agents[1]?.emit(initMessage)
       agents[1]?.emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+    })
+  })
+
+  /*
+   * Agents the conversation sent off to work on their own.
+   *
+   * The turn that launched them ends at once — the call answers
+   * `async_launched` — while they go on for minutes. The result used to set
+   * the conversation idle there and then, and the workspace list said
+   * "Finished" over agents that were still working.
+   */
+  describe('agents in the background', () => {
+    const started = (
+      taskId: string,
+      toolUseId: string,
+      extra: Record<string, unknown> = {}
+    ): SDKMessage =>
+      ({
+        type: 'system',
+        subtype: 'task_started',
+        task_id: taskId,
+        tool_use_id: toolUseId,
+        description: `Agent ${taskId}`,
+        subagent_type: 'Explore',
+        is_backgrounded: true,
+        task_type: 'local_agent',
+        uuid: 'frame',
+        session_id: 'sess-1',
+        ...extra
+      }) as unknown as SDKMessage
+
+    const progress = (taskId: string, description: string): SDKMessage =>
+      ({
+        type: 'system',
+        subtype: 'task_progress',
+        task_id: taskId,
+        description,
+        usage: { total_tokens: 1200, tool_uses: 2, duration_ms: 900 },
+        uuid: 'frame',
+        session_id: 'sess-1'
+      }) as unknown as SDKMessage
+
+    const notified = (taskId: string, status = 'completed'): SDKMessage =>
+      ({
+        type: 'system',
+        subtype: 'task_notification',
+        task_id: taskId,
+        status,
+        output_file: '/tmp/out',
+        summary: 'All read.',
+        usage: { total_tokens: 4800, tool_uses: 5, duration_ms: 3100 },
+        uuid: 'frame',
+        session_id: 'sess-1'
+      }) as unknown as SDKMessage
+
+    const alive = (...taskIds: string[]): SDKMessage =>
+      ({
+        type: 'system',
+        subtype: 'background_tasks_changed',
+        tasks: taskIds.map((task_id) => ({ task_id, task_type: 'local_agent', description: '' })),
+        uuid: 'frame',
+        session_id: 'sess-1'
+      }) as unknown as SDKMessage
+
+    const launched = (toolUseId: string): SDKMessage =>
+      ({
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: toolUseId, content: 'Async agent launched' }
+          ]
+        },
+        tool_use_result: {
+          status: 'async_launched',
+          isAsync: true,
+          resolvedModel: 'claude-haiku-5-5'
+        },
+        parent_tool_use_id: null,
+        uuid: 'u-launched',
+        session_id: 'sess-1'
+      }) as unknown as SDKMessage
+
+    /** A turn that sent one agent off and ended, with the agent still going. */
+    async function withAgentAway(extra: ServiceOptions = {}): Promise<{
+      service: OctopusService
+      workspaceId: string
+      chatId: string
+      events: ChatEvent[]
+    }> {
+      const { service, workspaceId, events } = await withWorkspace(extra)
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(toolCallMessage('call-1', 'Agent', { description: 'Look', prompt: 'look' }))
+      agent().emit(alive('task-1'))
+      agent().emit(started('task-1', 'call-1'))
+      agent().emit(launched('call-1'))
+      agent().emit(resultMessage)
+      return { service, workspaceId, chatId: chat.id, events }
+    }
+
+    const settle = (): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, 50))
+
+    it('stays working while an agent it sent off is still running', async () => {
+      const { service, workspaceId } = await withAgentAway()
+      await settle()
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+    })
+
+    it('finishes once the last agent has ended', async () => {
+      const { service, workspaceId } = await withAgentAway()
+      agent().emit(notified('task-1'))
+      agent().emit(alive())
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+    })
+
+    // The CLI hands a finished agent's report to the main agent in a turn of
+    // its own, which nobody sent a message for.
+    it('works through the turn the CLI starts to read a report', async () => {
+      const { service, workspaceId } = await withAgentAway()
+      agent().emit(notified('task-1'))
+      agent().emit(alive())
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      agent().emit(initMessage)
+      agent().emit(textMessage('The agent found three files.'))
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+    })
+
+    // Ending the agents is not ending the turn: one that ends while the main
+    // agent is still writing leaves the conversation working.
+    it('keeps working when the agents end inside a turn', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+      agent().emit(notified('task-1'))
+      agent().emit(alive())
+      await settle()
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+    })
+
+    it('lists what each agent is doing and on which model', async () => {
+      const { service, chatId } = await withAgentAway()
+      agent().emit(progress('task-1', 'Reading src/a.ts'))
+
+      await vi.waitFor(() => {
+        const [entry] = service.listTasks()
+        expect(entry?.chatId).toBe(chatId)
+        expect(entry?.tasks).toEqual([
+          expect.objectContaining({
+            taskId: 'task-1',
+            toolUseId: 'call-1',
+            status: 'running',
+            subagentType: 'Explore',
+            model: 'claude-haiku-5-5',
+            activity: 'Reading src/a.ts',
+            tokens: 1200
+          })
+        ])
+      })
+    })
+
+    /*
+     * A push per progress frame would be one per tool call per agent, and a
+     * workflow runs dozens: frames that land together go out as one.
+     */
+    it('announces a burst of progress once', async () => {
+      const { service } = await withAgentAway()
+      await settle()
+      const pushed: TasksEvent[] = []
+      service.onTasks((event) => pushed.push(event))
+
+      agent().emit(progress('task-1', 'Reading a'))
+      agent().emit(progress('task-1', 'Reading b'))
+      agent().emit(progress('task-1', 'Reading c'))
+
+      await vi.waitFor(() => {
+        expect(pushed).toHaveLength(1)
+      })
+      expect(pushed[0]?.tasks[0]?.activity).toBe('Reading c')
+    })
+
+    it('tells a window that stopped listening nothing more', async () => {
+      const { service } = await withAgentAway()
+      await settle()
+      const pushed: TasksEvent[] = []
+      const stop = service.onTasks((event) => pushed.push(event))
+
+      stop()
+      agent().emit(notified('task-1'))
+      await settle()
+
+      expect(pushed).toEqual([])
+    })
+
+    // The log draws the agent's row the moment its start is recorded, and the
+    // map has to know of it by then or the row would read as interrupted.
+    it('announces an agent starting at once, ahead of the event', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const order: string[] = []
+      service.onTasks(() => order.push('tasks'))
+      service.onAgentEvent(({ event }) => {
+        if (event.type === 'task_started') order.push('event')
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(started('task-1', 'call-1'))
+
+      await vi.waitFor(() => {
+        expect(order).toEqual(['tasks', 'event'])
+      })
+    })
+
+    it('stops one agent and leaves the rest', async () => {
+      const { service, chatId } = await withAgentAway()
+      await settle()
+
+      await service.stopTask(chatId, 'task-1')
+
+      expect(agent().stoppedTasks()).toEqual(['task-1'])
+      expect(agent().interrupted()).toBe(0)
+    })
+
+    // The click was behind the push that said the agent had ended.
+    it('takes a Stop for an agent that is already over as done', async () => {
+      const { service, chatId } = await withAgentAway()
+      agent().emit(notified('task-1'))
+      await settle()
+
+      await service.stopTask(chatId, 'task-1')
+      await service.stopTask(chatId, 'task-unknown')
+
+      expect(agent().stoppedTasks()).toEqual([])
+    })
+
+    // With a Stop for each task, the conversation's own Stop ends the turn
+    // only, and the agents it had sent off go on — so it is still working.
+    it('stays working after Stop while agents run on', async () => {
+      const { service, workspaceId, chatId } = await withAgentAway()
+      await settle()
+
+      await service.interruptChat(chatId)
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+    })
+
+    it('asks the session not to kill its agents on Stop', async () => {
+      await withAgentAway()
+
+      expect(agent().options()).toMatchObject({
+        perTaskStopAffordance: true,
+        agentProgressSummaries: true
+      })
+    })
+
+    /*
+     * A question from an agent belongs to that agent, not to the turn that
+     * launched it. Ending the turn used to refuse every open question, which
+     * would have refused the agent's too — and the agent would have read the
+     * refusal as an answer.
+     */
+    it("keeps an agent's question open when the turn ends", async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+
+      let answered = false
+      void agent()
+        .ask('Bash', { command: 'ls' }, undefined, undefined, { agentID: 'task-1' })
+        .then(() => {
+          answered = true
+        })
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      })
+
+      agent().emit(resultMessage)
+      await settle()
+
+      expect(answered).toBe(false)
+      expect(service.pendingPermissions(chat.id)).toHaveLength(1)
+      expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      expect(service.listTasks()[0]?.tasks[0]?.waiting).toBe(true)
+    })
+
+    it('names the agent that is asking', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+
+      void agent().ask('Bash', { command: 'ls' }, undefined, undefined, { agentID: 'task-1' })
+
+      await vi.waitFor(() => {
+        expect(events.map(({ event }) => event)).toContainEqual(
+          expect.objectContaining({ type: 'permission_request', taskId: 'task-1' })
+        )
+      })
+    })
+
+    /*
+     * Two agents asking at once, and the conversation itself: one agent ends,
+     * and only its question goes with it. The other agent's stays, and so does
+     * the turn's own until the turn ends.
+     */
+    it("lets an agent's question go with that agent and no other", async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+      agent().emit(started('task-2', 'call-2'))
+
+      const settled: string[] = []
+      const ask = (who: string, agentID?: string): void => {
+        void agent()
+          .ask('Bash', { command: who }, undefined, undefined, {
+            ...(agentID !== undefined && { agentID })
+          })
+          .then(() => settled.push(who))
+      }
+      ask('turn')
+      ask('first', 'task-1')
+      ask('second', 'task-2')
+      await vi.waitFor(() => {
+        expect(service.listTasks()[0]?.tasks.map((task) => task.waiting)).toEqual([true, true])
+      })
+
+      agent().emit(notified('task-1', 'failed'))
+      await vi.waitFor(() => {
+        expect(settled).toEqual(['first'])
+      })
+      expect(service.listTasks()[0]?.tasks.map((task) => task.waiting)).toEqual([false, true])
+    })
+
+    // A failed turn is news, and agents ending afterwards do not paint over it.
+    it('leaves a failed turn red when its agents end', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+      agent().emit(abortedResultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('error')
+      })
+
+      agent().emit(notified('task-1'))
+      await settle()
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('error')
+    })
+
+    // The process went down, and everything it ran went with it.
+    it('ends every agent when the session fails', async () => {
+      const { service } = await withAgentAway()
+      agent().finish(new Error('exited with code 1'))
+
+      await vi.waitFor(() => {
+        expect(service.listTasks()[0]?.tasks[0]?.status).toBe('stopped')
+      })
+    })
+
+    it('forgets the agents of a conversation that is closed', async () => {
+      const { service, workspaceId, chatId } = await withAgentAway()
+      await service.createChat(workspaceId)
+      await settle()
+
+      const pushed: TasksEvent[] = []
+      service.onTasks((event) => pushed.push(event))
+
+      await service.closeChat(chatId)
+
+      expect(service.listTasks()).toEqual([])
+      // The windows drop its rows, and the push that was gathering never comes.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(pushed).toEqual([{ chatId, workspaceId, tasks: [], mainWorking: false }])
+    })
+
+    // A closing session still speaks for a moment, and what it says about its
+    // agents must not bring back what closing it forgot.
+    it('does not bring back the agents of a closed conversation', async () => {
+      const { service, workspaceId, chatId } = await withAgentAway()
+      await service.createChat(workspaceId)
+      await settle()
+
+      await service.closeChat(chatId)
+      agent().emit(started('task-late', 'call-late'))
+      agent().emit(textMessage('still talking'))
+      await settle()
+
+      expect(service.listTasks()).toEqual([])
+    })
+
+    /*
+     * An agent's question outlives the turn, so the window keeps its card —
+     * and only an event can tell it the agent has gone and the buttons reach
+     * nothing. The amber goes with it.
+     */
+    it('withdraws the question of an agent that ends, and stops waiting', async () => {
+      const { service, workspaceId, events } = await withAgentAway()
+      agent().emit(started('task-2', 'call-2'))
+      await settle()
+      void agent().ask('Bash', { command: 'ls' }, undefined, undefined, { agentID: 'task-1' })
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      })
+      const asked = events.find(({ event }) => event.type === 'permission_request')?.event
+      if (asked?.type !== 'permission_request') throw new Error('no question')
+
+      agent().emit(notified('task-1', 'killed'))
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+      expect(events.map(({ event }) => event)).toContainEqual({
+        type: 'permission_withdrawn',
+        requestId: asked.requestId
+      })
+    })
+
+    it('rests once the last agent ends with its question open', async () => {
+      const { service, workspaceId } = await withAgentAway()
+      await settle()
+      void agent().ask('Bash', { command: 'ls' }, undefined, undefined, { agentID: 'task-1' })
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      })
+
+      agent().emit(notified('task-1', 'killed'))
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+    })
+
+    // A message still queued is a turn about to start: resting in between
+    // would flash the tab idle and say "done" for nothing.
+    it('does not rest between a turn and the message queued behind it', async () => {
+      const { service, workspaceId } = await withAgentAway()
+      agent().emit({
+        type: 'command_lifecycle',
+        command_uuid: 'queued-1',
+        state: 'queued',
+        uuid: 'frame',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+      await settle()
+
+      agent().emit(notified('task-1'))
+      await settle()
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+    })
+
+    /*
+     * The CLI opens a turn of its own to deliver each finished agent's report,
+     * so one piece of work ends in several results. "Done" is the moment the
+     * last of it is over, said once.
+     */
+    it('says it is finished once, when nothing is left working', async () => {
+      const { service, workspaceId, events } = await withAgentAway({ finishedAfterMs: 200 })
+      const finished = (): number => events.filter(({ event }) => event.type === 'finished').length
+
+      // The agent ending is not the end: its report is handed over in a turn
+      // of its own, which opens a moment later — as measured, with an init.
+      agent().emit(notified('task-1'))
+      agent().emit(alive())
+      agent().emit(initMessage)
+      // The model takes its time over the report before saying anything.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      agent().emit(textMessage('The agent found three files.'))
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(finished()).toBe(1)
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      expect(finished()).toBe(1)
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+    })
+
+    // Measured: an agent ending mid-turn is sometimes reported again in a turn
+    // of its own just after the turn's result.
+    it('waits out a report turn that follows the result', async () => {
+      const { service, workspaceId, events } = await withWorkspace({ finishedAfterMs: 200 })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+      agent().emit(notified('task-1'))
+      agent().emit(resultMessage)
+      agent().emit(initMessage)
+      agent().emit(textMessage('The agent is done.'))
+      agent().emit(resultMessage)
+
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      expect(events.filter(({ event }) => event.type === 'finished')).toHaveLength(1)
+    })
+
+    // Measured: two agents, a report turn for each; the first turn ends with
+    // the second agent still at work.
+    it('says nothing at a report turn while another agent works', async () => {
+      const { events } = await withAgentAway({ finishedAfterMs: 20 })
+      agent().emit(started('task-2', 'call-2'))
+      agent().emit(notified('task-1'))
+      agent().emit(textMessage('The first agent is done.'))
+      agent().emit(resultMessage)
+      await settle()
+
+      expect(events.filter(({ event }) => event.type === 'finished')).toEqual([])
+    })
+
+    it('says a plain turn is finished as it ends', async () => {
+      const { service, workspaceId, events } = await withWorkspace({ finishedAfterMs: 20 })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(events.map(({ event }) => event.type)).toContain('finished')
+      })
+    })
+
+    // An agent stopped from the map need not be reported back at all: the
+    // rest that follows is then the end.
+    it('is done when the last agent ends and no report turn follows', async () => {
+      const { events } = await withAgentAway({ finishedAfterMs: 50 })
+      agent().emit(notified('task-1', 'killed'))
+
+      await vi.waitFor(() => {
+        expect(events.map(({ event }) => event.type)).toContain('finished')
+      })
+    })
+
+    // A message sent the moment a turn ends is the conversation going on.
+    it('is not done when a message is sent straight after the turn', async () => {
+      const { service, workspaceId, events } = await withWorkspace({ finishedAfterMs: 200 })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await settle()
+      await service.sendToChat(chat.id, 'and another thing')
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      expect(events.map(({ event }) => event.type)).not.toContain('finished')
+    })
+
+    // Closed, or the application quitting: a "done" nobody will see is dropped.
+    it('drops a done still waiting when the conversation closes', async () => {
+      const { service, workspaceId, events } = await withWorkspace({ finishedAfterMs: 200 })
+      const chat = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await settle()
+
+      await service.closeChat(chat.id)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      expect(events.map(({ event }) => event.type)).not.toContain('finished')
+    })
+
+    // Only while there are agents can `running` mean the agents alone, and the
+    // composer has to know which, to offer Send rather than a Stop for nothing.
+    it('tells the windows whether the main agent is mid-turn', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const pushed: boolean[] = []
+      service.onTasks((event) => pushed.push(event.mainWorking))
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+      await settle()
+      expect(pushed).toEqual([true])
+
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(pushed).toEqual([true, false])
+      })
+    })
+
+    /*
+     * An end the CLI never announced — a task that simply dropped off the
+     * list of the living — is written down all the same, so the conversation
+     * reopened tomorrow says how it ended rather than "stopped".
+     */
+    it('records an end nobody announced', async () => {
+      const { service, chatId } = await withAgentAway()
+      agent().emit(alive())
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chatId)
+        expect(
+          history.flatMap((entry) => (entry.role === 'agent' ? [entry.event] : []))
+        ).toContainEqual({
+          type: 'task_ended',
+          taskId: 'task-1',
+          status: 'completed'
+        })
+      })
+    })
+
+    // Measured: a workflow is started with no background flag and its call
+    // returns at once; the list of the living is the only end it may get.
+    it('settles a workflow that drops off the list unannounced', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'ultracode: read two files')
+      agent().emit(initMessage)
+      agent().emit(alive('wf-1'))
+      agent().emit(
+        started('wf-1', 'call-wf', { task_type: 'local_workflow', is_backgrounded: undefined })
+      )
+      agent().emit(resultMessage)
+      await settle()
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+
+      agent().emit(alive())
 
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
@@ -7239,7 +7896,7 @@ describe('the agent chat', () => {
         type: 'permission_withdrawn',
         requestId
       })
-      expect(service.pendingPermission(chat.id)).toBeNull()
+      expect(service.pendingPermissions(chat.id)).toEqual([])
       // The turn goes on without the answer, as it does after a refusal.
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('running')
@@ -7715,23 +8372,21 @@ describe('the agent chat', () => {
       const requestId = await waitForRequest(events)
 
       // Everything the dialog needs to ask the question a second time.
-      expect(service.pendingPermission(chat.id)).toEqual({
-        requestId,
-        toolName: 'ExitPlanMode',
-        input: { plan: 'a plan' }
-      })
+      expect(service.pendingPermissions(chat.id)).toEqual([
+        { requestId, toolName: 'ExitPlanMode', input: { plan: 'a plan' } }
+      ])
 
       // And answering it still works, which is the point of recovering it.
       await service.answerPermission(requestId, 'allow')
       await expect(decision).resolves.toMatchObject({ behavior: 'allow' })
-      expect(service.pendingPermission(chat.id)).toBeNull()
+      expect(service.pendingPermissions(chat.id)).toEqual([])
     })
 
     it('says nothing for a chat whose agent is waiting on nothing', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      expect(service.pendingPermission(chat.id)).toBeNull()
+      expect(service.pendingPermissions(chat.id)).toEqual([])
     })
 
     // Two workspaces run at once, and each window asks about its own.
@@ -7746,14 +8401,14 @@ describe('the agent chat', () => {
       const second = await service.createWorkspaceIn(projectId)
       const other = await service.openChat(second.id)
 
-      expect(service.pendingPermission(first.id)).not.toBeNull()
-      expect(service.pendingPermission(other.id)).toBeNull()
+      expect(service.pendingPermissions(first.id)).toHaveLength(1)
+      expect(service.pendingPermissions(other.id)).toEqual([])
     })
 
     it('refuses a chat that does not exist', async () => {
       const { service } = await withWorkspace()
 
-      expect(() => service.pendingPermission('chat-nothing')).toThrow(WorkspaceError)
+      expect(() => service.pendingPermissions('chat-nothing')).toThrow(WorkspaceError)
     })
 
     /*
@@ -8134,7 +8789,7 @@ describe('the agent chat', () => {
     /*
      * A question used to outlive the turn that raised it: only an answer took
      * it out of the map, so stopping the turn instead of answering left it
-     * there — and `pendingPermission` hands the first one it finds to whatever
+     * there — and `pendingPermissions` hands it to whatever
      * window opens the conversation next. The cancelled card came back with
      * live buttons on it, and the composer with it, until the app restarted.
      *
@@ -8152,7 +8807,7 @@ describe('the agent chat', () => {
       await service.interruptChat(chat.id)
 
       await expect(decision).resolves.toMatchObject({ behavior: 'deny', message: ABANDONED })
-      expect(service.pendingPermission(chat.id)).toBeNull()
+      expect(service.pendingPermissions(chat.id)).toEqual([])
     })
 
     it('leaves the question another conversation is blocked on alone', async () => {
@@ -8172,8 +8827,8 @@ describe('the agent chat', () => {
 
       await service.interruptChat(first.id)
 
-      expect(service.pendingPermission(first.id)).toBeNull()
-      expect(service.pendingPermission(other.id)).not.toBeNull()
+      expect(service.pendingPermissions(first.id)).toEqual([])
+      expect(service.pendingPermissions(other.id)).toHaveLength(1)
     })
 
     // The turn can also end on its own while the question is open — the SDK
@@ -8189,7 +8844,7 @@ describe('the agent chat', () => {
       agent().emit(resultMessage)
 
       await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
-      expect(service.pendingPermission(chat.id)).toBeNull()
+      expect(service.pendingPermissions(chat.id)).toEqual([])
 
       await vi.waitFor(async () => {
         const [workspace] = await service.listWorkspaces('planner')
@@ -8208,7 +8863,7 @@ describe('the agent chat', () => {
       agent().finish(new Error('claude exited with code 1'))
 
       await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
-      expect(service.pendingPermission(chat.id)).toBeNull()
+      expect(service.pendingPermissions(chat.id)).toEqual([])
 
       await vi.waitFor(async () => {
         const [workspace] = await service.listWorkspaces('planner')
@@ -8221,7 +8876,7 @@ describe('the agent chat', () => {
      * taken out of the map before the write was attempted, so a config file
      * that could not be written left the agent blocked on something nobody
      * could answer a second time: the window had dropped its copy, and
-     * `pendingPermission` had none left to hand back.
+     * `pendingPermissions` had none left to hand back.
      */
     it('keeps the question askable when the answer cannot be saved', async () => {
       const { service, workspaceId, events } = await withWorkspace()
@@ -8237,7 +8892,7 @@ describe('the agent chat', () => {
       await mkdir(join(dir, 'config.json'), { recursive: true })
 
       await expect(service.answerPermission(requestId, 'always')).rejects.toThrow()
-      expect(service.pendingPermission(chat.id)?.requestId).toBe(requestId)
+      expect(service.pendingPermissions(chat.id)[0]?.requestId).toBe(requestId)
 
       // Answering it again works, which is the whole of the point: 'allow'
       // writes no config, so it gets through where 'always' could not.
@@ -9764,7 +10419,7 @@ describe('the agent chat', () => {
 
       await service.answerQuestions(requestId, [])
 
-      expect(service.pendingPermission(chat.id)?.requestId).toBe(requestId)
+      expect(service.pendingPermissions(chat.id)[0]?.requestId).toBe(requestId)
 
       // Answered properly before the test ends, so the tool call is not left
       // holding a promise while the temporary directory is being removed.
@@ -11267,7 +11922,7 @@ describe('the agent chat', () => {
 
       await service.closeChat(first.id)
 
-      expect(service.pendingPermission(second.id)).not.toBeNull()
+      expect(service.pendingPermissions(second.id)).toHaveLength(1)
     })
 
     it('brings the workspace back to idle when the one running goes', async () => {

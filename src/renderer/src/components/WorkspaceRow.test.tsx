@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { task } from '../test/tasks.js'
 import { workspaceView } from '../test/workspaces.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
 
@@ -439,6 +440,23 @@ describe('WorkspaceRow', () => {
 
       expect(screen.getByText('Working')).toBeInTheDocument()
       expect(screen.getByText('3 files')).toBeInTheDocument()
+    })
+
+    // The turn ended while what it sent off has not: the row says why it is
+    // still working with nothing visibly happening in the conversation.
+    it('counts the agents still at work', () => {
+      vi.mocked(window.octopus.tasks.onChanged).mockImplementation((push) => {
+        push({
+          chatId: 'c-1',
+          workspaceId: 'planner/anna',
+          tasks: [task(), task({ taskId: 't-2' })],
+          mainWorking: false
+        })
+        return vi.fn()
+      })
+      renderRow({ workspace: workspaceView('anna', { status: 'running' }) })
+
+      expect(screen.getByText('Working · 2 agents')).toBeInTheDocument()
     })
 
     // A directory that is gone has no state worth reporting.

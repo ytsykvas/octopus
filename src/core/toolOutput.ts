@@ -32,11 +32,15 @@ const AgentDoneSchema = z.object({
   content: z.array(z.object({ type: z.string(), text: z.string().optional() })),
   totalToolUseCount: Count,
   totalTokens: Count,
-  totalDurationMs: z.number().nonnegative()
+  totalDurationMs: z.number().nonnegative(),
+  resolvedModel: z.string().optional()
 })
 
 /** Sent off to run on its own; the report does not come back with this call. */
-const AgentAwaySchema = z.object({ status: z.enum(['async_launched', 'remote_launched']) })
+const AgentAwaySchema = z.object({
+  status: z.enum(['async_launched', 'remote_launched']),
+  resolvedModel: z.string().optional()
+})
 
 /** `TaskCreate`'s structured output — `TaskGet`'s has the same shape. */
 const CreatedTaskSchema = z.object({ task: z.object({ id: z.string() }) })
@@ -72,13 +76,20 @@ export function readToolOutput(output: unknown): ToolOutput {
       stats: {
         toolUses: done.data.totalToolUseCount,
         tokens: done.data.totalTokens,
-        durationMs: done.data.totalDurationMs
+        durationMs: done.data.totalDurationMs,
+        ...(done.data.resolvedModel !== undefined && { model: done.data.resolvedModel })
       },
       ...(report !== '' && { report })
     }
   }
 
-  if (AgentAwaySchema.safeParse(output).success) return { stats: { background: true } }
+  const away = AgentAwaySchema.safeParse(output)
+  if (away.success) {
+    const { resolvedModel } = away.data
+    return {
+      stats: { background: true, ...(resolvedModel !== undefined && { model: resolvedModel }) }
+    }
+  }
 
   /*
    * The id a later `TaskUpdate` refers to the task by. Another result that

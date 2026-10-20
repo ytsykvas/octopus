@@ -6,6 +6,7 @@ import {
   countLines,
   forTranscript,
   isEphemeral,
+  isTaskBoundary,
   turnOutcome
 } from './events.js'
 
@@ -426,5 +427,28 @@ describe('how a turn ended', () => {
   it('treats anything it does not know as a failure', () => {
     expect(turnOutcome('model_error')).toBe('failed')
     expect(turnOutcome('some_reason_invented_next_year')).toBe('failed')
+  })
+})
+
+// Kept, but about the work beside a turn: the log does not let one end the
+// sentence being typed out, nor start the turn's clock.
+describe('a task starting or ending', () => {
+  it('is told apart from the turn’s own events', () => {
+    expect(isTaskBoundary({ type: 'task_ended', taskId: 't', status: 'completed' })).toBe(true)
+    expect(
+      isTaskBoundary({
+        type: 'task_started',
+        taskId: 't',
+        kind: 'agent',
+        description: 'd',
+        backgrounded: true,
+        ambient: false
+      })
+    ).toBe(true)
+    expect(isTaskBoundary({ type: 'text', text: 'hi' })).toBe(false)
+  })
+
+  it('and coming to rest is live only', () => {
+    expect(isEphemeral({ type: 'finished' })).toBe(true)
   })
 })

@@ -2,19 +2,26 @@ import { Circle, LoaderCircle } from 'lucide-react'
 import { memo, useContext } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { TaskStatus, TaskView } from '@core/backgroundTasks.js'
 import { readTodos } from '@core/todos.js'
+
+import { useNow } from '../../hooks/useNow.js'
 
 import { DisclosureButton } from '../Disclosure.js'
 import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
+import { activityOf, elapsedOf, formatElapsed } from './agentFormat.js'
+import { STATUS_LABELS } from './AgentGlyph.js'
+import { AgentsContext } from './agentTasks.js'
 import type { Change } from './changeSummary.js'
 import { DiffPreview } from './DiffPreview.js'
+import { formatTokens } from './format.js'
 import { FileLinkContext, useExpanded } from './expansion.js'
 import type { LogBlock, ToolCall } from './logBlocks.js'
 import { Markdown } from './Markdown.js'
 import { OutputPreview } from './OutputPreview.js'
 import { TodoChecklist } from './TodoChecklist.js'
-import { agentReport, type ResultSummary, summarise, viewOf } from './toolViews.js'
+import { agentReport, latestStep, type ResultSummary, summarise, viewOf } from './toolViews.js'
 import { workspaceRelative } from './workspacePath.js'
 
 /** How many lines of a change show under a closed row, as Claude Code shows them. */
@@ -29,6 +36,13 @@ const STATE_LABELS = {
   stopped: 'chat.toolStopped'
 } as const
 
+const TASK_CALL_STATES: Readonly<Record<TaskStatus, CallState>> = {
+  running: 'running',
+  completed: 'done',
+  failed: 'failed',
+  stopped: 'stopped'
+}
+
 /**
  * Where a call is: still going, answered, failed, or left without an answer.
  *
@@ -36,7 +50,11 @@ const STATE_LABELS = {
  * call cut off by an interrupt has no answer either, and spinning for ever it
  * would claim work that is not happening.
  */
-function stateOf(call: ToolCall, busy: boolean): CallState {
+function stateOf(call: ToolCall, busy: boolean, task: TaskView | null): CallState {
+  // A call that started a background task answers at once and goes on working:
+  // the task, not the answer, says where it is.
+  if (task !== null && (call.result === null || call.result.ok))
+    return TASK_CALL_STATES[task.status]
   if (call.result !== null) return call.result.ok ? 'done' : 'failed'
   return busy && !call.settled ? 'running' : 'stopped'
 }
@@ -61,12 +79,16 @@ export const ToolRow = memo(function ToolRow({
   readonly busy: boolean
 }): React.JSX.Element {
   const { t } = useTranslation()
-  const [open, setOpen] = useExpanded()
+  const [open, setOpen] = useExpanded(call.toolUseId)
   const links = useContext(FileLinkContext)
+  const task = useContext(AgentsContext).byToolUse.get(call.toolUseId) ?? null
+  // A background task's own line while it works or once it is over; a
+  // foreground one says what it came back with, as any call does.
+  const lineTask = task !== null && (task.status === 'running' || task.backgrounded) ? task : null
 
   const view = viewOf(call.name)
   const label = view.label(call.name, call.input)
-  const state = stateOf(call, busy)
+  const state = stateOf(call, busy, task)
   const summary = summarise(call)
   const todos = readTodos(call.name, call.input)
   const detail = open ? view.detail(call.input) : null
@@ -78,7 +100,7 @@ export const ToolRow = memo(function ToolRow({
   const target = openable ?? label.target
 
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1" data-tool-use-id={call.toolUseId}>
       {/* Siblings rather than one button: the path opens the file and the rest
           opens the row, and a button inside a button is invalid markup that
           screen readers and clicks both get wrong. */}
@@ -129,10 +151,16 @@ export const ToolRow = memo(function ToolRow({
         )}
 
         {call.change !== null && <ChangeCounts change={call.change} />}
+
+        {task !== null && <TaskMeta task={task} />}
       </div>
 
       <div className="flex min-w-0 flex-col gap-1.5 pl-5">
-        <SummaryLine summary={summary} steps={state === 'running' ? call.steps : null} />
+        {lineTask !== null ? (
+          <TaskLine task={lineTask} steps={call.steps} />
+        ) : (
+          <SummaryLine summary={summary} steps={state === 'running' ? call.steps : null} />
+        )}
 
         {todos !== null && <TodoChecklist todos={todos} />}
 
@@ -156,7 +184,10 @@ export const ToolRow = memo(function ToolRow({
               </Section>
             )}
 
-            {call.steps !== null && <NestedBlocks blocks={call.steps} busy={busy} />}
+            {/* A background agent's steps run on after the turn that started it. */}
+            {call.steps !== null && (
+              <NestedBlocks blocks={call.steps} busy={busy || task?.status === 'running'} />
+            )}
 
             {call.result !== null &&
               (call.result.ok && view.output === 'report' ? (
@@ -176,6 +207,68 @@ export const ToolRow = memo(function ToolRow({
     </div>
   )
 })
+
+/**
+ * Model, time and tokens at the right of a row that started a task — the same
+ * three things the agent map says, so the log and the map agree at a glance.
+ * The time ticks while the task runs.
+ */
+function TaskMeta({ task }: { readonly task: TaskView }): React.JSX.Element {
+  const { t } = useTranslation()
+  const { modelName } = useContext(AgentsContext)
+  const now = useNow(task.status === 'running')
+  const parts = [
+    task.model === null ? null : modelName(task.model),
+    formatElapsed(elapsedOf(task, now)),
+    task.tokens > 0
+      ? t('agents.tokens', { count: task.tokens, tokens: formatTokens(task.tokens) })
+      : null
+  ].filter((part) => part !== null)
+
+  return (
+    <span className="text-ink-faint ml-auto shrink-0 text-[11px] tabular-nums">
+      {parts.join(' · ')}
+    </span>
+  )
+}
+
+/**
+ * The `⎿` line of a row that started a task.
+ *
+ * While it works: what it is doing, in the CLI's words or the model's summary,
+ * falling back to its latest step in the log. Once it is over: how it ended
+ * and how many calls it took — the report itself is in the opened row.
+ */
+function TaskLine({
+  task,
+  steps
+}: {
+  readonly task: TaskView
+  readonly steps: readonly LogBlock[] | null
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  if (task.waiting) return <Under tone="text-warning">{t('agents.statusWaiting')}</Under>
+
+  if (task.status === 'running') {
+    const text = activityOf(task) ?? latestStep(steps)
+    if (text === null) return <Under>{t('chat.agentBackground')}</Under>
+    return (
+      <Under>
+        <span className="truncate" title={named(text)}>
+          {shown(text)}
+        </span>
+      </Under>
+    )
+  }
+
+  const word = t(STATUS_LABELS[task.status])
+  return (
+    <Under tone={task.status === 'failed' ? 'text-danger' : 'text-ink-faint'}>
+      {task.toolUses > 0 ? `${word} · ${t('agents.toolUses', { count: task.toolUses })}` : word}
+    </Under>
+  )
+}
 
 /** The mark at the head of a row: a spinner while it runs, a dot after. */
 function StateMark({ state }: { readonly state: CallState }): React.JSX.Element {
@@ -244,10 +337,8 @@ function SummaryLine({
 }): React.JSX.Element | null {
   const { t } = useTranslation()
 
-  const latest = steps?.findLast((block) => block.kind === 'tool')
-  if (latest?.kind === 'tool') {
-    const step = viewOf(latest.call.name).label(latest.call.name, latest.call.input)
-    const text = step.target === null ? step.name : `${step.name} ${step.target}`
+  const text = latestStep(steps)
+  if (text !== null) {
     return (
       <Under>
         <span className="truncate" title={named(text)}>

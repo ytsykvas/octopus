@@ -296,6 +296,61 @@ describe('when the turn under way began', () => {
     expect(turnStartedAt(entries)).toBe('09:05')
   })
 
+  // An agent the turn sent off records its start and end after the turn's
+  // result, while no turn is running: counting from one would start a clock
+  // for work the main agent is not doing.
+  it('is not an agent starting or ending after the turn closed', () => {
+    const task = (type: 'task_started' | 'task_ended', at: string): ChatEntry => ({
+      role: 'agent',
+      at,
+      event:
+        type === 'task_started'
+          ? {
+              type,
+              taskId: 't',
+              kind: 'agent',
+              description: 'd',
+              backgrounded: true,
+              ambient: false
+            }
+          : { type, taskId: 't', status: 'completed' }
+    })
+
+    expect(turnStartedAt([user('one', '09:00'), footer, task('task_ended', '09:03')])).toBeNull()
+    expect(
+      turnStartedAt([user('one'), footer, task('task_started', '09:03'), user('two', '09:05')])
+    ).toBe('09:05')
+  })
+
+  // Its steps and its questions land there too, at any moment.
+  it('is not a step or a question of an agent at work after the turn closed', () => {
+    const step = agent(
+      {
+        type: 'tool_use',
+        toolUseId: 'inner',
+        name: 'Read',
+        input: { file_path: '/a.ts' },
+        parentToolUseId: 'call-1'
+      },
+      '09:02'
+    )
+    const asked = agent(
+      {
+        type: 'permission_request',
+        requestId: 'r-1',
+        toolName: 'Bash',
+        input: { command: 'ls' },
+        taskId: 't'
+      },
+      '09:03'
+    )
+
+    expect(turnStartedAt([user('one', '09:00'), footer, step, asked])).toBeNull()
+    expect(
+      turnStartedAt([user('one'), footer, step, agent({ type: 'text', text: 'reading' }, '09:04')])
+    ).toBe('09:04')
+  })
+
   it('is the start of the log when no turn has closed yet', () => {
     expect(turnStartedAt([user('one', '09:00')])).toBe('09:00')
   })

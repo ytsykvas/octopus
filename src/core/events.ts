@@ -68,10 +68,59 @@ export const ToolStatsSchema = z.object({
   tokens: z.number().int().nonnegative().optional(),
   durationMs: z.number().nonnegative().optional(),
   /** A subagent sent to the background: its report arrives some other way. */
-  background: z.literal(true).optional()
+  background: z.literal(true).optional(),
+  /**
+   * The model a subagent actually ran on, as the CLI resolved it.
+   *
+   * The call's own `model` is only a request — an alias, or nothing at all
+   * when the definition or the session decides — and this is the answer.
+   */
+  model: z.string().optional()
 })
 
 export type ToolStats = z.infer<typeof ToolStatsSchema>
+
+/**
+ * What a background task is, in the four kinds a reader tells apart.
+ *
+ * The CLI's own `task_type` has more values than this and grows; anything
+ * that is not a subagent, a shell or a workflow is `other` rather than a
+ * string the window would have to guess a label for.
+ */
+export const TaskKindSchema = z.enum(['agent', 'shell', 'workflow', 'other'])
+export type TaskKind = z.infer<typeof TaskKindSchema>
+
+/** How a task ended. `stopped` covers both a Stop and a kill. */
+export const TaskEndSchema = z.enum(['completed', 'failed', 'stopped'])
+export type TaskEnd = z.infer<typeof TaskEndSchema>
+
+/**
+ * One agent of a dynamic workflow, as its progress reports it.
+ *
+ * Workflow agents raise no task events of their own — measured against a live
+ * run, the workflow's progress is the only place they appear — so this is the
+ * whole of what can be said about one. `state` is kept as a string: the field
+ * is not in the SDK's types, and a value this build does not know should read
+ * as "working" rather than fail the event.
+ */
+export const WorkflowAgentSchema = z.object({
+  index: z.number().int(),
+  label: z.string(),
+  phase: z.number().int().nullable(),
+  state: z.string(),
+  model: z.string().nullable(),
+  tokens: z.number().nonnegative().nullable(),
+  toolCalls: z.number().int().nonnegative().nullable(),
+  durationMs: z.number().nonnegative().nullable(),
+  lastTool: z.string().nullable()
+})
+export type WorkflowAgent = z.infer<typeof WorkflowAgentSchema>
+
+export const WorkflowProgressSchema = z.object({
+  phases: z.array(z.object({ index: z.number().int(), title: z.string() })),
+  agents: z.array(WorkflowAgentSchema)
+})
+export type WorkflowProgress = z.infer<typeof WorkflowProgressSchema>
 
 const ChangeContextSchema = z.object({
   before: z.array(z.string()),
@@ -208,7 +257,14 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
      * draws no "Always". Optional: absent on most requests and on every one
      * written before.
      */
-    suppressAlways: z.boolean().optional()
+    suppressAlways: z.boolean().optional(),
+    /**
+     * The background task asking, when it is a subagent rather than the
+     * conversation itself. Several can ask at once, and the card has to say
+     * which one wants to run the command. Optional: the main thread never sets
+     * it, and neither did any request written before.
+     */
+    taskId: z.string().optional()
   }),
 
   /**
@@ -260,6 +316,87 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     requestId: z.string(),
     action: z.enum(['accept', 'decline', 'cancel'])
   }),
+
+  /**
+   * A subagent, a background command or a workflow began.
+   *
+   * Kept in the transcript, as its end is: together they are what lets a
+   * reopened conversation say that an agent ran, for how long and how it
+   * ended. Its progress is not kept — it describes a moment that has passed.
+   */
+  z.object({
+    type: z.literal('task_started'),
+    taskId: z.string(),
+    /** One run of the task: a resumed task keeps its id and gets a new one. */
+    runId: z.string().optional(),
+    /** The call that started it, which is what the log draws it under. */
+    toolUseId: z.string().optional(),
+    kind: TaskKindSchema,
+    description: z.string(),
+    subagentType: z.string().optional(),
+    /** The subagent whose agent started this one, for a nested spawn. */
+    parentTaskId: z.string().optional(),
+    workflowName: z.string().optional(),
+    /** Whether the call that started it went on without waiting. */
+    backgrounded: z.boolean(),
+    /**
+     * Housekeeping the CLI runs on its own, which the SDK asks hosts to leave
+     * out of anything that counts activity.
+     */
+    ambient: z.boolean()
+  }),
+
+  /**
+   * Where a running task has got to. Shown, never stored.
+   *
+   * `activity` is the CLI's own line for the step under way — "Reading
+   * src/a.ts" — and `summary` the model's sentence about the whole, when
+   * progress summaries are on and one has been written yet.
+   */
+  z.object({
+    type: z.literal('task_progress'),
+    taskId: z.string(),
+    runId: z.string().optional(),
+    activity: z.string().optional(),
+    summary: z.string().optional(),
+    tokens: z.number().nonnegative(),
+    toolUses: z.number().int().nonnegative(),
+    durationMs: z.number().nonnegative(),
+    workflow: WorkflowProgressSchema.optional()
+  }),
+
+  /** A task finished, failed or was stopped. */
+  z.object({
+    type: z.literal('task_ended'),
+    taskId: z.string(),
+    runId: z.string().optional(),
+    status: TaskEndSchema,
+    summary: z.string().optional(),
+    tokens: z.number().nonnegative().optional(),
+    toolUses: z.number().int().nonnegative().optional(),
+    durationMs: z.number().nonnegative().optional()
+  }),
+
+  /**
+   * Every background task still alive, whenever that set moves.
+   *
+   * The CLI's own answer to "what is running", with replace semantics, so a
+   * task whose end was never announced still drops out. Shown, never stored.
+   */
+  z.object({
+    type: z.literal('background_tasks'),
+    taskIds: z.array(z.string())
+  }),
+
+  /**
+   * The conversation has come to rest: its turn is over and nothing it sent
+   * off is still working. Shown, never stored.
+   *
+   * Not the same moment as a `result`. The CLI opens a turn of its own to hand
+   * each finished agent's report over, so one piece of work can end in several
+   * results — and only the last of them is the news "done" is.
+   */
+  z.object({ type: z.literal('finished') }),
 
   /**
    * A turn ended.
@@ -591,19 +728,6 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
 export type AgentEvent = Readonly<z.infer<typeof AgentEventSchema>>
 
 /**
- * Whether an event is a live signal rather than a record of what happened.
- *
- * Deltas exist so text appears while the model is still writing it; the
- * complete block follows immediately after and is what the transcript keeps.
- * Storing both would replay every answer twice on the next launch.
- *
- * A rate limit is ephemeral for a different reason: it describes the account
- * at this moment, not the conversation. Reading "you were at 62%" back a week
- * later says nothing, and it would put a row in the log nobody asked for.
- * The command list is ephemeral on the same grounds, and so is the mode the
- * session reports.
- */
-/**
  * How much of a successful tool result is worth writing down.
  *
  * Enough to recognise what came back and to make a head of a build log useful,
@@ -653,8 +777,25 @@ export function countLines(text: string): number {
   return lines.at(-1) === '' ? lines.length - 1 : lines.length
 }
 
+/**
+ * Whether an event is a live signal rather than a record of what happened.
+ *
+ * Deltas exist so text appears while the model is still writing it; the
+ * complete block follows immediately after and is what the transcript keeps.
+ * Storing both would replay every answer twice on the next launch.
+ *
+ * A rate limit is ephemeral for a different reason: it describes the account
+ * at this moment, not the conversation. Reading "you were at 62%" back a week
+ * later says nothing, and it would put a row in the log nobody asked for.
+ * The command list is ephemeral on the same grounds, and so is the mode the
+ * session reports — and so are a task's progress and the set of tasks alive,
+ * which arrive every few seconds and are only ever true of now.
+ */
 export function isEphemeral(event: AgentEvent): boolean {
   return (
+    event.type === 'task_progress' ||
+    event.type === 'background_tasks' ||
+    event.type === 'finished' ||
     event.type === 'text_delta' ||
     event.type === 'thinking_delta' ||
     event.type === 'rate_limit' ||
@@ -663,6 +804,11 @@ export function isEphemeral(event: AgentEvent): boolean {
     event.type === 'conversation_rewound' ||
     event.type === 'mode_reported'
   )
+}
+
+/** A task starting or ending — kept, but about the work beside a turn rather than the turn. */
+export function isTaskBoundary(event: AgentEvent): boolean {
+  return event.type === 'task_started' || event.type === 'task_ended'
 }
 
 /**

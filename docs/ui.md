@@ -51,10 +51,18 @@ workspace, or a chat that finished would wipe out another still waiting. A
 green one is withheld while its conversation is running again (`settle`): a
 message left in the agent's queue runs as a turn of its own once the last one
 ended — after a Stop, always — and "finished" over a working tab is the one
-thing the dot must not say. Withheld rather than dropped: the result reaches
-the window before the chat's `idle` does, so an ordinary turn's notice appears
-a state write later. The chime has already rung by then; the dot and the toast
+thing the dot must not say. Withheld rather than dropped: the news reaches the
+window before the chat's `idle` does, so an ordinary turn's notice appears a
+state write later. The chime has already rung by then; the dot and the toast
 wait for the turn that is really last. A red one stays.
+
+**Green is the conversation coming to rest, not a turn ending.** It is read
+from `finished`, which the core sends once the conversation has stayed at rest
+for a moment — every background agent it sent off ended and its report handed
+over — and not from a turn's `result`. The CLI opens a turn of its own to hand
+over each finished agent's report, so one piece of work can end in several
+results, and a chime for each said "done" over work still going. A failed result
+is still news at once.
 
 Kept in the window (`useAttention`, `attention.ts`) rather than in
 `state.json`: "seen" is one person looking at one window, and a field under

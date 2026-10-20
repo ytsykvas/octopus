@@ -31,6 +31,13 @@ import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
+import {
+  backgroundTasks,
+  taskNotification,
+  taskProgress,
+  taskStarted,
+  taskUpdated
+} from './taskEvents.js'
 import { readToolOutput } from './toolOutput.js'
 import type { SkillOverride, SkillVisibility } from './skills.js'
 import type { UsageReport } from './usage.js'
@@ -169,6 +176,8 @@ export interface PermissionAsk {
    * rule, so the fallback would store the whole tool.
    */
   readonly suppressAlways?: boolean
+  /** The background task asking, when a subagent is asking rather than the conversation. */
+  readonly taskId?: string
   /** Aborted when the bridge withdraws the question before anyone answered. */
   readonly signal: AbortSignal
 }
@@ -286,6 +295,8 @@ export interface AgentSession {
    */
   rewindFiles: (messageId: string, dryRun: boolean) => Promise<FileRewind>
   interrupt: () => Promise<void>
+  /** Stops one background task — a subagent, a command, a workflow — and nothing else. */
+  stopTask: (taskId: string) => Promise<void>
   setPermissionMode: (mode: PermissionMode) => Promise<void>
   setEffort: (effort: EffortChoice) => Promise<void>
   /** Changes the model for what follows; null hands the choice back. */
@@ -696,6 +707,20 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // optional afterwards: a checkpoint cannot be taken for work already done.
       enableFileCheckpointing: true,
       /*
+       * A sentence about what each running subagent is doing, written every
+       * thirty seconds or so from a fork of its own context — what the agent
+       * map shows under a row. The fork reuses the subagent's cache, so it is
+       * cheap, but it is not free, which is why it is said here.
+       */
+      agentProgressSummaries: true,
+      /*
+       * The map has a Stop for each task, so the conversation's own Stop ends
+       * the turn and nothing else. Without this the CLI kills every background
+       * agent on an interrupt — it fails closed, since a task nobody can stop
+       * one by one would otherwise run until the session ended.
+       */
+      perTaskStopAffordance: true,
+      /*
        * An MCP server asking the user something, mid-call.
        *
        * Declared at all because the SDK **declines automatically** when it is
@@ -738,7 +763,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       canUseTool: async (
         toolName,
         toolInput,
-        { decisionReason, suggestions, suppressAlwaysAllowRule, signal }
+        { decisionReason, suggestions, suppressAlwaysAllowRule, signal, agentID }
       ) => {
         const outcome = await hooks.askPermission({
           toolName,
@@ -749,7 +774,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
           // no reason for most requests.
           ...(decisionReason !== undefined && { reason: decisionReason }),
           ...(suggestions !== undefined && { suggestions }),
-          ...(suppressAlwaysAllowRule === true && { suppressAlways: true })
+          ...(suppressAlwaysAllowRule === true && { suppressAlways: true }),
+          // A subagent's id is its task's id, which is how the window finds the
+          // row to turn amber.
+          ...(agentID !== undefined && { taskId: agentID })
         })
         if (!outcome.allow) return { behavior: 'deny', message: outcome.message }
 
@@ -834,6 +862,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 
     async interrupt() {
       await conversation.interrupt()
+    },
+
+    async stopTask(taskId) {
+      await conversation.stopTask(taskId)
     },
 
     async setPermissionMode(mode) {
@@ -1076,6 +1108,21 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
               explanation: message.api_refusal_explanation ?? null
             }
           ]
+
+        case 'task_started':
+          return [taskStarted(message)]
+
+        case 'task_progress':
+          return [taskProgress(message)]
+
+        case 'task_notification':
+          return [taskNotification(message)]
+
+        case 'task_updated':
+          return taskUpdated(message)
+
+        case 'background_tasks_changed':
+          return [backgroundTasks(message)]
 
         // Every other system subtype, of which there are dozens and counting.
         default:

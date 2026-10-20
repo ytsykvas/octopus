@@ -1,4 +1,4 @@
-import type { AgentEvent, ChangeContext } from '@core/events.js'
+import { type AgentEvent, type ChangeContext, isTaskBoundary } from '@core/events.js'
 import { type QuestionAnswer, readQuestions } from '@core/questions.js'
 import type { ChatEntry } from '@core/transcript.js'
 
@@ -237,7 +237,22 @@ export function turnStartedAt(entries: readonly ChatEntry[]): string | null {
   const closed = entries.findLastIndex(
     (entry) => entry.role === 'agent' && entry.event.type === 'result'
   )
-  return entries[closed + 1]?.at ?? null
+  return entries.slice(closed + 1).find(isMainTurnEntry)?.at ?? null
+}
+
+/**
+ * Whether an entry is the main agent's own doing.
+ *
+ * The agents a turn sent off go on after its result — starting and ending,
+ * taking steps, asking — while no turn is running, and a clock started by
+ * one of those would count work the main agent is not doing.
+ */
+function isMainTurnEntry(entry: ChatEntry): boolean {
+  if (entry.role !== 'agent') return true
+  const { event } = entry
+  if (isTaskBoundary(event)) return false
+  if (event.type === 'permission_request') return event.taskId === undefined
+  return !('parentToolUseId' in event) || event.parentToolUseId === undefined
 }
 
 /**
