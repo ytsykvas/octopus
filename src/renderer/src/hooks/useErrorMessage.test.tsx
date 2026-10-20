@@ -13,6 +13,7 @@ import type { RepoConfigCode } from '@core/repoConfig.js'
 import type { LibraryErrorCode } from '@core/library.js'
 import type { SkillErrorCode } from '@core/skills.js'
 import type { StateConflictCode } from '@core/store.js'
+import type { StrayErrorCode } from '@core/strayServers.js'
 import type { WorkspaceErrorCode } from '@core/workspaces.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
@@ -47,6 +48,7 @@ type CoreErrorCode =
   | RepoConfigCode
   | SkillErrorCode
   | StateConflictCode
+  | StrayErrorCode
   | WorkspaceErrorCode
 
 /**
@@ -143,7 +145,8 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   skillFrontmatterMissing: null,
   skillTooLarge: { limit: '64000' },
   skillLinkRefused: { name: 'outside' },
-  skillUrlRefused: { url: 'https://example.test/SKILL.md' }
+  skillUrlRefused: { url: 'https://example.test/SKILL.md' },
+  strayStopFailed: { pid: '76404' }
 }
 
 const CODES = Object.entries(CODE_PARAMETERS)

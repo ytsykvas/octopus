@@ -381,6 +381,8 @@ describe('channel table', () => {
     'workspaces:serving',
     'resources:read',
     'workspaces:port',
+    'workspaces:strays',
+    'workspaces:stopStrays',
     'instructions:read',
     'instructions:save',
     'instructions:effective',
@@ -1363,6 +1365,34 @@ describe('scripts and instructions of a real project', () => {
     await expect(invoke('workspaces:port', workspace.id)).resolves.toEqual({
       ok: true,
       value: workspace.port
+    })
+  })
+
+  it('reports nothing left serving from a fresh workspace', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:strays', workspace.id)).resolves.toEqual({
+      ok: true,
+      value: []
+    })
+    await expect(invoke('workspaces:stopStrays', workspace.id, [])).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+  })
+
+  // Signals go to processes, so what names them is checked before the core
+  // ever looks.
+  it('refuses a list of pids that is not one', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:stopStrays', workspace.id, ['1; rm'])).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(invoke('workspaces:stopStrays', workspace.id, [-1])).resolves.toMatchObject({
+      ok: false
     })
   })
 

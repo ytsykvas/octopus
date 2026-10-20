@@ -116,7 +116,9 @@ export function useConfirm(): Confirmation {
           <div className="min-w-0">
             <p className="font-medium">{request.message}</p>
             {request.detail !== undefined && (
-              <p className="text-ink-soft mt-1.5 leading-relaxed">{request.detail}</p>
+              <p className="text-ink-soft mt-1.5 leading-relaxed whitespace-pre-line">
+                {request.detail}
+              </p>
             )}
 
             {request.checkbox !== undefined && (

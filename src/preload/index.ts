@@ -26,6 +26,7 @@ import type {
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type { StrayServer } from '@core/strayServers.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { ResourceReading } from '@core/resources.js'
 import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
@@ -648,7 +649,15 @@ const api = {
      * was made can belong to something else by the time anybody runs it.
      */
     port: (workspaceId: string): Promise<Result<number>> =>
-      ipcRenderer.invoke('workspaces:port', workspaceId) as Promise<Result<number>>
+      ipcRenderer.invoke('workspaces:port', workspaceId) as Promise<Result<number>>,
+
+    /** Servers serving from this workspace's worktree that octopus did not start. */
+    strays: (workspaceId: string): Promise<Result<StrayServer[]>> =>
+      ipcRenderer.invoke('workspaces:strays', workspaceId) as Promise<Result<StrayServer[]>>,
+
+    /** Stops those of `pids` still serving from the worktree. */
+    stopStrays: (workspaceId: string, pids: readonly number[]): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:stopStrays', workspaceId, pids) as Promise<Result<void>>
   },
 
   files: {

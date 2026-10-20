@@ -53,6 +53,7 @@ import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { terminalOwners } from '../core/resources.js'
 import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
+import { StrayPidsSchema } from '../core/strayServers.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
 import { SkillKeySchema, SkillNameSchema } from '../core/skillNames.js'
 import { FormValuesSchema } from '../core/elicitation.js'
@@ -498,6 +499,16 @@ export function registerIpc(
   // header is what keeps that true: `Run` is not offered while a server is up.
   host.handle('workspaces:port', (_event, workspaceId: string) =>
     attempt(() => service.ensureWorkspacePort(workspaceId))
+  )
+
+  // Asked at the same moment as the port, and only then: with nothing of ours
+  // running, a server in the worktree is one somebody else left there.
+  host.handle('workspaces:strays', (_event, workspaceId: string) =>
+    attempt(() => service.findStrayServers(workspaceId))
+  )
+
+  host.handle('workspaces:stopStrays', (_event, workspaceId: string, pids: unknown) =>
+    attempt(() => service.stopStrayServers(workspaceId, StrayPidsSchema.parse(pids)))
   )
 
   // `null` is the installation's own instruction rather than a project's, which

@@ -3812,6 +3812,75 @@ describe('a workspace\u2019s port', () => {
   })
 })
 
+describe('servers left running in a workspace', () => {
+  async function workspaceWithServer(): Promise<{
+    workspace: string
+    strays: OctopusService
+    signals: [number, NodeJS.Signals][]
+  }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    const cwd = await realpath(workspace.path)
+
+    // One Rails server the agent left behind, which leaves when signalled.
+    let alive = true
+    const signals: [number, NodeJS.Signals][] = []
+    const strays = await createService({
+      ...paths(dir),
+      strays: {
+        lsof: (args) =>
+          Promise.resolve(
+            !alive ? '' : args.includes('-iTCP') ? 'p76404\ncruby\nn*:3110\n' : `p76404\nn${cwd}\n`
+          ),
+        kill: (pid, signal) => {
+          signals.push([pid, signal])
+          alive = false
+        },
+        sleep: () => Promise.resolve()
+      }
+    })
+
+    return { workspace: workspace.id, strays, signals }
+  }
+
+  it("finds a server serving from the workspace's worktree", async () => {
+    const { workspace, strays } = await workspaceWithServer()
+
+    await expect(strays.findStrayServers(workspace)).resolves.toEqual([
+      { pid: 76404, command: 'ruby', ports: [3110] }
+    ])
+  })
+
+  it('stops it', async () => {
+    const { workspace, strays, signals } = await workspaceWithServer()
+
+    await strays.stopStrayServers(workspace, [76404])
+
+    expect(signals).toEqual([[76404, 'SIGTERM']])
+    await expect(strays.findStrayServers(workspace)).resolves.toEqual([])
+  })
+
+  // The tools a test does not replace are the real ones, and a fresh worktree
+  // has nothing serving from it.
+  it('asks the machine when no tools are given', async () => {
+    const real = await makeService(paths(dir))
+    started.push(real)
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await real.addProjectFromPath(repo)
+    const workspace = await real.createWorkspaceIn(project.id)
+
+    await expect(real.findStrayServers(workspace.id)).resolves.toEqual([])
+  })
+
+  it('refuses a workspace that does not exist', async () => {
+    await expect(service.findStrayServers('missing')).rejects.toBeInstanceOf(WorkspaceError)
+    await expect(service.stopStrayServers('missing', [1])).rejects.toBeInstanceOf(WorkspaceError)
+  })
+})
+
 describe('what the application costs', () => {
   it('charges an agent to the workspace whose worktree it runs in', async () => {
     const repo = join(dir, 'planner')

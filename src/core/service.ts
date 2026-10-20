@@ -73,6 +73,13 @@ import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, type PortProbe, settlePort } from './ports.js'
 import {
+  defaultStrayDeps,
+  findStrayServers,
+  type StrayDeps,
+  type StrayServer,
+  stopStrayServers
+} from './strayServers.js'
+import {
   type CarriedFile,
   carryInto,
   carryListForExport,
@@ -489,6 +496,12 @@ export interface ServiceOptions {
    * describes rather than the one it runs on (`docs/testing.md`).
    */
   readonly listening?: PortProbe
+  /**
+   * How servers left running in a worktree are found and stopped: `lsof`, the
+   * signal and the wait between signals. The real ones by default; a test
+   * describes a machine instead of signalling processes on this one.
+   */
+  readonly strays?: StrayDeps
   /**
    * Who outranks a chat's compaction window for a session about to start.
    *
@@ -945,6 +958,19 @@ export interface OctopusService {
    * running, whatever is answering on that port belongs to somebody else.
    */
   ensureWorkspacePort(workspaceId: string): Promise<number>
+
+  /**
+   * Servers listening from this workspace's worktree that octopus did not
+   * start (`strayServers.ts`).
+   *
+   * Asked at the same moment as the port and for the same reason: with nothing
+   * of ours alive here, whatever is serving from the worktree is somebody
+   * else's — and it will stop the run from starting.
+   */
+  findStrayServers(workspaceId: string): Promise<StrayServer[]>
+
+  /** Stops those of `pids` still serving from the worktree, and only those. */
+  stopStrayServers(workspaceId: string, pids: readonly number[]): Promise<void>
 
   /**
    * Guidance handed to the agent, or a starting template if none is written.
@@ -1530,6 +1556,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
   const fileSkillsFor = options.skillsInFiles ?? skillsInFiles
   const listening = options.listening ?? isListening
+  const strays = options.strays ?? defaultStrayDeps
   const processExec = options.processExec ?? defaultProcessExec
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
@@ -4756,6 +4783,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async isWorkspaceServing(workspaceId) {
       return listening(requireWorkspace(workspaceId).port)
+    },
+
+    async findStrayServers(workspaceId) {
+      return findStrayServers(requireWorkspace(workspaceId).path, strays.lsof)
+    },
+
+    async stopStrayServers(workspaceId, pids) {
+      await stopStrayServers(requireWorkspace(workspaceId).path, pids, strays)
     },
 
     measureResources(rootPid, terminals) {

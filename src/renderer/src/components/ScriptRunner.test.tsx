@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TerminalExit } from '@core/terminal.js'
 
+import { stubDialogElement } from '../test/dialog.js'
 import { octopus } from '../test/octopus.js'
 import { sessionId, sessionsOpened, stubTerminalHost } from '../test/terminal.js'
 import type { ResolvedScript } from '@core/repoSource.js'
@@ -1056,6 +1057,141 @@ describe('ScriptRunner', () => {
     const shown = await screen.findAllByText(/spawn \/bin\/zsh ENOENT/)
     expect(shown.filter((node) => node.tagName === 'P')).toHaveLength(1)
   })
+  /*
+   * A server octopus did not start, still serving from the worktree — the
+   * agent's, most often. Rails refuses a second boot while its pidfile names a
+   * live process, so the run asks before it begins.
+   */
+  describe('a server left running in the workspace', () => {
+    const RAILS = { pid: 76404, command: 'ruby', ports: [3110] }
+
+    function startServer(onOutcome = vi.fn()): ReturnType<typeof mountAndStart> {
+      return mountAndStart({
+        workspace: anna,
+        kind: 'run',
+        script: RUN_SCRIPT,
+        port: 3111,
+        rootPath: '/Users/test/planner',
+        onOpenSettings: vi.fn(),
+        onOutcome
+      })
+    }
+
+    beforeEach(() => {
+      stubDialogElement()
+      vi.mocked(octopus().workspaces.strays).mockResolvedValue({ ok: true, value: [RAILS] })
+    })
+
+    it('names it and asks before running', async () => {
+      startServer()
+
+      expect(await screen.findByText('A server is already running here')).toBeInTheDocument()
+      expect(screen.getByText('ruby \u2014 process 76404, port 3110')).toBeInTheDocument()
+      expect(octopus().workspaces.port).not.toHaveBeenCalled()
+      expect(octopus().terminal.create).not.toHaveBeenCalled()
+    })
+
+    it('stops it before settling the port, then runs', async () => {
+      const order: string[] = []
+      vi.mocked(octopus().workspaces.stopStrays).mockImplementation(() => {
+        order.push('stop')
+        return Promise.resolve({ ok: true, value: undefined })
+      })
+      vi.mocked(octopus().workspaces.port).mockImplementation(() => {
+        order.push('port')
+        return Promise.resolve({ ok: true, value: 3111 })
+      })
+
+      startServer()
+      await userEvent.click(await screen.findByRole('button', { name: 'Stop it and run' }))
+      await sessionsOpened(1)
+
+      expect(octopus().workspaces.stopStrays).toHaveBeenCalledWith(anna.id, [76404])
+      expect(order).toEqual(['stop', 'port'])
+    })
+
+    it('runs nothing and stops nothing when the answer is no', async () => {
+      const onOutcome = vi.fn()
+      startServer(onOutcome)
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() => {
+        expect(onOutcome).toHaveBeenCalledWith(false)
+      })
+      expect(octopus().workspaces.stopStrays).not.toHaveBeenCalled()
+      expect(octopus().terminal.create).not.toHaveBeenCalled()
+    })
+
+    it('says so and runs nothing when it will not stop', async () => {
+      const onOutcome = vi.fn()
+      vi.mocked(octopus().workspaces.stopStrays).mockResolvedValue({
+        ok: false,
+        error: 'still serving',
+        code: 'strayStopFailed',
+        params: { pid: '76404' }
+      })
+
+      startServer(onOutcome)
+      await userEvent.click(await screen.findByRole('button', { name: 'Stop it and run' }))
+
+      expect(
+        await screen.findByText('Process 76404 would not stop. Stop it yourself, then run again.')
+      ).toBeInTheDocument()
+      expect(onOutcome).toHaveBeenCalledWith(false)
+      expect(octopus().terminal.create).not.toHaveBeenCalled()
+    })
+
+    // A check that could not run says nothing about the workspace.
+    it('runs anyway when the check itself fails', async () => {
+      vi.mocked(octopus().workspaces.strays).mockResolvedValue({ ok: false, error: 'no lsof' })
+
+      startServer()
+      await sessionsOpened(1)
+
+      expect(screen.queryByText('A server is already running here')).not.toBeInTheDocument()
+    })
+
+    it('does not ask when nothing is left running', async () => {
+      vi.mocked(octopus().workspaces.strays).mockResolvedValue({ ok: true, value: [] })
+
+      startServer()
+      await sessionsOpened(1)
+
+      expect(screen.queryByText('A server is already running here')).not.toBeInTheDocument()
+    })
+
+    it('abandons a start that was stopped while it was being asked about', async () => {
+      const onOutcome = vi.fn()
+      const { rerender } = startServer(onOutcome)
+      await screen.findByText('A server is already running here')
+
+      rerender({ stopToken: 1 })
+      await userEvent.click(screen.getByRole('button', { name: 'Stop it and run' }))
+
+      await waitFor(() => {
+        expect(octopus().workspaces.stopStrays).toHaveBeenCalled()
+      })
+      expect(octopus().workspaces.port).not.toHaveBeenCalled()
+      expect(onOutcome).not.toHaveBeenCalled()
+    })
+
+    // The build binds nothing, and a server is what it would be blocked by.
+    it('does not look for one before the build', async () => {
+      mountAndStart({
+        workspace: anna,
+        kind: 'setup',
+        script: SETUP_SCRIPT,
+        port: 3111,
+        rootPath: '/Users/test/planner',
+        onOpenSettings: vi.fn()
+      })
+      await sessionsOpened(1)
+
+      expect(octopus().workspaces.strays).not.toHaveBeenCalled()
+    })
+  })
+
   describe('saying what is running', () => {
     const props = {
       workspace: anna,
