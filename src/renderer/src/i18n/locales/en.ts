@@ -378,6 +378,15 @@ export const en = {
       'Built with \u201c{{built}}\u201d. A restart keeps that build \u2014 stop, then run again to build with \u201c{{current}}\u201d.',
     envFollow: 'Follow the project ({{name}})',
     editEnv: 'Variables…',
+    /* Asked on the way into a run when something octopus did not start is
+       serving from the worktree — most often a server the agent started to
+       look at a page and left behind. */
+    strayTitle: 'A server is already running here',
+    strayMessage:
+      'Octopus did not start it \u2014 an agent or a terminal did. While it runs, this workspace\u2019s server may refuse to start.',
+    strayLine: '{{command}} \u2014 process {{pid}}, port {{ports}}',
+    strayConfirm: 'Stop it and run',
+    strayCancel: 'Cancel',
     repoUnreadable:
       'This repository\u2019s settings could not be read, so nothing here can run: {{reason}}',
     repoNotice:
@@ -1970,6 +1979,7 @@ export const en = {
     envPathEscapes:
       '{{file}} leaves this workspace through a symbolic link, so the variables would be written outside it. Point the project at a file the worktree really holds, or remove the link.',
     createFailed: 'Could not open the pull request. GitHub said: {{reason}}',
+    strayStopFailed: 'Process {{pid}} would not stop. Stop it yourself, then run again.',
     nothingToCommit: 'There is nothing here to commit.',
     commitFailed: 'Could not commit the changes. Git said: {{reason}}',
     mergeFailed: 'GitHub would not merge #{{number}}. It said: {{reason}}',

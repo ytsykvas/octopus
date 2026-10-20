@@ -232,6 +232,12 @@ describe('channel names', () => {
       'env:remove'
     ],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
+    ['workspaces.strays', () => method('workspaces', 'strays')('w' as never), 'workspaces:strays'],
+    [
+      'workspaces.stopStrays',
+      () => method('workspaces', 'stopStrays')('w' as never, [1] as never),
+      'workspaces:stopStrays'
+    ],
     [
       'workspaces.serving',
       () => method('workspaces', 'serving')('w' as never),

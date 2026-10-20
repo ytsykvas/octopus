@@ -6,6 +6,7 @@ import { scriptEnv } from '@core/scriptEnv.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { useConfirm } from '../hooks/useConfirm.js'
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import { Button } from './Button.js'
 import { Placeholder } from './Placeholder.js'
@@ -178,6 +179,7 @@ function Runner({
 }: RunnerProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
+  const { confirm, dialog } = useConfirm()
   // Bumped to restart: remounting Terminal is what ends the old session and
   // begins a new one, since the session is tied to the component's lifetime.
   const [run, setRun] = useState(0)
@@ -291,6 +293,42 @@ function Runner({
   const pendingStart = useRef<number | null>(null)
 
   /**
+   * Whether the server may start, once anything left serving from the worktree
+   * has been dealt with (`strayServers.ts`).
+   *
+   * Asked, never done silently: what is running there may be the agent's work
+   * in progress, and only the person in front of the dialog knows.
+   */
+  const clearStrays = async (): Promise<boolean> => {
+    const found = await window.octopus.workspaces.strays(workspace.id)
+
+    // A check that could not run says nothing about the workspace, and Run is
+    // not held up on its account — the framework will complain if it must.
+    if (!found.ok || found.value.length === 0) return true
+
+    const { confirmed } = await confirm({
+      title: t('scripts.strayTitle'),
+      message: t('scripts.strayMessage'),
+      detail: found.value
+        .map(({ command, pid, ports }) =>
+          t('scripts.strayLine', { command, pid, ports: ports.join(', ') })
+        )
+        .join('\n'),
+      confirmLabel: t('scripts.strayConfirm'),
+      cancelLabel: t('scripts.strayCancel'),
+      destructive: true
+    })
+    if (!confirmed) return false
+
+    const stopped = await window.octopus.workspaces.stopStrays(
+      workspace.id,
+      found.value.map(({ pid }) => pid)
+    )
+    if (!stopped.ok) setError(describeFailure(stopped))
+    return stopped.ok
+  }
+
+  /**
    * Everything a start does once nothing of ours is listening.
    *
    * Its own function because a restart arrives here twice removed — through the
@@ -315,6 +353,16 @@ function Runner({
        * number this run is about to move away from.
        */
       if (kind === 'run') {
+        // Before the port, because a server left running here holds one — and,
+        // for Rails, a pidfile that refuses a second boot on any port at all.
+        const cleared = await clearStrays()
+        if (latestStop.current !== stopWhenAsked) return
+
+        if (!cleared) {
+          onOutcome?.(false)
+          return
+        }
+
         const settled = await window.octopus.workspaces.port(workspace.id)
         if (latestStop.current !== stopWhenAsked) return
 
@@ -547,6 +595,8 @@ function Runner({
       ) : (
         <Hint>{t(kind === 'setup' ? 'scripts.setupIdle' : 'scripts.runIdle')}</Hint>
       )}
+
+      {dialog}
     </div>
   )
 }
