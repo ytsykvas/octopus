@@ -32,6 +32,7 @@ import type {
   ChatStatusEvent,
   WorkspaceStatusEvent
 } from '../core/service.js'
+import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
 import type { Workspace } from '../core/store.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
@@ -466,6 +467,7 @@ describe('channel table', () => {
     'chats:answerQuestions',
     'chats:pending',
     'chats:usage',
+    'chats:sideQuestion',
     'chats:permission',
     'chats:elicitation',
     'chats:rateLimit',
@@ -2722,6 +2724,26 @@ describe('the agent chat', () => {
       ok: true,
       value: { context: null, autoCompact: null }
     })
+  })
+
+  // Bounds enforced before the agent sees them.
+  it('refuses a side question that is empty or carries too long a thread', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+    const exchange = { question: 'q', response: 'a' }
+
+    await expect(invoke('chats:sideQuestion', chatIdOf(opened), '   ', [])).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(
+      invoke(
+        'chats:sideQuestion',
+        chatIdOf(opened),
+        'why?',
+        Array(SIDE_HISTORY_LIMIT + 1).fill(exchange)
+      )
+    ).resolves.toMatchObject({ ok: false })
   })
 
   // What a window asks on opening a conversation, because the event announcing

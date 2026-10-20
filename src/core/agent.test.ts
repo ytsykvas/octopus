@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   type AgentSession,
+  askSideQuestion,
   DENIED,
   mapMessage,
   type ElicitationAnswer,
@@ -25,6 +26,7 @@ import {
   promptTokens,
   readContextUsage,
   readUsageReport,
+  SideQuestionUnsupportedError,
   startSession,
   toAgentCommands,
   toAgentModels,
@@ -183,6 +185,7 @@ function fakeAgent(
       offeredAgents instanceof Error ? Promise.reject(offeredAgents) : whileOpen(offeredAgents),
     getContextUsage: () => whileOpen(CONTEXT_RESPONSE),
     usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => whileOpen(USAGE_RESPONSE),
+    askSideQuestion: (question: string) => whileOpen({ response: `on ${question}` }),
     close: () => {
       closed++
     }
@@ -3055,5 +3058,86 @@ describe("an MCP server's question", () => {
 
     expect(answer.action).toBe('decline')
     expect(asked).toEqual([])
+  })
+})
+
+describe('asking a side question', () => {
+  it('passes the question, the earlier thread and the deadline on', async () => {
+    const calls: unknown[][] = []
+    const conversation = queryAnswering({
+      askSideQuestion: (...args: unknown[]) => {
+        calls.push(args)
+        return Promise.resolve({ response: 'It retries twice.', synthetic: false })
+      }
+    })
+    const signal = new AbortController().signal
+    const history = [{ question: 'what is x?', response: 'a flag' }]
+
+    await expect(askSideQuestion(conversation, 'and y?', history, signal)).resolves.toEqual({
+      text: 'It retries twice.',
+      synthetic: false
+    })
+    expect(calls).toEqual([['and y?', { history, signal }]])
+  })
+
+  it('sends no signal key when there is no deadline', async () => {
+    const calls: unknown[][] = []
+    const conversation = queryAnswering({
+      askSideQuestion: (...args: unknown[]) => {
+        calls.push(args)
+        return Promise.resolve({ response: 'yes' })
+      }
+    })
+
+    await askSideQuestion(conversation, 'ok?', [])
+
+    expect(calls).toEqual([['ok?', { history: [] }]])
+  })
+
+  it('says when the answer was written by the CLI rather than the model', async () => {
+    const conversation = queryAnswering({
+      askSideQuestion: () => Promise.resolve({ response: '(No answer.)', synthetic: true })
+    })
+
+    await expect(askSideQuestion(conversation, 'q', [])).resolves.toEqual({
+      text: '(No answer.)',
+      synthetic: true
+    })
+  })
+
+  it('answers nothing when the CLI had no answer, or one of a shape it does not know', async () => {
+    await expect(
+      askSideQuestion(queryAnswering({ askSideQuestion: () => Promise.resolve(null) }), 'q', [])
+    ).resolves.toBeNull()
+    await expect(
+      askSideQuestion(
+        queryAnswering({ askSideQuestion: () => Promise.resolve({ answer: 'moved' }) }),
+        'q',
+        []
+      )
+    ).resolves.toBeNull()
+  })
+
+  it('refuses outright when the agent has no such call', async () => {
+    await expect(askSideQuestion(queryAnswering({}), 'q', [])).rejects.toBeInstanceOf(
+      SideQuestionUnsupportedError
+    )
+  })
+
+  it('lets a refused request through as it came', async () => {
+    const conversation = queryAnswering({
+      askSideQuestion: () => Promise.reject(new Error('side_question timed out'))
+    })
+
+    await expect(askSideQuestion(conversation, 'q', [])).rejects.toThrow('side_question timed out')
+  })
+
+  it('is asked of the conversation the session holds', async () => {
+    const { agent } = fakeAgent()
+
+    await expect(agent.session.sideQuestion('why', [])).resolves.toEqual({
+      text: 'on why',
+      synthetic: false
+    })
   })
 })

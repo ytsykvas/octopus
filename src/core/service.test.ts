@@ -4076,6 +4076,8 @@ describe('the agent chat', () => {
     readonly usageAsked: () => number
     /** The options each ask for what `/usage` answers carried, in order. */
     readonly usageOptions: () => unknown[]
+    /** Every side question this session was asked, as the SDK received it. */
+    readonly sideAsks: () => unknown[][]
     /** Permission modes the session was switched to, in order. */
     readonly modes: () => string[]
     /** Settings pushed onto the running session — where effort and skills land. */
@@ -4141,6 +4143,8 @@ describe('the agent chat', () => {
   let flagsAnswer: () => Promise<void>
   let pluginReload: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
+  /** Null is a CLI with no side-question call at all. */
+  let sideAnswer: (() => Promise<unknown>) | null
   /** What the session answers when asked to put the files back to a message. */
   let rewindAnswer: () => Promise<unknown>
   /** How setting the session's mode settles — held, to make a send wait on it. */
@@ -4163,6 +4167,7 @@ describe('the agent chat', () => {
       let usageAsked = 0
       let pluginReloads = 0
       const usageOptions: unknown[] = []
+      const sideAsks: unknown[][] = []
 
       const options = (params.options ?? {}) as unknown as Record<string, unknown>
 
@@ -4254,6 +4259,7 @@ describe('the agent chat', () => {
         closed: () => closed,
         usageAsked: () => usageAsked,
         usageOptions: () => usageOptions,
+        sideAsks: () => sideAsks,
         flagSettings: () => flagSettings,
         requestedModels: () => requestedModels,
         modes: () => modes,
@@ -4295,6 +4301,12 @@ describe('the agent chat', () => {
           usageOptions.push(options)
           return usageAnswer()
         },
+        ...(sideAnswer !== null && {
+          askSideQuestion: (...args: unknown[]) => {
+            sideAsks.push(args)
+            return sideAnswer?.()
+          }
+        }),
         setPermissionMode: (mode: string) => {
           modes.push(mode)
           return modeAnswer(mode)
@@ -4419,6 +4431,7 @@ describe('the agent chat', () => {
     pluginReload = () =>
       Promise.resolve({ commands: [], agents: [], plugins: [], mcpServers: [], error_count: 0 })
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
+    sideAnswer = () => Promise.resolve({ response: 'It is a flag.', synthetic: false })
     rewindAnswer = () =>
       Promise.resolve({
         canRewind: true,
@@ -5899,6 +5912,96 @@ describe('the agent chat', () => {
         'five_hour',
         'seven_day'
       ])
+    })
+  })
+
+  describe('a side question', () => {
+    it('is answered by the running session, beside the conversation', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      const before = events.length
+      const history = [{ question: 'what is x?', response: 'a flag' }]
+
+      await expect(service.askSideQuestion(chat.id, 'and y?', history)).resolves.toEqual({
+        text: 'It is a flag.',
+        synthetic: false
+      })
+
+      expect(agents).toHaveLength(1)
+      const [[question, options]] = agent().sideAsks() as [[string, Record<string, unknown>]]
+      expect(question).toBe('and y?')
+      expect(options.history).toEqual(history)
+      expect(options.signal).toBeInstanceOf(AbortSignal)
+      expect(agent().sent).toEqual(['work'])
+      expect(events.slice(before)).toEqual([])
+      expect(await service.chatHistory(chat.id)).toHaveLength(1)
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+    })
+
+    it('starts a session for it when none is running', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await service.askSideQuestion(chat.id, 'what is this repo?', [])
+
+      expect(agents).toHaveLength(1)
+      expect(agent().sent).toEqual([])
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+    })
+
+    it('answers nothing when the agent had nothing to say', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      sideAnswer = () => Promise.resolve(null)
+
+      await expect(service.askSideQuestion(chat.id, 'q', [])).resolves.toBeNull()
+    })
+
+    it('names an agent that cannot answer side questions at all', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      sideAnswer = null
+
+      await expect(service.askSideQuestion(chat.id, 'q', [])).rejects.toMatchObject({
+        code: 'sideQuestionUnsupported'
+      })
+    })
+
+    it('carries the reason when the request itself fails', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      sideAnswer = () => Promise.reject(new Error('transport closed'))
+
+      await expect(service.askSideQuestion(chat.id, 'q', [])).rejects.toMatchObject({
+        code: 'sideQuestionFailed',
+        params: { reason: 'transport closed' }
+      })
+    })
+
+    // The SDK rejects an aborted request with the DOMException's English text.
+    it('says it timed out rather than passing the abort text on', async () => {
+      const { service, workspaceId } = await withWorkspace({ sideQuestionTimeoutMs: 10 })
+      const chat = await service.openChat(workspaceId)
+      sideAnswer = () =>
+        new Promise((_resolve, reject) => {
+          setTimeout(() => {
+            reject(new Error('The operation was aborted due to timeout'))
+          }, 30)
+        })
+
+      await expect(service.askSideQuestion(chat.id, 'q', [])).rejects.toMatchObject({
+        code: 'sideQuestionTimedOut'
+      })
+    })
+
+    it('refuses a /btw sent as an ordinary message, so it never queues', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      await expect(service.sendToChat(chat.id, '/btw why?')).rejects.toThrow('askSideQuestion')
+      expect(agents).toHaveLength(0)
+      expect(await service.chatHistory(chat.id)).toEqual([])
     })
   })
 
@@ -11130,6 +11233,9 @@ describe('the agent chat', () => {
           })
         })
         await expect(service.rewindChat(chatId, first, 'conversation')).rejects.toMatchObject({
+          code: 'rewindInProgress'
+        })
+        await expect(service.askSideQuestion(chatId, 'q', [])).rejects.toMatchObject({
           code: 'rewindInProgress'
         })
 

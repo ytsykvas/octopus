@@ -774,6 +774,18 @@
   animation: notice-in 150ms ease-out;
 }
 
+/* The /btw drawer (SideQuestions.tsx). */
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.drawer-in {
+  animation: drawer-in 160ms ease-out;
+}
+
 /* Nothing moves on its own for anybody who has asked the system for less
    motion: every animation at once, so a spinner written tomorrow needs nothing
    of its own (docs/ui.md, "Motion"). `!important` because a class such as

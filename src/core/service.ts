@@ -30,6 +30,7 @@ import {
   type PermissionOutcome,
   type QueryFn,
   READ_ONLY_TOOLS,
+  SideQuestionUnsupportedError,
   startSession
 } from './agent.js'
 import { branchGuard } from './branchGuard.js'
@@ -226,6 +227,7 @@ import {
 } from './skills.js'
 import { describeSessionSkill, withholdable } from './sessionSkills.js'
 import { skillsInFiles } from './settingsFiles.js'
+import { parseBtw, type SideAnswer, type SideExchange } from './sideQuestions.js'
 import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
@@ -377,6 +379,9 @@ const STALE_AFTER_MS = 6 * 60_000
  */
 const PLUGIN_RELOAD_MS = 10_000
 
+/** VS Code's `/btw` panel gives up at five minutes; the CLI's own deadline is eleven. */
+const SIDE_TIMEOUT_MS = 5 * 60_000
+
 /**
  * The events that mean the model itself spoke — what a session's headers are
  * refreshed by. Deltas count: they are the response in progress.
@@ -480,6 +485,8 @@ export interface ServiceOptions {
   readonly forkSession?: ForkSessionFn
   /** The SDK's session reader, injected for the reason `forkSession` is. */
   readonly sessionMessages?: SessionMessagesFn
+  /** How long a side question may run; a parameter so the deadline can be tested. */
+  readonly sideQuestionTimeoutMs?: number
   readonly uuid?: () => string
   /** Current time as an ISO string; a parameter so records are predictable in tests. */
   readonly now?: () => string
@@ -1383,6 +1390,15 @@ export interface OctopusService {
    */
   sessionUsage(chatId: string): Promise<SessionUsage>
   /**
+   * Answers a `/btw` from the conversation as it stands, with no tools and
+   * nothing written to it. Null when the agent had no answer.
+   */
+  askSideQuestion(
+    chatId: string,
+    question: string,
+    history: readonly SideExchange[]
+  ): Promise<SideAnswer | null>
+  /**
    * What the chat's agent is blocked on, or null when it is not blocked.
    *
    * Asked rather than only announced, because the announcement happens once.
@@ -1559,6 +1575,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const plugins = options.pluginCli ?? pluginCli()
   const pluginReloadMs = options.pluginReloadMs ?? PLUGIN_RELOAD_MS
   const runForkSession = options.forkSession ?? defaultForkSession
+  const sideTimeoutMs = options.sideQuestionTimeoutMs ?? SIDE_TIMEOUT_MS
   const runSessionMessages = options.sessionMessages ?? defaultSessionMessages
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
@@ -5735,6 +5752,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const chat = requireOpenChat(chatId)
       const workspace = requireWorkspace(chat.workspaceId)
 
+      // The window routes `/btw` aside; sent as a prompt it would run as a
+      // full turn with tools. No code: no window can reach this.
+      if (parseBtw(text) !== null) {
+        throw new Error('A /btw is asked with askSideQuestion, not sent.')
+      }
+
       if (rewinding.has(chatId)) {
         throw new ChatError(
           'rewindInProgress',
@@ -6201,6 +6224,36 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     refreshSubscriptionUsage() {
       return askAccount()
+    },
+
+    async askSideQuestion(chatId, question, history) {
+      const chat = requireOpenChat(chatId)
+      const workspace = requireWorkspace(chat.workspaceId)
+
+      if (rewinding.has(chatId)) {
+        throw new ChatError(
+          'rewindInProgress',
+          { chatId },
+          `Chat ${chatId} is rewinding; its session is about to be replaced.`
+        )
+      }
+
+      // Started if none is running, as for `/usage`.
+      const session = sessions.get(chatId) ?? (await sessionFor(chat, workspace))
+      const deadline = AbortSignal.timeout(sideTimeoutMs)
+
+      try {
+        return await session.sideQuestion(question, history, deadline)
+      } catch (error) {
+        if (error instanceof SideQuestionUnsupportedError) {
+          throw new ChatError('sideQuestionUnsupported', { chatId }, error.message)
+        }
+        if (deadline.aborted) {
+          throw new ChatError('sideQuestionTimedOut', { chatId }, 'The side question timed out.')
+        }
+        const reason = describeError(error)
+        throw new ChatError('sideQuestionFailed', { chatId, reason }, reason)
+      }
     },
 
     async sessionUsage(chatId) {

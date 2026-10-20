@@ -36,6 +36,7 @@ import { useErrorMessage } from './hooks/useErrorMessage.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
 
 import { useCodeNotes } from './hooks/useCodeNotes.js'
+import { useSideQuestions } from './hooks/useSideQuestions.js'
 import { useDiffComments } from './hooks/useDiffComments.js'
 import { useFileRevert } from './hooks/useFileRevert.js'
 import { useBranchRequests } from './hooks/useBranchRequests.js'
@@ -207,6 +208,7 @@ export function App(): React.JSX.Element {
      tab key like the drafts, so a conversation closed and reopened from the
      history finds its notes where they were left. */
   const codeNotes = useCodeNotes(selectedWorkspaceId)
+  const sideQuestions = useSideQuestions()
 
   /*
    * The selected workspace's conversations.
@@ -1100,6 +1102,7 @@ export function App(): React.JSX.Element {
               comments={diffComments}
               quotes={reviewQuotes}
               codeNotes={codeNotes}
+              sideQuestions={sideQuestions}
               defaultWorkingMode={defaultWorkingMode}
               planExecutionMode={planExecutionMode}
               defaultEffort={defaultEffort}

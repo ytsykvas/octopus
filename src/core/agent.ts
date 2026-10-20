@@ -48,6 +48,7 @@ import {
   refusesPublishTool
 } from './publishGuard.js'
 import { readToolOutput } from './toolOutput.js'
+import type { SideAnswer, SideExchange } from './sideQuestions.js'
 import type { SkillOverride, SkillVisibility } from './skills.js'
 import type { UsageReport } from './usage.js'
 import { toUsageReport } from './usage.js'
@@ -351,6 +352,12 @@ export interface AgentSession {
    * it says so; the card a typed `/usage` draws wants all of it.
    */
   usageReport: (options?: UsageReadOptions) => Promise<UsageReport | null>
+  /** A `/btw` answered beside the conversation; see `askSideQuestion`. */
+  sideQuestion: (
+    question: string,
+    history: readonly SideExchange[],
+    signal?: AbortSignal
+  ) => Promise<SideAnswer | null>
   /** Ends the session, killing the process the SDK spawned. */
   close: () => Promise<void>
 }
@@ -487,6 +494,50 @@ export async function readUsageReport(
   } catch {
     return null
   }
+}
+
+/**
+ * `askSideQuestion` is in the SDK's runtime (VS Code's `/btw` calls it) but not
+ * in `sdk.d.ts`, so it is declared here and its reply is schema-checked.
+ */
+interface SideQuestionCapable {
+  askSideQuestion?: (
+    question: string,
+    options?: { history?: SideExchange[]; signal?: AbortSignal }
+  ) => Promise<unknown>
+}
+
+const SideReplySchema = z.object({ response: z.string(), synthetic: z.boolean().optional() })
+
+/** The agent has no side-question call to make: an older CLI, or a newer SDK that moved it. */
+export class SideQuestionUnsupportedError extends Error {
+  override readonly name = 'SideQuestionUnsupportedError'
+}
+
+/**
+ * Asks a `/btw` of a live conversation; see docs/core.md for what the CLI does.
+ *
+ * Null when the CLI had no answer. A refused or aborted request is rethrown.
+ */
+export async function askSideQuestion(
+  conversation: Query,
+  question: string,
+  history: readonly SideExchange[],
+  signal?: AbortSignal
+): Promise<SideAnswer | null> {
+  const ask = (conversation as SideQuestionCapable).askSideQuestion
+  if (typeof ask !== 'function') {
+    throw new SideQuestionUnsupportedError('This agent cannot answer side questions.')
+  }
+
+  const reply = await ask.call(conversation, question, {
+    history: [...history],
+    ...(signal && { signal })
+  })
+  const parsed = SideReplySchema.safeParse(reply)
+  if (!parsed.success) return null
+
+  return { text: parsed.data.response, synthetic: parsed.data.synthetic ?? false }
 }
 
 /**
@@ -1011,6 +1062,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 
     usageReport(options) {
       return readUsageReport(conversation, options)
+    },
+
+    sideQuestion(question, history, signal) {
+      return askSideQuestion(conversation, question, history, signal)
     },
 
     async setEffort(choice) {

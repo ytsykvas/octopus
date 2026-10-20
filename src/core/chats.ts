@@ -90,6 +90,9 @@ export type ChatErrorCode =
   | 'chatClosed'
   | 'autoModeUnavailable'
   | 'turnRunning'
+  | 'sideQuestionUnsupported'
+  | 'sideQuestionFailed'
+  | 'sideQuestionTimedOut'
 
 /**
  * What putting the files back to a message would do, or did.

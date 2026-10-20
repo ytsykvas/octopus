@@ -26,6 +26,7 @@ import type {
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type { SideAnswer, SideExchange } from '@core/sideQuestions.js'
 import type { StrayServer } from '@core/strayServers.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { ResourceReading } from '@core/resources.js'
@@ -335,6 +336,16 @@ const api = {
     /** How full the context is and how much of the subscription is gone. */
     usage: (chatId: string): Promise<Result<SessionUsage>> =>
       ipcRenderer.invoke('chats:usage', chatId) as Promise<Result<SessionUsage>>,
+
+    /** A `/btw`, answered beside the conversation and kept out of it. */
+    sideQuestion: (
+      chatId: string,
+      question: string,
+      history: readonly SideExchange[]
+    ): Promise<Result<SideAnswer | null>> =>
+      ipcRenderer.invoke('chats:sideQuestion', chatId, question, history) as Promise<
+        Result<SideAnswer | null>
+      >,
 
     /**
      * Answers a pending permission request; the agent is blocked until it arrives.
