@@ -156,7 +156,7 @@ function moment(value: string): string | null {
  * `…/actions/runs/<run>/job/<job>` is the only shape GitHub gives a job's page.
  */
 function runOf(url: string): string | null {
-  return /\/actions\/runs\/(\d+)\//u.exec(url)?.[1] ?? null
+  return /\/actions\/runs\/(\d+)\/job\/\d+$/u.exec(url)?.[1] ?? null
 }
 
 /** An empty string is how `gh` spells an absent URL, having marshalled a Go string. */
@@ -262,14 +262,34 @@ export function runsToRerun(checks: readonly PullRequestCheck[], scope: RerunSco
 /** What `gh pr view --json headRefName,statusCheckRollup` sends before a re-run. */
 export const RerunPayloadSchema = z.object({
   headRefName: z.string().min(1),
+  /** The request's own page, which says which repository a run must be in. */
+  url: z.string(),
   statusCheckRollup: RollupSchema
 })
 
+/**
+ * The checks a re-run may act on, each run id kept only where it is this
+ * repository's.
+ *
+ * A check's link is written by whichever app reported it, so a third-party app
+ * could hand back `…/actions/runs/<id>/…` naming some other run, and `gh run
+ * rerun` resolves an id against the repository it stands in. Only a link under
+ * the request's own repository is taken as a run of it.
+ */
 export function toRerunPayload(payload: z.infer<typeof RerunPayloadSchema>): {
   readonly headRefName: string
   readonly checks: PullRequestCheck[]
 } {
-  return { headRefName: payload.headRefName, checks: toChecks(payload.statusCheckRollup) }
+  const repository = payload.url.replace(/\/pull\/\d+$/u, '')
+
+  return {
+    headRefName: payload.headRefName,
+    checks: toChecks(payload.statusCheckRollup).map((check) =>
+      check.url?.startsWith(`${repository}/actions/runs/`) === true
+        ? check
+        : { ...check, runId: null }
+    )
+  }
 }
 
 // ─── the review ──────────────────────────────────────────────────────────────

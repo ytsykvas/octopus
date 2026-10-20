@@ -1033,7 +1033,11 @@ function job(run: string, conclusion: string, status = 'COMPLETED'): Record<stri
 }
 
 function rollup(head: string, ...entries: Record<string, string>[]): string {
-  return JSON.stringify({ headRefName: head, statusCheckRollup: entries })
+  return JSON.stringify({
+    headRefName: head,
+    url: 'https://github.com/o/p/pull/7',
+    statusCheckRollup: entries
+  })
 }
 
 describe('re-running the checks', () => {
@@ -1047,7 +1051,7 @@ describe('re-running the checks', () => {
 
     await rerunChecks(7, 'failed', 'octopus/anna', gh)
 
-    expect(calls[0]).toEqual(['pr', 'view', '7', '--json', 'headRefName,statusCheckRollup'])
+    expect(calls[0]).toEqual(['pr', 'view', '7', '--json', 'headRefName,url,statusCheckRollup'])
     expect(reruns(calls)).toEqual([['run', 'rerun', '1', '--failed']])
   })
 
@@ -1101,6 +1105,23 @@ describe('re-running the checks', () => {
     })
 
     expect(reruns(calls)).toEqual([])
+  })
+
+  /* A check's link is whatever the app that reported it wrote, so one pointing
+     into another repository's runs is not taken as a run of this one. */
+  it("takes a run only from a link inside the request's own repository", async () => {
+    const foreign = {
+      ...job('9', 'FAILURE'),
+      detailsUrl: 'https://github.com/x/y/actions/runs/9/job/1'
+    }
+    const { gh, calls } = fakeGh({
+      view: rollup('octopus/anna', foreign, job('1', 'FAILURE')),
+      rerun: ''
+    })
+
+    await rerunChecks(7, 'failed', 'octopus/anna', gh)
+
+    expect(reruns(calls)).toEqual([['run', 'rerun', '1', '--failed']])
   })
 
   it('stops at the first run GitHub refuses, carrying what it said', async () => {

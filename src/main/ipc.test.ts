@@ -2037,6 +2037,7 @@ describe('workspaces of a real project', () => {
           args[1] === 'view'
             ? JSON.stringify({
                 headRefName: branch,
+                url: 'https://github.com/o/p/pull/7',
                 statusCheckRollup: [
                   {
                     __typename: 'CheckRun',

@@ -622,7 +622,7 @@ export async function rerunChecks(
       RerunPayloadSchema,
       parsed(
         await asked(() =>
-          gh(['pr', 'view', String(number), '--json', 'headRefName,statusCheckRollup'])
+          gh(['pr', 'view', String(number), '--json', 'headRefName,url,statusCheckRollup'])
         )
       )
     )
