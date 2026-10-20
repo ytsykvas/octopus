@@ -1303,6 +1303,22 @@ describe('what the tab can do about a request', () => {
     expect(sent).toContain('main')
   })
 
+  // The service decides from it whether the turn ends in a push.
+  it('names the prompt it sent', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Fix the checks' }))
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(octopus().chats.send).mock.calls[0]?.[2]).toEqual({
+        instruction: 'fixChecks'
+      })
+    })
+  })
+
   it('has a button for each of the reviews it can ask for', async () => {
     answer(view({ request: request() }))
     answerDetail(detail())

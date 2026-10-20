@@ -506,7 +506,6 @@ export const uk: Translation = {
     stateClosed: 'Pull request #{{number}} закрито без злиття.',
 
     createShortcut: 'Створити PR',
-    openShortcut: 'Перевірити PR',
     commitMessage: 'Повідомлення коміту',
     commitMessagePlaceholder: 'Перейменувати те саме',
     commitHint:
@@ -1651,6 +1650,9 @@ export const uk: Translation = {
     rewindInProgress: 'Розмова саме повертається назад. Зачекайте, доки це завершиться.',
     chatClosed: 'Цю розмову закрито. Спершу відкрийте її з історії.',
     autoModeUnavailable: 'Auto тут недоступний: {{reason}}',
+    turnRunning: 'Агент ще працює. Дочекайтеся, поки він закінчить, і натисніть кнопку знову.',
+    pushTargetChanged:
+      '{{branch}} не запушено: origin тепер пушить у {{current}}, а не туди, куди пушив, коли ви натиснули кнопку.',
     repoConfigSymlink:
       '{{path}} — символічне посилання. octopus не читає й не пише через нього, бо воно може вести куди завгодно поза репозиторієм.',
     repoConfigTooLarge: '{{path}} більший, ніж дозволено файлу такого роду.',

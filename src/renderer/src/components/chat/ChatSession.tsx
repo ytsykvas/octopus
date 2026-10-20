@@ -510,7 +510,8 @@ export function ChatSession({
               setFarFromEnd(distance > element.clientHeight)
               dayAtTop.update()
             }}
-            className="min-h-0 flex-1 overflow-auto"
+            // Never sideways: wide content (code, tables, diffs) scrolls inside its own box.
+            className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
           >
             {/* The day on screen, floating once its own separator has scrolled
             away. Sticky only works on a child of the scroller itself, and

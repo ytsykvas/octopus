@@ -702,6 +702,16 @@ describe('following the conversation', () => {
     expect(log.scrollTop).toBe(0)
   })
 
+  // jsdom lays nothing out, so the class is all there is to check.
+  it('never scrolls the log sideways', async () => {
+    givenChat()
+    await openLoadedChat()
+
+    const log = screen.getByRole('log')
+    expect(log).toHaveClass('overflow-x-hidden')
+    expect(log).toHaveClass('overflow-y-auto')
+  })
+
   it('offers the way back down once the reader is a screen above the end', async () => {
     const user = userEvent.setup()
     givenChat()

@@ -245,3 +245,55 @@ describe('whether the answer was all of them', () => {
     expect(result.current.capped).toBe(false)
   })
 })
+
+describe('whether anything has answered yet', () => {
+  /*
+   * Before the first answer, `capped` is only where it starts. A caller reading
+   * it as "not capped" offered Create PR on a large repository and withdrew it
+   * the moment the read landed.
+   */
+  it('says not until the first answer lands', async () => {
+    const gate = held<{ ok: true; value: { requests: BranchRequest[]; capped: boolean } }>()
+    vi.mocked(octopus().projects.pullRequests).mockReturnValue(gate.promise)
+    const { result } = renderHook(() => useBranchRequests(PLANNER))
+
+    expect(result.current.answered).toBe(false)
+
+    await act(async () => {
+      gate.resolve({ ok: true, value: { requests: [], capped: true } })
+      await gate.promise
+    })
+    expect(result.current.answered).toBe(true)
+  })
+
+  // A repository with no GitHub remote never answers otherwise, and waiting on
+  // it would keep the header's shortcut away for the whole session.
+  it('counts a refusal as an answer', async () => {
+    vi.mocked(octopus().projects.pullRequests).mockResolvedValue({
+      ok: false,
+      error: 'gh: no remote',
+      code: 'notConnected'
+    })
+    const { result } = renderHook(() => useBranchRequests(PLANNER))
+
+    await waitFor(() => {
+      expect(result.current.answered).toBe(true)
+    })
+  })
+
+  it('starts over with the next project', async () => {
+    answer(request())
+    const { result, rerender } = renderHook(({ id }) => useBranchRequests(id), {
+      initialProps: { id: PLANNER }
+    })
+
+    await waitFor(() => {
+      expect(result.current.answered).toBe(true)
+    })
+
+    unanswered()
+    rerender({ id: 'ledger' })
+
+    expect(result.current.answered).toBe(false)
+  })
+})

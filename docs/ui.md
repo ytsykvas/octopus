@@ -381,7 +381,9 @@ rows grow after they are laid out (markdown, code), so the one scroll to the
 end landed short; a `ResizeObserver` on the log's content scrolls again while
 the reader is still pinned. More than one screen above the end, a small round
 accent button with a cloud-and-arrow icon floats at the bottom-right of the
-log; it jumps straight to the end and pins it again.
+log; it jumps straight to the end and pins it again. The log never scrolls
+sideways (`overflow-x-hidden`): code, tables and diffs scroll inside their own
+box, long message text wraps, and a tool row's path truncates.
 
 **A path in a row opens the file in the centre**, the way the right pane's tree
 does: a click previews, a double-click keeps it. The agent names absolute paths
@@ -1791,17 +1793,18 @@ than those hundred is simply not in the answer, and **absent reads exactly like
 "has none"**: the header then offered `Create PR` for a branch that already had
 one.
 
-So the read says whether it was all of them, and where it was not the button
-stops naming the action and says `Check PR` instead. Pressing it does the same
-thing either way — it opens the pull request tab, which asks about _this branch_
-rather than reading the capped list, and is therefore the one authority on what
-the branch has.
+So the read says whether it was all of them, and where it was not the header
+button is hidden. Leaving it saying `Create PR` would be a wrong sentence said
+with confidence, and a second label for the same press — it opens the pull
+request tab either way — is a button doing what the tab strip and `⌘⇧P` already
+do. The tab asks about _this branch_ rather than reading the capped list, so it
+is the one authority on what the branch has. The row's mark stays absent too,
+which says nothing rather than something false.
 
-The two alternatives were both worse. Hiding the button takes away a shortcut
-over a doubt; leaving it saying `Create PR` is a wrong sentence said with
-confidence. Not `Pull request` either, which is what the tab it opens is already
-called — two buttons of one name is a question for whoever hears them read out.
-The row's mark stays absent, which says nothing rather than something false.
+The button also waits for the first answer. Until one lands, "not capped" is
+only the starting value, and treating it as an answer showed `Create PR` on a
+large repository and then took it away. A refused read counts as an answer: a
+repository with no GitHub remote never gives another.
 
 **And a row says when its worktree is standing on some other branch.** `git
 checkout` is one command in the workspace terminal, which is a shipped tab, and
@@ -2181,6 +2184,15 @@ it with several subagents, resolve the conflicts — each send the project's
 instruction plus a line naming the request. Drawn twice rather than once around a
 guard: without a conversation the press could not do anything, and a branch
 nothing can reach is a claim nothing tests.
+
+**Three of them end in a push the app makes.** The agent may not push (§12.3 of
+`PROJECT.md`), so fixing the checks, answering the review and resolving the
+conflicts name themselves when sent, and the branch goes up once that turn has
+ended well. Pressed while the agent is still working, they are refused with a
+message saying to wait. A push that fails, or one refused because `origin` was
+pointed elsewhere during the turn, says so in the conversation. A project's own
+copy of one of these instructions that still says "push" is met by the refusal
+and the agent stops; the shipped wording says to commit and stop.
 
 Three of the five appear only when they would mean something: answering a review
 once somebody has left one, resolving a conflict against one, fixing the checks

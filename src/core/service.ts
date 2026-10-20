@@ -146,19 +146,23 @@ import {
   readBranchRequests,
   type BranchRequestList,
   pushBranch,
+  pushBranchTo,
+  pushUrl,
   readPullRequest,
   readPullRequestDetail
 } from './pullRequests.js'
 import type { PullRequestDetail } from './pullRequestShapes.js'
 import { gitIn, isIgnored, withIndexCopy } from './git.js'
-import { FETCH_OPTIONS, resolveBase } from './remotes.js'
+import { FETCH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
 import { narrowCarried } from './carriedTrust.js'
 import {
   effectiveInstruction,
   type InstructionKind,
+  PUBLISHES_AFTER,
   readInstruction,
+  type SendOptions,
   storedInstruction,
   writeInstruction
 } from './instructions.js'
@@ -1325,8 +1329,13 @@ export interface OctopusService {
    * rewound to — or null for one that never reaches the agent. The window
    * draws the message before this returns, and without the id its line could
    * not be rewound until the history was read again.
+   *
+   * `sending.instruction` names the pull request prompt a pane button sent.
+   * For one that changes the branch (`PUBLISHES_AFTER`) the app pushes once
+   * the turn ends well, and refuses while another turn is running — so the
+   * turn that ends is the button's. A message typed into the chat names none.
    */
-  sendToChat(chatId: string, text: string): Promise<string | null>
+  sendToChat(chatId: string, text: string, sending?: SendOptions): Promise<string | null>
   /**
    * Stops the current turn; the session stays open.
    *
@@ -1751,6 +1760,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * CLI refused — goes that second way, so this cannot grow.
    */
   const clearRequests = new Set<string>()
+
+  /**
+   * Conversations whose running turn a pull request button started, each with
+   * where `origin` pushed to when it was pressed. Emptied by the turn's end, a
+   * Stop, or the session closing, so an entry outlives no turn.
+   */
+  const publishAfterTurn = new Map<string, string>()
 
   /**
    * Chats whose clearing turn has not ended yet.
@@ -2714,6 +2730,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       else background(chat, setChatStatus(chat.id, 'error'))
     }
 
+    /*
+     * The turn a pull request button started has ended: the app pushes what it
+     * committed. Only on success — a failed turn's half-made commits are the
+     * user's to look at first, and its error is already shown.
+     */
+    const pushTo = publishAfterTurn.get(chat.id)
+    if (event.type === 'result' && pushTo !== undefined) {
+      publishAfterTurn.delete(chat.id)
+      if (event.ok) {
+        const workspace = requireWorkspace(chat.workspaceId)
+        background(chat, pushBranchTo(pushTo, workspace.branch, makeExec(workspace.path)))
+      }
+    }
     if (event.type === 'result') {
       background(chat, saveWriters(chat.workspaceId))
 
@@ -3233,8 +3262,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const session = sessions.get(chat.id)
     sessions.delete(chat.id)
     compaction.delete(chat.id)
-    // Its queue goes with its process.
+    // Its queue goes with its process, and so does a push promised for a turn
+    // it will now never finish — the next session's turns were asked nothing.
     heldMessages.delete(chat.id)
+    publishAfterTurn.delete(chat.id)
 
     // A session that ends mid-tool leaves an edit nobody will ever answer
     // for, and a question nobody will ever answer at all. Both go with it,
@@ -4191,6 +4222,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         effort: DEFAULT_EFFORT,
         allowedTools: [],
         additionalDirectories: [],
+        pushTargets: [],
         skillOverrides: {},
         autoCompactWindow: null
       },
@@ -4267,7 +4299,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Asked of the files this session will read, as it starts. The agent can
     // still take one from a settings file later; a reading that strays from the
     // window it started with is how that shows (`windowStrayed`).
-    const override = await windowOverrideFor(workspace.path, settingSources)
+    // In one await with the push targets: the record is read after the last one.
+    const [override, targets] = await Promise.all([
+      windowOverrideFor(workspace.path, settingSources),
+      pushTargets(makeExec(workspace.path))
+    ])
 
     // The record as it is **now**, read after the last await and before the
     // session is registered, with nothing in between. What was asked for is a
@@ -4306,6 +4342,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // on every call, against the config as it stands at that moment.
         allowedTools: [...READ_ONLY_TOOLS],
         additionalDirectories: [...roots, attachments],
+        pushTargets: targets,
         skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow
       },
@@ -4326,7 +4363,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // ones: those are the files it reads.
         skillsInFiles: () => fileSkillsFor(workspace.path, settingSources),
         // Re-read rather than closed over: a rename changes the branch.
-        refuseBash: branchGuard(
+        refuseCommand: branchGuard(
           () => state.workspaces.find((item) => item.id === workspace.id)?.branch ?? null,
           workspace.path
         )
@@ -5518,7 +5555,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // ordinary work, and there is no reason it should be answered by a
           // different model than the one that did the work being described.
           model: config.model,
-          settingSources: await sourcesFor(workspace)
+          settingSources: await sourcesFor(workspace),
+          pushTargets: await pushTargets(makeExec(workspace.path))
         },
         runQuery
       )
@@ -5856,7 +5894,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return readTranscript(chatId, dataRoot)
     },
 
-    async sendToChat(chatId, text) {
+    async sendToChat(chatId, text, sending) {
       // Not to a closed one: a window that has not heard it was closed would
       // otherwise start a session no tab and no status shows, editing the
       // worktree with nothing to stop it.
@@ -5870,6 +5908,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           `Chat ${chatId} is rewinding; the message would land in the middle of it.`
         )
       }
+
+      // A prompt that ends in a push only starts a turn of its own: sent behind
+      // a running one, the first turn to end — the one it pushes after — would
+      // not be the button's.
+      const publishes = sending?.instruction !== undefined && PUBLISHES_AFTER[sending.instruction]
+      if (publishes && chat.status !== 'idle' && chat.status !== 'error') {
+        throw new ChatError(
+          'turnRunning',
+          { chatId },
+          `Chat ${chatId} has a turn running; a prompt that ends in a push waits for it.`
+        )
+      }
+      const pushTo = publishes ? await pushUrl(makeExec(workspace.path)) : null
 
       // Written before the agent is asked anything: if starting the session
       // fails, the message the user typed is still in their history rather
@@ -6020,6 +6071,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         clearRequests.add(chatId)
       }
       session.send(text, messageId)
+      if (pushTo !== null) publishAfterTurn.set(chatId, pushTo)
 
       openTurn(chatId)
       await setChatStatus(chatId, 'running')
@@ -6037,6 +6089,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       abandonPermissions(chatId, 'turn')
       abandonElicitations(chatId)
       abandonEdits(chatId)
+      // Stopped is not finished: work cut off half way is not pushed.
+      publishAfterTurn.delete(chatId)
 
       // Nothing running is not a failure — the button is simply ahead of the
       // agent, which finished between the render and the click.

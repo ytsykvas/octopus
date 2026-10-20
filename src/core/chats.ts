@@ -89,6 +89,7 @@ export type ChatErrorCode =
   | 'rewindInProgress'
   | 'chatClosed'
   | 'autoModeUnavailable'
+  | 'turnRunning'
 
 /**
  * What putting the files back to a message would do, or did.

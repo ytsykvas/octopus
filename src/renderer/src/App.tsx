@@ -737,21 +737,21 @@ export function App(): React.JSX.Element {
     openRequest?.state !== 'open'
 
   /*
-   * Whether the button may say what pressing it will do.
+   * Whether the button may offer to create a request.
    *
    * The read asks GitHub for the hundred most recent requests of the whole
    * repository, so a workspace whose request is older than those hundred is
    * simply not in the answer — and absent reads exactly like "has none". Under
-   * a capped answer the header cannot tell the two apart, so it stops naming
-   * the action and names the **place**: the button opens the pull request tab
-   * either way, and that tab asks about this branch rather than reading the
-   * capped list, so it is the one authority on what the branch has.
+   * a capped answer the header cannot tell the two apart, so it offers nothing:
+   * "Create PR" over a branch that has one is the wrong sentence said
+   * confidently, and the pull request tab, which asks about this branch rather
+   * than reading the capped list, is still one press away.
    *
-   * Hiding the button instead would take away a shortcut over a doubt, and
-   * saying "Create PR" over a branch that has one is the wrong sentence said
-   * confidently. Naming the destination is true under both.
+   * Before the first answer `capped` is only its starting value, so the button
+   * waits for it: on a large repository it would otherwise show and then vanish.
    */
-  const requestKnown = openRequest !== undefined || !branchRequests.capped
+  const requestKnown =
+    openRequest !== undefined || (branchRequests.answered && !branchRequests.capped)
 
   /*
    * Merging and closing from the header.
@@ -826,14 +826,15 @@ export function App(): React.JSX.Element {
            *
            * Beside the branch, because that is what a request would be made of.
            * It appears when the workspace has something to carry and no request
-           * open yet — and it deliberately does not ask GitHub itself: that is a
+           * open yet, and stays away while the project's list cannot say so (see
+           * `requestKnown`) — and it deliberately does not ask GitHub itself: that is a
            * network call per workspace, and the tab it opens is the one authority
            * on what the branch has.
            */}
-          {readyForRequest && (
+          {readyForRequest && requestKnown && (
             <Button size="sm" onClick={showPullRequests}>
               <GitPullRequest aria-hidden size={12} />
-              {requestKnown ? t('pullRequest.createShortcut') : t('pullRequest.openShortcut')}
+              {t('pullRequest.createShortcut')}
             </Button>
           )}
 

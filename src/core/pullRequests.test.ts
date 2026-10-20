@@ -12,6 +12,8 @@ import {
   BRANCH_REQUEST_LIMIT,
   commitAndPush,
   pushBranch,
+  pushBranchTo,
+  pushUrl,
   createPullRequest,
   type GhExec,
   ghIn,
@@ -796,6 +798,42 @@ describe('committing an answer onto a request that exists', () => {
       code: 'pushFailed',
       params: { branch }
     })
+  })
+})
+
+describe('pushBranchTo', () => {
+  /** A git that answers `origin`'s push URL and records what it is asked to push. */
+  function fakeGit(origin: string): { git: GitExec; pushed: string[][] } {
+    const pushed: string[][] = []
+    const git: GitExec = (args) => {
+      if (args[0] === 'remote') return Promise.resolve(`${origin}\n`)
+      pushed.push([...args])
+      return Promise.resolve('')
+    }
+    return { git, pushed }
+  }
+
+  it('reads where origin pushes to', async () => {
+    await expect(pushUrl(fakeGit('https://github.com/o/r.git').git)).resolves.toBe(
+      'https://github.com/o/r.git'
+    )
+  })
+
+  it('pushes the branch while origin still pushes where it did', async () => {
+    const { git, pushed } = fakeGit('https://github.com/o/r.git')
+    await pushBranchTo('https://github.com/o/r.git', 'octopus/anna', git)
+    expect(pushed).toEqual([['push', '-u', 'origin', 'octopus/anna']])
+  })
+
+  it('pushes nothing once origin points somewhere else, and says where', async () => {
+    const { git, pushed } = fakeGit('https://example.com/elsewhere.git')
+    await expect(
+      pushBranchTo('https://github.com/o/r.git', 'octopus/anna', git)
+    ).rejects.toMatchObject({
+      code: 'pushTargetChanged',
+      params: { branch: 'octopus/anna', current: 'https://example.com/elsewhere.git' }
+    })
+    expect(pushed).toEqual([])
   })
 })
 

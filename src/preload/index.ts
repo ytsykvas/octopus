@@ -41,7 +41,7 @@ import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
 import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
-import type { InstructionKind } from '@core/instructions.js'
+import type { InstructionKind, SendOptions } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type {
   SkillDocument,
@@ -268,9 +268,12 @@ const api = {
     history: (chatId: string): Promise<Result<ChatEntry[]>> =>
       ipcRenderer.invoke('chats:history', chatId) as Promise<Result<ChatEntry[]>>,
 
-    /** Sends a message. The answer arrives through `onEvent`, not here. */
-    send: (chatId: string, text: string): Promise<Result<string | null>> =>
-      ipcRenderer.invoke('chats:send', chatId, text) as Promise<Result<string | null>>,
+    /**
+     * Sends a message. The answer arrives through `onEvent`, not here.
+     * `sending` names the pull request prompt a pane button sent — `sendToChat`.
+     */
+    send: (chatId: string, text: string, sending?: SendOptions): Promise<Result<string | null>> =>
+      ipcRenderer.invoke('chats:send', chatId, text, sending) as Promise<Result<string | null>>,
 
     /** Stops the current turn; the session stays open for the next message. */
     interrupt: (chatId: string): Promise<Result<void>> =>

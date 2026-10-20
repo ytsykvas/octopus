@@ -22,7 +22,8 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { GitError, type GitExec, gitIn } from './git.js'
-import { fetchRemote, listRemotes, parseRemotes, resolveBase } from './remotes.js'
+import { PUSH_NOWHERE } from './publishGuard.js'
+import { fetchRemote, listRemotes, parseRemotes, pushTargets, resolveBase } from './remotes.js'
 
 const run = promisify(execFile)
 
@@ -110,6 +111,38 @@ describe('listRemotes', () => {
   it('reads the configured ones', async () => {
     await addRemote()
     expect(await listRemotes(gitIn(dir))).toEqual(['origin'])
+  })
+})
+
+describe('pushTargets', () => {
+  it('answers nothing when nothing is configured', async () => {
+    expect(await pushTargets(gitIn(dir))).toEqual([])
+  })
+
+  it('reads every remote URL and every URL rewrite the user wrote', async () => {
+    const git = gitIn(dir)
+    await git(['remote', 'add', 'origin', 'https://github.com/o/r.git'])
+    await git(['remote', 'add', 'work', 'github-work:o/r.git'])
+    await git(['config', 'url.git@github.com:.pushInsteadOf', 'https://github.com/'])
+    await git(['config', 'url.git@example.com:.insteadOf', 'ex:'])
+
+    expect(await pushTargets(git)).toEqual([
+      'https://github.com/o/r.git',
+      'github-work:o/r.git',
+      'https://github.com/',
+      'ex:'
+    ])
+  })
+
+  it('leaves out the rewrite’s own rules, which git reports inside an agent’s session', async () => {
+    const asAgent = gitIn(dir, {
+      env: {
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: `url.${PUSH_NOWHERE}.pushInsteadOf`,
+        GIT_CONFIG_VALUE_0: 'https://'
+      }
+    })
+    expect(await pushTargets(asAgent)).toEqual([])
   })
 })
 

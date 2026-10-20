@@ -372,6 +372,31 @@ export async function pushBranch(branch: string, git: GitExec): Promise<void> {
   }
 }
 
+/** Where `origin` pushes to, as git resolves it now. */
+export async function pushUrl(git: GitExec): Promise<string> {
+  return (await git(['remote', 'get-url', '--push', 'origin'])).trim()
+}
+
+/**
+ * Pushes the branch, provided `origin` still pushes where it did when the push
+ * was asked for.
+ *
+ * The automatic push after a pull request prompt runs once the agent's turn is
+ * over, and the agent works in this worktree in between: a remote it pointed
+ * elsewhere would receive the work, sent with the user's credentials.
+ */
+export async function pushBranchTo(expected: string, branch: string, git: GitExec): Promise<void> {
+  const current = await pushUrl(git)
+  if (current !== expected) {
+    throw new GitHubError(
+      'pushTargetChanged',
+      { branch, expected, current },
+      'Where origin pushes to changed; the branch was not pushed.'
+    )
+  }
+  await pushBranch(branch, git)
+}
+
 /**
  * Commits everything here and sends it to the remote.
  *

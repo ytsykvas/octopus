@@ -14,6 +14,7 @@
 import type { UUID } from 'node:crypto'
 
 import type {
+  HookCallback,
   ModelInfo,
   Options,
   PermissionUpdate,
@@ -31,6 +32,13 @@ import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
+import {
+  agentEnv,
+  PUBLISH_DENY_RULES,
+  PUBLISH_REFUSAL,
+  refusesPublish,
+  refusesPublishTool
+} from './publishGuard.js'
 import {
   backgroundTasks,
   taskNotification,
@@ -101,6 +109,8 @@ export interface SessionOptions {
    * which is the honest reading of "load nothing" anyway.
    */
   readonly additionalDirectories: readonly string[]
+  /** The workspace's remote URLs and the user's URL rewrites (`pushTargets`), for `agentEnv`. */
+  readonly pushTargets: readonly string[]
   /**
    * What this conversation was told about each skill the record names, by the
    * name the agent knows (`skillOverridesFor`).
@@ -260,10 +270,11 @@ export interface SessionHooks {
    */
   readonly skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
   /**
-   * A refusal for a shell command, or null to let it run (`branchGuard`).
-   * Optional because the account probe runs no commands at all.
+   * A refusal for a shell command, or null to let it run (`branchGuard`) —
+   * beside the publish guard every session carries. Optional because the
+   * account probe works on no branch.
    */
-  readonly refuseBash?: (command: string) => string | null
+  readonly refuseCommand?: (command: string) => string | null
 }
 
 /** What an MCP server wants from the user, once the form has been read. */
@@ -538,6 +549,120 @@ export function toAgentCommands(commands: readonly SlashCommand[]): AgentCommand
  */
 export const DENIED = 'The user declined this action in octopus.'
 
+/** The tools that run a shell command, each carrying it in `tool_input.command`. */
+const SHELL_TOOLS = 'Bash|Monitor|PowerShell'
+
+const ShellCallSchema = z.object({
+  tool_name: z.string(),
+  tool_input: z.object({ command: z.string() })
+})
+const McpCallSchema = z.object({ tool_name: z.string() })
+const AgentCallSchema = z.object({ tool_input: z.object({ isolation: z.string().optional() }) })
+
+/** What the agent is told when a guard itself failed, so nothing it was asked to check ran. */
+export const GUARD_FAILED = 'Octopus could not check this call, so it was not run.'
+
+/**
+ * A hook that denies when `guard` names a reason — and when `guard` throws.
+ *
+ * An exception escaping a hook is not a decision the SDK promises to treat as a
+ * refusal, and a guard that fails open is not a guard.
+ */
+function denying(guard: (input: unknown) => string | null): HookCallback {
+  return (input) => {
+    let reason: string | null
+    try {
+      reason = guard(input)
+    } catch {
+      reason = GUARD_FAILED
+    }
+    return Promise.resolve(
+      reason === null
+        ? {}
+        : {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'deny' as const,
+              permissionDecisionReason: reason
+            }
+          }
+    )
+  }
+}
+
+/**
+ * The SDK hooks that keep the agent from publishing, and put `refuseCommand`
+ * in front of every shell command as well.
+ *
+ * A hook rather than a check in `canUseTool`, which is consulted last: a
+ * command the user's own allow rules cover, or one `auto` mode approves, never
+ * reaches it. A `PreToolUse` refusal holds in every mode, and inside subagents.
+ */
+export function toolGuards(
+  refuseCommand?: (command: string) => string | null
+): NonNullable<Options['hooks']> {
+  return {
+    PreToolUse: [
+      {
+        matcher: SHELL_TOOLS,
+        hooks: [
+          denying((input) => {
+            const call = ShellCallSchema.safeParse(input)
+            if (!call.success) return null
+            const { command } = call.data.tool_input
+            // PowerShell escapes with a backtick: ``g`h`` runs gh.
+            const read =
+              call.data.tool_name === 'PowerShell' ? command.replaceAll('`', '') : command
+            return refusesPublish(read) ?? refuseCommand?.(command) ?? null
+          })
+        ]
+      },
+      {
+        matcher: '^mcp__',
+        hooks: [
+          denying((input) => {
+            const call = McpCallSchema.safeParse(input)
+            return call.success ? refusesPublishTool(call.data.tool_name) : null
+          })
+        ]
+      },
+      {
+        // A subagent in the cloud runs where none of these layers reach.
+        matcher: 'Agent',
+        hooks: [
+          denying((input) => {
+            const call = AgentCallSchema.safeParse(input)
+            return call.success && call.data.tool_input.isolation === 'remote'
+              ? PUBLISH_REFUSAL
+              : null
+          })
+        ]
+      }
+    ]
+  }
+}
+
+/**
+ * What every session the app starts carries so its agent cannot publish: the
+ * hooks, the CLI's own deny rules, and an environment where a push to any of
+ * `pushTargets` fails. Three layers because none is a boundary on its own —
+ * `publishGuard.ts`.
+ *
+ * `base` is the app's own environment: the SDK replaces the environment
+ * outright when given one, and without it the agent would lose PATH and HOME.
+ */
+export function publishLocked(
+  refuseCommand: ((command: string) => string | null) | undefined,
+  pushTargets: readonly string[],
+  base: Readonly<Record<string, string | undefined>> = process.env
+): Pick<Options, 'hooks' | 'disallowedTools' | 'env'> {
+  return {
+    hooks: toolGuards(refuseCommand),
+    disallowedTools: [...PUBLISH_DENY_RULES],
+    env: agentEnv(base, pushTargets)
+  }
+}
+
 /**
  * What a question withdrawn rather than answered says.
  *
@@ -545,45 +670,6 @@ export const DENIED = 'The user declined this action in octopus.'
  * nobody declined anything — the turn the question belonged to ended first, so
  * saying "the user declined" would teach it something untrue about the user.
  */
-/** The one field of a Bash call the guard reads. */
-const BashCallSchema = z.object({ tool_input: z.object({ command: z.string() }) })
-
-/**
- * The SDK hooks that put `refuse` in front of every shell command.
- *
- * A hook rather than a check in `canUseTool`, which is consulted last: a
- * command the user's own allow rules cover, or one `auto` mode approves, never
- * reaches it. A `PreToolUse` refusal holds in every mode.
- */
-export function refusingBash(
-  refuse: (command: string) => string | null
-): NonNullable<Options['hooks']> {
-  return {
-    PreToolUse: [
-      {
-        matcher: 'Bash',
-        hooks: [
-          (input) => {
-            const call = BashCallSchema.safeParse(input)
-            const reason = call.success ? refuse(call.data.tool_input.command) : null
-            return Promise.resolve(
-              reason === null
-                ? {}
-                : {
-                    hookSpecificOutput: {
-                      hookEventName: 'PreToolUse' as const,
-                      permissionDecision: 'deny' as const,
-                      permissionDecisionReason: reason
-                    }
-                  }
-            )
-          }
-        ]
-      }
-    ]
-  }
-}
-
 export const ABANDONED = 'The turn this question belonged to ended before it was answered.'
 
 /**
@@ -698,7 +784,9 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
       allowedTools: [...options.allowedTools],
-      ...(hooks.refuseBash && { hooks: refusingBash(hooks.refuseBash) }),
+      // These own `hooks`, `disallowedTools` and `env`: a key of the same name
+      // later in this object would take the guard away.
+      ...publishLocked(hooks.refuseCommand, options.pushTargets),
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,

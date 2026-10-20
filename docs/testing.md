@@ -345,7 +345,10 @@ before `setup.ts` because the scheduler captures the function when it loads, and
 the renderer suite then runs as usual. CI runs it after the gate. With
 `setup.ts`'s wait removed, 36–39 tests failed this way on 2026-10-19, depending
 on the run; with it, none. A test that reads a component before its effects
-have run fails there every time instead of once in a while.
+have run fails there every time instead of once in a while. Each file waits for
+the immediates it still holds before its DOM is taken down: one released after
+the last test reached React with `window` gone and failed a run whose tests had
+all passed, charged to whichever file was ending.
 
 ## Main and preload
 

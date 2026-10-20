@@ -4430,6 +4430,179 @@ describe('the agent chat', () => {
       })
   })
 
+  const lifecycle = (command_uuid: string, state: string): SDKMessage =>
+    ({
+      type: 'command_lifecycle',
+      command_uuid,
+      state,
+      uuid: 'frame',
+      session_id: 'sess-1'
+    }) as unknown as SDKMessage
+
+  describe('a turn a pull request button started', () => {
+    const ORIGIN = 'https://github.com/o/r.git'
+
+    /** A workspace whose git records every push rather than making it, with `origin` where the test says. */
+    async function recording(push: () => Promise<string> = () => Promise.resolve('')): Promise<
+      Awaited<ReturnType<typeof withWorkspace>> & {
+        chat: Awaited<ReturnType<OctopusService['openChat']>>
+        branch: string | undefined
+        pushes: string[][]
+        moveOrigin: (url: string) => void
+      }
+    > {
+      const pushes: string[][] = []
+      let origin = ORIGIN
+      const setup = await withWorkspace({
+        makeExec: (cwd, options) => {
+          const exec = gitIn(cwd, options)
+          return (args) => {
+            if (args[0] === 'remote' && args[1] === 'get-url') return Promise.resolve(`${origin}\n`)
+            if (args[0] !== 'push') return exec(args)
+            pushes.push([...args])
+            return push()
+          }
+        }
+      })
+      const chat = await setup.service.openChat(setup.workspaceId)
+      const branch = (await setup.service.listWorkspaces(setup.projectId))[0]?.branch
+      return {
+        ...setup,
+        chat,
+        branch,
+        pushes,
+        moveOrigin: (url) => {
+          origin = url
+        }
+      }
+    }
+
+    it('is pushed by the app once it ends well', async () => {
+      const { service, chat, branch, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(pushes).toEqual([['push', '-u', 'origin', branch]])
+      })
+    })
+
+    it('is pushed after its own turn, even with a message typed behind it', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'answer the review', { instruction: 'addressReview' })
+      agent().emit(initMessage)
+      await service.sendToChat(chat.id, 'and something else')
+      agent().emit(lifecycle('typed', 'queued'))
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(pushes).toHaveLength(1)
+      })
+      agent().emit(lifecycle('typed', 'started'))
+      agent().emit(resultMessage)
+      await service.closeChats()
+      expect(pushes).toHaveLength(1)
+    })
+
+    it('is refused while another turn is running, so the turn that ends is its own', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+
+      await expect(
+        service.sendToChat(chat.id, 'resolve the conflicts', { instruction: 'resolveConflicts' })
+      ).rejects.toMatchObject({ code: 'turnRunning' })
+      agent().emit(resultMessage)
+      await service.closeChats()
+      expect(pushes).toEqual([])
+    })
+
+    it('is never pushed for a prompt that changes nothing, or a message typed into the chat', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'review it', { instruction: 'review' })
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(resultMessage)
+      await service.closeChats()
+      expect(pushes).toEqual([])
+    })
+
+    it('is not pushed when the turn fails', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
+      agent().emit(initMessage)
+      agent().emit(abortedResultMessage)
+      // The entry went with the failed turn, so the next one pushes nothing.
+      agent().emit(resultMessage)
+      await service.closeChats()
+      expect(pushes).toEqual([])
+    })
+
+    it('is not pushed by the session that replaced the one it was sent to', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
+      agent().emit(initMessage)
+      agent().finish(new Error('the process died'))
+      await vi.waitFor(() => {
+        expect(service.listChats(chat.workspaceId)[0]?.status).toBe('error')
+      })
+
+      await service.setChatAutoCompact(chat.id, 400_000)
+      expect(agents).toHaveLength(2)
+      await service.sendToChat(chat.id, 'something else')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+      await service.closeChats()
+      expect(pushes).toEqual([])
+    })
+
+    it('is not pushed once it was stopped', async () => {
+      const { service, chat, pushes } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
+      agent().emit(initMessage)
+      await service.interruptChat(chat.id)
+      agent().emit(resultMessage)
+      await service.closeChats()
+      expect(pushes).toEqual([])
+    })
+
+    it('is not pushed when origin was pointed somewhere else during the turn, and says so', async () => {
+      const { service, chat, pushes, events, moveOrigin } = await recording()
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
+      agent().emit(initMessage)
+      moveOrigin('https://example.com/elsewhere.git')
+      agent().emit(resultMessage)
+      await service.closeChats()
+
+      expect(pushes).toEqual([])
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          chatId: chat.id,
+          event: expect.objectContaining({ type: 'error' }) as unknown
+        })
+      )
+    })
+
+    it('says so in the conversation when the push fails', async () => {
+      const { service, chat, events } = await recording(() =>
+        Promise.reject(new Error('rejected: non-fast-forward'))
+      )
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await service.closeChats()
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          chatId: chat.id,
+          event: expect.objectContaining({ type: 'error' }) as unknown
+        })
+      )
+    })
+  })
+
   /*
    * A message sent while the agent works and not folded into that turn — and
    * after a Stop, always — is run by the CLI as a turn of its own once the
@@ -4439,15 +4612,6 @@ describe('the agent chat', () => {
    * second turn ran under an idle tab with no Stop.
    */
   describe('a turn the agent starts from its queue', () => {
-    const lifecycle = (command_uuid: string, state: string): SDKMessage =>
-      ({
-        type: 'command_lifecycle',
-        command_uuid,
-        state,
-        uuid: 'frame',
-        session_id: 'sess-1'
-      }) as unknown as SDKMessage
-
     it('is shown as running', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
@@ -5212,7 +5376,7 @@ describe('the agent chat', () => {
     if (!hook) throw new Error('no guard')
     const decide = async (command: string): Promise<string> =>
       JSON.stringify(
-        await hook({ tool_input: { command } } as never, 'tool-1', {
+        await hook({ tool_name: 'Bash', tool_input: { command } } as never, 'tool-1', {
           signal: new AbortController().signal
         })
       )
