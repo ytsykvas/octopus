@@ -746,8 +746,12 @@ export function App(): React.JSX.Element {
    * "Create PR" over a branch that has one is the wrong sentence said
    * confidently, and the pull request tab, which asks about this branch rather
    * than reading the capped list, is still one press away.
+   *
+   * Before the first answer `capped` is only its starting value, so the button
+   * waits for it: on a large repository it would otherwise show and then vanish.
    */
-  const requestKnown = openRequest !== undefined || !branchRequests.capped
+  const requestKnown =
+    openRequest !== undefined || (branchRequests.answered && !branchRequests.capped)
 
   /*
    * Merging and closing from the header.
@@ -822,7 +826,8 @@ export function App(): React.JSX.Element {
            *
            * Beside the branch, because that is what a request would be made of.
            * It appears when the workspace has something to carry and no request
-           * open yet — and it deliberately does not ask GitHub itself: that is a
+           * open yet, and stays away while the project's list cannot say so (see
+           * `requestKnown`) — and it deliberately does not ask GitHub itself: that is a
            * network call per workspace, and the tab it opens is the one authority
            * on what the branch has.
            */}

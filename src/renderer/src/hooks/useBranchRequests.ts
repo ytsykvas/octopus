@@ -14,6 +14,14 @@ export interface BranchRequestController {
    * know is the right one.
    */
   readonly capped: boolean
+  /**
+   * Whether any answer has come back for this project yet, refused or not.
+   *
+   * Before one has, `capped` is only its starting value: a caller treating that
+   * as "not capped" shows an action on a large repository and then withdraws it
+   * once the read lands.
+   */
+  readonly answered: boolean
   /** Reads again — after one is opened here, or merged. */
   readonly refresh: () => void
 }
@@ -54,6 +62,7 @@ export const RUNNING_INTERVAL_MS = 15_000
 export function useBranchRequests(projectId: string | null): BranchRequestController {
   const [byBranch, setByBranch] = useState<ReadonlyMap<string, BranchRequest>>(new Map())
   const [capped, setCapped] = useState(false)
+  const [answered, setAnswered] = useState(false)
 
   /** Bumped to ask again, which is the whole of what `refresh` does. */
   const [nonce, setNonce] = useState(0)
@@ -71,6 +80,7 @@ export function useBranchRequests(projectId: string | null): BranchRequestContro
     setShownId(projectId)
     setByBranch(new Map())
     setCapped(false)
+    setAnswered(false)
   }
 
   const refresh = useCallback(() => {
@@ -86,6 +96,10 @@ export function useBranchRequests(projectId: string | null): BranchRequestContro
     const read = async (): Promise<void> => {
       const result = await window.octopus.projects.pullRequests(projectId)
       if (stopped) return
+
+      // A refusal counts too: a repository with no GitHub remote never answers,
+      // and waiting on it would take the header's shortcut away for good.
+      setAnswered(true)
 
       let running = false
       if (result.ok) {
@@ -109,5 +123,5 @@ export function useBranchRequests(projectId: string | null): BranchRequestContro
     // `nonce` is not read in here; it is what makes a refresh re-run the effect.
   }, [projectId, nonce])
 
-  return { byBranch, capped, refresh }
+  return { byBranch, capped, answered, refresh }
 }

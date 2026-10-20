@@ -3166,11 +3166,69 @@ describe('a branch list that came back full', () => {
     await user.click(await screen.findByRole('button', { name: 'PL' }))
     await user.click(await screen.findByText('anna'))
 
-    // Wait for the row to be selected and the header to settle before asserting
-    // an absence, or the check passes before the button could ever have shown.
+    // The button also stays away until the read has answered, so an absence
+    // asserted before then would hold with the capped guard gone. Wait for the
+    // answer to land first.
     expect(await screen.findByRole('button', { name: 'Pull request' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(window.octopus.projects.pullRequests).toHaveBeenCalled()
+    })
+    await act(async () => {
+      await vi.mocked(window.octopus.projects.pullRequests).mock.results[0]?.value
+    })
     expect(screen.queryByRole('button', { name: 'Create PR' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Check PR' })).not.toBeInTheDocument()
+  })
+
+  // A request that is in the answer is known whatever the cap: a merged one
+  // leaves the branch free for the next, and the button says so.
+  it('still offers Create PR when the branch is in a full list with a merged request', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna', { ahead: 2 })]
+    })
+    vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
+      ok: true,
+      value: {
+        capped: true,
+        requests: [
+          {
+            branch: 'ytsykvas/anna',
+            number: 812,
+            state: 'merged',
+            checks: 'passed',
+            url: 'https://github.com/o/p/pull/812'
+          }
+        ]
+      }
+    })
+
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(await screen.findByRole('button', { name: 'Create PR' })).toBeInTheDocument()
+  })
+
+  /*
+   * Before the first answer, "not capped" is only the starting value. Taking it
+   * for an answer showed Create PR on a large repository and then withdrew it.
+   */
+  it('offers nothing before the list has answered', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [workspaceView('anna', { ahead: 2 })]
+    })
+    vi.mocked(window.octopus.projects.pullRequests).mockReturnValue(new Promise(() => undefined))
+
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    expect(await screen.findByRole('button', { name: 'Pull request' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create PR' })).not.toBeInTheDocument()
   })
 
   // Under an answer that was all of them, absent means absent — and saying so

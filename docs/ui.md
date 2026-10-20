@@ -1784,13 +1784,17 @@ than those hundred is simply not in the answer, and **absent reads exactly like
 one.
 
 So the read says whether it was all of them, and where it was not the header
-button is hidden. The pull request tab asks about _this branch_ rather than
-reading the capped list, and is therefore the one authority on what the branch
-has; it stays one press away.
+button is hidden. Leaving it saying `Create PR` would be a wrong sentence said
+with confidence, and a second label for the same press — it opens the pull
+request tab either way — is a button doing what the tab strip and `⌘⇧P` already
+do. The tab asks about _this branch_ rather than reading the capped list, so it
+is the one authority on what the branch has. The row's mark stays absent too,
+which says nothing rather than something false.
 
-A relabelled button (`Check PR`) was tried and dropped as unused.
-Leaving it saying `Create PR` is a wrong sentence said with confidence, so
-saying nothing is what remains. The row's mark stays absent likewise.
+The button also waits for the first answer. Until one lands, "not capped" is
+only the starting value, and treating it as an answer showed `Create PR` on a
+large repository and then took it away. A refused read counts as an answer: a
+repository with no GitHub remote never gives another.
 
 **And a row says when its worktree is standing on some other branch.** `git
 checkout` is one command in the workspace terminal, which is a shipped tab, and
