@@ -11,7 +11,14 @@ import type { AccountsController } from './useAccounts.js'
  * octopus never handles credentials: the CLI keeps them in the system
  * keychain, and this screen only reports what it says.
  */
-export function ClaudeSection({ accounts }: { accounts: AccountsController }): React.JSX.Element {
+export function ClaudeSection({
+  accounts,
+  children
+}: {
+  accounts: AccountsController
+  /** Settings that belong to the agent's account, shown under it but not over the sign-in terminal. */
+  children?: React.ReactNode
+}): React.JSX.Element {
   const { t } = useTranslation()
   const label = t('settings.claudeAccount')
 
@@ -54,6 +61,8 @@ export function ClaudeSection({ accounts }: { accounts: AccountsController }): R
       {accounts.error !== null && <p className="text-danger">{accounts.error}</p>}
 
       <p className="text-ink-faint leading-relaxed">{t('settings.opensTerminal')}</p>
+
+      {children}
     </div>
   )
 }
