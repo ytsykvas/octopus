@@ -882,7 +882,10 @@ function PermissionCard({
     <div className="border-warning/30 bg-warning-bg rounded-[var(--radius-panel)] border px-3 py-2.5">
       <p className="flex items-center gap-2 font-medium">
         <ShieldAlert aria-hidden className="text-warning shrink-0" size={14} />
-        {t('chat.permissionTitle', { tool: toolName })}
+        {/* An MCP tool name has no space to break at, and it is what is being approved. */}
+        <span className="min-w-0 wrap-anywhere">
+          {t('chat.permissionTitle', { tool: toolName })}
+        </span>
       </p>
 
       {/* The one place somebody authorises a command to run against their

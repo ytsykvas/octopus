@@ -1598,6 +1598,21 @@ describe('a permission request', () => {
     expect(screen.getByText('rm -rf build')).toBeInTheDocument()
   })
 
+  it('wraps a long tool name rather than letting it run past the card', () => {
+    const name = 'mcp__plugin_playwright_playwright__browser_run_code_unsafe'
+    renderLog({
+      entries: [
+        fromAgent({ type: 'permission_request', requestId: 'r-1', toolName: name, input: {} })
+      ],
+      pendingRequestId: 'r-1'
+    })
+
+    expect(screen.getByText(`The agent wants to use ${name}`)).toHaveClass(
+      'min-w-0',
+      'wrap-anywhere'
+    )
+  })
+
   /*
    * The one sentence that tells this request from fifty silent ones. Measured
    * against a live session: under `acceptEdits` an ordinary edit passes without
