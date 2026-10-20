@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -11,6 +11,7 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { Result } from '../../../../preload/index.js'
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
+import { STEP_MARGIN } from '../../hooks/useMessageSteps.js'
 import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import { useSideQuestions } from '../../hooks/useSideQuestions.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
@@ -871,16 +872,25 @@ describe('following the conversation', () => {
   })
 })
 
+/** Pins where the log and the marks inside it sit, as layout would. */
+function placeMarks(
+  log: HTMLElement,
+  selector: string,
+  topOf: (mark: HTMLElement, index: number) => number | undefined
+): void {
+  log.getBoundingClientRect = () => ({ top: 0 }) as DOMRect
+  // A scroll with no height is a hidden tab's and is not read; the end of the
+  // log is measured against it too.
+  Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
+  for (const [index, mark] of [...log.querySelectorAll<HTMLElement>(selector)].entries()) {
+    // Read on every call, so a mark can follow the log as it scrolls.
+    mark.getBoundingClientRect = () => ({ top: topOf(mark, index) }) as DOMRect
+  }
+}
+
 describe('the day on screen', () => {
-  /** Pins where the log and each day's separator sit, as layout would. */
   function place(log: HTMLElement, tops: Record<string, number>): void {
-    log.getBoundingClientRect = () => ({ top: 0 }) as DOMRect
-    // A scroll with no height is a hidden tab's, and is not read.
-    Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
-    for (const separator of log.querySelectorAll<HTMLElement>('[data-day]')) {
-      const top = tops[separator.dataset.day ?? '']
-      separator.getBoundingClientRect = () => ({ top }) as DOMRect
-    }
+    placeMarks(log, '[data-day]', (separator) => tops[separator.dataset.day ?? ''])
   }
 
   // Telegram's floating date: once a day's own separator has gone off the
@@ -929,6 +939,137 @@ describe('the day on screen', () => {
 
     await screen.findByText('still here')
     expect(screen.getAllByText('4 March 2025')).toHaveLength(2)
+  })
+})
+
+describe("stepping between the user's messages", () => {
+  // Three messages in a 2000px log, the last too near its end ever to reach the top.
+  const places = [100, 600, 1900]
+
+  async function openThree(): Promise<HTMLElement> {
+    givenChat([
+      { role: 'user', at: '2025-03-02T09:00:00.000Z', text: 'one' },
+      { role: 'user', at: '2025-03-02T09:01:00.000Z', text: 'two' },
+      { role: 'user', at: '2025-03-02T09:02:00.000Z', text: 'three' }
+    ])
+    await openLoadedChat()
+    await screen.findByText('three')
+
+    const log = screen.getByRole('log')
+    Object.defineProperty(log, 'scrollHeight', { value: 2000, configurable: true })
+    placeMarks(log, '[data-user-message]', (_, index) => (places[index] ?? 0) - log.scrollTop)
+    return log
+  }
+
+  const up = (): HTMLElement => screen.getByRole('button', { name: 'Previous message you sent' })
+  const down = (): HTMLElement => screen.getByRole('button', { name: 'Next message you sent' })
+
+  function scrollLog(log: HTMLElement, top: number): void {
+    log.scrollTop = top
+    fireEvent.scroll(log)
+  }
+
+  // Inside the first message's answer.
+  it('lands on the message above and the message below', async () => {
+    const user = userEvent.setup()
+    const log = await openThree()
+    scrollLog(log, 300)
+
+    await user.click(up())
+    expect(log.scrollTop).toBe(100 - STEP_MARGIN)
+
+    scrollLog(log, 300)
+    await user.click(down())
+    expect(log.scrollTop).toBe(600 - STEP_MARGIN)
+  })
+
+  it('moves on from the message it just landed on', async () => {
+    const user = userEvent.setup()
+    const log = await openThree()
+    scrollLog(log, 1100 - STEP_MARGIN)
+
+    await user.click(up())
+    expect(log.scrollTop).toBe(600 - STEP_MARGIN)
+  })
+
+  it('offers no step past either end of the log', async () => {
+    const log = await openThree()
+
+    scrollLog(log, 0)
+    expect(up()).toHaveAttribute('aria-disabled', 'true')
+    expect(down()).not.toHaveAttribute('aria-disabled')
+
+    // The last message is still below the line, but the log has ended.
+    scrollLog(log, 1700)
+    expect(up()).not.toHaveAttribute('aria-disabled')
+    expect(down()).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  // Chromium drops the focus of a natively disabled button and jsdom does not,
+  // so the native attribute is what is checked.
+  it('keeps the focus on a step that runs out', async () => {
+    const user = userEvent.setup()
+    const log = await openThree()
+    scrollLog(log, 300)
+
+    down().focus()
+    await user.keyboard('{Enter}')
+    scrollLog(log, 1700)
+    expect(down()).toHaveAttribute('aria-disabled', 'true')
+    expect(down()).toBeEnabled()
+
+    await user.keyboard('{Enter}')
+    expect(log.scrollTop).toBe(1700)
+  })
+
+  // A turn landing moves the log under a still scroller: no scroll event comes.
+  it('reads the steps again when the log changes under a still scroller', async () => {
+    const log = await openThree()
+    log.scrollTop = 300
+    expect(up()).toHaveAttribute('aria-disabled', 'true')
+
+    emitAgentEvent({ type: 'text', text: 'still here' })
+
+    await screen.findByText('still here')
+    expect(up()).not.toHaveAttribute('aria-disabled')
+  })
+
+  // Opening a row, or resizing the window, moves the log without a scroll.
+  it('reads the steps again when the log is resized', async () => {
+    const watchers: (() => void)[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(notify: () => void) {
+          watchers.push(notify)
+        }
+        observe = vi.fn()
+        unobserve = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
+    const log = await openThree()
+    // Off the end, so the observer only measures and does not pin.
+    scrollLog(log, 0)
+    log.scrollTop = 300
+
+    act(() => {
+      watchers.forEach((notify) => {
+        notify()
+      })
+    })
+
+    expect(up()).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('offers no steps in a conversation with nothing the user wrote', async () => {
+    givenChat()
+    await openLoadedChat()
+    emitAgentEvent({ type: 'text', text: 'hello' })
+    await screen.findByText('hello')
+
+    expect(screen.queryByRole('button', { name: 'Previous message you sent' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Next message you sent' })).toBeNull()
   })
 })
 

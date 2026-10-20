@@ -594,8 +594,9 @@ function UserMessage({
   return (
     /* The hour sits under the bubble, always shown: a footnote faint enough to
        read past, and the one thing a long day's log is scanned by. The day is
-       the separator's, so the full date waits in the tooltip. */
-    <div className="flex max-w-full flex-col items-end gap-0.5 self-end">
+       the separator's, so the full date waits in the tooltip. The data mark is
+       what `useMessageSteps` steps between. */
+    <div data-user-message className="flex max-w-full flex-col items-end gap-0.5 self-end">
       <div className="group flex max-w-full items-center gap-1">
         {onRewind !== null && (
           // Held in the layout and revealed on hover, so the bubble does not jump

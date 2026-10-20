@@ -370,7 +370,16 @@ memory only: a log reopened fully expanded would mount every diff in it at once.
 A dialog that is open keeps ⌘O, and a conversation behind a file does not hear
 it.
 
-That button sits at the log's top-left, clear of the day chip in the middle.
+That button, the floating day chip and two more share one sticky row, a grid
+column each, so the chip cannot draw over a button in a narrow pane. The two at
+the right, **↑ and ↓, step between the user's own messages** (`useMessageSteps`,
+reading `data-user-message`): up to the last one above the line just under the
+row, down to the first below it. Instant rather than smooth, so a second press
+measures from where the first landed. Each is disabled with nowhere to go,
+including at either end of the log, where the first and last messages can never
+reach the line; disabled through `aria-disabled`, so a key pressed until the end
+keeps its focus. A log with no message from the user shows neither. The row is
+re-read on scroll, on a new entry, and on any resize of the log or its content.
 
 **The log opens at its end and keeps to it** while the reader is there. Two
 things used to undo that. A hidden tab is `display:none`, and hiding it resets

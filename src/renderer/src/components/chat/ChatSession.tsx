@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronsDownUp, ChevronsUpDown, CloudDownload } from 'lucide-react'
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, ChevronUp, CloudDownload } from 'lucide-react'
 
 import {
   type Chat,
@@ -16,6 +16,7 @@ import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { EnvProfileSwitch } from '../EnvProfileSwitch.js'
+import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { onChatEvent } from '../../hooks/chatEvents.js'
@@ -31,6 +32,7 @@ import { useAgents } from '../../hooks/useAgents.js'
 import { useCommands } from '../../hooks/useCommands.js'
 import { useEnvProfiles } from '../../hooks/useEnvProfiles.js'
 import { useDayAtTop } from '../../hooks/useDayAtTop.js'
+import { useMessageSteps } from '../../hooks/useMessageSteps.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
 import { useRewindChoice } from '../../hooks/useRewindChoice.js'
@@ -420,6 +422,13 @@ export function ChatSession({
   // More than a screen above the end: where the way back down is worth a button.
   const [farFromEnd, setFarFromEnd] = useState(false)
   const dayAtTop = useDayAtTop(scroller)
+  const steps = useMessageSteps(scroller)
+  const { update: updateDayAtTop } = dayAtTop
+  const { update: updateSteps } = steps
+  const measureFloating = useCallback(() => {
+    updateDayAtTop()
+    updateSteps()
+  }, [updateDayAtTop, updateSteps])
 
   // Answered here rather than in the log because this is where the pending
   // request and the composer's mode meet — the plan's approval decides what the
@@ -510,6 +519,9 @@ export function ChatSession({
   // Rows grow after they are first laid out — markdown, highlighted code — so
   // the scroll above can land short of the end. Followed here for as long as the
   // reader has not left the end.
+  //
+  // The scroller is watched as well, and both re-read what floats over the log:
+  // a row opened, or the window resized, moves the log without a scroll event.
   useEffect(() => {
     const element = scroller.current
     const content = logContent.current
@@ -517,20 +529,26 @@ export function ChatSession({
 
     const observer = new ResizeObserver(() => {
       if (pinnedToBottom.current) element.scrollTop = element.scrollHeight
+      measureFloating()
     })
     observer.observe(content)
+    observer.observe(element)
     return () => {
       observer.disconnect()
     }
     // The wrapper only exists once there is a log to hold.
-  }, [visible, isEmpty])
+  }, [visible, isEmpty, measureFloating])
 
   // Read again whenever the log can have moved under a still scroller: a turn
   // landing, or the tab coming back. Hidden, there is nothing to measure.
-  const { update: updateDayAtTop } = dayAtTop
   useEffect(() => {
-    if (visible) updateDayAtTop()
-  }, [visible, chat.entries, updateDayAtTop])
+    if (visible) measureFloating()
+  }, [visible, chat.entries, measureFloating])
+
+  const hasUserMessage = useMemo(
+    () => chat.entries.some((entry) => entry.role === 'user'),
+    [chat.entries]
+  )
 
   return (
     <AgentsContext.Provider value={agentTasks}>
@@ -556,39 +574,59 @@ export function ChatSession({
               // "at the bottom" is rarely exactly zero.
               pinnedToBottom.current = distance < 40
               setFarFromEnd(distance > element.clientHeight)
-              dayAtTop.update()
+              measureFloating()
             }}
             // Never sideways: wide content (code, tables, diffs) scrolls inside its own box.
             className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
           >
-            {/* The day on screen, floating once its own separator has scrolled
-            away. Sticky only works on a child of the scroller itself, and
+            {/* One floating row: "show every step", the day on screen once its
+            own separator has scrolled away, and the steps between the user's
+            messages. Sticky only works on a child of the scroller itself, and
             zero-height so it lays nothing out — it draws over the log rather
-            than pushing it down. `items-start`, or the row's default stretch
-            squeezes the pill to the zero height of its row. */}
-            {dayAtTop.day !== null && (
-              <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-center overflow-visible">
-                <DayChip day={dayAtTop.day} floating />
-              </div>
-            )}
-            {/* "Show every step", in the same floating arrangement as the day: it
-            stays in reach however far up the log has been read. */}
+            than pushing it down. A column each, so the day cannot draw over a
+            button in a narrow pane; `items-start`, or the row's stretch squeezes
+            the pill to the row's zero height. */}
             {chat.entries.length > 0 && (
-              <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-start overflow-visible px-3">
-                <button
-                  type="button"
-                  aria-pressed={expansion.all}
-                  onClick={toggleExpansion}
-                  title={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
-                  aria-label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
-                  className="border-line bg-surface text-ink-faint hover:text-ink focus-ring pointer-events-auto flex size-7 items-center justify-center rounded-[var(--radius-control)] border transition-colors"
-                >
-                  {expansion.all ? (
-                    <ChevronsDownUp aria-hidden size={14} />
-                  ) : (
-                    <ChevronsUpDown aria-hidden size={14} />
-                  )}
-                </button>
+              <div className="pointer-events-none sticky top-2 z-10 grid h-0 grid-cols-[1fr_auto_1fr] items-start gap-2 overflow-visible px-3">
+                <div className="justify-self-start">
+                  <IconButton
+                    floating
+                    label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
+                    pressed={expansion.all}
+                    onClick={toggleExpansion}
+                  >
+                    {expansion.all ? (
+                      <ChevronsDownUp aria-hidden size={14} />
+                    ) : (
+                      <ChevronsUpDown aria-hidden size={14} />
+                    )}
+                  </IconButton>
+                </div>
+                <div>{dayAtTop.day !== null && <DayChip day={dayAtTop.day} floating />}</div>
+                {hasUserMessage && (
+                  <div className="flex gap-1 justify-self-end">
+                    <IconButton
+                      floating
+                      label={t('chat.previousMessage')}
+                      disabled={!steps.canUp}
+                      onClick={() => {
+                        steps.step('up')
+                      }}
+                    >
+                      <ChevronUp aria-hidden size={14} />
+                    </IconButton>
+                    <IconButton
+                      floating
+                      label={t('chat.nextMessage')}
+                      disabled={!steps.canDown}
+                      onClick={() => {
+                        steps.step('down')
+                      }}
+                    >
+                      <ChevronDown aria-hidden size={14} />
+                    </IconButton>
+                  </div>
+                )}
               </div>
             )}
             {/* Streaming counts as content even before the first entry lands:
