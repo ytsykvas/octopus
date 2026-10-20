@@ -2201,13 +2201,19 @@ timer while the project is open, and a failure is silent: there is no room on a
 row to explain one, the tab says it properly when opened, and a repository with
 no GitHub remote is an ordinary thing rather than a fault.
 
-**The workspace list says what each one is doing.** One mark carries it: the
-agent's state takes the dot while there is something to report — the accent
-while it works, `warning` while it is stopped on a question, `danger` after a
-failed turn, `success` once a session has run and stopped — and falls back to
-the filled dot for uncommitted work when there is not. Two marks side by side would make the list busier than the thing it
+**The workspace list says what each one is doing.** A workspace is a card: an
+icon tile, the name, and a line beneath it that says the state in a word. One
+mark carries it in the tile — the agent's state takes it while there is something
+to report: a turning spinner in the accent while it works, `warning` while it is
+stopped on a question, `danger` after a failed turn, `success` once a session has
+run and stopped — and falls back to a code glyph for a workspace nobody has
+written in. The word beneath is the same state in the same colour, which is what
+a reader who cannot tell the colours apart relies on; `idle` is two words
+(_Finished_, _Not started_), told apart by whether any conversation has
+`started`. Two marks side by side would make the list busier than the thing it
 describes, and `warning` is the one worth crossing the window for, because that
-turn has stopped and is waiting on you.
+turn has stopped and is waiting on you. A workspace holding several
+conversations draws one dot each inside the tile instead.
 
 ### What is left of the account, at the foot of the left column
 
@@ -3193,6 +3199,11 @@ So `.row-selected` lifts the chosen row out of the wash onto the plain canvas,
 and the only colour left is the 2px mark down its left edge, in the project's
 hue. `.row:hover` has to be restated for the selected row, or the cursor
 repaints what selection has already said.
+
+The workspace list's cards (`.workspace-card`) keep the lift but move the hue:
+a card has an edge of its own, so the chosen one is the canvas with its border
+mixed 45% towards the project's colour instead of a 2px mark. The rail, menus and
+file trees still use `.row-selected`.
 
 None of that reaches a screen reader, so whatever is chosen — a workspace row, a
 project tab, a rail item — also carries `aria-current`. That attribute is the

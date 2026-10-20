@@ -59,6 +59,55 @@ export const AGENT_LABELS: Partial<
   error: 'workspaces.statusError'
 }
 
+/** The five things a workspace row can say about its agent. */
+export type WorkspaceMood = 'running' | 'waiting' | 'error' | 'done' | 'idle'
+
+/**
+ * What a workspace row says about its agent, in a word and in a colour.
+ *
+ * The colours are the dots' (`AGENT_TONES`, `DONE_TONE`) as text, so the list
+ * and the tab strip keep to one vocabulary. Written out rather than derived, for
+ * the reason `AGENT_LABELS` is.
+ */
+export const WORKSPACE_MOODS: Record<
+  WorkspaceMood,
+  {
+    line:
+      | 'workspaces.lineRunning'
+      | 'workspaces.lineWaiting'
+      | 'workspaces.lineError'
+      | 'workspaces.lineDone'
+      | 'workspaces.lineIdle'
+    text: string
+  }
+> = {
+  running: { line: 'workspaces.lineRunning', text: 'text-accent' },
+  waiting: { line: 'workspaces.lineWaiting', text: 'text-warning' },
+  error: { line: 'workspaces.lineError', text: 'text-danger' },
+  done: { line: 'workspaces.lineDone', text: 'text-success' },
+  idle: { line: 'workspaces.lineIdle', text: 'text-ink-faint' }
+}
+
+/**
+ * Which of the five a workspace is in.
+ *
+ * `idle` is the one status that is two states, as it is for a conversation: a
+ * workspace where a session has run and stopped is finished, and one nobody has
+ * written in is not started. `started` on the chats is what tells them apart.
+ */
+export function workspaceMood(workspace: WorkspaceView): WorkspaceMood {
+  switch (workspace.status) {
+    case 'running':
+      return 'running'
+    case 'waiting_permission':
+      return 'waiting'
+    case 'error':
+      return 'error'
+    case 'idle':
+      return workspace.chats.some((chat) => chat.started) ? 'done' : 'idle'
+  }
+}
+
 /**
  * The label for a conversation, which unlike a workspace has words for `idle`.
  *

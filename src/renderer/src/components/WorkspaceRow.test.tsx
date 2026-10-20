@@ -389,4 +389,101 @@ describe('WorkspaceRow', () => {
     expect(props.onRename).not.toHaveBeenCalled()
     expect(props.onEditingChange).toHaveBeenCalledWith(false)
   })
+
+  /*
+   * The second line says the state in a word, in the colour the dots use. The
+   * mark beside the name is easy to miss at a glance and is no help to anyone
+   * who cannot tell the colours apart, so the word is what a reader can rely on.
+   */
+  describe('second line', () => {
+    it.each([
+      ['running', 'Working', 'text-accent'],
+      ['waiting_permission', 'Needs your answer', 'text-warning'],
+      ['error', 'Error', 'text-danger']
+    ] as const)('says a workspace that is %s in a word', (status, word, tone) => {
+      renderRow({ workspace: workspaceView('anna', { status }) })
+
+      expect(screen.getByText(word)).toHaveClass(tone)
+    })
+
+    it('says a workspace where a session has run and stopped is finished', () => {
+      renderRow({
+        workspace: workspaceView('anna', {
+          status: 'idle',
+          chats: [
+            { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle', started: true }
+          ]
+        })
+      })
+
+      expect(screen.getByText('Finished')).toHaveClass('text-success')
+    })
+
+    // Both are `idle`, so only `started` tells them apart.
+    it('says a workspace nobody has written in is not started', () => {
+      renderRow({
+        workspace: workspaceView('anna', {
+          status: 'idle',
+          chats: [
+            { id: 'chat-1', agent: 'claude' as const, title: null, status: 'idle', started: false }
+          ]
+        })
+      })
+
+      expect(screen.getByText('Not started')).toHaveClass('text-ink-faint')
+      expect(screen.queryByText('Finished')).not.toBeInTheDocument()
+    })
+
+    it('puts the change count after the state', () => {
+      renderRow({ workspace: workspaceView('anna', { status: 'running', changedFiles: 3 }) })
+
+      expect(screen.getByText('Working')).toBeInTheDocument()
+      expect(screen.getByText('3 files')).toBeInTheDocument()
+    })
+
+    // A directory that is gone has no state worth reporting.
+    it('replaces the state with the missing marker', () => {
+      renderRow({ workspace: workspaceView('anna', { missing: true, status: 'running' }) })
+
+      expect(screen.getByText('Directory is gone')).toBeInTheDocument()
+      expect(screen.queryByText('Working')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('tile', () => {
+    // The one state that changes on its own, so the glyph turns.
+    it('turns the glyph while the agent works', () => {
+      const { container } = render(
+        <WorkspaceRow
+          workspace={workspaceView('anna', { status: 'running' })}
+          request={null}
+          selected={false}
+          editing={false}
+          onSelect={vi.fn()}
+          onRename={vi.fn()}
+          onEditingChange={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      )
+
+      expect(container.querySelector('.animate-spin')).not.toBeNull()
+    })
+
+    it('holds the glyph still when nothing is running', () => {
+      const { container } = render(
+        <WorkspaceRow
+          workspace={workspaceView('anna', { status: 'idle' })}
+          request={null}
+          selected={false}
+          editing={false}
+          onSelect={vi.fn()}
+          onRename={vi.fn()}
+          onEditingChange={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      )
+
+      expect(container.querySelector('.animate-spin')).toBeNull()
+    })
+  })
 })

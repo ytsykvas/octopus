@@ -627,6 +627,36 @@
     background-color: var(--project-color, var(--accent));
   }
 
+  /* A workspace in the list: a card rather than a row.
+     Each one carries an icon tile, a name and a line of state, which is more
+     than a flat row can hold without the three running together; the border is
+     what keeps neighbours apart now that they are two lines tall. The fill is
+     the canvas thinned out, so a card sits a step off the project's wash and
+     the wash still reads through it. */
+  .workspace-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+    background-color: color-mix(in srgb, var(--canvas) 60%, transparent);
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease;
+  }
+
+  .workspace-card:hover {
+    background-color: var(--canvas);
+  }
+
+  /* Selection stays a surface plus the project's hue — the reasoning under
+     `.row-selected` holds — but the hue moves from a 2px mark to the card's own
+     edge, which a card has and a row did not. Mixed into the ordinary border
+     rather than drawn outright, so it reads as the project's colour and not as
+     a second accent. */
+  .workspace-card-selected,
+  .workspace-card-selected:hover {
+    background-color: var(--canvas);
+    border-color: color-mix(in srgb, var(--project-color, var(--accent)) 45%, var(--border));
+  }
+
   /* Syntax colours, which shiki emits as a pair of custom properties on every
      token so one tokenising serves both themes. The class on the container is
      what stops these reaching anything else; the fallback is what an
