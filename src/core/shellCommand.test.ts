@@ -45,6 +45,12 @@ describe('parseCommand', () => {
     ).toEqual([['gh', 'gh', 'gh', 'gh', 'a\tb', 'q', "it's", 'a']])
   })
 
+  it("ends a $'…' string at a NUL and keeps an octal escape to one byte, as bash does", () => {
+    expect(words(`$'gh\\0 ignored' $'g\\x00h' $'\\547h' $'gh\\0\\'x' pr`)).toEqual([
+      ['gh', 'g', 'gh', 'gh', 'pr']
+    ])
+  })
+
   it('runs an unterminated quote to the end', () => {
     expect(words("echo 'open")).toEqual([['echo', 'open']])
     expect(words('echo "open')).toEqual([['echo', 'open']])

@@ -45,10 +45,11 @@ const ANSI_ESCAPES: Readonly<Record<string, string>> = {
  */
 function ansiQuoted(text: string, from: number): { value: string; end: number } {
   let value = ''
+  let ended = false
   let at = from
   while (at < text.length && text.charAt(at) !== "'") {
     if (text.charAt(at) !== '\\') {
-      value += text.charAt(at)
+      if (!ended) value += text.charAt(at)
       at += 1
       continue
     }
@@ -58,12 +59,19 @@ function ansiQuoted(text: string, from: number): { value: string; end: number } 
       )
     const [whole = '', hex, unicode, wide, octal, single = ''] = escape ?? []
     const code = hex ?? unicode ?? wide
-    value +=
+    const point =
       code !== undefined
-        ? String.fromCodePoint(Number.parseInt(code, 16))
+        ? Number.parseInt(code, 16)
         : octal !== undefined
-          ? String.fromCodePoint(Number.parseInt(octal, 8))
-          : (ANSI_ESCAPES[single] ?? single)
+          ? // One byte, as bash keeps it: `\567` is `w`.
+            Number.parseInt(octal, 8) & 0xff
+          : null
+    // The shell's string ends at a NUL — what follows never reaches the command —
+    // though the quote that closes it is still found past escapes.
+    if (point === 0) ended = true
+    else if (!ended) {
+      value += point === null ? (ANSI_ESCAPES[single] ?? single) : String.fromCodePoint(point)
+    }
     at += 1 + whole.length
   }
   return { value, end: at }

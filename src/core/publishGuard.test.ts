@@ -119,6 +119,10 @@ describe('refusesPublish', () => {
     'git config http.https://github.com/.proxy http://proxy.example',
     'git config credential.helper store',
     'git config -f .git/config remote.origin.url https://example.com/r.git',
+    'git config --file --type remote.origin.url https://example.com/r.git',
+    // Fail closed: a word shaped like a refused key anywhere in a write.
+    'git config --add user.name remote.origin.url',
+    "$'gi\\x74' push",
     'git config include.path /tmp/more.gitconfig',
     'git config http.extraHeader "Authorization: x"'
   ])('refuses %s', (command) => {

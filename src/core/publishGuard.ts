@@ -162,17 +162,22 @@ function gitTampers(options: readonly string[], command: string, args: readonly 
   if (command === 'remote') return args[0] === 'set-url' || args[0] === 'add'
   if (command !== 'config') return false
 
-  // `-f .git/config` names the file, and its value is not the key.
-  const positional = args.filter(
-    (arg, at) => !arg.startsWith('-') && !CONFIG_VALUE_OPTIONS.has(args[at - 1] ?? '')
-  )
+  // Left to right, so an option's value is consumed and never read as anything else.
+  const positional: string[] = []
+  let value = false
+  for (const arg of args) {
+    if (value) value = false
+    else if (CONFIG_VALUE_OPTIONS.has(arg)) value = true
+    else if (!arg.startsWith('-')) positional.push(arg)
+  }
   const reads =
     args.some((arg) => /^(?:--get.*|--list|-l)$/u.test(arg)) ||
     positional[0] === 'get' ||
     positional[0] === 'list' ||
     (positional.length === 1 && !args.some((arg) => /^--(?:unset|add|replace)/u.test(arg)))
-  const key = positional[0] === 'set' || positional[0] === 'unset' ? positional[1] : positional[0]
-  return !reads && key !== undefined && TAMPERED_KEY.test(key)
+  // Any word shaped like a refused key: which word git takes for the key is
+  // what a reading of the options would have to get right, and need not.
+  return !reads && args.some((arg) => TAMPERED_KEY.test(arg))
 }
 
 function envTampers(name: string, args: readonly string[]): boolean {
