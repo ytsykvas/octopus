@@ -987,6 +987,8 @@ describe('what the log shows', () => {
     const note = screen.getByText('Do it without the new component.')
     expect(note).toHaveClass('text-warning')
     expect(note).not.toHaveClass('text-danger')
+    // A path or URL has no space to break at.
+    expect(note).toHaveClass('wrap-anywhere')
   })
 
   // Transcripts written before the mapping learned to drop these already hold

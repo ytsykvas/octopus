@@ -849,7 +849,7 @@ function ToolFailure({ content }: { content: string }): React.JSX.Element {
  */
 function PlanNote({ content }: { content: string }): React.JSX.Element {
   return (
-    <p className="text-warning border-warning/25 border-l pl-3 whitespace-pre-wrap">
+    <p className="text-warning border-warning/25 border-l pl-3 whitespace-pre-wrap wrap-anywhere">
       {shown(readFailure(content))}
     </p>
   )

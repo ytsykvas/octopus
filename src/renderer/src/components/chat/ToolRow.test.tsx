@@ -131,6 +131,17 @@ describe('the line under a row', () => {
     expect(screen.getByText('2 files')).toBeInTheDocument()
   })
 
+  // The scope is a path, often absolute, so it has to give way like the target beside it.
+  it('lets a long scope shrink instead of widening the row', () => {
+    const path = '/Users/someone/workspaces/project/node_modules/package/dist/index.d.ts'
+    renderRow(called({ name: 'Grep', input: { pattern: 'x', path } }))
+
+    const scope = screen.getByText(`in ${path}`)
+    expect(scope).toHaveClass('min-w-0', 'truncate')
+    expect(scope).not.toHaveClass('shrink-0')
+    expect(scope).toHaveAttribute('title', `in ${path}`)
+  })
+
   // Cut on disk before the count was kept: all that is known is a floor.
   it('says the count is a floor when only the head was saved and not its length', () => {
     renderRow(called({ result: answer({ content: 'a\nb\nc', truncated: true }) }))

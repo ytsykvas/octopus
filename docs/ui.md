@@ -373,7 +373,9 @@ rows grow after they are laid out (markdown, code), so the one scroll to the
 end landed short; a `ResizeObserver` on the log's content scrolls again while
 the reader is still pinned. More than one screen above the end, a small round
 accent button with a cloud-and-arrow icon floats at the bottom-right of the
-log; it jumps straight to the end and pins it again.
+log; it jumps straight to the end and pins it again. The log never scrolls
+sideways (`overflow-x-hidden`): code, tables and diffs scroll inside their own
+box, long message text wraps, and a tool row's path truncates.
 
 **A path in a row opens the file in the centre**, the way the right pane's tree
 does: a click previews, a double-click keeps it. The agent names absolute paths

@@ -76,6 +76,7 @@ export const ToolRow = memo(function ToolRow({
       ? null
       : workspaceRelative(links.workspacePath, label.path)
   const target = openable ?? label.target
+  const scopeText = label.scope === null ? null : t('chat.toolScope', { scope: label.scope })
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -122,9 +123,13 @@ export const ToolRow = memo(function ToolRow({
           )
         )}
 
-        {label.scope !== null && (
-          <span className="text-ink-faint shrink-0 font-mono text-[11px]">
-            {shown(t('chat.toolScope', { scope: label.scope }))}
+        {scopeText !== null && (
+          // Truncates like the target beside it: a scope is often an absolute path.
+          <span
+            className="text-ink-faint min-w-0 truncate font-mono text-[11px]"
+            title={named(scopeText)}
+          >
+            {shown(scopeText)}
           </span>
         )}
 
