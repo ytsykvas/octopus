@@ -665,6 +665,41 @@ describe('a pull request that exists', () => {
     expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
   })
 
+  // The list reads on its own clock; without this the row kept spinning after
+  // the tab had already said the run was over.
+  it('tells the list when the checks go from running to passed', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
+    const { onRequestChanged } = renderPanel()
+
+    await screen.findByText(/Read at \d/)
+    // The first reading has nothing to be compared with.
+    expect(onRequestChanged).not.toHaveBeenCalled()
+
+    answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
+    await user.click(screen.getByRole('button', { name: 'Read GitHub again' }))
+
+    await waitFor(() => {
+      expect(onRequestChanged).toHaveBeenCalledOnce()
+    })
+  })
+
+  it('does not bother the list when a read finds the checks as they were', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
+    const { onRequestChanged } = renderPanel()
+
+    await screen.findByText(/Read at \d/)
+    await user.click(screen.getByRole('button', { name: 'Read GitHub again' }))
+    await waitFor(() => {
+      expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+    })
+
+    expect(onRequestChanged).not.toHaveBeenCalled()
+  })
+
   it('names it, and reads what GitHub has made of it', async () => {
     answer(view({ request: request() }))
     answerDetail(detail({ decision: 'approved' }))

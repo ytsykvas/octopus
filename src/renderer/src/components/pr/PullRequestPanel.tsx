@@ -1,11 +1,11 @@
 import { GitPullRequest } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { shortBranchName } from '@core/branches.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { MergeMethod, PullRequest, PullRequestDraft } from '@core/pullRequests.js'
-import type { PullRequestComment } from '@core/pullRequestShapes.js'
+import { type PullRequestComment, summariseChecks } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Failure } from '../../../../preload/index.js'
@@ -125,6 +125,24 @@ export function PullRequestPanel({
       controller.abort()
     }
   }, [visible, workspace, envFile])
+
+  /*
+   * Tell the list when the checks change under it.
+   *
+   * The list reads the whole project on its own clock, so a run finishing was
+   * on this tab for as long as it took that clock to come round, while the row
+   * kept spinning. The first reading is not a change — there is nothing to
+   * compare it with — and a different request resets `detail` to null, which
+   * starts the comparison over.
+   */
+  const checksSummary = detail.detail === null ? null : summariseChecks(detail.detail.checks)
+  const shownChecks = useRef(checksSummary)
+
+  useEffect(() => {
+    const before = shownChecks.current
+    shownChecks.current = checksSummary
+    if (before !== null && checksSummary !== null && before !== checksSummary) onRequestChanged()
+  }, [checksSummary, onRequestChanged])
 
   if (!workspace) {
     return (
