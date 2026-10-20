@@ -21,7 +21,6 @@ import { SourceItemIdSchema } from './sourceItems.js'
 import { UsageWindowsSchema } from './usage.js'
 
 import {
-  type AgentCommand,
   type AgentModel,
   AgentModelSchema,
   type Chat,
@@ -950,13 +949,18 @@ export function skillsRemembered(state: State, held: readonly AgentSkill[]): boo
   })
 }
 
+/** One of the lists a chat remembers from its agent, as the agent just answered it. */
+export type KnownAnswer = Pick<Chat, 'knownCommands'> | Pick<Chat, 'knownAgents'>
+
 /**
- * Whether this chat's remembered commands already say exactly this.
+ * Whether this chat's remembered list already says exactly this.
  *
- * Worth more here than for models: a session asks for the list every time it
+ * Worth more here than for models: a session asks for the lists every time it
  * starts, and a chat is where the answer is kept, so without this every restart
  * of every conversation would rewrite the state file to the same bytes.
  */
-export function commandsUnchanged(chat: Chat, commands: readonly AgentCommand[]): boolean {
-  return JSON.stringify(chat.knownCommands) === JSON.stringify(commands)
+export function knownUnchanged(chat: Chat, answer: KnownAnswer): boolean {
+  return 'knownCommands' in answer
+    ? JSON.stringify(chat.knownCommands) === JSON.stringify(answer.knownCommands)
+    : JSON.stringify(chat.knownAgents) === JSON.stringify(answer.knownAgents)
 }

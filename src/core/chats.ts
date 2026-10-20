@@ -557,6 +557,21 @@ export const AgentCommandSchema = z.object({
 export type AgentCommand = z.infer<typeof AgentCommandSchema>
 
 /**
+ * A subagent the session can hand work to, as it reported them.
+ *
+ * Ours rather than the SDK's `AgentInfo` for the reasons `AgentCommandSchema`
+ * gives: the composer draws it, and it is stored. Only what the `@` list shows
+ * is kept — the model an agent runs on is the agent's business, not the list's.
+ */
+export const AgentEntrySchema = z.object({
+  /** The agent type, as `@agent-<name>` names it — `Explore`, `my-plugin:review`. */
+  name: z.string().min(1),
+  description: z.string().default('')
+})
+
+export type AgentEntry = z.infer<typeof AgentEntrySchema>
+
+/**
  * A command name as written, without its slash.
  *
  * Aliases are documented with slashes in the SDK's prose and without them in
@@ -848,6 +863,14 @@ export const ChatSchema = z.object({
    */
   knownCommands: z.array(AgentCommandSchema).default([]),
   /**
+   * The subagents this conversation may mention, as the agent last reported.
+   *
+   * On the chat for the reason `knownCommands` is: a project's own agents live
+   * in its `.claude/agents/`, which is a fact about the worktree. Defaulted, so
+   * a record written before the `@` list offered agents still loads.
+   */
+  knownAgents: z.array(AgentEntrySchema).default([]),
+  /**
    * Which skills this conversation was told to differ on, and how.
    *
    * Only what the user changed, not the whole answer. The effective state is
@@ -981,8 +1004,9 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     planMode: true,
     autoCompactWindow: null,
     // Nothing known until a session has run: the agent is the only thing that
-    // can say which commands this worktree has.
+    // can say which commands and agents this worktree has.
     knownCommands: [],
+    knownAgents: [],
     // Empty, which is not the same as "no skills": it means this conversation
     // has been told nothing and follows the defaults, so a skill switched off
     // for the project after this chat was opened is off here too.
@@ -1045,6 +1069,7 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     autoCompactWindow: source.autoCompactWindow,
     closedAt: null,
     knownCommands: source.knownCommands,
+    knownAgents: source.knownAgents,
     // Carried across with the model and the effort, and for the same reason: a
     // fork is the same work in the same place, and a skill switched off
     // because it was getting in the way is still in the way.

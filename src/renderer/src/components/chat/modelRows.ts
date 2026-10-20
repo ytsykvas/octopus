@@ -2,7 +2,7 @@
  * The rows the model picker shows, out of the catalogue the agent reported.
  *
  * Kept out of the component and free of React so it can be tested against
- * plain lists — the same arrangement as `commandMatch.ts`. The wording arrives
+ * plain lists — the same arrangement as `suggest.ts`. The wording arrives
  * as arguments rather than through `t`: this file has no business knowing what
  * language the window is in.
  */

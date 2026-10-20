@@ -433,7 +433,6 @@ describe('channel table', () => {
     'workspaces:replyToReviewThread',
     'workspaces:resolveReviewThread',
     'files:open',
-    'files:search',
     'files:tree',
     'files:directory',
     'files:read',
@@ -459,6 +458,7 @@ describe('channel table', () => {
     'chats:planModel',
     'chats:models',
     'chats:commands',
+    'chats:agents',
     'chats:answerQuestions',
     'chats:pending',
     'chats:usage',
@@ -2136,26 +2136,6 @@ describe('workspaces of a real project', () => {
     expect(bench.opened).toEqual([])
   })
 
-  it('finds files of a workspace for a mention', async () => {
-    const projectId = await addProject()
-    const workspace = await createWorkspace(projectId)
-
-    await expect(invoke('files:search', workspace.id, 'readme')).resolves.toMatchObject({
-      ok: true,
-      value: [{ path: 'README.md', absolute: join(workspace.path, 'README.md') }]
-    })
-  })
-
-  it('refuses a mention query that is not a short string', async () => {
-    const projectId = await addProject()
-    const workspace = await createWorkspace(projectId)
-
-    expect(await invoke('files:search', workspace.id, 42)).toMatchObject({ ok: false })
-    expect(await invoke('files:search', workspace.id, 'x'.repeat(257))).toMatchObject({
-      ok: false
-    })
-  })
-
   it('reads the file tree, a folder and a file of a workspace', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
@@ -2660,6 +2640,18 @@ describe('the agent chat', () => {
     const opened = await invoke('chats:open', workspace.id)
 
     await expect(invoke('chats:commands', chatIdOf(opened))).resolves.toEqual({
+      ok: true,
+      value: []
+    })
+  })
+
+  // The `@` list, per chat for the same reason as the commands.
+  it('reports no agents for a chat that has not run a session', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:agents', chatIdOf(opened))).resolves.toEqual({
       ok: true,
       value: []
     })

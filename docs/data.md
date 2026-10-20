@@ -285,7 +285,7 @@ when an answer says something new, since the panel asks on every open.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `sessionId`, `model`, `planModel`, `effort`,
-`workingMode`, `planMode`, `autoCompactWindow`, `knownCommands`,
+`workingMode`, `planMode`, `autoCompactWindow`, `knownCommands`, `knownAgents`,
 `skillOverrides`, `createdAt`, `closedAt`.
 
 **`autoCompactWindow` is where the conversation compacts itself** — one of
@@ -378,7 +378,9 @@ Remembered globally, a command from one workspace would be suggested in another
 that does not have it. The cost is that a fresh chat suggests nothing until its
 first message has started a session. Each command carries `skill`, marked from
 the session's `init` and defaulted to `false`, so a list remembered before the
-field existed loads and offers nothing mid-sentence until the next session.
+field existed loads and offers nothing mid-sentence until the next session. `knownAgents`
+is the `@` list, kept beside it for the same reason — a project's own agents
+live in its `.claude/agents/` — and defaulted to empty for older records.
 
 Custom commands only appear at all when `settingSources` includes `project`.
 The setting is described as controlling `CLAUDE.md` and settings files, and it

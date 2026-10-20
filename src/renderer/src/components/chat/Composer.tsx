@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import {
   type AgentCommand,
+  type AgentEntry,
   type AgentModel,
   type AutoCompactWindow,
   DEFAULT_MODEL,
@@ -16,21 +17,17 @@ import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
 import type { ChatMode } from '../../hooks/useChat.js'
-import type { MentionFile } from '@core/fileSearch.js'
 
 import { useDismiss } from '../../hooks/useDismiss.js'
-import { useFileMentions } from '../../hooks/useFileMentions.js'
-import { CommandMenu } from './CommandMenu.js'
 import { type ChatNote, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { EffortPicker } from './EffortPicker.js'
-import { MentionMenu } from './MentionMenu.js'
-import { type Mention, readMention, withoutMention } from './mentionMatch.js'
 import { modelRows } from './modelRows.js'
 import { ModelPicker } from './ModelPicker.js'
 import { SendButton } from './SendButton.js'
 import { commandText, rankByName, readTrigger, replaceToken, type Trigger } from './suggest.js'
+import { type Suggestion, SuggestionMenu } from './SuggestionMenu.js'
 
 interface ComposerProps {
   /**
@@ -86,15 +83,6 @@ interface ComposerProps {
   readonly onRemoveFile: (path: string) => void
   /** The paperclip. One of three ways in, and the only visible one. */
   readonly onAttachFiles: () => void
-  /**
-   * Files matching what is typed after an `@`, best first.
-   *
-   * Asked of the workspace rather than computed here: the list is the
-   * worktree's, which the window has no way to read.
-   */
-  readonly onSearchFiles: (query: string) => Promise<readonly MentionFile[]>
-  /** Attaches by path — the fourth way in, which a chosen mention takes. */
-  readonly onAttachPaths: (paths: readonly string[]) => void
   /** Files dropped on the composer, whose paths the window cannot read itself. */
   readonly onDropFiles: (files: readonly File[]) => void
   /** An image pasted into the field, which has no path until one is made. */
@@ -124,6 +112,8 @@ interface ComposerProps {
   readonly activeModel: string | null
   /** Slash commands to suggest; empty until this chat has run a session. */
   readonly commands: readonly AgentCommand[]
+  /** Subagents to suggest after an `@`; empty until this chat has run a session. */
+  readonly agents: readonly AgentEntry[]
   /** What the next message is up against; each reading hides when there is none. */
   readonly usage: SessionUsage
   readonly limit: RateLimit | null
@@ -207,6 +197,11 @@ const NEXT_MODE: Record<ChatMode, ChatMode> = {
   auto: 'default'
 }
 
+/** A row of the suggestion list, and what picking it writes into the text. */
+interface Choice extends Suggestion {
+  readonly text: string
+}
+
 /**
  * The input field, and the settings the next message will run under.
  *
@@ -233,8 +228,6 @@ export function Composer({
   files,
   onRemoveFile,
   onAttachFiles,
-  onSearchFiles,
-  onAttachPaths,
   onDropFiles,
   onPasteImage,
   model,
@@ -244,6 +237,7 @@ export function Composer({
   models,
   activeModel,
   commands,
+  agents,
   usage,
   limit,
   skills,
@@ -400,60 +394,54 @@ export function Composer({
   const trimmed = draft.trim()
 
   /*
-   * A command or skill being typed, read at the caret. At the very start of the
-   * message every command is offered, since that is where one runs; anywhere
-   * else only skills are — a skill named mid-sentence is permission for Claude
-   * to run it, while a built-in such as `/clear` there would do nothing.
+   * The word being typed at the caret, if it names something. One word at a
+   * time, so at most one of these is set: a word starts with one sigil or the
+   * other.
+   *
+   * After `/`, at the very start of the message, every command is offered,
+   * since that is where one runs; anywhere else only skills are — a skill
+   * named mid-sentence is permission for Claude to run it, while a built-in
+   * such as `/clear` there would do nothing. After `@`, the subagents: picking
+   * one writes `@agent-<name>`, which is how Claude Code is told to hand the
+   * work to that agent rather than leave the choice to Claude.
    */
   const command = readTrigger(draft, caret, '/')
-  const matches =
-    command === null
-      ? []
-      : rankByName(
+  const mention = readTrigger(draft, caret, '@')
+  const token = command ?? mention
+  const choices: readonly Choice[] =
+    command !== null
+      ? rankByName(
           command.start === 0 ? commands : commands.filter((offered) => offered.skill),
           command.query
-        )
-  // `matches.length > 0` is what stops a lone `/` from swallowing Enter: with
-  // no suggestions there is nothing to complete, so the key means what it
-  // always means. The token itself rather than a flag, like `shownMention`.
-  const commandAt = command?.start ?? null
-  const shownCommand =
-    command !== null && commandAt !== dismissedAt && matches.length > 0 ? command : null
-
-  useDismiss(shownCommand !== null, field, () => {
-    setDismissedAt(commandAt)
-  })
-
-  /*
-   * A file being mentioned, read at the caret like a command — and the two
-   * lists cannot both be open: each is the word the caret ends, and a word
-   * starts with one sigil or the other.
-   */
-  const mention = readMention(draft, caret)
-  const found = useFileMentions(mention?.query ?? null, onSearchFiles)
-  const [mentionActive, setMentionActive] = useState(0)
-  const [mentionDismissed, setMentionDismissed] = useState(false)
-  // The mention itself rather than a flag about it, so everything below that
+        ).map((chosen) => ({
+          label: `/${chosen.name}`,
+          hint: chosen.argumentHint,
+          description: chosen.description,
+          text: commandText(chosen, command.start === 0)
+        }))
+      : mention !== null
+        ? rankByName(
+            // The written form answers too: `@agent-Exp` is how the docs spell
+            // it, and somebody who types that should not find the list empty.
+            agents.map((agent) => ({ ...agent, aliases: [`agent-${agent.name}`] })),
+            mention.query
+          ).map((agent) => ({
+            label: `@${agent.name}`,
+            hint: '',
+            description: agent.description,
+            text: `@agent-${agent.name} `
+          }))
+        : []
+  // `choices.length > 0` is what stops a lone sigil from swallowing Enter:
+  // with no suggestions there is nothing to complete, so the key means what it
+  // always means. The token itself rather than a flag, so everything below that
   // acts on one holds it and has no null to answer for.
-  const shownMention = !mentionDismissed && found.length > 0 ? mention : null
+  const tokenAt = token?.start ?? null
+  const shown = token !== null && tokenAt !== dismissedAt && choices.length > 0 ? token : null
 
-  useDismiss(shownMention !== null, field, () => {
-    setMentionDismissed(true)
+  useDismiss(shown !== null, field, () => {
+    setDismissedAt(tokenAt)
   })
-
-  /**
-   * Takes the file as an attachment and the token out of the text.
-   *
-   * The caret goes where the token was, once React has written the new value:
-   * setting it before would be undone by the render that follows.
-   */
-  const mentionFile = (taken: Mention, file: MentionFile): void => {
-    onAttachPaths([file.absolute])
-    write(withoutMention(draft, taken, caret))
-    setCaret(taken.start)
-    setMentionActive(0)
-    caretAfterWrite.current = taken.start
-  }
 
   const mode: ChatMode = planMode ? 'plan' : workingMode
   const nextMode = (): void => {
@@ -499,14 +487,17 @@ export function Composer({
   }
 
   /**
-   * Puts a chosen command in the field. It does not send it.
+   * Puts a choice in the field. It does not send it.
    *
-   * Deliberate: the command may take arguments, and a single Enter that both
-   * chose and ran would leave no way to type them. It also means no command
-   * ever runs from one keystroke aimed at a list that had just moved.
+   * Deliberate: a command may take arguments, and a single Enter that both
+   * chose and ran would leave no way to type them. It also means nothing ever
+   * runs from one keystroke aimed at a list that had just moved.
+   *
+   * The caret goes after what was written, once React has written the new
+   * value: setting it before would be undone by the render that follows.
    */
-  const complete = (taken: Trigger, chosen: AgentCommand): void => {
-    const next = replaceToken(draft, taken, caret, commandText(chosen, taken.start === 0))
+  const complete = (taken: Trigger, chosen: Choice): void => {
+    const next = replaceToken(draft, taken, caret, chosen.text)
     write(next.draft)
     setCaret(next.caret)
     caretAfterWrite.current = next.caret
@@ -560,24 +551,13 @@ export function Composer({
             turning it repaints an edge rather than the whole frame. First, so
             the menus that open out of the frame draw over it. */}
         {!dragging && <span aria-hidden className="composer-ring-line" />}
-        {shownCommand !== null && (
-          <CommandMenu
-            commands={matches}
+        {shown !== null && (
+          <SuggestionMenu
+            rows={choices}
             active={active}
             onActive={setActive}
-            onPick={(chosen) => {
-              complete(shownCommand, chosen)
-            }}
-          />
-        )}
-
-        {shownMention !== null && (
-          <MentionMenu
-            files={found}
-            active={mentionActive}
-            onActive={setMentionActive}
-            onPick={(file) => {
-              mentionFile(shownMention, file)
+            onPick={(index) => {
+              for (const chosen of choices.slice(index, index + 1)) complete(shown, chosen)
             }}
           />
         )}
@@ -616,8 +596,6 @@ export function Composer({
             // has moved what sits at each index.
             setDismissedAt(null)
             setActive(0)
-            setMentionDismissed(false)
-            setMentionActive(0)
           }}
           // The caret also moves without the text changing — arrows, a click —
           // and both lists are read at it.
@@ -651,38 +629,14 @@ export function Composer({
               return
             }
 
-            // The files, under the same rules as the commands below: the list
-            // gets first refusal on the keys it uses, and closed it takes none.
-            if (shownMention !== null) {
-              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                event.preventDefault()
-                const step = event.key === 'ArrowDown' ? 1 : -1
-                setMentionActive((current) => (current + step + found.length) % found.length)
-                return
-              }
-
-              if (event.key === 'Enter' || event.key === 'Tab') {
-                event.preventDefault()
-                for (const chosen of found.slice(mentionActive, mentionActive + 1)) {
-                  mentionFile(shownMention, chosen)
-                }
-                return
-              }
-
-              if (event.key === 'Escape') {
-                setMentionDismissed(true)
-                return
-              }
-            }
-
             // The list gets first refusal on the keys it uses, because it is
             // the thing the user is looking at. When it is closed every one of
             // these falls through to the field's own behaviour.
-            if (shownCommand !== null) {
+            if (shown !== null) {
               if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                 event.preventDefault()
                 const step = event.key === 'ArrowDown' ? 1 : -1
-                setActive((current) => (current + step + matches.length) % matches.length)
+                setActive((current) => (current + step + choices.length) % choices.length)
                 return
               }
 
@@ -695,15 +649,14 @@ export function Composer({
                 // inside the list — every keystroke that could move it out
                 // resets it — but the index signature says otherwise, and one
                 // element is exactly what this walks.
-                for (const chosen of matches.slice(active, active + 1))
-                  complete(shownCommand, chosen)
+                for (const chosen of choices.slice(active, active + 1)) complete(shown, chosen)
                 return
               }
 
               if (event.key === 'Escape') {
                 // The draft is left alone. Escape here means "stop suggesting",
                 // not "undo what I typed".
-                setDismissedAt(shownCommand.start)
+                setDismissedAt(shown.start)
                 return
               }
             }

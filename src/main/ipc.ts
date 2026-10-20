@@ -179,9 +179,6 @@ const FilePathSchema = z.string().min(1).max(4096)
 /** A message of a conversation, by the id it was sent under. */
 const MessageIdSchema = z.uuid()
 
-/** What is typed after an `@`; empty is a real query, meaning "nearest the root". */
-const MentionQuerySchema = z.string().max(256)
-
 /**
  * Writes the config and tells every window, from the one place that writes it.
  *
@@ -869,12 +866,6 @@ export function registerIpc(
     })
   )
 
-  // Typed after an `@`, so it is bounded: the query is a few letters and a
-  // path fragment, and a pasted paragraph is not one.
-  host.handle('files:search', (_event, workspaceId: string, query: unknown) =>
-    attempt(() => service.searchFiles(workspaceId, MentionQuerySchema.parse(query)))
-  )
-
   // The Files tab. The two that take a path validate it here and leave proving
   // it inside the workspace to the service, the split `files:open` uses.
   host.handle('files:tree', (_event, workspaceId: string) =>
@@ -998,6 +989,8 @@ export function registerIpc(
   host.handle('chats:commands', (_event, chatId: string) =>
     attempt(() => service.chatCommands(chatId))
   )
+
+  host.handle('chats:agents', (_event, chatId: string) => attempt(() => service.chatAgents(chatId)))
 
   host.handle('chats:answerQuestions', (_event, requestId: string, answers: unknown) =>
     attempt(() => service.answerQuestions(requestId, z.array(QuestionAnswerSchema).parse(answers)))

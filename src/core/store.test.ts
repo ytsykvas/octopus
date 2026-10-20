@@ -17,7 +17,7 @@ import {
   allChatsOfWorkspace,
   chatsOfWorkspace,
   closedChatsOfWorkspace,
-  commandsUnchanged,
+  knownUnchanged,
   expiredClosedChats,
   EMPTY_STATE,
   findChat,
@@ -106,6 +106,7 @@ function storedChat(overrides: Partial<Chat> = {}): Chat {
     planMode: false,
     autoCompactWindow: null,
     knownCommands: [],
+    knownAgents: [],
     skillOverrides: {},
     closedAt: null,
     createdAt: '2026-08-07T12:00:00.000Z',
@@ -645,6 +646,7 @@ describe('chats', () => {
       planMode: false,
       autoCompactWindow: null,
       knownCommands: [],
+      knownAgents: [],
       skillOverrides: {},
       closedAt: null,
       createdAt: '2026-08-11T09:00:00.000Z',
@@ -898,6 +900,7 @@ describe('the remembered model list', () => {
       workingMode: 'default',
       planMode: false,
       knownCommands: [],
+      knownAgents: [],
       skillOverrides: {},
       createdAt: '2026-08-11T09:00:00.000Z'
     }
@@ -922,6 +925,7 @@ describe('the remembered model list', () => {
       workingMode: 'auto',
       planMode: false,
       knownCommands: [],
+      knownAgents: [],
       skillOverrides: {},
       createdAt: '2026-08-11T09:00:00.000Z'
     }
@@ -940,6 +944,17 @@ describe('the remembered model list', () => {
 
     const state = await loadState(file)
     expect(state.chats[0]?.resumeAt).toBeNull()
+  })
+
+  // Written before the `@` list offered agents: it knows none until the next
+  // session says — and the file must still open.
+  it('loads a chat written before agents were remembered', async () => {
+    const { knownAgents, ...older } = storedChat()
+    expect(knownAgents).toEqual([])
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [older] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.knownAgents).toEqual([])
   })
 
   // Remembered before a command could be marked a skill: it reads as not one
@@ -988,6 +1003,7 @@ describe('the commands a chat remembers', () => {
     planMode: false,
     autoCompactWindow: null,
     knownCommands: [],
+    knownAgents: [],
     skillOverrides: {},
     closedAt: null,
     createdAt: '2026-08-11T09:00:00.000Z'
@@ -996,16 +1012,33 @@ describe('the commands a chat remembers', () => {
   // Asked on every session start, so without this every restart of every
   // conversation would rewrite the state file to the same bytes.
   it('recognises a list that says exactly the same thing', () => {
-    expect(commandsUnchanged({ ...chat, knownCommands: [command] }, [command])).toBe(true)
-    expect(commandsUnchanged(chat, [])).toBe(true)
+    expect(
+      knownUnchanged({ ...chat, knownCommands: [command] }, { knownCommands: [command] })
+    ).toBe(true)
+    expect(knownUnchanged(chat, { knownCommands: [] })).toBe(true)
   })
 
   it('notices a command added, removed or renamed', () => {
     const knowing = { ...chat, knownCommands: [command] }
 
-    expect(commandsUnchanged(knowing, [])).toBe(false)
-    expect(commandsUnchanged(knowing, [command, { ...command, name: 'rollback' }])).toBe(false)
-    expect(commandsUnchanged(knowing, [{ ...command, description: 'Ship it now' }])).toBe(false)
+    expect(knownUnchanged(knowing, { knownCommands: [] })).toBe(false)
+    expect(
+      knownUnchanged(knowing, { knownCommands: [command, { ...command, name: 'rollback' }] })
+    ).toBe(false)
+    expect(
+      knownUnchanged(knowing, { knownCommands: [{ ...command, description: 'Ship it now' }] })
+    ).toBe(false)
+  })
+
+  // The agents are kept the same way, and compared against their own list —
+  // never against the commands, which a shared helper could easily do.
+  it('compares the agents against the agents', () => {
+    const reviewer = { name: 'reviewer', description: 'Reviews a change' }
+    const knowing = { ...chat, knownCommands: [command], knownAgents: [reviewer] }
+
+    expect(knownUnchanged(knowing, { knownAgents: [reviewer] })).toBe(true)
+    expect(knownUnchanged(knowing, { knownAgents: [] })).toBe(false)
+    expect(knownUnchanged(chat, { knownAgents: [] })).toBe(true)
   })
 })
 

@@ -19,6 +19,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 import type {
+  AgentInfo,
   ModelInfo,
   Options,
   PermissionUpdate,
@@ -987,105 +988,6 @@ describe('workspaces', () => {
     await expect(service.resolveWorkspaceFile(workspace.id, 'notes.txt')).rejects.toThrow(
       WorkspaceError
     )
-  })
-
-  describe('searching a workspace for a mention', () => {
-    it('finds tracked files, with the absolute path an attachment needs', async () => {
-      const { service, projectId } = await withProject()
-      const workspace = await service.createWorkspaceIn(projectId)
-
-      await expect(service.searchFiles(workspace.id, 'readme')).resolves.toEqual([
-        { path: 'README.md', absolute: join(workspace.path, 'README.md') }
-      ])
-    })
-
-    // The file somebody made a minute ago is the likeliest thing to mention,
-    // and is not in the index.
-    it('finds a file git has not been told about yet', async () => {
-      const { service, projectId } = await withProject()
-      const workspace = await service.createWorkspaceIn(projectId)
-      await writeFile(join(workspace.path, 'scratch-notes.md'), 'x\n', 'utf8')
-
-      const found = await service.searchFiles(workspace.id, 'scratch')
-
-      expect(found.map(({ path }) => path)).toEqual(['scratch-notes.md'])
-    })
-
-    // A repository can hold a link called README.md that points at a key in the
-    // home directory. Offered by name it would be attached as an ordinary file
-    // of the workspace, and read through the link.
-    it('leaves out a symlink that points out of the workspace', async () => {
-      const { service, projectId } = await withProject()
-      const workspace = await service.createWorkspaceIn(projectId)
-      await symlink('/etc/hosts', join(workspace.path, 'hosts-link.txt'))
-
-      await expect(service.searchFiles(workspace.id, 'hosts-link')).resolves.toEqual([])
-    })
-
-    it('still offers a symlink that stays inside it', async () => {
-      const { service, projectId } = await withProject()
-      const workspace = await service.createWorkspaceIn(projectId)
-      await symlink('README.md', join(workspace.path, 'readme-link.md'))
-
-      const found = await service.searchFiles(workspace.id, 'readme-link')
-
-      expect(found.map(({ path }) => path)).toEqual(['readme-link.md'])
-    })
-
-    // git names it `nested/`, a folder; picked, it attached a folder as a file.
-    it('leaves out a repository nested in the worktree', async () => {
-      const { service, projectId } = await withProject()
-      const workspace = await service.createWorkspaceIn(projectId)
-      await mkdir(join(workspace.path, 'nested'))
-      await run('git', ['init', '-q'], { cwd: join(workspace.path, 'nested') })
-
-      await expect(service.searchFiles(workspace.id, 'nested')).resolves.toEqual([])
-    })
-
-    // Git still lists a tracked file that was deleted from the disk.
-    it('leaves out a file that is listed but gone', async () => {
-      const { service, projectId } = await withProject()
-      const workspace = await service.createWorkspaceIn(projectId)
-      await rm(join(workspace.path, 'README.md'))
-
-      await expect(service.searchFiles(workspace.id, 'readme')).resolves.toEqual([])
-    })
-
-    it('leaves out what .gitignore says to', async () => {
-      const { service, projectId } = await withProject()
-      const workspace = await service.createWorkspaceIn(projectId)
-      await writeFile(join(workspace.path, '.gitignore'), 'secret.env\n', 'utf8')
-      await writeFile(join(workspace.path, 'secret.env'), 'TOKEN=x\n', 'utf8')
-
-      await expect(service.searchFiles(workspace.id, 'secret')).resolves.toEqual([])
-    })
-
-    // A query is asked on every keystroke, and the listing is not free. Held
-    // for a few seconds, then read again.
-    it('holds the listing briefly, then looks again', async () => {
-      let clock = '2026-08-20T10:00:00.000Z'
-      const repo = join(dir, 'planner')
-      await initRepo(repo)
-      const timed = await createService({ ...paths(dir), now: () => clock })
-      const project = await timed.addProjectFromPath(repo)
-      const workspace = await timed.createWorkspaceIn(project.id)
-
-      await expect(timed.searchFiles(workspace.id, 'later')).resolves.toEqual([])
-
-      await writeFile(join(workspace.path, 'later.md'), 'x\n', 'utf8')
-      clock = '2026-08-20T10:00:01.000Z'
-      await expect(timed.searchFiles(workspace.id, 'later')).resolves.toEqual([])
-
-      clock = '2026-08-20T10:00:06.000Z'
-      const found = await timed.searchFiles(workspace.id, 'later')
-      expect(found.map(({ path }) => path)).toEqual(['later.md'])
-    })
-
-    it('refuses a workspace that does not exist', async () => {
-      const { service } = await withProject()
-
-      await expect(service.searchFiles('missing', 'a')).rejects.toThrow()
-    })
   })
 
   describe('the Files tab', () => {
@@ -4127,6 +4029,7 @@ describe('the agent chat', () => {
   let offered: () => Promise<ModelInfo[]>
   /** The same, for the slash commands this worktree offers. */
   let offeredCommands: () => Promise<SlashCommand[]>
+  let offeredAgents: () => Promise<AgentInfo[]>
   /** What the session answers about its context window, and the account's. */
   let contextAnswer: () => Promise<unknown>
   let skillReload: () => Promise<unknown>
@@ -4281,6 +4184,7 @@ describe('the agent chat', () => {
         },
         supportedModels: () => offered(),
         supportedCommands: () => offeredCommands(),
+        supportedAgents: () => offeredAgents(),
         getContextUsage: () => contextAnswer(),
         usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: (options?: unknown) => {
           usageAsked++
@@ -4404,6 +4308,7 @@ describe('the agent chat', () => {
     modeAnswer = () => Promise.resolve()
     offered = () => Promise.resolve([])
     offeredCommands = () => Promise.resolve([])
+    offeredAgents = () => Promise.resolve([])
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
     skillReload = () => Promise.resolve({ skills: [] })
     flagsAnswer = () => Promise.resolve()
@@ -5920,7 +5825,7 @@ describe('the agent chat', () => {
       // The list is only learned once a session has run, so the first message
       // teaches it and the second is the one under test.
       await service.sendToChat(chat.id, 'work')
-      // Which commands are skills is read from the init, and the list waits for it.
+      // The session announces its lists once its first init has arrived.
       agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.knownCommands).toHaveLength(1)
@@ -6115,6 +6020,61 @@ describe('the agent chat', () => {
    * own commands live in its `.claude/commands/`, so the answer is about this
    * worktree and this branch.
    */
+  /*
+   * The `@` list. Kept per chat for the reason the commands are: a project's
+   * own agents live in its `.claude/agents/`.
+   */
+  describe('the subagents a chat may mention', () => {
+    it('knows none until a session has run', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+
+      expect(service.chatAgents(chat.id)).toEqual([])
+    })
+
+    it('remembers what the agent reported when a session started, across a restart', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      offeredAgents = () =>
+        Promise.resolve([{ name: 'Explore', description: 'Searches the code', model: 'haiku' }])
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      // The session announces its lists once its first init has arrived.
+      agent().emit(initMessage)
+
+      await vi.waitFor(() => {
+        expect(service.chatAgents(chat.id)).toEqual([
+          { name: 'Explore', description: 'Searches the code' }
+        ])
+      })
+
+      const reopened = await createService({ ...paths(dir), query: fakeQuery() })
+      expect(reopened.chatAgents(chat.id)).toEqual([
+        { name: 'Explore', description: 'Searches the code' }
+      ])
+    })
+
+    // A convenience missing is not a failure: the message has gone, and the
+    // list stays as it was rather than claiming there are no agents.
+    it('keeps what it knew when the agents cannot be read', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      offeredCommands = () =>
+        Promise.resolve([{ name: 'deploy', description: '', argumentHint: '' }])
+      offeredAgents = () => Promise.reject(new Error('no such control request'))
+      const chat = await service.openChat(workspaceId)
+
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      // The commands arriving is what says the lists were asked for at all.
+      await vi.waitFor(() => {
+        expect(service.chatCommands(chat.id)).toHaveLength(1)
+      })
+
+      expect(service.chatAgents(chat.id)).toEqual([])
+      expect(events.map((announced) => announced.event.type)).not.toContain('error')
+    })
+  })
+
   describe('the commands a chat may use', () => {
     const DEPLOY: SlashCommand = {
       name: 'deploy',
@@ -6135,7 +6095,7 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
-      // Which commands are skills is read from the init, and the list waits for it.
+      // The session announces its lists once its first init has arrived.
       agent().emit(initMessage)
 
       await vi.waitFor(() => {
@@ -6156,7 +6116,7 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
-      // Which commands are skills is read from the init, and the list waits for it.
+      // The session announces its lists once its first init has arrived.
       agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
@@ -6174,7 +6134,7 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
-      // Which commands are skills is read from the init, and the list waits for it.
+      // The session announces its lists once its first init has arrived.
       agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
@@ -6197,7 +6157,7 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
-      // Which commands are skills is read from the init, and the list waits for it.
+      // The session announces its lists once its first init has arrived.
       agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)
@@ -6533,7 +6493,7 @@ describe('the agent chat', () => {
 
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
-      // Which commands are skills is read from the init, and the list waits for it.
+      // The session announces its lists once its first init has arrived.
       agent().emit(initMessage)
       await vi.waitFor(() => {
         expect(service.chatCommands(chat.id)).toHaveLength(1)

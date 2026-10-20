@@ -23,6 +23,7 @@ import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { type ChatNote, mergeNotes } from './attachments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
+import { useAgents } from '../../hooks/useAgents.js'
 import { useCommands } from '../../hooks/useCommands.js'
 import { useEnvProfiles } from '../../hooks/useEnvProfiles.js'
 import { useDayAtTop } from '../../hooks/useDayAtTop.js'
@@ -247,21 +248,10 @@ export function ChatSession({
     () => (chat.busy ? null : currentTip(chat.entries, new Set([...dismissedTips, ...closedTips]))),
     [chat.busy, chat.entries, dismissedTips, closedTips]
   )
-
-  // A refusal is no suggestions rather than a message: the list is a
-  // convenience, and an error banner over a half-typed `@` would be the louder
-  // of the two problems.
-  const workspaceId = workspace.id
-  const searchFiles = useCallback(
-    async (query: string) => {
-      const found = await window.octopus.files.search(workspaceId, query)
-      return found.ok ? found.value : []
-    },
-    [workspaceId]
-  )
   const rateLimit = useRateLimit()
   const models = useModels()
   const commands = useCommands(chat.chat?.id ?? null)
+  const agents = useAgents(chat.chat?.id ?? null)
   // Moved once a choice that moves the session has been applied — a window, a
   // model, a mode — so the reading is taken again; see `useSessionUsage`.
   const [sessionMoves, setSessionMoves] = useState(0)
@@ -671,6 +661,7 @@ export function ChatSession({
         // reading, so it refreshes on the same `result` the token count does.
         activeModel={usage.context?.model ?? null}
         commands={commands}
+        agents={agents}
         usage={usage}
         limit={rateLimit}
         skills={skills.skills}
@@ -701,8 +692,6 @@ export function ChatSession({
           setNotice(null)
           void attachments.choose(t('chat.attach'))
         }}
-        onSearchFiles={searchFiles}
-        onAttachPaths={attachments.attach}
         onDropFiles={attachments.drop}
         onPasteImage={(image) => {
           setNotice(null)

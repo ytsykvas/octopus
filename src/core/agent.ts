@@ -12,10 +12,10 @@
  */
 
 import type { UUID } from 'node:crypto'
-import { EventEmitter, once } from 'node:events'
 
 import type {
   HookCallback,
+  AgentInfo,
   ModelInfo,
   Options,
   PermissionUpdate,
@@ -28,7 +28,14 @@ import type {
   SlashCommand
 } from '@anthropic-ai/claude-agent-sdk'
 
-import type { AgentCommand, AgentModel, EffortChoice, FileRewind, PermissionMode } from './chats.js'
+import type {
+  AgentCommand,
+  AgentEntry,
+  AgentModel,
+  EffortChoice,
+  FileRewind,
+  PermissionMode
+} from './chats.js'
 import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
@@ -334,7 +341,6 @@ export interface AgentSession {
   /** What this account may use, as the agent reported when the session began. */
   models: () => Promise<AgentModel[]>
   /** The slash commands this session offers, agent's own and the project's. */
-  commands: () => Promise<AgentCommand[]>
   /** How full this conversation's context window is, or null if it cannot say. */
   contextUsage: () => Promise<ContextUsage | null>
   /**
@@ -506,6 +512,11 @@ export function toAgentModels(models: readonly ModelInfo[]): AgentModel[] {
     supportedEffortLevels: model.supportedEffortLevels ? [...model.supportedEffortLevels] : null,
     supportsEffort: model.supportsEffort ?? null
   }))
+}
+
+/** The SDK's subagents, narrowed to what the `@` list shows. */
+export function toAgentEntries(agents: readonly AgentInfo[]): AgentEntry[] {
+  return agents.map((agent) => ({ name: agent.name, description: agent.description }))
 }
 
 /** What a message is read against before the session has said which skills it has. */
@@ -891,19 +902,36 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   const closing = new AbortController()
 
   /*
-   * The skills this session holds, as its latest `init` listed them.
-   *
-   * Nothing else says which commands are skills, and `commands()` waits for the
-   * first `init` before it answers: asked any earlier, every command would read
-   * as not a skill and the composer would offer nothing mid-sentence. A stream
-   * that ends before any `init` releases the wait too, so the answer is late
-   * rather than never.
+   * The skills this session holds, as its latest `init` listed them — nothing
+   * else says which commands are skills.
    */
   let heldSkills: ReadonlySet<string> = NO_SKILLS
-  // Listened for from the start, so an `init` that lands before anyone asks
-  // still counts; a second signal finds no listener and does nothing.
-  const lifecycle = new EventEmitter()
-  const firstInit = once(lifecycle, 'initialised')
+  let announced = false
+
+  /*
+   * The two lists the composer suggests from, announced by the session itself
+   * once its first `init` has said which commands are skills.
+   *
+   * Announced rather than waited to be asked: a list asked for when the session
+   * starts was answered before the `init` — every command read as no skill —
+   * and one asked for on the `init` raced the window re-reading it. Each list
+   * on its own, so one that cannot be read does not take the other with it; a
+   * list missing is a convenience missing, and the stream reports real trouble.
+   */
+  const announceLists = (): void => {
+    conversation.supportedCommands().then(
+      (commands) => {
+        hooks.onEvent({ type: 'commands_changed', commands: toAgentCommands(commands, heldSkills) })
+      },
+      () => undefined
+    )
+    conversation.supportedAgents().then(
+      (agents) => {
+        hooks.onEvent({ type: 'agents_changed', agents: toAgentEntries(agents) })
+      },
+      () => undefined
+    )
+  }
 
   // Started and never awaited. `close` is what actually ends the session —
   // it kills the process the SDK spawned, and the loop then falls out on its
@@ -923,7 +951,10 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
         }
         if (message.type === 'system' && message.subtype === 'init') {
           heldSkills = new Set(message.skills)
-          lifecycle.emit('initialised')
+          if (!announced) {
+            announced = true
+            announceLists()
+          }
         }
         for (const event of mapMessage(message, heldSkills)) hooks.onEvent(event)
       }
@@ -935,8 +966,6 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // with code 143" above an answer from its successor.
       if (closing.signal.aborted) return
       hooks.onEvent({ type: 'error', message: describeError(error) })
-    } finally {
-      lifecycle.emit('initialised')
     }
   })()
 
@@ -974,11 +1003,6 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 
     async models() {
       return toAgentModels(await conversation.supportedModels())
-    },
-
-    async commands() {
-      await firstInit
-      return toAgentCommands(await conversation.supportedCommands(), heldSkills)
     },
 
     contextUsage() {
