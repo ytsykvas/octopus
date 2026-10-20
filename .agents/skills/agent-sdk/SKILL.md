@@ -33,7 +33,9 @@ not to the instructions a user wrote for their own agent. If you find that
 argument still standing anywhere, it is stale — fix it.
 
 What must stay true: no text of ours in the system prompt, no bundled skill of
-ours, and any prose the app sends goes as a **visible** user message.
+ours, and any prose the app sends goes as a **visible** user message. The one
+exception is a refusal's reason (`DENIED`, `branchGuard`, `publishGuard`): it
+answers a call the agent made, so it is not context we added.
 
 ## Basic run
 

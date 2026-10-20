@@ -34,7 +34,11 @@ import { RewindScopeSchema } from '../core/rewind.js'
 import { EnvBodySchema } from '../core/env.js'
 import { ProfileNameSchema } from '../core/envProfileNames.js'
 import type { RemoteRepository } from '../core/github.js'
-import { InstructionBodySchema, InstructionKindSchema } from '../core/instructions.js'
+import {
+  InstructionBodySchema,
+  InstructionKindSchema,
+  SendOptionsSchema
+} from '../core/instructions.js'
 import {
   CommitMessageSchema,
   MergeMethodSchema,
@@ -946,8 +950,10 @@ export function registerIpc(
     attempt(() => service.chatHistory(chatId))
   )
 
-  host.handle('chats:send', (_event, chatId: string, text: unknown) =>
-    attempt(() => service.sendToChat(chatId, ChatMessageSchema.parse(text)))
+  host.handle('chats:send', (_event, chatId: string, text: unknown, sending: unknown) =>
+    attempt(() =>
+      service.sendToChat(chatId, ChatMessageSchema.parse(text), SendOptionsSchema.parse(sending))
+    )
   )
 
   host.handle('chats:interrupt', (_event, chatId: string) =>

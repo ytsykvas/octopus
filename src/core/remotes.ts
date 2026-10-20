@@ -16,6 +16,7 @@
  */
 
 import { type GitExec, type GitOptions, refExists } from './git.js'
+import { PUSH_NOWHERE } from './publishGuard.js'
 
 /** What a base branch names, and where its current state comes from. */
 export interface BaseRef {
@@ -85,6 +86,33 @@ export function parseRemotes(output: string): string[] {
 /** Configured remotes, `origin` first. */
 export async function listRemotes(exec: GitExec): Promise<string[]> {
   return parseRemotes(await exec(['remote']))
+}
+
+/**
+ * Every remote's URL and every URL rewrite the user configured — what
+ * `agentEnv` must outrank for a push to be refused wherever it is aimed.
+ *
+ * Empty when there is nothing to read: `git config --get-regexp` exits 1 when
+ * no key matches, and the network-wide rules still stand without these. The
+ * rewrite's own rules are left out — read from inside an agent's session, git
+ * reports them too.
+ */
+export async function pushTargets(exec: GitExec): Promise<string[]> {
+  let output: string
+  try {
+    output = await exec([
+      'config',
+      '--get-regexp',
+      String.raw`^(remote\..*\.url|url\..*\.(push)?insteadof)$`
+    ])
+  } catch {
+    return []
+  }
+  return output
+    .split('\n')
+    .filter((line) => !line.startsWith(`url.${PUSH_NOWHERE}`))
+    .map((line) => line.slice(line.indexOf(' ') + 1).trim())
+    .filter((value) => value !== '')
 }
 
 /**

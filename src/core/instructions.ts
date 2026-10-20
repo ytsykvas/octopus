@@ -41,6 +41,30 @@ export const InstructionKindSchema = z.enum([
 export type InstructionKind = z.infer<typeof InstructionKindSchema>
 
 /**
+ * Whether the turn a kind starts ends in a push the app makes.
+ *
+ * The agent may not push (`publishGuard.ts`), so the prompts that change the
+ * branch tell it to commit and stop, and the push is the app's — the press was
+ * the user asking for it. A record rather than a list so a new kind cannot be
+ * added without deciding.
+ */
+export const PUBLISHES_AFTER: Readonly<Record<InstructionKind, boolean>> = {
+  pullRequest: false,
+  commitMessage: false,
+  fixChecks: true,
+  addressReview: true,
+  review: false,
+  multiAgentReview: false,
+  resolveConflicts: true
+}
+
+/** How a message is sent, as accepted from the renderer: the prompt a pane button sent, if any. */
+export const SendOptionsSchema = z
+  .object({ instruction: InstructionKindSchema.optional() })
+  .optional()
+export type SendOptions = z.infer<typeof SendOptionsSchema>
+
+/**
  * An instruction body as accepted from the renderer.
  *
  * Bounded because it will be prepended to a prompt: an instruction longer than
@@ -102,9 +126,10 @@ A check on this pull request has failed. Find out why before changing anything.
 - Fix the cause. A test weakened, skipped or deleted to make a run green is a
   failure hidden rather than fixed — if the test itself is wrong, say so rather
   than quietly changing it.
-- Run the same thing locally before pushing. The command the workflow runs is in
-  the workflow file, and a round trip through CI costs minutes.
-- Commit and push, so the checks run again on the fix.
+- Run the same thing locally before committing. The command the workflow runs is
+  in the workflow file, and a round trip through CI costs minutes.
+- Commit the fix and stop. Do not push: Octopus pushes the branch once you are
+  done, and the checks run again on it then.
 `,
 
   addressReview: `# Answering a review
@@ -116,7 +141,8 @@ Read the review on this pull request and deal with it.
 - Where a comment is right, make the change. Where it is not, say so in the
   reply rather than changing the code to end the conversation.
 - Where a comment asks a question, answer it — do not treat it as a request.
-- Leave the branch committed and pushed, so the request carries the answer.
+- Leave the branch committed and stop. Do not push: Octopus pushes it once you
+  are done, so the request carries the answer.
 `,
 
   review: `# Reviewing this change
@@ -157,7 +183,8 @@ This branch conflicts with its base. Merge the base in and settle it.
   Taking one side wholesale is how a change quietly disappears.
 - Build and run the tests afterwards. A file that merged cleanly can still be
   wrong once both changes are in it.
-- Commit and push, so the request stops showing a conflict.
+- Commit the merge and stop. Do not push: Octopus pushes the branch once you are
+  done, and the request stops showing a conflict then.
 `
 }
 

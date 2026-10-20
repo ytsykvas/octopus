@@ -209,9 +209,11 @@ export function PullRequestPanel({
             })
           : ''
 
+      // Named so the app can push once a prompt that changes the branch is done.
       const sent = await window.octopus.chats.send(
         conversation,
-        [instruction.value.trim(), context, failures].filter((part) => part !== '').join('\n\n')
+        [instruction.value.trim(), context, failures].filter((part) => part !== '').join('\n\n'),
+        { instruction: kind }
       )
       setSending(null)
       if (!sent.ok) report(sent)

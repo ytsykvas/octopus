@@ -115,6 +115,11 @@ export function useErrorMessage(): (failure: Failure) => string {
           })
         case 'headNotOnBranch':
           return t('errors.headNotOnBranch', { branch: failure.params?.branch ?? '' })
+        case 'pushTargetChanged':
+          return t('errors.pushTargetChanged', {
+            branch: failure.params?.branch ?? '',
+            current: failure.params?.current ?? ''
+          })
         case 'branchUnmerged':
           return t('errors.branchUnmerged', { branch: failure.params?.branch ?? '' })
         case 'branchExists':
@@ -156,6 +161,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.chatClosed')
         case 'autoModeUnavailable':
           return t('errors.autoModeUnavailable', { reason: failure.params?.reason ?? '' })
+        case 'turnRunning':
+          return t('errors.turnRunning')
         case 'rewindUnavailable':
           // The agent's own reason, when it gave one: "no checkpoint for that
           // message" is the answer to *why*, and the generic line is not.

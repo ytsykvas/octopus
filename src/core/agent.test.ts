@@ -17,7 +17,9 @@ import {
   type PermissionAsk,
   type PermissionOutcome,
   READ_ONLY_TOOLS,
-  refusingBash,
+  GUARD_FAILED,
+  publishLocked,
+  toolGuards,
   type SessionOptions,
   promptTokens,
   readContextUsage,
@@ -28,6 +30,7 @@ import {
   toIsoTimestamp
 } from './agent.js'
 import type { AgentEvent } from './events.js'
+import { agentEnv, PUBLISH_DENY_RULES, PUBLISH_REFUSAL } from './publishGuard.js'
 import type { SkillVisibility } from './skills.js'
 
 /**
@@ -74,7 +77,7 @@ function fakeAgent(
     rewind?: Record<string, unknown>
     /** What the session's settings files say about skills; left out, it reads none. */
     skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
-    refuseBash?: (command: string) => string | null
+    refuseCommand?: (command: string) => string | null
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -187,6 +190,7 @@ function fakeAgent(
       effort: 'medium',
       allowedTools: [...READ_ONLY_TOOLS],
       additionalDirectories: [],
+      pushTargets: [],
       skillOverrides: {},
       autoCompactWindow: null,
       ...overrides
@@ -208,7 +212,7 @@ function fakeAgent(
       askElicitation: (ask) =>
         hooks.askElicitation?.(ask) ?? Promise.resolve({ action: 'decline' } as const),
       ...(hooks.skillsInFiles && { skillsInFiles: hooks.skillsInFiles }),
-      ...(hooks.refuseBash && { refuseBash: hooks.refuseBash })
+      ...(hooks.refuseCommand && { refuseCommand: hooks.refuseCommand })
     }
   )
 
@@ -1806,6 +1810,7 @@ describe('a session that will not close', () => {
         effort: 'medium',
         allowedTools: [],
         additionalDirectories: [],
+        pushTargets: [],
         skillOverrides: {},
         autoCompactWindow: null
       },
@@ -1821,42 +1826,127 @@ describe('a session that will not close', () => {
   })
 })
 
-describe('refusingBash', () => {
+describe('toolGuards', () => {
   const refuse = (command: string): string | null =>
     command.startsWith('git checkout -b') ? 'Stay on the branch.' : null
 
-  /** Runs the one hook on a call, as the SDK would. */
-  async function decide(input: unknown): Promise<unknown> {
-    const [matcher] = refusingBash(refuse).PreToolUse ?? []
-    expect(matcher?.matcher).toBe('Bash')
-    const [hook] = matcher?.hooks ?? []
-    if (!hook) throw new Error('no hook')
+  /** Runs the hook registered under `matcher` on a call, as the SDK would. */
+  async function decide(
+    hooks: ReturnType<typeof toolGuards>,
+    matcher: string,
+    input: unknown
+  ): Promise<unknown> {
+    const [hook] = hooks.PreToolUse?.find((entry) => entry.matcher === matcher)?.hooks ?? []
+    if (!hook) throw new Error(`no hook for ${matcher}`)
     return hook(input as never, 'tool-1', { signal: new AbortController().signal })
   }
 
-  it('denies a command the guard refuses, with its reason', async () => {
+  const shell = (command: string, tool = 'Bash'): unknown => ({
+    tool_name: tool,
+    tool_input: { command }
+  })
+
+  const denied = (reason: string): unknown => ({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason
+    }
+  })
+
+  it('refuses a push before the branch guard is asked, and with no branch guard at all', async () => {
+    const SHELL = 'Bash|Monitor|PowerShell'
+    await expect(decide(toolGuards(refuse), SHELL, shell('git push'))).resolves.toEqual(
+      denied(PUBLISH_REFUSAL)
+    )
+    await expect(decide(toolGuards(), SHELL, shell('git push'))).resolves.toEqual(
+      denied(PUBLISH_REFUSAL)
+    )
+    await expect(decide(toolGuards(), SHELL, shell('git checkout -b x'))).resolves.toEqual({})
+  })
+
+  it('reads a PowerShell command with its backtick escapes taken out', async () => {
+    const hooks = toolGuards()
     await expect(
-      decide({ hook_event_name: 'PreToolUse', tool_input: { command: 'git checkout -b x' } })
-    ).resolves.toEqual({
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: 'Stay on the branch.'
-      }
+      decide(hooks, 'Bash|Monitor|PowerShell', shell('g`h pr create', 'PowerShell'))
+    ).resolves.toEqual(denied(PUBLISH_REFUSAL))
+  })
+
+  it('denies a command the branch guard refuses, with its reason', async () => {
+    await expect(
+      decide(toolGuards(refuse), 'Bash|Monitor|PowerShell', shell('git checkout -b x'))
+    ).resolves.toEqual(denied('Stay on the branch.'))
+  })
+
+  it('says nothing about a command it lets through, or a call that carries none', async () => {
+    const hooks = toolGuards(refuse)
+    await expect(decide(hooks, 'Bash|Monitor|PowerShell', shell('git status'))).resolves.toEqual({})
+    await expect(decide(hooks, 'Bash|Monitor|PowerShell', { tool_input: {} })).resolves.toEqual({})
+  })
+
+  it('refuses when the guard itself throws, rather than letting the call through', async () => {
+    const broken = (): string | null => {
+      throw new Error('broken')
+    }
+    await expect(
+      decide(toolGuards(broken), 'Bash|Monitor|PowerShell', shell('ls'))
+    ).resolves.toEqual(denied(GUARD_FAILED))
+  })
+
+  it('refuses an MCP tool that would open a pull request, and lets one that reads', async () => {
+    const hooks = toolGuards()
+    await expect(
+      decide(hooks, '^mcp__', { tool_name: 'mcp__github__create_pull_request' })
+    ).resolves.toEqual(denied(PUBLISH_REFUSAL))
+    await expect(decide(hooks, '^mcp__', { tool_name: 'mcp__github__get_issue' })).resolves.toEqual(
+      {}
+    )
+    await expect(decide(hooks, '^mcp__', {})).resolves.toEqual({})
+  })
+
+  it('refuses a subagent in the cloud, and lets one that runs here', async () => {
+    const hooks = toolGuards()
+    await expect(
+      decide(hooks, 'Agent', { tool_input: { prompt: 'x', isolation: 'remote' } })
+    ).resolves.toEqual(denied(PUBLISH_REFUSAL))
+    await expect(
+      decide(hooks, 'Agent', { tool_input: { prompt: 'x', isolation: 'worktree' } })
+    ).resolves.toEqual({})
+    await expect(decide(hooks, 'Agent', { tool_input: { prompt: 'x' } })).resolves.toEqual({})
+    await expect(decide(hooks, 'Agent', {})).resolves.toEqual({})
+  })
+})
+
+describe('publishLocked', () => {
+  it('builds the environment from the base it is given, with the push targets rewritten', () => {
+    const { env, disallowedTools } = publishLocked(undefined, ['git@work:o/r.git'], {
+      PATH: '/bin'
     })
+    expect(env).toEqual(agentEnv({ PATH: '/bin' }, ['git@work:o/r.git']))
+    expect(disallowedTools).toEqual([...PUBLISH_DENY_RULES])
   })
 
-  it('says nothing about a command it lets through', async () => {
-    await expect(decide({ tool_input: { command: 'git status' } })).resolves.toEqual({})
+  it('starts from the app’s own environment when given none', () => {
+    expect(publishLocked(undefined, []).env).toEqual(agentEnv(process.env, []))
   })
 
-  it('says nothing about a call that carries no command', async () => {
-    await expect(decide({ tool_input: {} })).resolves.toEqual({})
-  })
-
-  it('reaches the session only when there is a guard', () => {
-    expect(fakeAgent().agent.options().hooks).toBeUndefined()
-    expect(fakeAgent({}, { refuseBash: refuse }).agent.options().hooks).toHaveProperty('PreToolUse')
+  it('reaches every session, with its push targets, with or without a branch guard', () => {
+    for (const options of [
+      fakeAgent({ pushTargets: ['git@work:o/r.git'] }).agent.options(),
+      fakeAgent(
+        { pushTargets: ['git@work:o/r.git'] },
+        { refuseCommand: () => null }
+      ).agent.options()
+    ]) {
+      const hooks = options.hooks as ReturnType<typeof toolGuards>
+      expect(hooks.PreToolUse?.map((entry) => entry.matcher)).toEqual([
+        'Bash|Monitor|PowerShell',
+        '^mcp__',
+        'Agent'
+      ])
+      expect(options.disallowedTools).toEqual([...PUBLISH_DENY_RULES])
+      expect(options.env).toEqual(agentEnv(process.env, ['git@work:o/r.git']))
+    }
   })
 })
 

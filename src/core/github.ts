@@ -120,6 +120,9 @@ export type GitHubErrorCode =
      `pushBranch` sends a *name*, so with the two apart the commit goes on one
      branch while another is pushed — and both report success. */
   | 'headNotOnBranch'
+  // Refused before an automatic push: where `origin` pushes to changed during
+  // the agent's turn, and pushing would send the work somewhere nobody chose.
+  | 'pushTargetChanged'
   // Asking the agent to write the title and body is on the way to a pull
   // request too, and fails in the same place as far as the reader is concerned.
   | 'draftFailed'

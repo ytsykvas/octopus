@@ -545,7 +545,9 @@ const q = query({
 
 The config keeps the switch — nothing / `project` / `user + project + local` — for anyone who wants isolation; it is simply no longer what everybody gets. Version 2 of the config raises an install that was still on `nothing`.
 
-**One workspace is one branch and one pull request.** The request, the Changes tab and the push button are all found by the workspace's branch, so an agent that leaves it — `git checkout -b`, `git switch`, `git branch -m`, `gh pr create --head` elsewhere — empties all three while its work goes to a request the app cannot see. Every session in a worktree, the pull-request draft's included, carries a `PreToolUse` hook on `Bash` (`branchGuard.ts`) that refuses such a command whatever the mode or the user's allow rules say, and tells the agent why; going back to the workspace's branch, and `git checkout` of a file, still run. It is a refusal with its reason, as `DENIED` is, not text put into the agent's context — so it stays inside §4. A command hidden in a script the agent runs is out of its reach; the Changes tab's warning about HEAD is what catches that.
+**One workspace is one branch and one pull request.** The request, the Changes tab and the push button are all found by the workspace's branch, so an agent that leaves it — `git checkout -b`, `git switch`, `git branch -m` — empties all three while its work goes to a request the app cannot see. Every session in a worktree, the pull-request draft's included, carries a `PreToolUse` hook on the tools that run a shell command (`branchGuard.ts`) that refuses such a command whatever the mode or the user's allow rules say, and tells the agent why; going back to the workspace's branch, and `git checkout` of a file, still run. It is a refusal with its reason, as `DENIED` is, not text put into the agent's context — so it stays inside §4. A command hidden in a script the agent runs is out of its reach; the Changes tab's warning about HEAD is what catches that.
+
+**The agent never publishes; the user does.** Pushing, and opening, merging or closing a pull request, belong to the pull request pane, which runs `git` and `gh` itself (§12.4). An agent that pushed on its own ended a conversation with work on the remote nobody had looked at, and a line in its instructions saying not to was read and then not always kept. Every session carries three layers, described in `publishGuard.ts`, because none of them is a boundary on its own: a hook that reads the programs a command runs, the CLI's own deny rules, and an environment in which git rewrites the push URL of each of the workspace's remotes to one it cannot open. The hook reads structure rather than words: a first version that looked for `push` anywhere in the text refused commit messages, `grep` and a test file named after pull requests, and an agent refused its ordinary work learns to work round the guard. Measured against a live session: with all three layers the push was refused and the agent stopped; with the environment alone, `git push`, `git -C . push`, `bash -c 'git push'` and a script on disk that pushed all failed, and the commit and the fetch went through. Measured against git 2.54: of two `pushInsteadOf` rules git takes the longer prefix, and on a tie the one read last — which is why the rewrite names each remote's own URL and repeats the user's own rules, and why it holds against a rule in `~/.gitconfig`. What is left, and stays written down here: a `pushurl` already set in the user's config is not rewritten, so for such a remote only the hook stands; the app's own push after a prompt checks where `origin` points but not the rest of the worktree's git config, so the keys that change how it is carried are refused to the agent rather than compared; and an agent set on it can still get round all three, by a variable naming `gh` or a script that calls it. Only an OS sandbox would close that, at the price of the network the agent reads CI logs with.
 
 **A repository is asked about before it is believed.** Loading every source means
 a clone can pre-approve tools through `permissions.allow`, run shell commands
@@ -646,9 +648,15 @@ the app never sees a token (§10.9).
   **Add to chat** puts a remark into the composer beside the diff's own notes,
   so a question can be typed under it rather than the app asking one. A thread
   is replied to, resolved and reopened from the same list.
-- **The four prepared messages** — answer the review, review it, review it with
-  several subagents, resolve the conflicts — each the project's own instruction
-  plus a line naming the request, sent as one visible user message (§4).
+- **The five prepared messages** — fix the checks, answer the review, review it,
+  review it with several subagents, resolve the conflicts — each the project's
+  own instruction plus a line naming the request, sent as one visible user
+  message (§4). The agent may not push (§12.3), so the three that change the
+  branch tell it to commit and stop, and the app pushes once that turn has ended
+  well (`PUBLISHES_AFTER`). They wait for a running turn to end, so the turn
+  that ends is theirs; a failure, a Stop or a replaced session pushes nothing,
+  and neither does a change of where `origin` pushes to during the turn. A
+  message typed into the chat never pushes.
 - **Merging**, with the three methods, and never `--delete-branch`: a worktree
   is checked out on that branch. A zero exit is not proof of a merge — `gh`
   enables auto-merge instead when a required check has not passed — so the pane
