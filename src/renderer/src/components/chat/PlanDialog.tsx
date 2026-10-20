@@ -23,6 +23,13 @@ interface PlanDialogProps {
   readonly text: string
   readonly onText: (text: string) => void
   /**
+   * The note in the field, held by the pane for the same reason as `text`:
+   * minimising unmounts the dialog, and a half-written correction must be there
+   * when it comes back.
+   */
+  readonly feedback: string
+  readonly onFeedback: (feedback: string) => void
+  /**
    * The mode executing moves the conversation to, when it moves at all — only
    * out of planning, since a plan the agent offered unasked changes no mode.
    * `acceptEdits` or `auto`, whichever the settings name, and `auto` for a
@@ -37,6 +44,11 @@ interface PlanDialogProps {
   readonly onExecute: (editedPlan: string | null) => void
   /** Sends the plan back with the user's note, which may be empty. */
   readonly onKeepPlanning: (feedback: string) => void
+  /**
+   * Sets the dialog aside without answering, to look something up before
+   * replying. The agent stays waiting; the pane keeps a way back on screen.
+   */
+  readonly onMinimize: () => void
 }
 
 /**
@@ -57,17 +69,25 @@ interface PlanDialogProps {
  * second half left to say otherwise — or back in `auto` for a conversation
  * that was there. Either widens what the agent may do, so the line beside the
  * button says it before the click rather than the footer after it.
+ *
+ * Minimising is the one way out that answers nothing. A plan often sends the
+ * reader to a file or the diff before they know what to say back, and the
+ * dialog took the whole window to do it. The pane draws a strip above the
+ * composer while it is set aside, so the question the agent is blocked on stays
+ * on screen.
  */
 export function PlanDialog({
   plan,
   text,
   onText,
+  feedback,
+  onFeedback,
   goesOnIn,
   onExecute,
-  onKeepPlanning
+  onKeepPlanning,
+  onMinimize
 }: PlanDialogProps): React.JSX.Element {
   const { t } = useTranslation()
-  const [feedback, setFeedback] = useState('')
   const [editing, setEditing] = useState(false)
 
   // Null for an untouched plan, and for one edited back to what it was: only a
@@ -86,6 +106,7 @@ export function PlanDialog({
       // would leave the conversation waiting on a question no longer on screen
       // — and this dialog would simply reopen on the next render.
       onClose={keepPlanning}
+      onMinimize={onMinimize}
       footer={
         <>
           {goesOnIn !== null && (
@@ -141,7 +162,7 @@ export function PlanDialog({
             value={feedback}
             placeholder={t('chat.planFeedbackPlaceholder')}
             onChange={(event) => {
-              setFeedback(event.target.value)
+              onFeedback(event.target.value)
             }}
             // The composer's keys, so there is one convention rather than two —
             // and with no second button, this is what sends the note at all.

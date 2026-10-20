@@ -295,7 +295,8 @@ export const uk: Translation = {
   },
 
   modal: {
-    close: 'Закрити'
+    close: 'Закрити',
+    minimize: 'Згорнути'
   },
 
   scripts: {
@@ -955,6 +956,8 @@ export const uk: Translation = {
     planFeedback: 'Щось іще треба уточнити?',
     planFeedbackPlaceholder: 'Напишіть, і агент доопрацює план',
     planSendFeedback: 'Надіслати нотатку й далі планувати',
+    planWaiting: 'План чекає на вашу відповідь',
+    planReopen: 'Відкрити план',
     questionTitle: 'Агент запитує',
     questionOther: 'Інше',
     questionOtherPlaceholder: 'Напишіть свою відповідь',

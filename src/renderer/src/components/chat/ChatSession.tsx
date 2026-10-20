@@ -43,6 +43,7 @@ import { DayChip } from './DayChip.js'
 import { Composer } from './Composer.js'
 import { HeadsUp } from './HeadsUp.js'
 import { PlanDialog } from './PlanDialog.js'
+import { PlanWaiting } from './PlanWaiting.js'
 import { TodoPanel } from './TodoPanel.js'
 import { currentTip } from './tips.js'
 import { planTitle, readPlan } from './toolSummary.js'
@@ -214,6 +215,12 @@ export function ChatSession({
   // A plan the user is rewriting, by the request it belongs to. Kept here so
   // that looking at another tab does not throw the edits away.
   const [planEdit, setPlanEdit] = useState<{ requestId: string; text: string } | null>(null)
+  // The note being written back to it, for the same reason and one more: the
+  // dialog unmounts while it is minimised.
+  const [planNote, setPlanNote] = useState<{ requestId: string; text: string } | null>(null)
+  // The plan whose dialog was set aside, by request: the next plan the agent
+  // hands over is a new question, and raises its dialog as any other would.
+  const [minimizedPlan, setMinimizedPlan] = useState<string | null>(null)
   const describeFailure = useErrorMessage()
   /*
    * Read here as well as in the Run row: the first message is where a task
@@ -633,7 +640,7 @@ export function ChatSession({
           takes the keyboard from work they can. The tab's dot turns amber
           instead, which is how the workspace list already announces a turn
           waiting somewhere nobody is looking. */}
-          {visible && plan !== null && pending !== null && (
+          {visible && plan !== null && pending !== null && minimizedPlan !== pending.requestId && (
             <PlanDialog
               // Per request: a plan the agent replaces is a different plan, and the
               // editor's open-or-closed state belongs to the one it was opened on.
@@ -644,6 +651,15 @@ export function ChatSession({
               }
               onText={(next) => {
                 setPlanEdit({ requestId: pending.requestId, text: next })
+              }}
+              feedback={
+                planNote !== null && planNote.requestId === pending.requestId ? planNote.text : ''
+              }
+              onFeedback={(next) => {
+                setPlanNote({ requestId: pending.requestId, text: next })
+              }}
+              onMinimize={() => {
+                setMinimizedPlan(pending.requestId)
               }}
               goesOnIn={record?.planMode === true ? modeAfterPlan(record, planExecutionMode) : null}
               onExecute={(edited) => {
@@ -665,6 +681,14 @@ export function ChatSession({
           pinned across every later turn and every restart, describing work
           nobody is doing. The log still holds it. */}
           <TodoPanel todos={chat.busy ? todos : []} />
+
+          {visible && plan !== null && pending !== null && minimizedPlan === pending.requestId && (
+            <PlanWaiting
+              onOpen={() => {
+                setMinimizedPlan(null)
+              }}
+            />
+          )}
 
           {tip !== null && (
             <HeadsUp

@@ -1621,6 +1621,74 @@ describe('the permission mode', () => {
     })
   })
 
+  // Minimising is how a plan is checked against the code before answering it.
+  // It answers nothing, keeps a way back on screen, and loses nothing typed.
+  describe('setting a plan aside to check something', () => {
+    it('hides the dialog without answering, and brings it back as it was', async () => {
+      const user = userEvent.setup()
+      givenChat([], { planMode: true })
+      await openLoadedChat()
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-plan',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# Normalising the locales' }
+      })
+      await user.click(await screen.findByRole('button', { name: 'Edit' }))
+      const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
+      await user.clear(editor)
+      await user.type(editor, '# Only English first')
+      await user.type(screen.getByRole('textbox', { name: /Anything to work out/ }), 'and tests')
+      await user.click(screen.getByRole('button', { name: 'Minimise' }))
+
+      expect(screen.queryByText('The plan is ready')).not.toBeInTheDocument()
+      expect(screen.getByText('The plan is waiting for your answer')).toBeInTheDocument()
+      expect(octopus().chats.answerPermission).not.toHaveBeenCalled()
+
+      await user.click(screen.getByRole('button', { name: 'Open the plan' }))
+
+      expect(screen.queryByText('The plan is waiting for your answer')).not.toBeInTheDocument()
+      expect(screen.getByText('Only English first')).toBeInTheDocument()
+      const note = screen.getByRole('textbox', { name: /Anything to work out/ })
+      expect(note).toHaveValue('and tests')
+
+      await user.type(note, '{Enter}')
+      expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'deny', 'and tests')
+    })
+
+    // The next plan is a new question: it raises its own dialog, and it does
+    // not inherit the note written to the one before it.
+    it('raises the next plan however the last one was left', async () => {
+      const user = userEvent.setup()
+      givenChat([], { planMode: true })
+      await openLoadedChat()
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-1',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# First plan' }
+      })
+      await user.type(
+        await screen.findByRole('textbox', { name: /Anything to work out/ }),
+        'old note'
+      )
+      await user.click(screen.getByRole('button', { name: 'Minimise' }))
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-2',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# Second plan' }
+      })
+
+      expect(await screen.findByText('Second plan')).toBeInTheDocument()
+      expect(screen.queryByText('The plan is waiting for your answer')).not.toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: /Anything to work out/ })).toHaveValue('')
+    })
+  })
+
   // The agent may hand over another plan while one is being rewritten. The old
   // edit describes a plan that is gone, and must not be sent as the new one's.
   describe('a plan replaced while it is being rewritten', () => {
