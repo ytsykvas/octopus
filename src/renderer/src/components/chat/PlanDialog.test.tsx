@@ -10,7 +10,10 @@ beforeAll(stubDialogElement)
 
 const PLAN = '# Normalising the locales\n\n## Context\n\nUse `en.ts` as the source.'
 
-type Props = Omit<React.ComponentProps<typeof PlanDialog>, 'text' | 'onText'>
+type Props = Omit<
+  React.ComponentProps<typeof PlanDialog>,
+  'text' | 'onText' | 'feedback' | 'onFeedback'
+>
 
 /**
  * The pane's half of the contract: it holds the text the dialog shows and takes
@@ -18,16 +21,27 @@ type Props = Omit<React.ComponentProps<typeof PlanDialog>, 'text' | 'onText'>
  */
 function Held(props: Props): React.JSX.Element {
   const [text, setText] = useState(props.plan)
+  const [feedback, setFeedback] = useState('')
 
-  return <PlanDialog {...props} text={text} onText={setText} />
+  return (
+    <PlanDialog
+      {...props}
+      text={text}
+      onText={setText}
+      feedback={feedback}
+      onFeedback={setFeedback}
+    />
+  )
 }
 
 function renderDialog(overrides: Partial<Props> = {}): {
   onExecute: ReturnType<typeof vi.fn>
   onKeepPlanning: ReturnType<typeof vi.fn>
+  onMinimize: ReturnType<typeof vi.fn>
 } {
   const onExecute = vi.fn()
   const onKeepPlanning = vi.fn()
+  const onMinimize = vi.fn()
 
   render(
     <Held
@@ -35,11 +49,12 @@ function renderDialog(overrides: Partial<Props> = {}): {
       goesOnIn="acceptEdits"
       onExecute={onExecute}
       onKeepPlanning={onKeepPlanning}
+      onMinimize={onMinimize}
       {...overrides}
     />
   )
 
-  return { onExecute, onKeepPlanning }
+  return { onExecute, onKeepPlanning, onMinimize }
 }
 
 describe('the plan itself', () => {
@@ -85,6 +100,20 @@ describe('the two ways out', () => {
       )
     ).toBeInTheDocument()
     expect(screen.queryByText(/Runs with Accept edits on/)).not.toBeInTheDocument()
+  })
+
+  // Setting the plan aside to look something up is not an answer: the note in
+  // the field must not go to the agent as one.
+  it('minimises without sending the plan back', async () => {
+    const user = userEvent.setup()
+    const { onExecute, onKeepPlanning, onMinimize } = renderDialog()
+
+    await user.type(screen.getByRole('textbox'), 'check the routes first')
+    await user.click(screen.getByRole('button', { name: 'Minimise' }))
+
+    expect(onMinimize).toHaveBeenCalledTimes(1)
+    expect(onKeepPlanning).not.toHaveBeenCalled()
+    expect(onExecute).not.toHaveBeenCalled()
   })
 
   it('executes when that is what was chosen', async () => {

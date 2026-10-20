@@ -337,7 +337,8 @@ export const en = {
   },
 
   modal: {
-    close: 'Close'
+    close: 'Close',
+    minimize: 'Minimise'
   },
 
   scripts: {
@@ -1267,6 +1268,8 @@ export const en = {
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     planSendFeedback: 'Send the note and keep planning',
+    planWaiting: 'The plan is waiting for your answer',
+    planReopen: 'Open the plan',
     questionTitle: 'The agent is asking',
     questionOther: 'Something else',
     questionOtherPlaceholder: 'Write your own answer',
