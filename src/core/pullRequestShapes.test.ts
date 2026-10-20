@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  type BranchRequest,
   BranchListSchema,
   commentKey,
+  pullRequestStanding,
   type DetailPayload,
   DetailPayloadSchema,
   type PullRequestCheck,
@@ -663,6 +665,10 @@ describe('every branch of a project at once', () => {
     state: 'OPEN',
     url: 'https://github.com/o/p/pull/12',
     statusCheckRollup: [PASSED],
+    isDraft: false,
+    mergeable: 'MERGEABLE',
+    mergeStateStatus: 'CLEAN',
+    reviewDecision: '',
     ...overrides
   })
 
@@ -673,9 +679,41 @@ describe('every branch of a project at once', () => {
         number: 12,
         state: 'open',
         checks: 'passed',
-        url: 'https://github.com/o/p/pull/12'
+        url: 'https://github.com/o/p/pull/12',
+        draft: false,
+        decision: null,
+        mergeable: 'mergeable',
+        mergeState: 'clean'
       }
     ])
+  })
+
+  it('reads the review and the merge the way the detail does', () => {
+    const [request] = toBranchRequests(
+      BranchListSchema.parse([
+        entry({
+          isDraft: true,
+          reviewDecision: 'CHANGES_REQUESTED',
+          mergeable: 'CONFLICTING',
+          mergeStateStatus: 'DIRTY'
+        })
+      ])
+    )
+
+    expect(request).toMatchObject({
+      draft: true,
+      decision: 'changesRequested',
+      mergeable: 'conflicting',
+      mergeState: 'dirty'
+    })
+  })
+
+  it('calls a value it has never seen unknown rather than failing the list', () => {
+    const [request] = toBranchRequests(
+      BranchListSchema.parse([entry({ mergeable: 'NEW', mergeStateStatus: 'NEW' })])
+    )
+
+    expect(request).toMatchObject({ mergeable: 'unknown', mergeState: 'unknown' })
   })
 
   it('reads a closed branch and a merged one', () => {
@@ -705,5 +743,49 @@ describe('every branch of a project at once', () => {
     const requests = toBranchRequests(BranchListSchema.parse([entry({ statusCheckRollup: [] })]))
 
     expect(requests[0]?.checks).toBe('none')
+  })
+})
+
+describe('where an open request stands', () => {
+  const request = (overrides: Partial<BranchRequest> = {}): BranchRequest => ({
+    branch: 'octopus/anna',
+    number: 7,
+    state: 'open',
+    checks: 'passed',
+    url: 'https://e.test/7',
+    draft: false,
+    decision: null,
+    mergeable: 'mergeable',
+    mergeState: 'clean',
+    ...overrides
+  })
+
+  it('is ready when GitHub would take it now', () => {
+    expect(pullRequestStanding(request())).toEqual({ kind: 'ready' })
+    expect(pullRequestStanding(request({ checks: 'none', decision: 'approved' }))).toEqual({
+      kind: 'ready'
+    })
+  })
+
+  it('needs action for each thing a reader must go and fix, all of them named', () => {
+    expect(pullRequestStanding(request({ checks: 'failed' }))).toEqual({
+      kind: 'needsAction',
+      reasons: ['checksFailed']
+    })
+    expect(
+      pullRequestStanding(
+        request({ checks: 'failed', decision: 'changesRequested', mergeable: 'conflicting' })
+      )
+    ).toEqual({ kind: 'needsAction', reasons: ['checksFailed', 'changesRequested', 'conflict'] })
+  })
+
+  it.each([
+    ['a draft', { draft: true }],
+    ['checks still running', { checks: 'running' }],
+    ['a review still required', { decision: 'reviewRequired' }],
+    ['GitHub not yet sure of the trees', { mergeable: 'unknown' }],
+    ['a state GitHub would block', { mergeState: 'blocked' }]
+  ] as const)('is pending with %s', (_name, overrides) => {
+    expect(pullRequestStanding(request(overrides))).toEqual({ kind: 'pending' })
   })
 })

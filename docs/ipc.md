@@ -159,7 +159,10 @@ whether that is all of them**. The read asks for the hundred most recent of the
 whole repository, so an older request is missing from the answer and missing
 reads like "has none" — a caller that cannot tell the two apart says the wrong
 thing with confidence. The same shape, and the same reason, as the repository
-list's `capped`.
+list's `capped`. Each request carries its draft flag, review decision and
+mergeability as well as its checks — one `gh` call still, and enough for the
+status bar to say which requests need action and which are ready to merge
+(`pullRequestStanding`).
 
 `workspaces:notes` writes the line a workspace carries for its user, parsing the
 body rather than trusting it — it lands in `state.json`, which `commit` rewrites
@@ -262,7 +265,7 @@ turn, to learn what the main process had already decided. It says nothing about
 a conversation, which is why it is not folded into the one above — the list that
 draws it is not looking at a chat.
 
-**`chats:status`** carries `{ chatId, workspaceId, status }`. The twin of the
+**`chats:status`** carries `{ chatId, workspaceId, status, turnStartedAt }` — the last when the turn under way began, kept by the service by the same rule the working line reads a log with (`turns.ts`), so the status bar can count a turn whose log no window has loaded. The twin of the
 one above, a level in: the tab strip draws a conversation while
 the list draws its workspace, and the two move at different moments — a second
 conversation finishing leaves a workspace whose first is still running exactly
@@ -323,6 +326,12 @@ without creating one — the first message is what brings it into being.
 | `terminal:dispose` | `id`                 | resolves when the session has gone, not when it was asked |
 
 Output flows the other way, on `terminal:data` and `terminal:exit`.
+
+### The machine
+
+| Channel          | Arguments | Notes                                                                                                                                                                                                                                 |
+| ---------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resources:read` | —         | what the tree under the main process costs, total and per workspace (`resources.ts`). No argument on purpose: the root is the main process and the terminals' pids are the ones `main` spawned, and neither is the renderer's to name |
 
 ### Accounts and dialogs
 

@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { UsageOutcome } from '@core/service.js'
 import type { UsageWindows } from '@core/usage.js'
 
+import { useVisibleInterval } from './useVisibleInterval.js'
+
 /**
  * How often the account is asked while the window is being looked at.
  *
@@ -97,38 +99,7 @@ export function useSubscriptionUsage(): SubscriptionController {
 
   useEffect(() => window.octopus.chats.onUsageWindows(setUsage), [])
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null
-
-    const stop = (): void => {
-      if (timer !== null) clearInterval(timer)
-      timer = null
-    }
-
-    /*
-     * Both halves of "the window is being looked at". `visibilitychange` covers
-     * the tab or the app being hidden and shown; `focus` covers moving between
-     * this window and another while both stay visible, which fires no
-     * visibility change at all.
-     */
-    const watch = (): void => {
-      stop()
-      if (document.hidden) return
-
-      void refresh()
-      timer = setInterval(() => void refresh(), REFRESH_INTERVAL_MS)
-    }
-
-    watch()
-    window.addEventListener('focus', watch)
-    document.addEventListener('visibilitychange', watch)
-
-    return () => {
-      stop()
-      window.removeEventListener('focus', watch)
-      document.removeEventListener('visibilitychange', watch)
-    }
-  }, [refresh])
+  useVisibleInterval(() => void refresh(), REFRESH_INTERVAL_MS)
 
   return { usage, busy, outcome, refresh }
 }

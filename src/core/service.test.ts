@@ -3812,6 +3812,41 @@ describe('a workspace\u2019s port', () => {
   })
 })
 
+describe('what the application costs', () => {
+  it('charges an agent to the workspace whose worktree it runs in', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    // Filled in once the workspace exists; the table is only read after that.
+    let workspacePath = ''
+    const measuring = await createService({
+      ...paths(dir),
+      processExec: (command) =>
+        Promise.resolve(
+          command === 'ps'
+            ? '10 1 1.0 100\n11 10 4.0 400\n12 10 2.0 200\n'
+            : `p11\nfcwd\nn${workspacePath}\np12\nfcwd\nn/\n`
+        )
+    })
+    const project = await measuring.addProjectFromPath(repo)
+    const workspace = await measuring.createWorkspaceIn(project.id)
+    workspacePath = workspace.path
+
+    const reading = await measuring.measureResources(10, [])
+
+    expect(reading.parts).toEqual([
+      { workspaceId: workspace.id, kind: 'agent', cpu: 4, memory: 400 * 1024 }
+    ])
+    expect(reading.app).toEqual({ cpu: 3, memory: 300 * 1024 })
+  })
+
+  // The table a test does not replace is the machine's own.
+  it('reads the machine when no executor is given', async () => {
+    const reading = await service.measureResources(process.pid, [])
+
+    expect(reading.total.memory).toBeGreaterThan(0)
+  })
+})
+
 describe('project instructions', () => {
   async function withProject(): Promise<string> {
     const repo = join(dir, 'planner')
@@ -10166,8 +10201,39 @@ describe('the agent chat', () => {
 
       await service.sendToChat(first, 'go')
 
-      expect(statuses).toEqual([{ chatId: first, workspaceId, status: 'running' }])
+      expect(statuses).toEqual([
+        { chatId: first, workspaceId, status: 'running', turnStartedAt: expect.any(String) }
+      ])
       expect(workspaces).toEqual([{ workspaceId, status: 'running' }])
+    })
+
+    /*
+     * The status bar counts a turn for conversations whose logs no window has
+     * loaded, so the start travels with the status — and it must be the moment
+     * the working line counts from: the prompt, not the latest event.
+     */
+    it('says when the turn began, and forgets it once the turn is over', async () => {
+      let clock = '2026-10-20T09:00:00.000Z'
+      const { service, projectId, workspaceId } = await withWorkspace({ now: () => clock })
+      const chat = await service.openChat(workspaceId)
+      const statuses: ChatStatusEvent[] = []
+      service.onChatStatus((event) => statuses.push(event))
+
+      await service.sendToChat(chat.id, 'go')
+      clock = '2026-10-20T09:03:00.000Z'
+      agent().emit(textMessage('working on it'))
+      await vi.waitFor(async () => {
+        expect(await service.chatHistory(chat.id)).toHaveLength(2)
+      })
+
+      expect(statuses[0]?.turnStartedAt).toBe('2026-10-20T09:00:00.000Z')
+      const [view] = await service.listWorkspaces(projectId)
+      expect(view?.chats[0]?.turnStartedAt).toBe('2026-10-20T09:00:00.000Z')
+
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(statuses.at(-1)).toMatchObject({ status: 'idle', turnStartedAt: null })
+      })
     })
 
     /*
@@ -10261,13 +10327,21 @@ describe('the agent chat', () => {
        * meanwhile.
        */
       expect(view?.chats).toEqual([
-        { id: first.id, agent: 'claude', title: null, status: 'running', started: false },
+        {
+          id: first.id,
+          agent: 'claude',
+          title: null,
+          status: 'running',
+          started: false,
+          turnStartedAt: expect.any(String)
+        },
         {
           id: second.id,
           agent: 'claude',
           title: 'auth refactor',
           status: 'idle',
-          started: false
+          started: false,
+          turnStartedAt: null
         }
       ])
     })

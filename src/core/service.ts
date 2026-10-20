@@ -292,6 +292,14 @@ import {
   scriptKindOf,
   writeRepoConfig
 } from './repoConfig.js'
+import { nextTurnStart } from './turns.js'
+import {
+  defaultProcessExec,
+  type ProcessExec,
+  readResources,
+  type ResourceOwner,
+  type ResourceReading
+} from './resources.js'
 import {
   addChat,
   addProject,
@@ -426,6 +434,8 @@ export interface ServiceOptions {
    */
   readonly makeExec?: (cwd: string, options?: GitOptions) => GitExec
   readonly commandExec?: CommandExec
+  /** `ps` and `lsof`, injected so a test reads a process table of its own. */
+  readonly processExec?: ProcessExec
   /**
    * `gh` in a worktree, injected for the reason the two above are: a test that
    * used the real one would open pull requests on somebody's repository.
@@ -548,6 +558,8 @@ export interface ChatStatusEvent {
   readonly chatId: string
   readonly workspaceId: string
   readonly status: ChatStatus
+  /** When the turn under way began, or null between turns. */
+  readonly turnStartedAt: string | null
 }
 
 /**
@@ -916,6 +928,14 @@ export interface OctopusService {
    * a script that ignores `$OCTOPUS_PORT` makes our own record of it a lie.
    */
   isWorkspaceServing(workspaceId: string): Promise<boolean>
+
+  /**
+   * What the tree under `rootPid` costs, charged to the workspaces that own it.
+   *
+   * The terminals come from the caller because `main/` spawned them and alone
+   * knows their pids; the workspaces' places are this service's to give.
+   */
+  measureResources(rootPid: number, terminals: readonly ResourceOwner[]): Promise<ResourceReading>
 
   /**
    * The port this workspace should serve on, moving it if the old one is gone.
@@ -1510,6 +1530,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
   const fileSkillsFor = options.skillsInFiles ?? skillsInFiles
   const listening = options.listening ?? isListening
+  const processExec = options.processExec ?? defaultProcessExec
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
   const runQuery = options.query ?? withAgentBinary(defaultQuery, unpackedAgentBinary())
@@ -2196,7 +2217,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   const transcriptWrites = oneAtATime()
 
+  /*
+   * When each conversation's turn began, kept as its entries are written.
+   *
+   * The status bar shows it for conversations whose logs no window has loaded,
+   * so it cannot be read the way the working line reads it; applying the same
+   * rule entry by entry (`turns.ts`) is what keeps the two counting from the
+   * same moment.
+   */
+  const turnStarts = new Map<string, string>()
+
+  function noteTurn(chatId: string, entry: ChatEntry): void {
+    const start = nextTurnStart(turnStarts.get(chatId) ?? null, entry)
+    if (start === null) turnStarts.delete(chatId)
+    else turnStarts.set(chatId, start)
+  }
+
   function record(chat: Chat, entry: ChatEntry): void {
+    noteTurn(chat.id, entry)
     const append = async (): Promise<void> => {
       // A closing session goes on emitting for a moment after its workspace was
       // removed. Without this a late event would write the transcript back
@@ -2402,7 +2440,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
     })).then(() => {
       if (!changed) return
-      for (const listener of chatStatusListeners) listener({ chatId, workspaceId, status })
+      const turnStartedAt = turnStarts.get(chatId) ?? null
+      for (const listener of chatStatusListeners) {
+        listener({ chatId, workspaceId, status, turnStartedAt })
+      }
     })
   }
 
@@ -4717,6 +4758,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return listening(requireWorkspace(workspaceId).port)
     },
 
+    measureResources(rootPid, terminals) {
+      const workspaces = state.workspaces.map(({ id, path }) => ({ id, path }))
+      return readResources({ rootPid, terminals, workspaces }, processExec)
+    },
+
     async ensureWorkspacePort(workspaceId) {
       return settlingOneAtATime(async () => {
         // Read inside the chain, not outside it: the whole point is that this
@@ -5113,7 +5159,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
       const counts = await countChanges(stored, await baseRefOf(project), makeExec)
 
-      return reconcile(stored, worktrees, counts, state.chats.filter(isOpenChat))
+      return reconcile(stored, worktrees, counts, state.chats.filter(isOpenChat), turnStarts)
     },
 
     async createWorkspaceIn(projectId) {
@@ -5743,11 +5789,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // rewind mark on it would be a promise nothing could keep.
       const messageId = randomUUID()
       const reachesAgent = !isUsageCommand(text, chat.knownCommands)
-      await appendEntry(
-        chatId,
-        { role: 'user', at: now(), text, ...(reachesAgent && { uuid: messageId }) },
-        dataRoot
-      )
+      const prompt: ChatEntry = {
+        role: 'user',
+        at: now(),
+        text,
+        ...(reachesAgent && { uuid: messageId })
+      }
+      await appendEntry(chatId, prompt, dataRoot)
+      noteTurn(chatId, prompt)
 
       /*
        * The record is what the session runs under, re-asserted rather than

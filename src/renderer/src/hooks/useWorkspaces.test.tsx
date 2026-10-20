@@ -95,12 +95,13 @@ const emitChatStatus = (event: {
   chatId: string
   workspaceId: string
   status: 'idle' | 'running' | 'waiting_permission' | 'error'
+  turnStartedAt?: string | null
 }): void => {
   const handlers = vi.mocked(window.octopus.chats.onStatus).mock.calls.map(([handler]) => handler)
   refuseSilence(handlers.length, 'chats.onStatus')
 
   act(() => {
-    for (const handler of handlers) handler(event)
+    for (const handler of handlers) handler({ turnStartedAt: null, ...event })
   })
 }
 
@@ -170,14 +171,16 @@ describe('useWorkspaces', () => {
           agent: 'claude' as const,
           title: null,
           status: 'idle' as const,
-          started: true
+          started: true,
+          turnStartedAt: null
         },
         {
           id: 'chat-2',
           agent: 'claude' as const,
           title: null,
           status: 'idle' as const,
-          started: true
+          started: true,
+          turnStartedAt: null
         }
       ]
     })
@@ -192,6 +195,33 @@ describe('useWorkspaces', () => {
     emitChatStatus({ chatId: 'chat-2', workspaceId: busy.id, status: 'running' })
 
     expect(result.current.flat[0]?.chats.map((item) => item.status)).toEqual(['idle', 'running'])
+  })
+
+  // The strip knows its tabs and not when a turn began, which only the core
+  // says; handing the list down must not wipe the start the core sent.
+  it('keeps when a turn began across a list handed down by the pane', async () => {
+    workspacesPerProject({ planner: [anna] })
+    const projects = [planner]
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toHaveLength(1)
+    })
+    const tab = { id: 'chat-1', agent: 'claude', title: null, started: true } as const
+
+    act(() => {
+      result.current.setChats(anna.id, [{ ...tab, status: 'idle' }])
+    })
+    emitChatStatus({
+      chatId: 'chat-1',
+      workspaceId: anna.id,
+      status: 'running',
+      turnStartedAt: '2026-10-20T09:00:00.000Z'
+    })
+    act(() => {
+      result.current.setChats(anna.id, [{ ...tab, status: 'running' }])
+    })
+
+    expect(result.current.flat[0]?.chats[0]?.turnStartedAt).toBe('2026-10-20T09:00:00.000Z')
   })
 
   // Pushed by the strip that opened it, rather than re-read: `workspaces.list`
@@ -213,7 +243,14 @@ describe('useWorkspaces', () => {
     })
 
     expect(result.current.flat[0]?.chats).toEqual([
-      { id: 'chat-1', agent: 'claude', title: null, status: 'running', started: true }
+      {
+        id: 'chat-1',
+        agent: 'claude',
+        title: null,
+        status: 'running',
+        started: true,
+        turnStartedAt: null
+      }
     ])
   })
 

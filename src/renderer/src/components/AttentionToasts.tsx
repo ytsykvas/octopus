@@ -63,7 +63,7 @@ export function AttentionToasts({
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-80 flex-col gap-2"
+      className="pointer-events-none fixed right-4 bottom-[calc(1rem+var(--status-bar-height,0px))] z-50 flex w-80 flex-col gap-2"
     >
       {toasts.map((notice) => {
         const project = projects.find((candidate) => candidate.id === notice.projectId)

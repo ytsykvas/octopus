@@ -95,14 +95,15 @@ export function refuseSilence(handlers: number, channel: string): void {
 export function emitChatStatus(
   chatId: string,
   status: ChatStatus,
-  workspaceId = 'planner/anna'
+  workspaceId = 'planner/anna',
+  turnStartedAt: string | null = null
 ): void {
   const handlers = vi.mocked(octopus().chats.onStatus).mock.calls.map(([handler]) => handler)
   refuseSilence(handlers.length, 'chats.onStatus')
 
   act(() => {
     for (const handler of handlers) {
-      handler({ chatId, workspaceId, status })
+      handler({ chatId, workspaceId, status, turnStartedAt })
     }
   })
 }

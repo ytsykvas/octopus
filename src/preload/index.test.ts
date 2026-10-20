@@ -77,6 +77,7 @@ describe('the exposed bridge', () => {
       'library',
       'plugins',
       'projects',
+      'resources',
       'settings',
       'skills',
       'terminal',
@@ -231,6 +232,7 @@ describe('channel names', () => {
       () => method('projects', 'removeEnv')('p' as never, 'n' as never),
       'env:remove'
     ],
+    ['resources.read', () => method('resources', 'read')(), 'resources:read'],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
     [
       'workspaces.serving',

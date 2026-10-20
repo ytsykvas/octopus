@@ -1205,6 +1205,14 @@ describe('reading one request in full', () => {
   })
 })
 
+/** What `gh pr list` sends about review and merge, for a request with nothing in the way. */
+const REVIEW_FIELDS = {
+  isDraft: false,
+  mergeable: 'MERGEABLE',
+  mergeStateStatus: 'CLEAN',
+  reviewDecision: ''
+}
+
 describe('every branch of a project at once', () => {
   const LIST = JSON.stringify([
     {
@@ -1212,7 +1220,8 @@ describe('every branch of a project at once', () => {
       number: 7,
       state: 'OPEN',
       url: 'https://github.com/o/p/pull/7',
-      statusCheckRollup: []
+      statusCheckRollup: [],
+      ...REVIEW_FIELDS
     }
   ])
 
@@ -1232,7 +1241,11 @@ describe('every branch of a project at once', () => {
         number: 7,
         state: 'open',
         checks: 'none',
-        url: 'https://github.com/o/p/pull/7'
+        url: 'https://github.com/o/p/pull/7',
+        draft: false,
+        decision: null,
+        mergeable: 'mergeable',
+        mergeState: 'clean'
       }
     ])
 
@@ -1313,8 +1326,20 @@ describe('whether the branch list was all of them', () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh({
       list: JSON.stringify([
-        { headRefName: branch, number: 7, state: 'OPEN', url: 'https://e.test/7' },
-        { headRefName: 'other', number: 8, state: 'OPEN', url: 'https://e.test/8' }
+        {
+          headRefName: branch,
+          number: 7,
+          state: 'OPEN',
+          url: 'https://e.test/7',
+          ...REVIEW_FIELDS
+        },
+        {
+          headRefName: 'other',
+          number: 8,
+          state: 'OPEN',
+          url: 'https://e.test/8',
+          ...REVIEW_FIELDS
+        }
       ])
     })
 
@@ -1325,7 +1350,7 @@ describe('whether the branch list was all of them', () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh({
       list: JSON.stringify([
-        { headRefName: branch, number: 7, state: 'OPEN', url: 'https://e.test/7' }
+        { headRefName: branch, number: 7, state: 'OPEN', url: 'https://e.test/7', ...REVIEW_FIELDS }
       ])
     })
 
@@ -1343,8 +1368,8 @@ describe('whether the branch list was all of them', () => {
   it('counts what GitHub answered, not what came through the filtering', async () => {
     const { gh } = fakeGh({
       list: JSON.stringify([
-        { headRefName: 'a', number: 7, state: 'OPEN', url: 'https://e.test/7' },
-        { headRefName: 'a', number: 8, state: 'CLOSED', url: 'https://e.test/8' }
+        { headRefName: 'a', number: 7, state: 'OPEN', url: 'https://e.test/7', ...REVIEW_FIELDS },
+        { headRefName: 'a', number: 8, state: 'CLOSED', url: 'https://e.test/8', ...REVIEW_FIELDS }
       ])
     })
 
