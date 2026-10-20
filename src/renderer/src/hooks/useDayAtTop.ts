@@ -1,5 +1,7 @@
 import { type RefObject, useCallback, useState } from 'react'
 
+import { placedMarkers } from './markers.js'
+
 /** Where a day separator sits, as `useDayAtTop` reads it off the page. */
 export interface DayMarker {
   /** The separator's `data-day`; absent only on an element that is not one. */
@@ -47,9 +49,9 @@ export function useDayAtTop(scroller: RefObject<HTMLElement | null>): {
     const element = scroller.current
     if (!element) return
 
-    const markers = [...element.querySelectorAll<HTMLElement>('[data-day]')].map((marker) => ({
+    const markers = placedMarkers(element, '[data-day]').map(({ element: marker, top }) => ({
       day: marker.dataset.day,
-      top: marker.getBoundingClientRect().top
+      top
     }))
     setDay(dayAtTop(markers, element.getBoundingClientRect().top))
   }, [scroller])

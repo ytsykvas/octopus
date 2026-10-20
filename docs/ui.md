@@ -370,7 +370,14 @@ memory only: a log reopened fully expanded would mount every diff in it at once.
 A dialog that is open keeps ⌘O, and a conversation behind a file does not hear
 it.
 
-That button sits at the log's top-left, clear of the day chip in the middle.
+That button sits at the log's top-left, clear of the day chip in the middle. The
+top-right holds two more, **↑ and ↓, which step between the user's own
+messages** (`useMessageSteps`, reading the `data-user-message` mark on each):
+up is the last one above the top of the screen, down the first below it, and
+either lands just under the floating row. Instant rather than smooth, so a
+second press measures from where the first landed. Each is disabled when there
+is nowhere to go — down also once the log has reached its end, since the last
+messages can never scroll up to the top.
 
 **The log opens at its end and keeps to it** while the reader is there. Two
 things used to undo that. A hidden tab is `display:none`, and hiding it resets

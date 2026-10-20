@@ -1250,6 +1250,8 @@ export const en = {
     expandAll: 'Show every step (⌘O)',
     collapseAll: 'Fold every step (⌘O)',
     jumpToEnd: 'Jump to the latest message',
+    previousMessage: 'Previous message you sent',
+    nextMessage: 'Next message you sent',
     workingElapsed: 'Working… {{elapsed}}',
 
     /* Where the `+1 −1` normally sits, for an edit that replaced its text

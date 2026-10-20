@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronsDownUp, ChevronsUpDown, CloudDownload } from 'lucide-react'
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, ChevronUp, CloudDownload } from 'lucide-react'
 
 import {
   type Chat,
@@ -30,6 +30,7 @@ import { useAgents } from '../../hooks/useAgents.js'
 import { useCommands } from '../../hooks/useCommands.js'
 import { useEnvProfiles } from '../../hooks/useEnvProfiles.js'
 import { useDayAtTop } from '../../hooks/useDayAtTop.js'
+import { useMessageSteps } from '../../hooks/useMessageSteps.js'
 import { useModels } from '../../hooks/useModels.js'
 import { useRateLimit } from '../../hooks/useRateLimit.js'
 import { useRewindChoice } from '../../hooks/useRewindChoice.js'
@@ -369,6 +370,14 @@ export function ChatSession({
   // More than a screen above the end: where the way back down is worth a button.
   const [farFromEnd, setFarFromEnd] = useState(false)
   const dayAtTop = useDayAtTop(scroller)
+  const steps = useMessageSteps(scroller)
+  // Everything floating over the log that is read off where it has scrolled to.
+  const { update: updateDayAtTop } = dayAtTop
+  const { update: updateSteps } = steps
+  const measure = useCallback(() => {
+    updateDayAtTop()
+    updateSteps()
+  }, [updateDayAtTop, updateSteps])
 
   // Answered here rather than in the log because this is where the pending
   // request and the composer's mode meet — the plan's approval decides what the
@@ -476,10 +485,9 @@ export function ChatSession({
 
   // Read again whenever the log can have moved under a still scroller: a turn
   // landing, or the tab coming back. Hidden, there is nothing to measure.
-  const { update: updateDayAtTop } = dayAtTop
   useEffect(() => {
-    if (visible) updateDayAtTop()
-  }, [visible, chat.entries, updateDayAtTop])
+    if (visible) measure()
+  }, [visible, chat.entries, measure])
 
   return (
     <AgentsContext.Provider value={agentTasks}>
@@ -505,7 +513,7 @@ export function ChatSession({
               // "at the bottom" is rarely exactly zero.
               pinnedToBottom.current = distance < 40
               setFarFromEnd(distance > element.clientHeight)
-              dayAtTop.update()
+              measure()
             }}
             // Never sideways: wide content (code, tables, diffs) scrolls inside its own box.
             className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
@@ -520,24 +528,42 @@ export function ChatSession({
                 <DayChip day={dayAtTop.day} floating />
               </div>
             )}
-            {/* "Show every step", in the same floating arrangement as the day: it
-            stays in reach however far up the log has been read. */}
+            {/* "Show every step" at the left and the steps between the user's own
+            messages at the right, in the same floating arrangement as the day:
+            they stay in reach however far up the log has been read. */}
             {chat.entries.length > 0 && (
-              <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-start overflow-visible px-3">
-                <button
-                  type="button"
-                  aria-pressed={expansion.all}
+              <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-between overflow-visible px-3">
+                <FloatingButton
+                  label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
+                  pressed={expansion.all}
                   onClick={toggleExpansion}
-                  title={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
-                  aria-label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
-                  className="border-line bg-surface text-ink-faint hover:text-ink focus-ring pointer-events-auto flex size-7 items-center justify-center rounded-[var(--radius-control)] border transition-colors"
                 >
                   {expansion.all ? (
                     <ChevronsDownUp aria-hidden size={14} />
                   ) : (
                     <ChevronsUpDown aria-hidden size={14} />
                   )}
-                </button>
+                </FloatingButton>
+                <div className="flex gap-1">
+                  <FloatingButton
+                    label={t('chat.previousMessage')}
+                    disabled={!steps.canUp}
+                    onClick={() => {
+                      steps.step('up')
+                    }}
+                  >
+                    <ChevronUp aria-hidden size={14} />
+                  </FloatingButton>
+                  <FloatingButton
+                    label={t('chat.nextMessage')}
+                    disabled={!steps.canDown}
+                    onClick={() => {
+                      steps.step('down')
+                    }}
+                  >
+                    <ChevronDown aria-hidden size={14} />
+                  </FloatingButton>
+                </div>
               </div>
             )}
             {/* Streaming counts as content even before the first entry lands:
@@ -790,5 +816,35 @@ export function ChatSession({
         </div>
       </AgentLogContext.Provider>
     </AgentsContext.Provider>
+  )
+}
+
+/** A quiet square button floating over the log, clickable through its row. */
+function FloatingButton({
+  label,
+  onClick,
+  pressed,
+  disabled = false,
+  children
+}: {
+  readonly label: string
+  readonly onClick: () => void
+  /** Set only on a toggle; a plain action has no pressed state to announce. */
+  readonly pressed?: boolean
+  readonly disabled?: boolean
+  readonly children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className="border-line bg-surface text-ink-faint hover:text-ink focus-ring pointer-events-auto flex size-7 items-center justify-center rounded-[var(--radius-control)] border transition-colors disabled:pointer-events-none disabled:opacity-40"
+    >
+      {children}
+    </button>
   )
 }

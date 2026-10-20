@@ -11,6 +11,7 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { Result } from '../../../../preload/index.js'
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
+import { STEP_MARGIN } from '../../hooks/useMessageSteps.js'
 import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
@@ -773,16 +774,24 @@ describe('following the conversation', () => {
   })
 })
 
+/** Pins where the log and the marks inside it sit, as layout would. */
+function placeMarks(
+  log: HTMLElement,
+  selector: string,
+  topOf: (mark: HTMLElement, index: number) => number | undefined
+): void {
+  log.getBoundingClientRect = () => ({ top: 0 }) as DOMRect
+  // A scroll with no height is a hidden tab's, and is not read.
+  Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
+  for (const [index, mark] of [...log.querySelectorAll<HTMLElement>(selector)].entries()) {
+    // Read on every call, so a mark can follow the log as it scrolls.
+    mark.getBoundingClientRect = () => ({ top: topOf(mark, index) }) as DOMRect
+  }
+}
+
 describe('the day on screen', () => {
-  /** Pins where the log and each day's separator sit, as layout would. */
   function place(log: HTMLElement, tops: Record<string, number>): void {
-    log.getBoundingClientRect = () => ({ top: 0 }) as DOMRect
-    // A scroll with no height is a hidden tab's, and is not read.
-    Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
-    for (const separator of log.querySelectorAll<HTMLElement>('[data-day]')) {
-      const top = tops[separator.dataset.day ?? '']
-      separator.getBoundingClientRect = () => ({ top }) as DOMRect
-    }
+    placeMarks(log, '[data-day]', (separator) => tops[separator.dataset.day ?? ''])
   }
 
   // Telegram's floating date: once a day's own separator has gone off the
@@ -831,6 +840,87 @@ describe('the day on screen', () => {
 
     await screen.findByText('still here')
     expect(screen.getAllByText('4 March 2025')).toHaveLength(2)
+  })
+})
+
+describe("stepping between the user's messages", () => {
+  /*
+   * Three messages in a 2000px log, the last too near its end ever to reach
+   * the top, read from `scrollTop` the way layout would: a message's top on
+   * screen is its place in the log less how far the log has scrolled.
+   */
+  async function openThree(): Promise<HTMLElement> {
+    givenChat([
+      { role: 'user', at: '2025-03-02T09:00:00.000Z', text: 'one' },
+      { role: 'user', at: '2025-03-02T09:01:00.000Z', text: 'two' },
+      { role: 'user', at: '2025-03-02T09:02:00.000Z', text: 'three' }
+    ])
+    await openLoadedChat()
+    await screen.findByText('three')
+
+    const log = screen.getByRole('log')
+    Object.defineProperty(log, 'scrollHeight', { value: 2000, configurable: true })
+    const places = [100, 600, 1900]
+    placeMarks(log, '[data-user-message]', (_, index) => (places[index] ?? 0) - log.scrollTop)
+    return log
+  }
+
+  const up = (): HTMLElement => screen.getByRole('button', { name: 'Previous message you sent' })
+  const down = (): HTMLElement => screen.getByRole('button', { name: 'Next message you sent' })
+
+  /** Scrolls the log as the reader would, and lets the buttons read it. */
+  function scrollTo(log: HTMLElement, top: number): void {
+    log.scrollTop = top
+    fireEvent.scroll(log)
+  }
+
+  // From the middle of the second message's answer, up is the message that
+  // asked for it and down the one that followed — each landing just under the
+  // floating row.
+  it('lands on the message above and the message below', async () => {
+    const user = userEvent.setup()
+    const log = await openThree()
+    scrollTo(log, 300)
+
+    await user.click(up())
+    expect(log.scrollTop).toBe(100 - STEP_MARGIN)
+
+    scrollTo(log, 300)
+    await user.click(down())
+    expect(log.scrollTop).toBe(600 - STEP_MARGIN)
+  })
+
+  // The message just stepped to is on the line; the next press moves on.
+  it('moves on from the message it just landed on', async () => {
+    const user = userEvent.setup()
+    const log = await openThree()
+    scrollTo(log, 600 - STEP_MARGIN)
+
+    await user.click(up())
+    expect(log.scrollTop).toBe(100 - STEP_MARGIN)
+  })
+
+  it('offers no step past the first message or past the end of the log', async () => {
+    const log = await openThree()
+
+    scrollTo(log, 0)
+    expect(up()).toBeDisabled()
+    expect(down()).toBeEnabled()
+
+    // The last message is still below the line, but the log has ended.
+    scrollTo(log, 1700)
+    expect(up()).toBeEnabled()
+    expect(down()).toBeDisabled()
+  })
+
+  it('offers no step in a conversation with nothing the user wrote', async () => {
+    givenChat()
+    await openLoadedChat()
+    emitAgentEvent({ type: 'text', text: 'hello' })
+    await screen.findByText('hello')
+
+    expect(up()).toBeDisabled()
+    expect(down()).toBeDisabled()
   })
 })
 
