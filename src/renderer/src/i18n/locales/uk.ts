@@ -666,6 +666,8 @@ export const uk: Translation = {
     publishStaleCount_few: '{{count}} файли у пул-реквесті застаріли',
     publishStaleCount_many: '{{count}} файлів у пул-реквесті застаріли',
     publishStaleCount_other: '{{count}} файлів у пул-реквесті застаріли',
+    publishStaleHint:
+      'Версія на GitHub застаріла: у пул-реквесті лежить старіша версія цих файлів, ніж у вас локально. Запуште, щоб її оновити.',
     publishCount: '{{count}} {{state}}',
     push: 'Запушити',
     pushing: 'Пушимо…',

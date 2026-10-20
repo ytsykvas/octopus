@@ -855,6 +855,8 @@ export const en = {
     publishStaleCount_few: '{{count}} files are out of date in the request',
     publishStaleCount_many: '{{count}} files are out of date in the request',
     publishStaleCount_other: '{{count}} files are out of date in the request',
+    publishStaleHint:
+      'The version on GitHub is out of date: the pull request still holds an older version of these files than you have here. Push to bring it up to date.',
     publishCount: '{{count}} {{state}}',
     push: 'Push',
     pushing: 'Pushing…',

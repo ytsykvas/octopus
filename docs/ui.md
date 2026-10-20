@@ -2840,7 +2840,8 @@ which is what makes it the legend for the rows rather than a second vocabulary.
 It is meant to fit one line, so everything else on it is short: a red cloud with
 the number of files out of date in the request, a faint "not on GitHub" when the
 branch has no copy there, and **Push**, offered only where there is a commit to
-send, with how many in its tooltip. The full sentences are the tooltips. Pushing publishes nothing uncommitted, and a
+send, with how many in its tooltip. The full sentences are the tooltips; the
+cloud's also says what being out of date means and that pushing settles it. Pushing publishes nothing uncommitted, and a
 button here that committed on the reader's behalf would be choosing a commit
 message for them; that decision belongs to the pull request tab, which has a
 field for it. The counts are taken over the whole branch and not over what a
