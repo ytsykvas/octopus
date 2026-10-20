@@ -54,10 +54,10 @@ function ansiQuoted(text: string, from: number): { value: string; end: number } 
       continue
     }
     const escape =
-      /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|(.))/su.exec(
+      /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c(.)|(.))/su.exec(
         text.slice(at + 1)
       )
-    const [whole = '', hex, unicode, wide, octal, single = ''] = escape ?? []
+    const [whole = '', hex, unicode, wide, octal, control, single = ''] = escape ?? []
     const code = hex ?? unicode ?? wide
     const point =
       code !== undefined
@@ -65,7 +65,10 @@ function ansiQuoted(text: string, from: number): { value: string; end: number } 
         : octal !== undefined
           ? // One byte, as bash keeps it: `\567` is `w`.
             Number.parseInt(octal, 8) & 0xff
-          : null
+          : control !== undefined
+            ? // `\cX` is control-X; `\c@` is a NUL.
+              control.toUpperCase().charCodeAt(0) & 0x1f
+            : null
     // The shell's string ends at a NUL — what follows never reaches the command —
     // though the quote that closes it is still found past escapes.
     if (point === 0) ended = true

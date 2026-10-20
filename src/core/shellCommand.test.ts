@@ -49,6 +49,7 @@ describe('parseCommand', () => {
     expect(words(`$'gh\\0 ignored' $'g\\x00h' $'\\547h' $'gh\\0\\'x' pr`)).toEqual([
       ['gh', 'g', 'gh', 'gh', 'pr']
     ])
+    expect(words(`$'gi\\c@t' $'a\\cAb' $'\\c?'`)).toEqual([['gi', 'a\u0001b', '\u001f']])
   })
 
   it('runs an unterminated quote to the end', () => {

@@ -164,17 +164,20 @@ function gitTampers(options: readonly string[], command: string, args: readonly 
 
   // Left to right, so an option's value is consumed and never read as anything else.
   const positional: string[] = []
+  const flags: string[] = []
   let value = false
   for (const arg of args) {
     if (value) value = false
     else if (CONFIG_VALUE_OPTIONS.has(arg)) value = true
-    else if (!arg.startsWith('-')) positional.push(arg)
+    else if (arg.startsWith('-')) flags.push(arg)
+    else positional.push(arg)
   }
+  // From the flags left after the scan: `--file --get` names a file called `--get`.
   const reads =
-    args.some((arg) => /^(?:--get.*|--list|-l)$/u.test(arg)) ||
+    flags.some((flag) => /^(?:--get.*|--list|-l)$/u.test(flag)) ||
     positional[0] === 'get' ||
     positional[0] === 'list' ||
-    (positional.length === 1 && !args.some((arg) => /^--(?:unset|add|replace)/u.test(arg)))
+    (positional.length === 1 && !flags.some((flag) => /^--(?:unset|add|replace)/u.test(flag)))
   // Any word shaped like a refused key: which word git takes for the key is
   // what a reading of the options would have to get right, and need not.
   return !reads && args.some((arg) => TAMPERED_KEY.test(arg))
