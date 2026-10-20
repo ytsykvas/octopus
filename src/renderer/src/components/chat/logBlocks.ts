@@ -228,19 +228,6 @@ export function buildBlocks(entries: readonly ChatEntry[]): LogBlock[] {
 }
 
 /**
- * When the turn under way began: the first entry after the last turn closed.
- *
- * What the working line counts from. Null when nothing has been said since —
- * the line then shows without a time rather than counting from nowhere.
- */
-export function turnStartedAt(entries: readonly ChatEntry[]): string | null {
-  const closed = entries.findLastIndex(
-    (entry) => entry.role === 'agent' && entry.event.type === 'result'
-  )
-  return entries[closed + 1]?.at ?? null
-}
-
-/**
  * The wire ids the agent has taken back.
  *
  * Gathered rather than applied by filtering. The log only grows between rewinds

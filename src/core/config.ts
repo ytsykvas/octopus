@@ -272,6 +272,15 @@ export const ConfigSchema = z.object({
   rightPanelOpen: z.boolean().default(true),
 
   /**
+   * Whether the status bar along the foot of the window is showing.
+   *
+   * Kept for the reason the right pane's fold is. Folding it away also stops
+   * the reading behind it, so it is the switch for somebody who would rather
+   * the app did not run `ps` every ten seconds.
+   */
+  statusBarOpen: z.boolean().default(true),
+
+  /**
    * Whether a notice is announced with a sound as well as drawn.
    *
    * On by default: the notice is for work happening out of sight, and a sound
@@ -298,9 +307,9 @@ export const ConfigSchema = z.object({
    * reader changes most often. Somebody who works with the server log open got
    * Changes back on every launch.
    *
-   * Whether the pane is folded away is deliberately **not** stored — that is a
-   * mood about the current window, and `App` keeps it. This says what is behind
-   * the tab strip when there is one, not whether there is one.
+   * Whether the pane is folded away is the other field, `rightPanelOpen`: this
+   * says what is behind the tab strip when there is one, not whether there is
+   * one.
    */
   rightPanelTab: StoredRightPanelTabSchema,
 
@@ -406,6 +415,7 @@ export function createDefaultConfig(
     cloneDirectory: '',
     rightPanelWidth: 360,
     rightPanelOpen: true,
+    statusBarOpen: true,
     notificationSound: true,
     diffView: 'unified',
     rightPanelTab: 'diff',

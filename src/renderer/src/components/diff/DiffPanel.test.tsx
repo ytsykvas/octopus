@@ -1729,7 +1729,8 @@ const chat = (id: string, title: string | null = null): WorkspaceChat => ({
   agent: 'claude',
   title,
   status: 'idle',
-  started: true
+  started: true,
+  turnStartedAt: null
 })
 
 describe('who wrote which file', () => {

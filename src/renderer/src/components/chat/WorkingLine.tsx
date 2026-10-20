@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useNow } from '../../hooks/useNow.js'
 import { formatDuration } from './format.js'
 
 /**
@@ -16,16 +16,7 @@ import { formatDuration } from './format.js'
  */
 export function WorkingLine({ since }: { readonly since: string | null }): React.JSX.Element {
   const { t } = useTranslation()
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setNow(Date.now())
-    }, 1000)
-    return () => {
-      clearInterval(tick)
-    }
-  }, [])
+  const now = useNow()
 
   const started = since === null ? Number.NaN : Date.parse(since)
   const label = Number.isNaN(started)

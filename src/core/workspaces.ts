@@ -125,6 +125,13 @@ export interface WorkspaceChat {
    * session id is written the moment the agent answers and kept afterwards.
    */
   readonly started: boolean
+  /**
+   * When the turn under way began, or null between turns.
+   *
+   * Live, like the rest of the view: it is kept in memory by the service and
+   * never stored, so a restart forgets a turn that the restart ended anyway.
+   */
+  readonly turnStartedAt: string | null
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -600,7 +607,9 @@ export function reconcile(
    * list, and pre-grouping it would be a second shape to keep in step for a
    * handful of records.
    */
-  chats: readonly Chat[] = []
+  chats: readonly Chat[] = [],
+  /** When each conversation's turn under way began, which only the service knows. */
+  turnStarts: ReadonlyMap<string, string> = new Map()
 ): WorkspaceView[] {
   const conversations = (workspace: Workspace): WorkspaceChat[] =>
     chats
@@ -610,7 +619,8 @@ export function reconcile(
         agent: chat.agent,
         title: chat.title,
         status: chat.status,
-        started: chat.sessionId !== null
+        started: chat.sessionId !== null,
+        turnStartedAt: turnStarts.get(chat.id) ?? null
       }))
 
   // `null` means git could not be asked — the repository was moved, renamed or

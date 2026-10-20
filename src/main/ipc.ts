@@ -50,6 +50,7 @@ import {
 import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import { QuestionAnswerSchema } from '../core/questions.js'
 import { RepoItemIdsSchema } from '../core/repoConfig.js'
+import { terminalOwners } from '../core/resources.js'
 import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
@@ -478,6 +479,12 @@ export function registerIpc(
         name === null ? null : ProfileNameSchema.parse(name)
       )
     )
+  )
+
+  // The terminals are this process's to name, the workspaces the service's;
+  // the main pid is the root, so the whole tree is the application's.
+  host.handle('resources:read', () =>
+    attempt(() => service.measureResources(process.pid, terminalOwners(terminals.leaders())))
   )
 
   // Keyed by workspace rather than taking a port: a port from the renderer is a

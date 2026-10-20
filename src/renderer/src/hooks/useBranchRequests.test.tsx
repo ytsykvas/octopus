@@ -20,6 +20,10 @@ const request = (overrides: Partial<BranchRequest> = {}): BranchRequest => ({
   state: 'open',
   checks: 'passed',
   url: 'https://github.com/o/p/pull/812',
+  draft: false,
+  decision: null,
+  mergeable: 'mergeable',
+  mergeState: 'clean',
   ...overrides
 })
 
@@ -296,4 +300,68 @@ describe('whether anything has answered yet', () => {
 
     expect(result.current.answered).toBe(false)
   })
+})
+
+describe('the other projects the status bar counts', () => {
+  it('asks about each of them and keeps their answers apart', async () => {
+    vi.mocked(octopus().projects.pullRequests).mockImplementation((id) =>
+      Promise.resolve({
+        ok: true,
+        value: { requests: [request({ number: id === PLANNER ? 1 : 2 })], capped: false }
+      })
+    )
+    const { result } = renderHook(() => useBranchRequests(PLANNER, ['ledger']))
+
+    await waitFor(() => {
+      expect(result.current.byProject.size).toBe(2)
+    })
+    expect(result.current.byProject.get('ledger')?.get('ytsykvas/anna')?.number).toBe(2)
+    expect(result.current.byBranch.get('ytsykvas/anna')?.number).toBe(1)
+  })
+
+  // On the open project's clock, not a second one: two pollers would ask `gh`
+  // about the open project twice a minute.
+  it('asks about the open project once even when it is also watched', async () => {
+    answer(request())
+    renderHook(() => useBranchRequests(PLANNER, [PLANNER]))
+
+    await waitFor(() => {
+      expect(octopus().projects.pullRequests).toHaveBeenCalledExactlyOnceWith(PLANNER)
+    })
+  })
+
+  // The caller builds the list every render; the same projects in a fresh
+  // array must not start every read over.
+  it('does not start over for the same projects in a fresh list', async () => {
+    answer(request())
+    const { rerender } = renderHook(({ also }) => useBranchRequests(null, also), {
+      initialProps: { also: ['ledger'] }
+    })
+    await waitFor(() => {
+      expect(octopus().projects.pullRequests).toHaveBeenCalledOnce()
+    })
+
+    rerender({ also: ['ledger'] })
+
+    expect(octopus().projects.pullRequests).toHaveBeenCalledOnce()
+  })
+})
+
+// Folding the status bar takes the other projects off the clock; one left
+// ticking would go on asking `gh` about a project nothing is showing.
+it('stops asking about a project once it is no longer watched', async () => {
+  vi.useFakeTimers()
+  answer(request())
+  const { rerender } = renderHook(({ also }) => useBranchRequests(PLANNER, also), {
+    initialProps: { also: ['ledger'] as readonly string[] }
+  })
+  await act(() => vi.advanceTimersByTimeAsync(0))
+
+  rerender({ also: [] })
+  vi.mocked(octopus().projects.pullRequests).mockClear()
+  await act(() => vi.advanceTimersByTimeAsync(130_000))
+
+  const asked = vi.mocked(octopus().projects.pullRequests).mock.calls.map(([id]) => id)
+  expect(asked).not.toContain('ledger')
+  expect(asked).toContain(PLANNER)
 })

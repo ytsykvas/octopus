@@ -202,6 +202,16 @@ export class TerminalManager {
     return [...this.sessions].map(([id, session]) => ({ id, owner: session.owner }))
   }
 
+  /**
+   * Each session's process group leader and whose it is.
+   *
+   * What the resource reading charges a subtree by: the pid is only known
+   * here, because this is what spawned it.
+   */
+  leaders(): { pid: number; owner: TerminalOwner }[] {
+    return [...this.sessions.values()].map(({ pty, owner }) => ({ pid: pty.pid, owner }))
+  }
+
   get size(): number {
     return this.sessions.size
   }
