@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { chat } from '../../test/chat.js'
 import type { ChatTab, ChatTabsController } from '../../hooks/useChatTabs.js'
@@ -30,6 +30,7 @@ function controller(overrides: Partial<ChatTabsController> = {}): ChatTabsContro
     canCreate: true,
     create: vi.fn(() => Promise.resolve()),
     fork: vi.fn(() => Promise.resolve()),
+    copyTranscript: vi.fn(() => Promise.resolve(true)),
     close: vi.fn(() => Promise.resolve()),
     history: [],
     refreshHistory: vi.fn(() => Promise.resolve()),
@@ -246,6 +247,29 @@ describe('what a tab’s menu offers', () => {
     expect(tabs.fork).toHaveBeenCalledWith('chat-1')
   })
 
+  it('copies the conversation under the name the tab shows', async () => {
+    const user = userEvent.setup()
+    const tabs = controller()
+    render(<ChatTabs tabs={tabs} />)
+
+    await openMenu()
+    await user.click(screen.getByRole('menuitem', { name: /Copy transcript/ }))
+
+    expect(tabs.copyTranscript).toHaveBeenCalledWith('chat-1', 'Claude 1')
+  })
+
+  it('does not offer to copy a conversation that has not started', async () => {
+    render(
+      <ChatTabs
+        tabs={controller({ tabs: [tab({ started: false }), tab({ key: 'b', id: 'b' })] })}
+      />
+    )
+
+    await openMenu()
+
+    expect(screen.queryByRole('menuitem', { name: /Copy transcript/ })).not.toBeInTheDocument()
+  })
+
   it('closes it', async () => {
     const user = userEvent.setup()
     const tabs = controller({ tabs: [tab(), tab({ key: 'chat-2', id: 'chat-2' })] })
@@ -380,5 +404,39 @@ describe('the history of closed conversations', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Nothing closed yet' }))
 
     expect(refreshHistory).toHaveBeenCalledOnce()
+  })
+})
+
+describe('what the strip says once a transcript is copied', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function copy(copied: boolean): Promise<void> {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    render(<ChatTabs tabs={controller({ copyTranscript: vi.fn(() => Promise.resolve(copied)) })} />)
+
+    await user.click(screen.getByRole('button', { name: 'Claude 1' }))
+    await user.click(screen.getByRole('menuitem', { name: /Copy transcript/ }))
+  }
+
+  it('confirms it, aloud as well, and then goes back to being a menu', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await copy(true)
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Copied')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100)
+    })
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('says it failed when the copy did not happen', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await copy(false)
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Copy failed')
   })
 })

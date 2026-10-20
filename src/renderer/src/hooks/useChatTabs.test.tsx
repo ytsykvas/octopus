@@ -961,6 +961,88 @@ describe('continuing a conversation in a new tab', () => {
   })
 })
 
+describe('copying a conversation to brief another', () => {
+  const AT = '2026-08-11T09:00:00.000Z'
+
+  /** A clipboard to watch; jsdom ships none. */
+  function withClipboard(writeText: () => Promise<void>): void {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+  }
+
+  async function opened(onError = vi.fn()): Promise<ReturnType<typeof open>> {
+    givenChats([chat({ sessionId: 'sess-1' })])
+    const shown = open({ onError })
+    await waitFor(() => {
+      expect(shown.result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    return shown
+  }
+
+  it('puts the conversation, under its name, on the clipboard', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    withClipboard(writeText)
+    const { result } = await opened()
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: [{ role: 'user', at: AT, text: 'add a test' }]
+    })
+
+    let copied = false
+    await act(async () => {
+      copied = await result.current.copyTranscript('chat-1', 'Claude 1')
+    })
+
+    expect(copied).toBe(true)
+    expect(octopus().chats.history).toHaveBeenCalledWith('chat-1')
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('# Earlier conversation: Claude 1')
+    )
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('add a test'))
+  })
+
+  it('clears a message left by an earlier failure before it tries', async () => {
+    withClipboard(vi.fn(() => Promise.resolve()))
+    const onError = vi.fn()
+    const { result } = await opened(onError)
+
+    await act(async () => {
+      await result.current.copyTranscript('chat-1', 'Claude 1')
+    })
+
+    expect(onError).toHaveBeenCalledWith(null)
+  })
+
+  it('says so, and copies nothing, when the history cannot be read', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    withClipboard(writeText)
+    const onError = vi.fn()
+    const { result } = await opened(onError)
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: false, error: 'disk on fire' })
+
+    let copied = true
+    await act(async () => {
+      copied = await result.current.copyTranscript('chat-1', 'Claude 1')
+    })
+
+    expect(copied).toBe(false)
+    expect(writeText).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('disk on fire'))
+  })
+
+  it('reports false rather than throwing when the clipboard refuses', async () => {
+    withClipboard(() => Promise.reject(new Error('not focused')))
+    const { result } = await opened()
+
+    let copied = true
+    await act(async () => {
+      copied = await result.current.copyTranscript('chat-1', 'Claude 1')
+    })
+
+    expect(copied).toBe(false)
+  })
+})
+
 describe('what each conversation is doing', () => {
   it('patches the tab the core named', async () => {
     givenChats([chat(), chat({ id: 'chat-2' })])

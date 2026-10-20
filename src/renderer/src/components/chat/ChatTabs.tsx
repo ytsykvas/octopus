@@ -1,4 +1,15 @@
-import { GitBranchPlus, History, MoreHorizontal, Pencil, Plus, X } from 'lucide-react'
+import {
+  Check,
+  ClipboardCopy,
+  GitBranchPlus,
+  History,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  TriangleAlert,
+  X
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { MAX_CHAT_TITLE, MAX_CHATS_PER_WORKSPACE } from '@core/chats.js'
@@ -136,6 +147,12 @@ function HistoryMenu({ tabs }: { readonly tabs: ChatTabsController }): React.JSX
   )
 }
 
+/** What the last copy did, shown on the menu's button once the menu has closed. */
+type CopyOutcome = 'idle' | 'copied' | 'failed'
+
+/** How long the button reports it before going back to being a menu. */
+const SETTLE_MS = 2000
+
 interface TabButtonProps {
   readonly tab: ChatTab
   readonly number: number
@@ -143,6 +160,13 @@ interface TabButtonProps {
   readonly closable: boolean
   readonly controller: ChatTabsController
   readonly waiting: number
+}
+
+function TriggerIcon({ outcome }: { readonly outcome: CopyOutcome }): React.JSX.Element {
+  if (outcome === 'copied') return <Check aria-hidden size={12} />
+  if (outcome === 'failed') return <TriangleAlert aria-hidden size={12} />
+
+  return <MoreHorizontal aria-hidden size={12} />
 }
 
 function TabButton({
@@ -154,6 +178,21 @@ function TabButton({
   waiting
 }: TabButtonProps): React.JSX.Element {
   const { t } = useTranslation()
+  const [copy, setCopy] = useState<CopyOutcome>('idle')
+
+  // Back to the plain button on its own: it would otherwise go on claiming
+  // something about a clipboard that has moved on since.
+  useEffect(() => {
+    if (copy === 'idle') return
+
+    const timer = setTimeout(() => {
+      setCopy('idle')
+    }, SETTLE_MS)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [copy])
 
   // The agent's own name rather than a word for "conversation": what a tab
   // holds is a Claude, and the strip is where that stops being a guess once
@@ -195,6 +234,20 @@ function TabButton({
                   description: t('chat.forkTabHint'),
                   icon: <GitBranchPlus aria-hidden size={13} />,
                   onSelect: () => void controller.fork(id)
+                }
+              ]
+            : []),
+          ...(tab.started
+            ? [
+                {
+                  id: 'copyTranscript',
+                  label: t('chat.copyTranscript'),
+                  description: t('chat.copyTranscriptHint'),
+                  icon: <ClipboardCopy aria-hidden size={13} />,
+                  onSelect: () =>
+                    void controller.copyTranscript(id, named).then((copied) => {
+                      setCopy(copied ? 'copied' : 'failed')
+                    })
                 }
               ]
             : []),
@@ -289,6 +342,12 @@ function TabButton({
         </span>
       </button>
 
+      {copy !== 'idle' && (
+        <span role="status" className="sr-only">
+          {t(copy === 'copied' ? 'chat.copied' : 'chat.copyFailed')}
+        </span>
+      )}
+
       {actions.length > 0 && (
         <DropdownMenu
           align="left"
@@ -302,10 +361,12 @@ function TabButton({
               // Held in the layout rather than added on hover, so the strip
               // does not jump under the pointer as it crosses a tab.
               className={`text-ink-faint hover:text-ink focus-ring -ml-1 flex size-5 items-center justify-center rounded transition-opacity ${
-                open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
+                open || copy !== 'idle'
+                  ? 'opacity-100'
+                  : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
               }`}
             >
-              <MoreHorizontal aria-hidden size={12} />
+              <TriggerIcon outcome={copy} />
             </button>
           )}
         />
