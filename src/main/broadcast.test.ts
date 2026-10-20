@@ -4,6 +4,7 @@ import {
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
+  pushTasks,
   pushConfig,
   pushSettingsOpen,
   pushTheme,
@@ -107,6 +108,15 @@ describe('what the main process pushes, and on which channel', () => {
     pushChatStatus([window], event)
 
     expect(window.sent).toEqual([['chats:status', event]])
+  })
+
+  it("announces a conversation's background agents", () => {
+    const window = target()
+    const event = { chatId: 'chat-1', workspaceId: 'planner/anna', tasks: [] }
+
+    pushTasks([window], event)
+
+    expect(window.sent).toEqual([['tasks:changed', event]])
   })
 
   it("announces that a workspace's conversations changed", () => {

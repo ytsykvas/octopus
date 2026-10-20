@@ -19,6 +19,7 @@ import { CHAT_ID, emitAgentEvent, emitChatStatus, givenChat } from '../../test/c
 import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
+import { task } from '../../test/tasks.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { Chat } from './Chat.js'
 
@@ -1718,6 +1719,74 @@ describe('the permission mode', () => {
     })
   })
 
+  // Minimising is how a plan is checked against the code before answering it.
+  // It answers nothing, keeps a way back on screen, and loses nothing typed.
+  describe('setting a plan aside to check something', () => {
+    it('hides the dialog without answering, and brings it back as it was', async () => {
+      const user = userEvent.setup()
+      givenChat([], { planMode: true })
+      await openLoadedChat()
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-plan',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# Normalising the locales' }
+      })
+      await user.click(await screen.findByRole('button', { name: 'Edit' }))
+      const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
+      await user.clear(editor)
+      await user.type(editor, '# Only English first')
+      await user.type(screen.getByRole('textbox', { name: /Anything to work out/ }), 'and tests')
+      await user.click(screen.getByRole('button', { name: 'Minimise' }))
+
+      expect(screen.queryByText('The plan is ready')).not.toBeInTheDocument()
+      expect(screen.getByText('The plan is waiting for your answer')).toBeInTheDocument()
+      expect(octopus().chats.answerPermission).not.toHaveBeenCalled()
+
+      await user.click(screen.getByRole('button', { name: 'Open the plan' }))
+
+      expect(screen.queryByText('The plan is waiting for your answer')).not.toBeInTheDocument()
+      expect(screen.getByText('Only English first')).toBeInTheDocument()
+      const note = screen.getByRole('textbox', { name: /Anything to work out/ })
+      expect(note).toHaveValue('and tests')
+
+      await user.type(note, '{Enter}')
+      expect(octopus().chats.answerPermission).toHaveBeenCalledWith('r-plan', 'deny', 'and tests')
+    })
+
+    // The next plan is a new question: it raises its own dialog, and it does
+    // not inherit the note written to the one before it.
+    it('raises the next plan however the last one was left', async () => {
+      const user = userEvent.setup()
+      givenChat([], { planMode: true })
+      await openLoadedChat()
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-1',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# First plan' }
+      })
+      await user.type(
+        await screen.findByRole('textbox', { name: /Anything to work out/ }),
+        'old note'
+      )
+      await user.click(screen.getByRole('button', { name: 'Minimise' }))
+
+      emitAgentEvent({
+        type: 'permission_request',
+        requestId: 'r-2',
+        toolName: 'ExitPlanMode',
+        input: { plan: '# Second plan' }
+      })
+
+      expect(await screen.findByText('Second plan')).toBeInTheDocument()
+      expect(screen.queryByText('The plan is waiting for your answer')).not.toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: /Anything to work out/ })).toHaveValue('')
+    })
+  })
+
   // The agent may hand over another plan while one is being rewritten. The old
   // edit describes a plan that is gone, and must not be sent as the new one's.
   describe('a plan replaced while it is being rewritten', () => {
@@ -2721,5 +2790,121 @@ describe('showing every step', () => {
     await waitFor(() => {
       expect(octopus().files.read).toHaveBeenCalledWith(workspaceView('anna').id, 'src/App.tsx')
     })
+  })
+})
+
+/*
+ * The agents a conversation sent off, read from its log after a restart and
+ * from the core while they run. The count opens the map, and the map takes
+ * the reader to the row that started an agent.
+ */
+describe('the agents of a conversation', () => {
+  const SENT_ONE_OFF: ChatEntry[] = [
+    {
+      role: 'agent',
+      at: '2026-08-13T09:00:00.000Z',
+      event: {
+        type: 'tool_use',
+        toolUseId: 'call-1',
+        name: 'Agent',
+        input: { description: 'Look around', prompt: 'Read everything.' }
+      }
+    },
+    {
+      role: 'agent',
+      at: '2026-08-13T09:00:01.000Z',
+      event: {
+        type: 'task_started',
+        taskId: 't-1',
+        toolUseId: 'call-1',
+        kind: 'agent',
+        description: 'Look around',
+        backgrounded: true,
+        ambient: false
+      }
+    }
+  ]
+
+  // Nothing is live after a restart, so one with no end was cut off.
+  it('reads an agent a restart cut off as stopped', async () => {
+    givenChat(SENT_ONE_OFF)
+    await openLoadedChat()
+
+    await userEvent.click(
+      await screen.findByTitle('The agents this conversation ran — show what they did')
+    )
+
+    expect(screen.getByRole('button', { name: 'Look around, Stopped' })).toBeInTheDocument()
+  })
+
+  it('takes the reader from the map to the row that started the agent', async () => {
+    givenChat(SENT_ONE_OFF)
+    vi.mocked(octopus().tasks.onChanged).mockImplementation((push) => {
+      push({
+        chatId: CHAT_ID,
+        workspaceId: 'planner/anna',
+        tasks: [task({ taskId: 't-1' })],
+        mainWorking: false
+      })
+      return vi.fn()
+    })
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView')
+    await openLoadedChat()
+
+    await userEvent.click(await screen.findByTitle('1 agent working — show what it is doing'))
+    await userEvent.click(screen.getByRole('button', { name: 'Audit route handlers, Working' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
+
+    expect(scrolled).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stop agent' }))
+    expect(octopus().tasks.stop).toHaveBeenCalledWith(CHAT_ID, 't-1')
+  })
+
+  // A nested agent's row is drawn only inside its parent's opened row, so the
+  // parent is opened on the way to it.
+  it('opens the row an agent was started inside to reach it', async () => {
+    givenChat([
+      ...SENT_ONE_OFF,
+      {
+        role: 'agent',
+        at: '2026-08-13T09:00:02.000Z',
+        event: {
+          type: 'tool_use',
+          toolUseId: 'call-2',
+          name: 'Agent',
+          input: { description: 'Look deeper', prompt: 'Read more.' },
+          parentToolUseId: 'call-1'
+        }
+      }
+    ])
+    vi.mocked(octopus().tasks.onChanged).mockImplementation((push) => {
+      push({
+        chatId: CHAT_ID,
+        workspaceId: 'planner/anna',
+        tasks: [
+          task({ taskId: 't-1', toolUseId: 'call-1', description: 'Look around' }),
+          task({
+            taskId: 't-2',
+            toolUseId: 'call-2',
+            parentTaskId: 't-1',
+            description: 'Look deeper'
+          })
+        ],
+        mainWorking: false
+      })
+      return vi.fn()
+    })
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView')
+    await openLoadedChat()
+    const nested = (): Element | null => document.querySelector('[data-tool-use-id="call-2"]')
+    expect(nested()).toBeNull()
+
+    await userEvent.click(await screen.findByTitle('2 agents working — show what they are doing'))
+    await userEvent.click(screen.getByRole('button', { name: 'Look deeper, Working' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
+
+    expect(nested()).not.toBeNull()
+    expect(scrolled.mock.contexts.at(-1)).toBe(nested())
   })
 })

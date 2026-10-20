@@ -557,12 +557,14 @@ export function DiffPanel({
             ))}
 
             {/* The cloud the rows carry, with a count: the sentence it replaces
-                was the longest thing on a strip meant to fit one line. */}
+                was the longest thing on a strip meant to fit one line. It
+                lives on in the tooltip, because a red cloud and a number say
+                that something is wrong and not what to do about it. */}
             {stale > 0 && (
               <span
                 role="img"
                 aria-label={t('diff.publishStaleCount', { count: stale })}
-                title={t('diff.publishStaleCount', { count: stale })}
+                title={`${t('diff.publishStaleCount', { count: stale })}\n${t('diff.publishStaleHint')}`}
                 className="text-danger flex items-center gap-1"
               >
                 <CloudAlert aria-hidden size={12} />

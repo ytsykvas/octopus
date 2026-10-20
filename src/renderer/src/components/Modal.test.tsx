@@ -113,6 +113,36 @@ describe('Modal', () => {
     expect(screen.getByRole('dialog', { name: 'Rename workspace' })).toBeInTheDocument()
   })
 
+  // Only where the caller can bring it back: a minimise with nowhere to return
+  // from would be a close that does not say so.
+  it('offers no minimise button unless asked to', () => {
+    render(
+      <Modal title="Rename workspace" onClose={vi.fn()}>
+        <p>Body</p>
+      </Modal>
+    )
+
+    expect(screen.queryByRole('button', { name: 'Minimise' })).not.toBeInTheDocument()
+  })
+
+  // Setting a dialog aside is not answering it: the × keeps its meaning, and
+  // this button must not reach for it.
+  it('minimises without closing', async () => {
+    const onClose = vi.fn()
+    const onMinimize = vi.fn()
+
+    render(
+      <Modal title="Rename workspace" onClose={onClose} onMinimize={onMinimize}>
+        <p>Body</p>
+      </Modal>
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Minimise' }))
+
+    expect(onMinimize).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('closes when the close button is clicked', async () => {
     const onClose = vi.fn()
 

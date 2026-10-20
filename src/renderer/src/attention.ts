@@ -49,7 +49,11 @@ export function noticeFrom(
 
   const notice = { chatId, workspaceId, projectId: workspace.projectId, toolName: '', at }
 
-  if (event.type === 'result') return { ...notice, kind: event.ok ? 'done' : 'error' }
+  // Done is the conversation coming to rest, not a turn ending: the CLI opens a
+  // turn of its own to hand over each finished agent's report, and a chime for
+  // every one of those would say "done" over work still going.
+  if (event.type === 'finished') return { ...notice, kind: 'done' }
+  if (event.type === 'result') return event.ok ? null : { ...notice, kind: 'error' }
   if (event.type === 'error') return { ...notice, kind: 'error' }
   // An MCP server's form is a question to the user like any other.
   if (event.type === 'elicitation_request') return { ...notice, kind: 'question' }

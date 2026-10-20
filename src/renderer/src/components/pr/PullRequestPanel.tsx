@@ -1,11 +1,15 @@
-import { GitPullRequest } from 'lucide-react'
+import { GitPullRequest, RotateCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { shortBranchName } from '@core/branches.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { MergeMethod, PullRequest, PullRequestDraft } from '@core/pullRequests.js'
-import { type PullRequestComment, summariseChecks } from '@core/pullRequestShapes.js'
+import {
+  type PullRequestComment,
+  type RerunScope,
+  summariseChecks
+} from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Failure } from '../../../../preload/index.js'
@@ -97,6 +101,7 @@ export function PullRequestPanel({
   const [sending, setSending] = useState<InstructionKind | null>(null)
   const [merging, setMerging] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [rerunning, setRerunning] = useState<RerunScope | null>(null)
   const [committing, setCommitting] = useState(false)
   const [pushing, setPushing] = useState(false)
 
@@ -255,6 +260,22 @@ export function PullRequestPanel({
     })()
   }
 
+  /*
+   * Restarts CI, the same shape as closing: the fresh reading is what the pane
+   * believes, and the list's mark goes back to spinning along with the rows.
+   */
+  const rerun = (number: number, scope: RerunScope): void => {
+    setRerunning(scope)
+    void (async () => {
+      const result = await window.octopus.workspaces.rerunChecks(workspace.id, number, scope)
+      setRerunning(null)
+      if (!result.ok) report(result)
+
+      detail.refresh()
+      onRequestChanged()
+    })()
+  }
+
   const commitAndPush = (message: string): void => {
     setCommitting(true)
     void (async () => {
@@ -342,7 +363,36 @@ export function PullRequestPanel({
 
           {detail.detail !== null && (
             <>
-              <Section title={t('pullRequest.checks')}>
+              <Section
+                title={t('pullRequest.checks')}
+                /* Only while something is red: restarting a green suite is a
+                   thing nobody reaches for, and two buttons on every request
+                   would be noise beside the one moment they matter. */
+                action={
+                  failed.length > 0 && (
+                    <div className="flex gap-1">
+                      {RERUNS.map(({ scope, labelKey, titleKey }) => (
+                        <Button
+                          key={scope}
+                          size="sm"
+                          title={t(titleKey)}
+                          disabled={rerunning !== null}
+                          onClick={() => {
+                            rerun(request.number, scope)
+                          }}
+                        >
+                          <RotateCw
+                            aria-hidden
+                            size={11}
+                            className={rerunning === scope ? 'animate-spin' : ''}
+                          />
+                          {t(labelKey)}
+                        </Button>
+                      ))}
+                    </div>
+                  )
+                }
+              >
                 <ChecksList checks={detail.detail.checks} />
               </Section>
 
@@ -433,16 +483,36 @@ export function PullRequestPanel({
   )
 }
 
+/** The two re-runs, in the order they are drawn. */
+const RERUNS: readonly {
+  readonly scope: RerunScope
+  readonly labelKey: 'pullRequest.rerunFailed' | 'pullRequest.rerunAll'
+  readonly titleKey: 'pullRequest.rerunFailedTitle' | 'pullRequest.rerunAllTitle'
+}[] = [
+  {
+    scope: 'failed',
+    labelKey: 'pullRequest.rerunFailed',
+    titleKey: 'pullRequest.rerunFailedTitle'
+  },
+  { scope: 'all', labelKey: 'pullRequest.rerunAll', titleKey: 'pullRequest.rerunAllTitle' }
+]
+
 function Section({
   title,
+  action,
   children
 }: {
   readonly title: string
+  /** Drawn at the heading's right edge, for what acts on the whole section. */
+  readonly action?: React.ReactNode
   readonly children: React.ReactNode
 }): React.JSX.Element {
   return (
     <section className="space-y-1">
-      <h2 className="section-label">{title}</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="section-label">{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   )

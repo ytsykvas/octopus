@@ -2,10 +2,13 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { TaskView } from '@core/backgroundTasks.js'
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
+import { agentsOf, task } from '../../test/tasks.js'
 import { highlight } from '../diff/highlight.js'
+import { AgentsContext } from './agentTasks.js'
 import { ChatLog } from './ChatLog.js'
 import { COLLAPSED } from './expansion.js'
 
@@ -21,6 +24,9 @@ function fromAgent(event: AgentEvent): ChatEntry {
 
 /** No message held in the agent's queue, which is every log but one. */
 const NOT_WAITING: ReadonlySet<string> = new Set()
+
+/** No question open, which is every log but the ones about questions. */
+const NOTHING_ASKED: ReadonlySet<string> = new Set()
 
 /**
  * The turn a footer closes.
@@ -42,7 +48,15 @@ function diffRow(text: string): string {
 /** The checkout the agent works in, which the paths in these fixtures sit under. */
 const WORKSPACE = '/tmp/planner/anna'
 
-function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}): {
+function renderLog({
+  pendingRequestId = null,
+  tasks = [],
+  ...overrides
+}: Partial<React.ComponentProps<typeof ChatLog>> & {
+  /** The one question open, for the tests about one. */
+  readonly pendingRequestId?: string | null
+  readonly tasks?: readonly TaskView[]
+} = {}): {
   onAnswer: ReturnType<typeof vi.fn>
   onAnswerElicitation: ReturnType<typeof vi.fn>
   onAnswerQuestions: ReturnType<typeof vi.fn>
@@ -58,23 +72,25 @@ function renderLog(overrides: Partial<React.ComponentProps<typeof ChatLog>> = {}
   const onRewind = vi.fn()
 
   render(
-    <ChatLog
-      entries={[]}
-      streaming={{ text: '', thinking: '' }}
-      busy={false}
-      pendingRequestId={null}
-      pendingElicitationId={null}
-      onAnswer={onAnswer}
-      onAnswerElicitation={onAnswerElicitation}
-      onAnswerQuestions={onAnswerQuestions}
-      onExecutePlan={onExecutePlan}
-      onRewind={onRewind}
-      waiting={NOT_WAITING}
-      expansion={COLLAPSED}
-      workspacePath={WORKSPACE}
-      onOpenFile={onOpenFile}
-      {...overrides}
-    />
+    <AgentsContext.Provider value={agentsOf(tasks)}>
+      <ChatLog
+        entries={[]}
+        streaming={{ text: '', thinking: '' }}
+        busy={false}
+        answerable={pendingRequestId === null ? NOTHING_ASKED : new Set([pendingRequestId])}
+        pendingElicitationId={null}
+        onAnswer={onAnswer}
+        onAnswerElicitation={onAnswerElicitation}
+        onAnswerQuestions={onAnswerQuestions}
+        onExecutePlan={onExecutePlan}
+        onRewind={onRewind}
+        waiting={NOT_WAITING}
+        expansion={COLLAPSED}
+        workspacePath={WORKSPACE}
+        onOpenFile={onOpenFile}
+        {...overrides}
+      />
+    </AgentsContext.Provider>
   )
 
   return { onAnswer, onAnswerElicitation, onAnswerQuestions, onExecutePlan, onRewind, onOpenFile }
@@ -480,7 +496,7 @@ describe('what the log shows', () => {
         ]}
         streaming={{ text: '', thinking: '' }}
         busy={false}
-        pendingRequestId={null}
+        answerable={NOTHING_ASKED}
         pendingElicitationId={null}
         onAnswer={vi.fn()}
         onAnswerElicitation={vi.fn()}
@@ -516,7 +532,7 @@ describe('what the log shows', () => {
         entries={[]}
         streaming={{ text: '**still writing**', thinking: '' }}
         busy
-        pendingRequestId={null}
+        answerable={NOTHING_ASKED}
         pendingElicitationId={null}
         onAnswer={vi.fn()}
         onAnswerElicitation={vi.fn()}
@@ -1017,7 +1033,7 @@ describe('what the log shows', () => {
         fromAgent({ type: 'tool_use', toolUseId: 'c-1', name: 'Bash', input: { command: 'ls' } }),
         fromAgent({ type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'a.ts' })
       ],
-      expansion: { all: true, generation: 1 }
+      expansion: { ...COLLAPSED, all: true, generation: 1 }
     })
 
     expect(screen.getByText('weighing it up')).toBeVisible()
@@ -1940,14 +1956,22 @@ describe('a log cut back and written again', () => {
       onOpenFile: vi.fn()
     }
     const { rerender } = render(
-      <ChatLog {...props} entries={[said, asked('r-1', 'Which one?')]} pendingRequestId="r-1" />
+      <ChatLog
+        {...props}
+        entries={[said, asked('r-1', 'Which one?')]}
+        answerable={new Set(['r-1'])}
+      />
     )
     await user.click(screen.getByRole('radio', { name: /Luxon/ }))
     expect(screen.getByRole('radio', { name: /Luxon/ })).toBeChecked()
 
-    rerender(<ChatLog {...props} entries={[said]} pendingRequestId={null} />)
+    rerender(<ChatLog {...props} entries={[said]} answerable={NOTHING_ASKED} />)
     rerender(
-      <ChatLog {...props} entries={[said, asked('r-2', 'Which one now?')]} pendingRequestId="r-2" />
+      <ChatLog
+        {...props}
+        entries={[said, asked('r-2', 'Which one now?')]}
+        answerable={new Set(['r-2'])}
+      />
     )
 
     expect(screen.getByText('Which one now?')).toBeInTheDocument()
@@ -2202,5 +2226,83 @@ describe('a question from an MCP server, in the log', () => {
     })
 
     expect(screen.getByText('Declined.')).toBeInTheDocument()
+  })
+})
+
+describe('agents the conversation sent off', () => {
+  // Several agents can ask at once, and "may it run Bash" is a different
+  // question depending on which of them wants to.
+  it('names the agent asking on its permission card', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_request',
+          requestId: 'r-1',
+          toolName: 'Bash',
+          input: { command: 'ls' },
+          taskId: 't-1'
+        })
+      ],
+      pendingRequestId: 'r-1',
+      tasks: [task()]
+    })
+
+    expect(screen.getByText('Audit route handlers is asking')).toBeInTheDocument()
+  })
+
+  it('names no one on a card the conversation itself raised', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'permission_request',
+          requestId: 'r-1',
+          toolName: 'Bash',
+          input: { command: 'ls' }
+        })
+      ],
+      pendingRequestId: 'r-1',
+      tasks: [task()]
+    })
+
+    expect(screen.queryByText(/is asking/)).not.toBeInTheDocument()
+  })
+
+  /*
+   * The main agent's turn is over and its agents are not: a clock from the
+   * turn's start would count the wrong thing, so the line says who is working.
+   * The task events they record after the result do not start a new turn.
+   */
+  it('says the agents are at work once the turn that sent them has ended', () => {
+    renderLog({
+      busy: false,
+      entries: [
+        fromAgent({
+          type: 'result',
+          ok: true,
+          costUsd: null,
+          durationMs: 1000,
+          inputTokens: 10,
+          outputTokens: 10,
+          terminalReason: null
+        }),
+        fromAgent({ type: 'task_ended', taskId: 't-0', status: 'completed' })
+      ],
+      tasks: [task(), task({ taskId: 't-2' })]
+    })
+
+    expect(screen.getByText('2 agents working in the background')).toBeInTheDocument()
+  })
+
+  // The main agent at work again — reading a report — is what the line is
+  // about, agents or no agents.
+  it('counts the main agent’s turn while it works beside its agents', () => {
+    renderLog({
+      busy: true,
+      entries: [fromAgent({ type: 'text', text: 'reading' })],
+      tasks: [task()]
+    })
+
+    expect(screen.getByText(/^Working… /)).toBeInTheDocument()
+    expect(screen.queryByText(/in the background/)).not.toBeInTheDocument()
   })
 })

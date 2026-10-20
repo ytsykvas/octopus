@@ -94,6 +94,12 @@ export const en = {
     // The same states in a word, for the second line of a row, where the
     // sentences above would not fit beside the file count.
     lineRunning: 'Working',
+    // The same word with the agents still at it, for a turn that has ended
+    // while what it sent off has not.
+    lineRunningAgents_one: 'Working · {{count}} agent',
+    lineRunningAgents_few: 'Working · {{count}} agents',
+    lineRunningAgents_many: 'Working · {{count}} agents',
+    lineRunningAgents_other: 'Working · {{count}} agents',
     lineWaiting: 'Needs your answer',
     lineError: 'Error',
     lineDone: 'Finished',
@@ -337,7 +343,8 @@ export const en = {
   },
 
   modal: {
-    close: 'Close'
+    close: 'Close',
+    minimize: 'Minimise'
   },
 
   scripts: {
@@ -652,6 +659,10 @@ export const en = {
 
     checks: 'Checks',
     checksNone: 'This repository runs nothing on a pull request.',
+    rerunFailed: 'Failed',
+    rerunFailedTitle: 'Re-run the failed jobs',
+    rerunAll: 'All',
+    rerunAllTitle: 'Re-run every check',
     /* The state as a word beside the mark, because a colour reaches nobody
        using a screen reader and no test can hold one. */
     checkPending: 'running',
@@ -851,6 +862,8 @@ export const en = {
     publishStaleCount_few: '{{count}} files are out of date in the request',
     publishStaleCount_many: '{{count}} files are out of date in the request',
     publishStaleCount_other: '{{count}} files are out of date in the request',
+    publishStaleHint:
+      'The version on GitHub is out of date: the pull request still holds an older version of these files than you have here. Push to bring it up to date.',
     publishCount: '{{count}} {{state}}',
     push: 'Push',
     pushing: 'Pushing…',
@@ -1282,6 +1295,8 @@ export const en = {
     planFeedback: 'Anything to work out first?',
     planFeedbackPlaceholder: 'Write here and the agent will revise the plan',
     planSendFeedback: 'Send the note and keep planning',
+    planWaiting: 'The plan is waiting for your answer',
+    planReopen: 'Open the plan',
     questionTitle: 'The agent is asking',
     questionOther: 'Something else',
     questionOtherPlaceholder: 'Write your own answer',
@@ -1311,6 +1326,81 @@ export const en = {
     endedFailed: 'ended with an error',
 
     usageReached: 'limit reached'
+  },
+
+  /*
+   * The agents a conversation sent off to work beside it: the count in the
+   * composer, the map it opens, and the line under an `Agent` row in the log.
+   */
+  agents: {
+    count_one: '{{count}} agent',
+    count_few: '{{count}} agents',
+    count_many: '{{count}} agents',
+    count_other: '{{count}} agents',
+    /* The chip's tooltip, in the three moods it has. */
+    chipWorking_one: '{{count}} agent working — show what it is doing',
+    chipWorking_few: '{{count}} agents working — show what they are doing',
+    chipWorking_many: '{{count}} agents working — show what they are doing',
+    chipWorking_other: '{{count}} agents working — show what they are doing',
+    chipWaiting: 'An agent is waiting for your answer',
+    chipDone: 'The agents this conversation ran — show what they did',
+    title: 'Agents',
+    working_one: '{{count}} working',
+    working_few: '{{count}} working',
+    working_many: '{{count}} working',
+    working_other: '{{count}} working',
+    ended_one: '{{count}} done',
+    ended_few: '{{count}} done',
+    ended_many: '{{count}} done',
+    ended_other: '{{count}} done',
+    commands: 'Background commands',
+    commandCount_one: '{{count}} command',
+    commandCount_few: '{{count}} commands',
+    commandCount_many: '{{count}} commands',
+    commandCount_other: '{{count}} commands',
+    statusRunning: 'Working',
+    statusWaiting: 'Needs your answer',
+    statusCompleted: 'Done',
+    statusFailed: 'Failed',
+    statusStopped: 'Stopped',
+    tokens_one: '{{tokens}} token',
+    tokens_few: '{{tokens}} tokens',
+    tokens_many: '{{tokens}} tokens',
+    tokens_other: '{{tokens}} tokens',
+    toolUses_one: '{{count}} tool call',
+    toolUses_few: '{{count}} tool calls',
+    toolUses_many: '{{count}} tool calls',
+    toolUses_other: '{{count}} tool calls',
+    kindShell: 'Command',
+    kindWorkflow: 'Workflow',
+    kindOther: 'Task',
+    /* A workflow's agents, of which only some are still going. */
+    workflowAgents_one: '{{running}} of {{count}} agent working',
+    workflowAgents_few: '{{running}} of {{count}} agents working',
+    workflowAgents_many: '{{running}} of {{count}} agents working',
+    workflowAgents_other: '{{running}} of {{count}} agents working',
+    workflowNoPhase: 'Agents',
+    mainAgent: 'The conversation',
+    back: 'All agents',
+    detailModel: 'Model',
+    detailType: 'Type',
+    detailElapsed: 'Time',
+    detailTokens: 'Tokens',
+    detailToolUses: 'Tool calls',
+    detailSpawnedBy: 'Started by',
+    prompt: 'Task',
+    steps: 'Recent steps',
+    noSteps: 'No steps yet.',
+    showInChat: 'Show in conversation',
+    stop: 'Stop {{name}}',
+    stopAgent: 'Stop agent',
+    /* Said on the permission card, so a reader knows which of several is asking. */
+    asking: '{{name}} is asking',
+    /* Under the log once the main agent's turn is over and its agents are not. */
+    lineWorking_one: '{{count}} agent working in the background',
+    lineWorking_few: '{{count}} agents working in the background',
+    lineWorking_many: '{{count}} agents working in the background',
+    lineWorking_other: '{{count}} agents working in the background'
   },
 
   /* The card `/usage` draws. Its own section rather than more of `chat`,
@@ -2059,6 +2149,8 @@ export const en = {
     headNotOnBranch:
       'HEAD is not on this workspace\u2019s branch {{branch}}. Nothing was committed or pushed \u2014 check it out in the terminal first.',
     closeFailed: 'GitHub would not close #{{number}}. It said: {{reason}}',
+    nothingToRerun: 'No GitHub Actions run of #{{number}} can be re-run right now.',
+    rerunFailed: 'GitHub would not re-run the checks of #{{number}}. It said: {{reason}}',
     /* No number on either: a reply and a resolve are addressed to a thread, and
        the thread is what the reader is looking at when one of them fails. */
     replyFailed: 'GitHub would not post the reply. It said: {{reason}}',

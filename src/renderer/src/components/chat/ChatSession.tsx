@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronsDownUp, ChevronsUpDown, CloudDownload } from 'lucide-react'
 
 import {
   type Chat,
   type Effort,
+  findAgentModel,
   modeAfterPlan,
   opusPlanSplit,
   type PlanExecutionMode,
   type WorkingMode
 } from '@core/chats.js'
+import { byToolUse, callsAbove } from '@core/backgroundTasks.js'
 import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -17,6 +19,7 @@ import { EnvProfileSwitch } from '../EnvProfileSwitch.js'
 import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { onChatEvent } from '../../hooks/chatEvents.js'
+import { stopTask, useChatTasks, useMainWorking } from '../../hooks/backgroundTasks.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
 import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
@@ -34,12 +37,15 @@ import { useRewindChoice } from '../../hooks/useRewindChoice.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
 import { useSkills } from '../../hooks/useSkills.js'
+import { shortModel } from './agentFormat.js'
+import { AgentLogContext, type Agents, AgentsContext } from './agentTasks.js'
 import { ChatLog } from './ChatLog.js'
 import { COLLAPSED, type Expansion } from './expansion.js'
 import { DayChip } from './DayChip.js'
 import { Composer } from './Composer.js'
 import { HeadsUp } from './HeadsUp.js'
 import { PlanDialog } from './PlanDialog.js'
+import { PlanWaiting } from './PlanWaiting.js'
 import { SideQuestions } from './SideQuestions.js'
 import { TodoPanel } from './TodoPanel.js'
 import { currentTip } from './tips.js'
@@ -156,7 +162,11 @@ export function ChatSession({
    */
   const [expansion, setExpansion] = useState<Expansion>(COLLAPSED)
   const toggleExpansion = useCallback(() => {
-    setExpansion((current) => ({ all: !current.all, generation: current.generation + 1 }))
+    setExpansion((current) => ({
+      ...current,
+      all: !current.all,
+      generation: current.generation + 1
+    }))
   }, [])
 
   useEffect(() => {
@@ -211,6 +221,12 @@ export function ChatSession({
   // A plan the user is rewriting, by the request it belongs to. Kept here so
   // that looking at another tab does not throw the edits away.
   const [planEdit, setPlanEdit] = useState<{ requestId: string; text: string } | null>(null)
+  // The note being written back to it, for the same reason and one more: the
+  // dialog unmounts while it is minimised.
+  const [planNote, setPlanNote] = useState<{ requestId: string; text: string } | null>(null)
+  // The plan whose dialog was set aside, by request: the next plan the agent
+  // hands over is a new question, and raises its dialog as any other would.
+  const [minimizedPlan, setMinimizedPlan] = useState<string | null>(null)
   const describeFailure = useErrorMessage()
   /*
    * Read here as well as in the Run row: the first message is where a task
@@ -285,15 +301,11 @@ export function ChatSession({
   )
   const openSide = useCallback(
     (open: boolean) => {
-      if (!open) {
-        if (sideChatId !== null) setSideOpen(sideChatId, false)
-        return
-      }
       void withRecord((chatId) => {
-        setSideOpen(chatId, true)
+        setSideOpen(chatId, open)
       })
     },
-    [sideChatId, setSideOpen, withRecord]
+    [setSideOpen, withRecord]
   )
   const askSide = useCallback(
     (question: string) => {
@@ -352,6 +364,58 @@ export function ChatSession({
 
   const scroller = useRef<HTMLDivElement | null>(null)
   const logContent = useRef<HTMLDivElement | null>(null)
+
+  /*
+   * What the conversation has running beside it, for every part of this pane
+   * that draws it — see `AgentsContext`.
+   */
+  const chatId = chat.chat?.id ?? tab.id ?? ''
+  const tasks = useChatTasks(chatId, chat.entries)
+  const mainWorking = useMainWorking(chatId)
+
+  /*
+   * "Show in conversation": the agent's row is opened up to — a nested one is
+   * drawn only inside its parent's opened row, so every row above it is
+   * revealed first — and brought into view once it is on the page.
+   */
+  const [shownAgent, setShownAgent] = useState<{ readonly toolUseId: string } | null>(null)
+  const showAgent = useCallback(
+    (toolUseId: string) => {
+      const above = callsAbove(tasks, toolUseId)
+      setExpansion((current) => ({ ...current, reveal: above, revealed: current.revealed + 1 }))
+      setShownAgent({ toolUseId })
+    },
+    [tasks]
+  )
+  // Found in this pane's own log — three panes are mounted at once.
+  useLayoutEffect(() => {
+    if (shownAgent === null) return
+    // The log is drawn whenever there is an agent to show: the map is reached
+    // from the count, which a pane with no log does not have.
+    /* v8 ignore next 3 */
+    const row = [
+      ...(logContent.current?.querySelectorAll<HTMLElement>('[data-tool-use-id]') ?? [])
+    ].find((element) => element.dataset.toolUseId === shownAgent.toolUseId)
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    row?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true })
+  }, [shownAgent])
+
+  const agentTasks = useMemo<Agents>(
+    () => ({
+      tasks,
+      byToolUse: byToolUse(tasks),
+      byId: new globalThis.Map(tasks.map((task) => [task.taskId, task])),
+      mainWorking,
+      // The picker's name for a model it offers; a subagent can run on one it
+      // does not, which is named as a person would.
+      modelName: (model) => findAgentModel(models, model)?.displayName ?? shortModel(model),
+      onStop: (taskId) => {
+        stopTask(chatId, taskId)
+      },
+      onShow: showAgent
+    }),
+    [tasks, mainWorking, models, chatId, showAgent]
+  )
   const pinnedToBottom = useRef(true)
   // More than a screen above the end: where the way back down is worth a button.
   const [farFromEnd, setFarFromEnd] = useState(false)
@@ -469,305 +533,326 @@ export function ChatSession({
   }, [visible, chat.entries, updateDayAtTop])
 
   return (
-    <div
-      aria-hidden={!visible}
-      className={`relative min-h-0 flex-1 flex-col ${visible ? 'flex' : 'hidden'}`}
-    >
-      <div
-        ref={scroller}
-        // A log rather than a plain box: the content appends over time, which
-        // is what tells a screen reader to announce additions rather than
-        // re-read the conversation from the top.
-        role="log"
-        onScroll={(event) => {
-          const element = event.currentTarget
-          // Hiding the tab resets the scroll position and says so; with no
-          // height there is nothing to measure, and reading it as "scrolled
-          // away from the end" would stop the log following for good.
-          if (element.clientHeight === 0) return
-          const distance = element.scrollHeight - element.scrollTop - element.clientHeight
-          // A few pixels of slack: smooth scrolling and sub-pixel heights mean
-          // "at the bottom" is rarely exactly zero.
-          pinnedToBottom.current = distance < 40
-          setFarFromEnd(distance > element.clientHeight)
-          dayAtTop.update()
-        }}
-        // Never sideways: wide content (code, tables, diffs) scrolls inside its own box.
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
-      >
-        {/* The day on screen, floating once its own separator has scrolled
+    <AgentsContext.Provider value={agentTasks}>
+      <AgentLogContext.Provider value={chat.entries}>
+        <div
+          aria-hidden={!visible}
+          className={`min-h-0 flex-1 flex-col ${visible ? 'flex' : 'hidden'}`}
+        >
+          <div
+            ref={scroller}
+            // A log rather than a plain box: the content appends over time, which
+            // is what tells a screen reader to announce additions rather than
+            // re-read the conversation from the top.
+            role="log"
+            onScroll={(event) => {
+              const element = event.currentTarget
+              // Hiding the tab resets the scroll position and says so; with no
+              // height there is nothing to measure, and reading it as "scrolled
+              // away from the end" would stop the log following for good.
+              if (element.clientHeight === 0) return
+              const distance = element.scrollHeight - element.scrollTop - element.clientHeight
+              // A few pixels of slack: smooth scrolling and sub-pixel heights mean
+              // "at the bottom" is rarely exactly zero.
+              pinnedToBottom.current = distance < 40
+              setFarFromEnd(distance > element.clientHeight)
+              dayAtTop.update()
+            }}
+            // Never sideways: wide content (code, tables, diffs) scrolls inside its own box.
+            className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          >
+            {/* The day on screen, floating once its own separator has scrolled
             away. Sticky only works on a child of the scroller itself, and
             zero-height so it lays nothing out — it draws over the log rather
             than pushing it down. `items-start`, or the row's default stretch
             squeezes the pill to the zero height of its row. */}
-        {dayAtTop.day !== null && (
-          <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-center overflow-visible">
-            <DayChip day={dayAtTop.day} floating />
-          </div>
-        )}
-        {/* "Show every step", in the same floating arrangement as the day: it
+            {dayAtTop.day !== null && (
+              <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-center overflow-visible">
+                <DayChip day={dayAtTop.day} floating />
+              </div>
+            )}
+            {/* "Show every step", in the same floating arrangement as the day: it
             stays in reach however far up the log has been read. */}
-        {chat.entries.length > 0 && (
-          <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-start overflow-visible px-3">
-            <button
-              type="button"
-              aria-pressed={expansion.all}
-              onClick={toggleExpansion}
-              title={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
-              aria-label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
-              className="border-line bg-surface text-ink-faint hover:text-ink focus-ring pointer-events-auto flex size-7 items-center justify-center rounded-[var(--radius-control)] border transition-colors"
-            >
-              {expansion.all ? (
-                <ChevronsDownUp aria-hidden size={14} />
-              ) : (
-                <ChevronsUpDown aria-hidden size={14} />
-              )}
-            </button>
-          </div>
-        )}
-        {/* Streaming counts as content even before the first entry lands:
+            {chat.entries.length > 0 && (
+              <div className="pointer-events-none sticky top-2 z-10 flex h-0 items-start justify-start overflow-visible px-3">
+                <button
+                  type="button"
+                  aria-pressed={expansion.all}
+                  onClick={toggleExpansion}
+                  title={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
+                  aria-label={t(expansion.all ? 'chat.collapseAll' : 'chat.expandAll')}
+                  className="border-line bg-surface text-ink-faint hover:text-ink focus-ring pointer-events-auto flex size-7 items-center justify-center rounded-[var(--radius-control)] border transition-colors"
+                >
+                  {expansion.all ? (
+                    <ChevronsDownUp aria-hidden size={14} />
+                  ) : (
+                    <ChevronsUpDown aria-hidden size={14} />
+                  )}
+                </button>
+              </div>
+            )}
+            {/* Streaming counts as content even before the first entry lands:
             without it the answer to the very first message would draw over the
             placeholder, and the pane would say "start the conversation" while
             the agent was replying to it. */}
-        {isEmpty ? (
-          <Placeholder
-            title={t('chat.emptyTitle')}
-            actions={
-              /* Nothing to choose with a single set, so nothing is drawn. */
-              env.profiles.length > 1 ? (
-                <>
-                  <span className="text-ink-faint text-[11px]">{t('chat.envLabel')}</span>
-                  <EnvProfileSwitch
-                    profiles={env.profiles}
-                    value={workspace.envProfile ?? env.projectDefault}
-                    onChange={(name) => {
-                      void env.setWorkspaceProfile(workspace.id, name)
-                    }}
-                  />
-                </>
-              ) : undefined
-            }
-          >
-            {t('chat.emptyBody')}
-          </Placeholder>
-        ) : (
-          <div ref={logContent}>
-            <ChatLog
-              entries={chat.entries}
-              streaming={chat.streaming}
-              busy={chat.busy}
-              waiting={chat.waiting}
-              pendingRequestId={pending?.requestId ?? null}
-              pendingElicitationId={chat.pendingElicitation}
-              onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
-              onAnswerElicitation={(requestId, answer, values) =>
-                void chat.answerElicitation(requestId, answer, values)
-              }
-              onAnswerQuestions={(requestId, answers) =>
-                void chat.answerQuestions(requestId, answers)
-              }
-              // Sent as an ordinary message, because that is what it is: the
-              // request it belonged to was answered when the dialog closed, and
-              // there is nothing left to approve. Naming the plan matters — by
-              // the time anyone comes back to one the conversation may hold
-              // several, and "the plan above" would be the agent's guess.
-              //
-              // Planning is turned off first, and not only for the control's
-              // sake: that is what hands the session the mode the footer names.
-              // Without it the message went out while the conversation was still
-              // recorded as planning, and the agent worked in whatever mode it
-              // happened to fall back to. The mode an approved plan gets in the
-              // core — this is the same plan, approved later — and, as there,
-              // only out of planning: a plan the agent offered unasked does not
-              // lift a conversation out of Manual.
-              onRewind={(messageId) => void rewind(messageId)}
-              expansion={expansion}
-              workspacePath={workspace.path}
-              onOpenFile={openFile}
-              onExecutePlan={(plan) => {
-                void (async () => {
-                  if (record?.planMode === true) {
-                    await chat.setMode(modeAfterPlan(record, planExecutionMode))
+            {isEmpty ? (
+              <Placeholder
+                title={t('chat.emptyTitle')}
+                actions={
+                  /* Nothing to choose with a single set, so nothing is drawn. */
+                  env.profiles.length > 1 ? (
+                    <>
+                      <span className="text-ink-faint text-[11px]">{t('chat.envLabel')}</span>
+                      <EnvProfileSwitch
+                        profiles={env.profiles}
+                        value={workspace.envProfile ?? env.projectDefault}
+                        onChange={(name) => {
+                          void env.setWorkspaceProfile(workspace.id, name)
+                        }}
+                      />
+                    </>
+                  ) : undefined
+                }
+              >
+                {t('chat.emptyBody')}
+              </Placeholder>
+            ) : (
+              <div ref={logContent}>
+                <ChatLog
+                  entries={chat.entries}
+                  streaming={chat.streaming}
+                  busy={chat.busy}
+                  waiting={chat.waiting}
+                  answerable={chat.answerable}
+                  pendingElicitationId={chat.pendingElicitation}
+                  onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
+                  onAnswerElicitation={(requestId, answer, values) =>
+                    void chat.answerElicitation(requestId, answer, values)
                   }
-                  await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
-                })()
-              }}
-            />
+                  onAnswerQuestions={(requestId, answers) =>
+                    void chat.answerQuestions(requestId, answers)
+                  }
+                  // Sent as an ordinary message, because that is what it is: the
+                  // request it belonged to was answered when the dialog closed, and
+                  // there is nothing left to approve. Naming the plan matters — by
+                  // the time anyone comes back to one the conversation may hold
+                  // several, and "the plan above" would be the agent's guess.
+                  //
+                  // Planning is turned off first, and not only for the control's
+                  // sake: that is what hands the session the mode the footer names.
+                  // Without it the message went out while the conversation was still
+                  // recorded as planning, and the agent worked in whatever mode it
+                  // happened to fall back to. The mode an approved plan gets in the
+                  // core — this is the same plan, approved later — and, as there,
+                  // only out of planning: a plan the agent offered unasked does not
+                  // lift a conversation out of Manual.
+                  onRewind={(messageId) => void rewind(messageId)}
+                  expansion={expansion}
+                  workspacePath={workspace.path}
+                  onOpenFile={openFile}
+                  onExecutePlan={(plan) => {
+                    void (async () => {
+                      if (record?.planMode === true) {
+                        await chat.setMode(modeAfterPlan(record, planExecutionMode))
+                      }
+                      await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
+                    })()
+                  }}
+                />
+              </div>
+            )}
+            {farFromEnd && (
+              <div className="pointer-events-none sticky bottom-3 z-10 flex h-0 items-end justify-end overflow-visible px-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const element = scroller.current
+                    // The button lives inside the scroller, so it cannot be clicked
+                    // without one; the guard is for the type.
+                    /* v8 ignore next */
+                    if (!element) return
+                    element.scrollTop = element.scrollHeight
+                    pinnedToBottom.current = true
+                    setFarFromEnd(false)
+                  }}
+                  title={t('chat.jumpToEnd')}
+                  aria-label={t('chat.jumpToEnd')}
+                  className="bg-accent text-on-accent hover:bg-accent-hover focus-ring pointer-events-auto grid size-9 place-items-center rounded-full transition-colors"
+                >
+                  <CloudDownload aria-hidden size={16} />
+                </button>
+              </div>
+            )}
           </div>
-        )}
-        {farFromEnd && (
-          <div className="pointer-events-none sticky bottom-3 z-10 flex h-0 items-end justify-end overflow-visible px-3">
-            <button
-              type="button"
-              onClick={() => {
-                const element = scroller.current
-                // The button lives inside the scroller, so it cannot be clicked
-                // without one; the guard is for the type.
-                /* v8 ignore next */
-                if (!element) return
-                element.scrollTop = element.scrollHeight
-                pinnedToBottom.current = true
-                setFarFromEnd(false)
-              }}
-              title={t('chat.jumpToEnd')}
-              aria-label={t('chat.jumpToEnd')}
-              className="bg-accent text-on-accent hover:bg-accent-hover focus-ring pointer-events-auto grid size-9 place-items-center rounded-full transition-colors"
-            >
-              <CloudDownload aria-hidden size={16} />
-            </button>
-          </div>
-        )}
-      </div>
 
-      {/* Only while showing. This is a modal, and a conversation nobody is
+          {/* Only while showing. This is a modal, and a conversation nobody is
           looking at raising one over the conversation being read is the worst
           kind of interruption: it is about work the reader cannot see, and it
           takes the keyboard from work they can. The tab's dot turns amber
           instead, which is how the workspace list already announces a turn
           waiting somewhere nobody is looking. */}
-      {visible && plan !== null && pending !== null && (
-        <PlanDialog
-          // Per request: a plan the agent replaces is a different plan, and the
-          // editor's open-or-closed state belongs to the one it was opened on.
-          key={pending.requestId}
-          plan={plan}
-          text={
-            planEdit !== null && planEdit.requestId === pending.requestId ? planEdit.text : plan
-          }
-          onText={(next) => {
-            setPlanEdit({ requestId: pending.requestId, text: next })
-          }}
-          goesOnIn={record?.planMode === true ? modeAfterPlan(record, planExecutionMode) : null}
-          onExecute={(edited) => {
-            // The `undefined` where feedback goes: an approval has none, and
-            // the plan the user rewrote is the fourth argument.
-            void chat.answer(
-              pending.requestId,
-              'allow',
-              undefined,
-              ...(edited === null ? [] : [edited])
-            )
-          }}
-          onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
-        />
-      )}
+          {visible && plan !== null && pending !== null && minimizedPlan !== pending.requestId && (
+            <PlanDialog
+              // Per request: a plan the agent replaces is a different plan, and the
+              // editor's open-or-closed state belongs to the one it was opened on.
+              key={pending.requestId}
+              plan={plan}
+              text={
+                planEdit !== null && planEdit.requestId === pending.requestId ? planEdit.text : plan
+              }
+              onText={(next) => {
+                setPlanEdit({ requestId: pending.requestId, text: next })
+              }}
+              feedback={
+                planNote !== null && planNote.requestId === pending.requestId ? planNote.text : ''
+              }
+              onFeedback={(next) => {
+                setPlanNote({ requestId: pending.requestId, text: next })
+              }}
+              onMinimize={() => {
+                setMinimizedPlan(pending.requestId)
+              }}
+              goesOnIn={record?.planMode === true ? modeAfterPlan(record, planExecutionMode) : null}
+              onExecute={(edited) => {
+                // The `undefined` where feedback goes: an approval has none, and
+                // the plan the user rewrote is the fourth argument.
+                void chat.answer(
+                  pending.requestId,
+                  'allow',
+                  undefined,
+                  ...(edited === null ? [] : [edited])
+                )
+              }}
+              onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
+            />
+          )}
 
-      {/* Only while the agent is working. A list it left with items pending —
+          {/* Only while the agent is working. A list it left with items pending —
           interrupted, errored, or simply abandoned — would otherwise stay
           pinned across every later turn and every restart, describing work
           nobody is doing. The log still holds it. */}
-      <TodoPanel todos={chat.busy ? todos : []} />
+          <TodoPanel todos={chat.busy ? todos : []} />
 
-      {tip !== null && (
-        <HeadsUp
-          tip={tip}
-          onKnown={() => {
-            onDismissTip(tip)
-          }}
-          onClose={() => {
-            setClosedTips((current) => new Set([...current, tip]))
-          }}
-          // Added to what is being written rather than replacing it, and the
-          // heads-up goes for this conversation: its words are in the field
-          // now, and a second press would put them in twice.
-          onAdd={(text) => {
-            setSeed((current) => ({ text, id: (current?.id ?? 0) + 1, append: true }))
-            setClosedTips((current) => new Set([...current, tip]))
-          }}
-        />
-      )}
+          {visible && plan !== null && pending !== null && minimizedPlan === pending.requestId && (
+            <PlanWaiting
+              onOpen={() => {
+                setMinimizedPlan(null)
+              }}
+            />
+          )}
 
-      {/* Beside the field, outside the log. It used to be the log's first
+          {tip !== null && (
+            <HeadsUp
+              tip={tip}
+              onKnown={() => {
+                onDismissTip(tip)
+              }}
+              onClose={() => {
+                setClosedTips((current) => new Set([...current, tip]))
+              }}
+              // Added to what is being written rather than replacing it, and the
+              // heads-up goes for this conversation: its words are in the field
+              // now, and a second press would put them in twice.
+              onAdd={(text) => {
+                setSeed((current) => ({ text, id: (current?.id ?? 0) + 1, append: true }))
+                setClosedTips((current) => new Set([...current, tip]))
+              }}
+            />
+          )}
+
+          {/* Beside the field, outside the log. It used to be the log's first
           child, and in a conversation of any length that is thousands of
           pixels above what is on screen: a send that failed looked like an
           agent ignoring the message, for days. What it reports is about the
           message being written, so it sits where that message is. */}
-      {(chat.error ?? notice) !== null && (
-        <div className="mx-auto w-full max-w-6xl px-6 pt-2">
-          <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-            {chat.error ?? notice}
-          </p>
-        </div>
-      )}
+          {(chat.error ?? notice) !== null && (
+            <div className="mx-auto w-full max-w-6xl px-6 pt-2">
+              <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
+                {chat.error ?? notice}
+              </p>
+            </div>
+          )}
 
-      <div className="relative">
-        <Composer
-          initialDraft={draft}
-          seed={seed}
-          onDraftLeave={onDraftLeave}
-          focusOnMount={focusComposer}
-          busy={chat.busy}
-          workingMode={workingMode}
-          planMode={record?.planMode ?? true}
-          onMode={(mode) => void chat.setMode(mode).then(moved)}
-          effort={effort}
-          onEffort={(level) => void chat.setEffort(level)}
-          planEffort={planEffort}
-          onPlanEffort={(level) => void chat.setPlanEffort(level)}
-          onAutoCompact={(window) => {
-            void chat.setAutoCompact(window).then(moved)
-          }}
-          model={model}
-          onModel={(chosen) => void chat.setModel(chosen).then(moved)}
-          planModel={planModel}
-          onPlanModel={(chosen) => void chat.setPlanModel(chosen).then(moved)}
-          models={models}
-          // What the session reports it is running, which the chip shows when it
-          // differs from what was chosen here. It rides in with the context
-          // reading, so it refreshes on the same `result` the token count does.
-          activeModel={usage.context?.model ?? null}
-          commands={commands}
-          agents={agents}
-          usage={usage}
-          limit={rateLimit}
-          skills={skills.skills}
-          onToggleSkill={skills.toggle}
-          onRefreshSkills={skills.refresh}
-          onOpenSettings={onOpenSkillSettings}
-          onSend={send}
-          onStop={() => void chat.interrupt()}
-          /* The two queues become one list here rather than in the composer:
+          <div className="relative">
+            <Composer
+              initialDraft={draft}
+              seed={seed}
+              onDraftLeave={onDraftLeave}
+              focusOnMount={focusComposer}
+              busy={chat.busy}
+              workingMode={workingMode}
+              planMode={record?.planMode ?? true}
+              onMode={(mode) => void chat.setMode(mode).then(moved)}
+              effort={effort}
+              onEffort={(level) => void chat.setEffort(level)}
+              planEffort={planEffort}
+              onPlanEffort={(level) => void chat.setPlanEffort(level)}
+              onAutoCompact={(window) => {
+                void chat.setAutoCompact(window).then(moved)
+              }}
+              model={model}
+              onModel={(chosen) => void chat.setModel(chosen).then(moved)}
+              planModel={planModel}
+              onPlanModel={(chosen) => void chat.setPlanModel(chosen).then(moved)}
+              models={models}
+              // What the session reports it is running, which the chip shows when it
+              // differs from what was chosen here. It rides in with the context
+              // reading, so it refreshes on the same `result` the token count does.
+              activeModel={usage.context?.model ?? null}
+              commands={commands}
+              agents={agents}
+              usage={usage}
+              limit={rateLimit}
+              skills={skills.skills}
+              onToggleSkill={skills.toggle}
+              onRefreshSkills={skills.refresh}
+              onOpenSettings={onOpenSkillSettings}
+              onSend={send}
+              onStop={() => void chat.interrupt()}
+              /* The two queues become one list here rather than in the composer:
            this is already the layer that adapts a controller to a prop, and the
            composer has no business knowing there are two places a note can come
            from. */
-          notes={mergeNotes(comments.pending, quotes.pending, codeNotes.pendingFor(tab.key))}
-          onRemoveNote={(note: ChatNote) => {
-            if (note.kind === 'diff') comments.remove(note)
-            else if (note.kind === 'code') codeNotes.remove(tab.key, note)
-            else quotes.remove(note)
-          }}
-          onNotesSent={() => {
-            comments.clear()
-            quotes.clear()
-            codeNotes.clear(tab.key)
-            attachments.clear()
-          }}
-          files={attachments.files}
-          onRemoveFile={attachments.remove}
-          onAttachFiles={() => {
-            setNotice(null)
-            void attachments.choose(t('chat.attach'))
-          }}
-          onDropFiles={attachments.drop}
-          onPasteImage={(image) => {
-            setNotice(null)
-            void attachments.paste(image)
-          }}
-          onSideQuestion={askSide}
-        />
+              notes={mergeNotes(comments.pending, quotes.pending, codeNotes.pendingFor(tab.key))}
+              onRemoveNote={(note: ChatNote) => {
+                if (note.kind === 'diff') comments.remove(note)
+                else if (note.kind === 'code') codeNotes.remove(tab.key, note)
+                else quotes.remove(note)
+              }}
+              onNotesSent={() => {
+                comments.clear()
+                quotes.clear()
+                codeNotes.clear(tab.key)
+                attachments.clear()
+              }}
+              files={attachments.files}
+              onRemoveFile={attachments.remove}
+              onAttachFiles={() => {
+                setNotice(null)
+                void attachments.choose(t('chat.attach'))
+              }}
+              onDropFiles={attachments.drop}
+              onPasteImage={(image) => {
+                setNotice(null)
+                void attachments.paste(image)
+              }}
+              onSideQuestion={askSide}
+            />
 
-        <SideQuestions
-          thread={sideQuestions.threadFor(sideChatId)}
-          visible={visible}
-          onOpenChange={openSide}
-          onAsk={askSide}
-          onClear={() => {
-            if (sideChatId !== null) clearSide(sideChatId)
-          }}
-        />
-      </div>
+            <SideQuestions
+              thread={sideQuestions.threadFor(sideChatId)}
+              visible={visible}
+              onOpenChange={openSide}
+              onAsk={askSide}
+              onClear={() => {
+                void withRecord(clearSide)
+              }}
+            />
+          </div>
 
-      {rewindDialog}
-    </div>
+          {rewindDialog}
+        </div>
+      </AgentLogContext.Provider>
+    </AgentsContext.Provider>
   )
 }

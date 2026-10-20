@@ -26,6 +26,7 @@ import {
   type WorkspaceMood
 } from './agentStatus.js'
 import { DropdownMenu } from './DropdownMenu.js'
+import { useWorkspaceAgents } from '../hooks/backgroundTasks.js'
 import { RequestMark } from './RequestMark.js'
 import { NameEditor } from './NameEditor.js'
 
@@ -59,6 +60,9 @@ export function WorkspaceRow({
   onRemove
 }: WorkspaceRowProps): React.JSX.Element {
   const { t } = useTranslation()
+  // Agents a turn sent off, still at work after it ended: the reason the row
+  // says "Working" with nothing visibly happening in the conversation.
+  const agents = useWorkspaceAgents(workspace.id)
 
   if (editing) {
     return (
@@ -75,7 +79,8 @@ export function WorkspaceRow({
     )
   }
 
-  const mood = WORKSPACE_MOODS[workspaceMood(workspace)]
+  const moodKey = workspaceMood(workspace)
+  const mood = WORKSPACE_MOODS[moodKey]
 
   return (
     <div
@@ -114,7 +119,11 @@ export function WorkspaceRow({
               <span className="text-warning truncate">{t('workspaces.missing')}</span>
             ) : (
               <>
-                <span className={`shrink-0 ${mood.text}`}>{t(mood.line)}</span>
+                <span className={`shrink-0 ${mood.text}`}>
+                  {moodKey === 'running' && agents > 0
+                    ? t('workspaces.lineRunningAgents', { count: agents })
+                    : t(mood.line)}
+                </span>
                 {workspace.changedFiles > 0 && (
                   <>
                     <span aria-hidden className="text-ink-faint">

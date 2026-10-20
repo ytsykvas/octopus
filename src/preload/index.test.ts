@@ -80,6 +80,7 @@ describe('the exposed bridge', () => {
       'resources',
       'settings',
       'skills',
+      'tasks',
       'terminal',
       'theme',
       'workspaces'
@@ -301,6 +302,11 @@ describe('channel names', () => {
       'workspaces:closePullRequest'
     ],
     [
+      'workspaces.rerunChecks',
+      () => method('workspaces', 'rerunChecks')('w' as never, 7 as never, 'all' as never),
+      'workspaces:rerunChecks'
+    ],
+    [
       'workspaces.mergePullRequest',
       () => method('workspaces', 'mergePullRequest')('w' as never, 7 as never, 'squash' as never),
       'workspaces:mergePullRequest'
@@ -355,6 +361,8 @@ describe('channel names', () => {
     ['chats.history', () => method('chats', 'history')('c' as never), 'chats:history'],
     ['chats.send', () => method('chats', 'send')('c' as never, 'hi' as never), 'chats:send'],
     ['chats.interrupt', () => method('chats', 'interrupt')('c' as never), 'chats:interrupt'],
+    ['tasks.list', () => method('tasks', 'list')(), 'tasks:list'],
+    ['tasks.stop', () => method('tasks', 'stop')('c' as never, 't' as never), 'tasks:stop'],
     [
       'chats.setWorkingMode',
       () => method('chats', 'setWorkingMode')('c' as never, 'acceptEdits' as never),
@@ -399,8 +407,8 @@ describe('channel names', () => {
       'chats:answerQuestions'
     ],
     [
-      'chats.pendingPermission',
-      () => method('chats', 'pendingPermission')('c' as never),
+      'chats.pendingPermissions',
+      () => method('chats', 'pendingPermissions')('c' as never),
       'chats:pending'
     ],
     ['chats.usage', () => method('chats', 'usage')('c' as never), 'chats:usage'],
@@ -647,6 +655,7 @@ describe('channel names', () => {
     'settings.onOpen',
     'chats.onEvent',
     'chats.onStatus',
+    'tasks.onChanged',
     'chats.onChanged',
     'chats.onUsageWindows',
     'workspaces.onStatus',
@@ -865,6 +874,24 @@ describe('the rest of the surface', () => {
 
     stop()
     expect(off).toHaveBeenCalledWith('chats:status', expect.any(Function))
+  })
+
+  // The agent map's stream: a conversation's tasks, gathered per burst.
+  it('tasks.onChanged delivers the tasks and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('tasks', 'onChanged')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'tasks:changed')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    const tasks = { chatId: 'chat-1', workspaceId: 'planner/kyiv', tasks: [] }
+    listener({}, tasks)
+    expect(handler).toHaveBeenCalledWith(tasks)
+
+    stop()
+    expect(off).toHaveBeenCalledWith('tasks:changed', expect.any(Function))
   })
 
   // A fifth stream, because a conversation appearing or going is not a status:

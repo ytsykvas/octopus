@@ -741,6 +741,47 @@
     animation-play-state: running;
   }
 
+  /* The count of agents at work in the composer (AgentsChip.tsx), wearing the
+     composer's own colours as a 1px line that turns while any of them is
+     working. The one thing on the strip that moves, and only while there is
+     work nobody is watching: no glow, which is the composer's alone, and no
+     line at all once the agents are done. */
+  .agents-chip {
+    isolation: isolate;
+    --ring-colours:
+      var(--project-blue), var(--project-red), var(--project-amber), var(--project-green),
+      var(--project-blue);
+  }
+
+  .agents-chip-line {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: conic-gradient(from var(--ring-angle), var(--ring-colours));
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    opacity: 0.7;
+    animation: ring-turn 4s linear infinite;
+  }
+
+  /* An agent at work: a quarter of a ring turning, in the accent. Drawn rather
+     than an icon so it is the same 10px in the map, the detail and the log,
+     and so its track can be the accent thinned out rather than a grey that
+     reads as a second colour on the tinted panes. */
+  .agent-arc {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    border: 1.5px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    border-top-color: var(--accent);
+    animation: agent-arc-turn 0.9s linear infinite;
+  }
+
   .focus-ring:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -760,6 +801,12 @@
 @keyframes ring-turn {
   to {
     --ring-angle: 360deg;
+  }
+}
+
+@keyframes agent-arc-turn {
+  to {
+    transform: rotate(360deg);
   }
 }
 

@@ -3266,15 +3266,7 @@ describe('a branch list that came back full', () => {
 })
 
 describe('news from agents out of sight', () => {
-  const DONE = {
-    type: 'result',
-    ok: true,
-    costUsd: null,
-    durationMs: 1,
-    inputTokens: null,
-    outputTokens: null,
-    terminalReason: null
-  } as const
+  const DONE = { type: 'finished' } as const
 
   // The toast is the news; Show is the way to it — the project, the workspace
   // and the very conversation, rather than whichever tab the workspace last had.

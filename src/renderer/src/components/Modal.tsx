@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { Minus, X } from 'lucide-react'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -10,6 +10,11 @@ interface ModalProps {
   readonly footer?: React.ReactNode
   /** `sm` for a question, `md` for a list, `lg` for a form with sections. */
   readonly size?: 'sm' | 'md' | 'lg'
+  /**
+   * Sets the dialog aside without answering it. Offered only where the caller
+   * has somewhere to bring it back from: × and Escape still mean `onClose`.
+   */
+  readonly onMinimize?: () => void
 }
 
 const WIDTHS = {
@@ -71,7 +76,8 @@ export function Modal({
   onClose,
   children,
   footer,
-  size = 'md'
+  size = 'md',
+  onMinimize
 }: ModalProps): React.JSX.Element {
   const { t } = useTranslation()
   const dialog = useRef<HTMLDialogElement>(null)
@@ -110,6 +116,18 @@ export function Modal({
       <div className={`flex flex-col ${HEIGHTS[size]}`}>
         <header className="border-line flex shrink-0 items-center gap-3 border-b px-4 py-3">
           <h2 className="min-w-0 flex-1 truncate font-medium">{title}</h2>
+
+          {onMinimize !== undefined && (
+            <button
+              type="button"
+              onClick={onMinimize}
+              title={t('modal.minimize')}
+              aria-label={t('modal.minimize')}
+              className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 transition-colors"
+            >
+              <Minus aria-hidden size={14} />
+            </button>
+          )}
 
           {/* Now that the backdrop no longer dismisses, a visible way out has
               to exist for anyone not reaching for Escape. */}

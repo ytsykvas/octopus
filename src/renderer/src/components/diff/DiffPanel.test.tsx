@@ -2021,9 +2021,13 @@ describe('what has reached GitHub', () => {
     )
     renderPanel()
 
-    expect(
-      await screen.findByRole('img', { name: '1 file is out of date in the request' })
-    ).toHaveTextContent('1')
+    const strip = await screen.findByRole('img', { name: '1 file is out of date in the request' })
+    expect(strip).toHaveTextContent('1')
+    // The count alone says something is wrong; the tooltip says what, and what to do.
+    expect(strip).toHaveAttribute(
+      'title',
+      expect.stringMatching(/^1 file is out of date in the request\n.*older version.*Push/s)
+    )
     expect(screen.getByRole('img', { name: /older version of this file/ })).toBeInTheDocument()
   })
 

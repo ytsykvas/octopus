@@ -71,6 +71,7 @@ function failing(overrides: Partial<PullRequestCheck> = {}): PullRequestCheck {
     url: 'https://github.com/o/p/actions/runs/123/job/456',
     startedAt: '2026-08-20T11:00:00Z',
     completedAt: '2026-08-20T11:02:00Z',
+    runId: '123',
     ...overrides
   }
 }
@@ -735,7 +736,8 @@ describe('a pull request that exists', () => {
             state: 'pending',
             url: null,
             startedAt: null,
-            completedAt: null
+            completedAt: null,
+            runId: null
           }
         ]
       })
@@ -1720,5 +1722,82 @@ describe('what the tab can do about a request', () => {
     expect(await screen.findByText('Pull request #7 was merged.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Review it' })).not.toBeInTheDocument()
+  })
+})
+
+describe('re-running the checks', () => {
+  /* Restarting a green suite is not something anybody reaches for, and two
+     buttons on every request would be noise beside the moment they matter. */
+  it('offers nothing to re-run while no check has failed', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
+    renderPanel()
+
+    expect(await screen.findByText('test')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Failed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument()
+  })
+
+  it('sends each button its own scope, then reads the request again', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing()] }))
+    const { onRequestChanged } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Failed' }))
+    await waitFor(() => {
+      expect(onRequestChanged).toHaveBeenCalledTimes(1)
+    })
+    await user.click(screen.getByRole('button', { name: 'All' }))
+
+    expect(vi.mocked(octopus().workspaces.rerunChecks).mock.calls).toEqual([
+      [anna.id, 7, 'failed'],
+      [anna.id, 7, 'all']
+    ])
+    await waitFor(() => {
+      expect(onRequestChanged).toHaveBeenCalledTimes(2)
+    })
+    // The first read, and one after each press.
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(3)
+  })
+
+  /* A second press while the first is still on its way would restart a run
+     GitHub is already restarting, and it refuses that. */
+  it('holds both buttons while one re-run is on its way', async () => {
+    const user = userEvent.setup()
+    const pending = held<{ ok: true; value: undefined }>()
+    vi.mocked(octopus().workspaces.rerunChecks).mockReturnValue(pending.promise)
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'All' }))
+
+    expect(screen.getByRole('button', { name: 'Failed' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'All' })).toBeDisabled()
+
+    pending.resolve({ ok: true, value: undefined })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'All' })).toBeEnabled()
+    })
+  })
+
+  it('says why GitHub would not re-run them', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().workspaces.rerunChecks).mockResolvedValue({
+      ok: false,
+      error: 'refused',
+      code: 'rerunFailed',
+      params: { number: '7', reason: 'run is in progress' }
+    })
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing()] }))
+    const { onError } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Failed' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('run is in progress'))
+    })
   })
 })

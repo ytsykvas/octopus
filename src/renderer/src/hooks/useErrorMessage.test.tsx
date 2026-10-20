@@ -132,6 +132,8 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   draftUnreadable: null,
   pushFailed: { branch: 'octopus/anna', reason: 'rejected' },
   closeFailed: { number: '42', reason: 'already closed' },
+  nothingToRerun: { number: '42' },
+  rerunFailed: { number: '42', reason: 'run is in progress' },
   replyFailed: { reason: 'empty' },
   resolveFailed: { reason: 'not found' },
   mergeFailed: { number: '42', reason: 'checks failing' },

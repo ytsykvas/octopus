@@ -22,6 +22,7 @@ import type {
   PluginApplied,
   RateLimit,
   SessionUsage,
+  TasksEvent,
   UsageOutcome,
   WorkspaceStatusEvent
 } from '@core/service.js'
@@ -38,7 +39,7 @@ import type { CliPermission } from '@core/cliPermissions.js'
 import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
-import type { PullRequestDetail } from '@core/pullRequestShapes.js'
+import type { PullRequestDetail, RerunScope } from '@core/pullRequestShapes.js'
 import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
@@ -201,6 +202,28 @@ const api = {
     }
   },
 
+  /** What the conversations have running beside them: subagents, commands, workflows. */
+  tasks: {
+    /** Every conversation with tasks, ended ones included. */
+    list: (): Promise<Result<readonly TasksEvent[]>> =>
+      ipcRenderer.invoke('tasks:list') as Promise<Result<readonly TasksEvent[]>>,
+
+    /** Stops one of them; the conversation and the rest go on. */
+    stop: (chatId: string, taskId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('tasks:stop', chatId, taskId) as Promise<Result<void>>,
+
+    /** A conversation's tasks, whenever they move — all of them, not a change. */
+    onChanged: (handler: (event: TasksEvent) => void): (() => void) => {
+      const listener = (_event: unknown, tasks: TasksEvent): void => {
+        handler(tasks)
+      }
+      ipcRenderer.on('tasks:changed', listener)
+      return () => {
+        ipcRenderer.off('tasks:changed', listener)
+      }
+    }
+  },
+
   chats: {
     /** Chats of a workspace; empty when nobody has written yet. Creates nothing. */
     list: (workspaceId: string): Promise<Result<Chat[]>> =>
@@ -324,14 +347,14 @@ const api = {
       ipcRenderer.invoke('chats:answerQuestions', requestId, answers) as Promise<Result<void>>,
 
     /**
-     * What the chat's agent is blocked on, or `null` when it is not blocked.
+     * What the chat's agents are blocked on — the turn's question and its background agents'.
      *
      * Asked on opening a conversation, because the event announcing it goes
      * out once: a window that was not there to hear it would otherwise show a
      * chat that stays busy for ever.
      */
-    pendingPermission: (chatId: string): Promise<Result<PermissionRequest | null>> =>
-      ipcRenderer.invoke('chats:pending', chatId) as Promise<Result<PermissionRequest | null>>,
+    pendingPermissions: (chatId: string): Promise<Result<readonly PermissionRequest[]>> =>
+      ipcRenderer.invoke('chats:pending', chatId) as Promise<Result<readonly PermissionRequest[]>>,
 
     /** How full the context is and how much of the subscription is gone. */
     usage: (chatId: string): Promise<Result<SessionUsage>> =>
@@ -576,6 +599,12 @@ const api = {
     /** Closes it without merging, and leaves the branch where it is. */
     closePullRequest: (workspaceId: string, number: number): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:closePullRequest', workspaceId, number) as Promise<
+        Result<void>
+      >,
+
+    /** Restarts its Actions runs. The caller reads the request again. */
+    rerunChecks: (workspaceId: string, number: number, scope: RerunScope): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:rerunChecks', workspaceId, number, scope) as Promise<
         Result<void>
       >,
 

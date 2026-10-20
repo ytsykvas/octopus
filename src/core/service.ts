@@ -128,6 +128,8 @@ import {
   toSdkSettingSources
 } from './config.js'
 import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
+import { liveCount } from './backgroundTasks.js'
+import { createTaskRegistry, type TaskEnding, type TasksEvent } from './taskRegistry.js'
 import { type DirectoryListing, type FileTreeSnapshot, readFileTree } from './fileTree.js'
 import { type FileContent, readWorkspaceDirectory, readWorkspaceFile } from './workspaceFiles.js'
 import {
@@ -145,6 +147,7 @@ import {
   type MergeMethod,
   closePullRequest,
   mergePullRequest,
+  rerunChecks,
   replyToReviewThread,
   setReviewThreadResolved,
   type NewPullRequest,
@@ -157,7 +160,7 @@ import {
   readPullRequest,
   readPullRequestDetail
 } from './pullRequests.js'
-import type { PullRequestDetail } from './pullRequestShapes.js'
+import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, withIndexCopy } from './git.js'
 import { FETCH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
@@ -383,6 +386,18 @@ const PLUGIN_RELOAD_MS = 10_000
 const SIDE_TIMEOUT_MS = 5 * 60_000
 
 /**
+ * How long a conversation has to stay at rest before it is said to be done.
+ *
+ * The CLI hands a finished agent's report to the main agent in a turn of its
+ * own, and whether one is coming cannot be read from anything before it
+ * starts: an agent ending mid-turn is usually folded into that turn, and
+ * sometimes reported again just after it. Measured, that turn's start arrives
+ * 0.2 to 0.5 seconds after the agent's end or the turn's result, so a rest
+ * that lasts this long is the real one.
+ */
+const FINISHED_AFTER_MS = 1500
+
+/**
  * The events that mean the model itself spoke — what a session's headers are
  * refreshed by. Deltas count: they are the response in progress.
  */
@@ -469,6 +484,8 @@ export interface ServiceOptions {
   readonly pluginCli?: PluginCli
   /** How long a running conversation is given to reload its plugins. */
   readonly pluginReloadMs?: number
+  /** How long a conversation stays at rest before it is said to be done. */
+  readonly finishedAfterMs?: number
   /**
    * How a skill is downloaded, injected for the reason `makeGh` is: the real
    * one leaves the machine, and a suite that used it would be testing
@@ -583,6 +600,8 @@ export interface ChatStatusEvent {
   readonly turnStartedAt: string | null
 }
 
+export type { TasksEvent } from './taskRegistry.js'
+
 /**
  * The conversations of a workspace are not the set they were.
  *
@@ -679,6 +698,8 @@ export interface PermissionRequest {
   readonly requestId: string
   readonly toolName: string
   readonly input: unknown
+  /** The background agent asking, when it is one and not the turn. */
+  readonly taskId?: string
 }
 
 interface PendingElicitation {
@@ -701,6 +722,8 @@ interface PendingPermission {
   /** Which conversation is blocked — approving a plan reads its mode back. */
   readonly chatId: string
   readonly workspaceId: string
+  /** The background agent asking, when it is not the conversation itself. */
+  readonly taskId?: string
 }
 
 /**
@@ -1216,6 +1239,9 @@ export interface OctopusService {
   /** Closes it without merging. The branch is left alone. */
   closePullRequest(workspaceId: string, number: number): Promise<void>
 
+  /** Restarts its Actions runs — only the failed jobs, or all of them. */
+  rerunChecks(workspaceId: string, number: number, scope: RerunScope): Promise<void>
+
   /**
    * Answers one review thread.
    *
@@ -1359,8 +1385,17 @@ export interface OctopusService {
    * turn that ends is the button's. A message typed into the chat names none.
    */
   sendToChat(chatId: string, text: string, sending?: SendOptions): Promise<string | null>
-  /** Stops the current turn; the session stays open. */
+  /**
+   * Stops the current turn; the session stays open.
+   *
+   * Background agents go on: the session is started with a Stop for each of
+   * them (`stopTask`), so this one ends the turn and nothing else.
+   */
   interruptChat(chatId: string): Promise<void>
+  /** Stops one background task of a chat — a subagent, a command, a workflow. */
+  stopTask(chatId: string, taskId: string): Promise<void>
+  /** Every conversation with tasks, as the agent map draws them. */
+  listTasks(): readonly TasksEvent[]
   /** Sets how freely the chat works once it is working. */
   setChatWorkingMode(chatId: string, mode: WorkingMode): Promise<void>
   /** Turns planning on or off for the chat. */
@@ -1399,14 +1434,15 @@ export interface OctopusService {
     history: readonly SideExchange[]
   ): Promise<SideAnswer | null>
   /**
-   * What the chat's agent is blocked on, or null when it is not blocked.
+   * What the chat's agents are blocked on, oldest first — the turn's own
+   * question and its background agents' alike.
    *
    * Asked rather than only announced, because the announcement happens once.
    * A window that opens afterwards — or comes back to a workspace it had
    * switched away from — otherwise shows a conversation that looks busy for
    * ever while the answer it needs is one nobody can give.
    */
-  pendingPermission(chatId: string): PermissionRequest | null
+  pendingPermissions(chatId: string): readonly PermissionRequest[]
   /**
    * Models the agent last reported, for the picker.
    *
@@ -1513,6 +1549,8 @@ export interface OctopusService {
   onUsageWindows(handler: (windows: UsageWindows) => void): () => void
   /** What each conversation is doing, as it changes. The tab strip draws this. */
   onChatStatus(handler: (event: ChatStatusEvent) => void): () => void
+  /** A conversation's tasks, whenever they move — gathered, see `TASK_PUSH_MS` in `taskRegistry.ts`. */
+  onTasks(handler: (event: TasksEvent) => void): () => void
   /**
    * Which conversations a workspace has, when that set changes.
    *
@@ -1574,6 +1612,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const runQuery = options.query ?? withAgentBinary(defaultQuery, unpackedAgentBinary())
   const plugins = options.pluginCli ?? pluginCli()
   const pluginReloadMs = options.pluginReloadMs ?? PLUGIN_RELOAD_MS
+  const finishedAfterMs = options.finishedAfterMs ?? FINISHED_AFTER_MS
+  /** A "done" waiting out `FINISHED_AFTER_MS`, per conversation. */
+  const finishing = new Map<string, ReturnType<typeof setTimeout>>()
   const runForkSession = options.forkSession ?? defaultForkSession
   const sideTimeoutMs = options.sideQuestionTimeoutMs ?? SIDE_TIMEOUT_MS
   const runSessionMessages = options.sessionMessages ?? defaultSessionMessages
@@ -1687,7 +1728,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const usageListeners = new Set<(windows: UsageWindows) => void>()
   const chatStatusListeners = new Set<(event: ChatStatusEvent) => void>()
   const chatsChangedListeners = new Set<(event: ChatsChangedEvent) => void>()
+  const taskListeners = new Set<(event: TasksEvent) => void>()
   const pending = new Map<string, PendingPermission>()
+
+  /**
+   * Each conversation's background tasks, and whether its main agent is
+   * mid-turn: opened by a message sent or taken from the queue, or by the main
+   * agent speaking unprompted; closed by the turn's result.
+   */
+  const registry = createTaskRegistry({
+    asking: askingTasks,
+    onSnapshot: (event) => {
+      for (const listener of taskListeners) listener(event)
+    }
+  })
   /**
    * MCP servers' questions waiting for an answer.
    *
@@ -2441,7 +2495,89 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const asking = [...pending.values(), ...pendingElicitations.values()].some(
       (request) => request.chatId === chatId
     )
+    // A question answered or raised moves an agent's row in or out of amber.
+    registry.pushSoon(chatId)
     return setChatStatus(chatId, asking ? 'waiting_permission' : 'running')
+  }
+
+  /**
+   * What a conversation is doing once its main agent has stopped.
+   *
+   * Not simply idle: a background agent waiting on an answer still needs one,
+   * and agents still working are still working. Only questions an agent asked
+   * count here — the turn's own are refused as it ends.
+   */
+  function restingStatus(chatId: string): ChatStatus {
+    if (askingTasks(chatId).size > 0) return 'waiting_permission'
+    return liveCount(registry.tasks(chatId)) > 0 ? 'running' : 'idle'
+  }
+
+  /** The background agents with a question open, by task. */
+  function askingTasks(chatId: string): ReadonlySet<string> {
+    const asking = new Set<string>()
+    for (const request of pending.values()) {
+      if (request.chatId === chatId && request.taskId !== undefined) asking.add(request.taskId)
+    }
+    return asking
+  }
+
+  /**
+   * Writes the resting status, and says the conversation is done once it has
+   * stayed at rest — see `FINISHED_AFTER_MS`.
+   */
+  function rest(chat: Chat): void {
+    const status = restingStatus(chat.id)
+    background(chat, setChatStatus(chat.id, status))
+    if (status !== 'idle') return
+
+    clearTimeout(finishing.get(chat.id))
+    finishing.set(
+      chat.id,
+      setTimeout(() => {
+        finishing.delete(chat.id)
+        emit({ chatId: chat.id, workspaceId: chat.workspaceId, event: { type: 'finished' } })
+      }, finishedAfterMs)
+    )
+  }
+
+  /** Work again: a "done" still waiting is not news after all. */
+  function stillWorking(chatId: string): void {
+    clearTimeout(finishing.get(chatId))
+    finishing.delete(chatId)
+  }
+
+  function openTurn(chatId: string): void {
+    stillWorking(chatId)
+    registry.setTurnOpen(chatId, true)
+  }
+
+  /**
+   * Folds one event into a chat's tasks. Answers the tasks it ended that no
+   * `task_ended` announced, for the caller to record.
+   *
+   * With no turn open and nothing queued the status follows the agents, both
+   * ways: the last one ending brings the conversation to rest, and one ending
+   * with its question open takes the amber with it.
+   */
+  function trackTasks(chat: Chat, event: AgentEvent): readonly TaskEnding[] {
+    // A closing session still speaks for a moment; what it says about its
+    // agents would put back what closing it forgot.
+    if (!sessions.has(chat.id)) return []
+
+    const ended = registry.apply(chat, event, now())
+    if (ended === null) return []
+
+    // A question an agent asked goes with the agent.
+    for (const { taskId } of ended) abandonPermissions(chat.id, { taskId })
+
+    const status = findChat(state, chat.id)?.status
+    const resting =
+      !registry.turnOpen(chat.id) &&
+      (heldMessages.get(chat.id)?.size ?? 0) === 0 &&
+      (status === 'running' || status === 'waiting_permission')
+    if (resting && restingStatus(chat.id) !== status) rest(chat)
+
+    return event.type === 'task_ended' ? [] : ended
   }
 
   /**
@@ -2562,7 +2698,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     if (event.type === 'rate_limit') rateLimit = event
 
+    const unannounced = trackTasks(chat, event)
+
+    /*
+     * The main agent speaking with no turn open is a turn the CLI started by
+     * itself — to read a finished agent's report — and it is work like any
+     * other. Only the main agent's words count: a subagent's arrive on the
+     * same stream at any time.
+     */
+    if (
+      (event.type === 'text' || event.type === 'thinking' || event.type === 'tool_use') &&
+      event.parentToolUseId === undefined &&
+      !registry.turnOpen(chat.id) &&
+      sessions.has(chat.id)
+    ) {
+      openTurn(chat.id)
+      background(chat, carryOn(chat.id))
+    }
+
     if (event.type === 'session_started') {
+      // A turn starting — the one that hands a finished agent's report over
+      // opens with this, before the main agent says anything.
+      stillWorking(chat.id)
+
       // Persisted the moment it appears: this id is the only thing that makes
       // a conversation survive the application being restarted.
       //
@@ -2649,8 +2807,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     // A failure is still said: it is news even with another turn to come.
     const another = (heldMessages.get(chat.id)?.size ?? 0) > 0
+    if (event.type === 'result' || event.type === 'error') registry.setTurnOpen(chat.id, false)
+
+    // Not idle while agents it sent off are still working — see `restingStatus`.
     if (event.type === 'result' && !(event.ok && another)) {
-      background(chat, setChatStatus(chat.id, event.ok ? 'idle' : 'error'))
+      if (event.ok) rest(chat)
+      else background(chat, setChatStatus(chat.id, 'error'))
     }
 
     /*
@@ -2698,6 +2860,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
      * its amber. `started` alone: `finished` arrives after a result too.
      */
     if (event.type === 'message_queue' && event.state === 'started') {
+      openTurn(chat.id)
       background(chat, carryOn(chat.id))
     }
 
@@ -2708,13 +2871,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // A turn that has ended cannot answer for a tool it never ran. Only the
     // session's own stream reaches here — a background write that failed is
     // reported straight to the listeners by `report` — so this cannot withdraw
-    // a question a live turn is still waiting on.
+    // a question a live turn is still waiting on. An agent's question outlives
+    // the turn that launched the agent; it goes when the agent does, or with
+    // the session.
     if (event.type === 'result' || event.type === 'error') {
-      abandonPermissions(chat.id)
+      abandonPermissions(chat.id, event.type === 'result' ? 'turn' : 'all')
       abandonElicitations(chat.id)
     }
 
     emit({ chatId: chat.id, workspaceId: chat.workspaceId, event })
+
+    // Recorded after the event that ended them, and outside the fold that
+    // found them, so a reopened conversation reads how each one ended.
+    for (const { taskId, status } of unannounced) {
+      handleEvent(chat, { type: 'task_ended', taskId, status })
+    }
   }
 
   /**
@@ -2794,7 +2965,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   async function askPermission(
     chat: Chat,
-    { toolName, input, reason, suggestions, suppressAlways, signal }: PermissionAsk
+    { toolName, input, reason, suggestions, suppressAlways, signal, taskId }: PermissionAsk
   ): Promise<PermissionOutcome> {
     // Read on every call, against the config as it stands at that moment: a
     // name handed to `allowedTools` at session start could not be taken back
@@ -2808,7 +2979,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       toolName,
       input,
       ...(reason !== undefined && { reason }),
-      ...(suppressAlways === true && { suppressAlways })
+      ...(suppressAlways === true && { suppressAlways }),
+      ...(taskId !== undefined && { taskId })
     })
 
     return new Promise<PermissionOutcome>((resolve) => {
@@ -2820,9 +2992,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // bridge named, rather than this application guessing at one.
         ...(suggestions !== undefined && { suggestions }),
         ...(suppressAlways === true && { suppressAlways }),
+        ...(taskId !== undefined && { taskId }),
         chatId: chat.id,
         workspaceId: chat.workspaceId
       })
+      // Its row turns amber.
+      registry.pushSoon(chat.id)
 
       /*
        * The bridge can take a question back — the call it held is gone — and
@@ -2851,7 +3026,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    *
    * A request used to outlive the turn that raised it. Nothing but an answer
    * removed it, so a question the user had stopped instead of answering stayed
-   * in the map — and `pendingPermission` hands the first one it finds to
+   * in the map — and `pendingPermissions` hands it to
    * whatever window opens that conversation next, which brought the cancelled
    * card back with live buttons on it.
    *
@@ -2923,12 +3098,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
   }
 
-  function abandonPermissions(chatId: string): void {
+  /**
+   * `turn` lets go of the conversation's own questions and leaves its
+   * background agents' — they outlive the turn that launched them. A task id
+   * lets go of that agent's alone, as it ends.
+   */
+  function abandonPermissions(
+    chatId: string,
+    which: 'all' | 'turn' | { readonly taskId: string } = 'all'
+  ): void {
     for (const [requestId, request] of pending) {
       if (request.chatId !== chatId) continue
+      if (which === 'turn' && request.taskId !== undefined) continue
+      if (typeof which === 'object' && request.taskId !== which.taskId) continue
 
       pending.delete(requestId)
       request.resolve({ allow: false, message: ABANDONED })
+
+      // The window keeps an agent's card past the turn, so only this tells it
+      // the buttons reach nothing now. A turn's own cards go with its result.
+      const chat = typeof which === 'object' ? findChat(state, chatId) : undefined
+      if (chat) handleEvent(chat, { type: 'permission_withdrawn', requestId })
     }
   }
 
@@ -3174,6 +3364,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // neither is left in a set for the rest of the run.
     clearRequests.delete(chat.id)
     clearedTurns.delete(chat.id)
+
+    // Its agents go with its process, and a "done" nobody will see now.
+    registry.forget(chat.id)
+    stillWorking(chat.id)
 
     // Best effort: a session that fails to close must not stop the workspace
     // from being removed, nor the tab from closing.
@@ -4179,7 +4373,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // is not there is at best untested — and until the first skill is written
     // neither of ours exists. A write, so it lives here rather than in
     // `skillRootsFor`, which only names them.
-    await Promise.all([
+    const [targets] = await Promise.all([
+      // With the stores rather than beside the window below: it is a git
+      // process, and one still running after the window was read would let a
+      // close be written before the record is read again.
+      pushTargets(makeExec(workspace.path)),
       ...[...roots, attachments].map((root) => ensureStore(root)),
       // The commands and subagents beside them, for the same reason: the roots
       // are passed once at session start, and a directory that was not there
@@ -4190,11 +4388,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Asked of the files this session will read, as it starts. The agent can
     // still take one from a settings file later; a reading that strays from the
     // window it started with is how that shows (`windowStrayed`).
-    // In one await with the push targets: the record is read after the last one.
-    const [override, targets] = await Promise.all([
-      windowOverrideFor(workspace.path, settingSources),
-      pushTargets(makeExec(workspace.path))
-    ])
+    // Last and alone: the record is read straight after it.
+    const override = await windowOverrideFor(workspace.path, settingSources)
 
     // The record as it is **now**, read after the last await and before the
     // session is registered, with nothing in between. What was asked for is a
@@ -5474,6 +5669,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return closePullRequest(number, workspace.branch, makeGh(workspace.path))
     },
 
+    rerunChecks(workspaceId, number, scope) {
+      const workspace = requireWorkspace(workspaceId)
+      return rerunChecks(number, scope, workspace.branch, makeGh(workspace.path))
+    },
+
     /* No branch check on either of these, unlike merge and close. Those take a
        number, which `gh` resolves against the repository — so a stale one names
        whatever request now holds it. A thread id names one thread and nothing
@@ -5933,6 +6133,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       session.send(text, messageId)
       if (pushTo !== null) publishAfterTurn.set(chatId, pushTo)
 
+      openTurn(chatId)
       await setChatStatus(chatId, 'running')
       return messageId
     },
@@ -5945,7 +6146,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // throws must still leave nothing behind to be asked again. The same
       // applies to an edit announced and never finished — no result is coming
       // for it now.
-      abandonPermissions(chatId)
+      abandonPermissions(chatId, 'turn')
       abandonElicitations(chatId)
       abandonEdits(chatId)
       // Stopped is not finished: work cut off half way is not pushed.
@@ -5954,7 +6155,23 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Nothing running is not a failure — the button is simply ahead of the
       // agent, which finished between the render and the click.
       await sessions.get(chatId)?.interrupt()
-      await setChatStatus(chatId, 'idle')
+      registry.setTurnOpen(chatId, false)
+      // The agents it sent off are not stopped by this, so they may still be
+      // working, or still asking.
+      await setChatStatus(chatId, restingStatus(chatId))
+    },
+
+    async stopTask(chatId, taskId) {
+      requireChat(chatId)
+      // One already over is what the Stop asked for: the click was simply
+      // behind the push that said so.
+      const task = registry.tasks(chatId).find((each) => each.taskId === taskId)
+      if (task?.status !== 'running') return
+      await sessions.get(chatId)?.stopTask(taskId)
+    },
+
+    listTasks() {
+      return registry.list()
     },
 
     async setChatWorkingMode(chatId, mode) {
@@ -6014,16 +6231,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return requireChat(chatId).knownAgents
     },
 
-    pendingPermission(chatId) {
+    pendingPermissions(chatId) {
       requireChat(chatId)
 
-      for (const [requestId, request] of pending) {
-        if (request.chatId === chatId) {
-          return { requestId, toolName: request.toolName, input: request.input }
-        }
-      }
-
-      return null
+      return [...pending]
+        .filter(([, request]) => request.chatId === chatId)
+        .map(([requestId, request]) => ({
+          requestId,
+          toolName: request.toolName,
+          input: request.input,
+          ...(request.taskId !== undefined && { taskId: request.taskId })
+        }))
     },
 
     async answerElicitation(requestId, answer, values = {}) {
@@ -6064,7 +6282,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // Removed as the answer is given, never before it. An "always" whose
         // config write fails throws from here, and taking the question out
         // first left the agent blocked on something nothing could offer again:
-        // the window had dropped its copy, and `pendingPermission` had none.
+        // the window had dropped its copy, and `pendingPermissions` had none.
         pending.delete(requestId)
         request.resolve({ allow: false, message: note === '' ? DENIED : note })
 
@@ -6323,6 +6541,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return () => chatStatusListeners.delete(handler)
     },
 
+    onTasks(handler) {
+      taskListeners.add(handler)
+      return () => taskListeners.delete(handler)
+    },
+
     onChatsChanged(handler) {
       chatsChangedListeners.add(handler)
       return () => chatsChangedListeners.delete(handler)
@@ -6348,6 +6571,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )) {
         abandonElicitations(chatId)
       }
+
+      // A gathered push left for after the quit would reach no window, and
+      // its timer would hold the process open for nothing.
+      registry.stop()
+      for (const timer of finishing.values()) clearTimeout(timer)
+      finishing.clear()
 
       return within(
         SHUTDOWN_GRACE_MS,

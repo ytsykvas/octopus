@@ -60,6 +60,11 @@ export function installOctopusStub(): Api {
       onData: vi.fn(subscription),
       onExit: vi.fn(subscription)
     },
+    tasks: {
+      list: vi.fn(() => ok([])),
+      stop: vi.fn(() => ok(undefined)),
+      onChanged: vi.fn(subscription)
+    },
     chats: {
       list: vi.fn(() => ok([])),
       open: vi.fn(() => ok(chatFixture())),
@@ -96,7 +101,7 @@ export function installOctopusStub(): Api {
       models: vi.fn(() => ok([])),
       commands: vi.fn(() => ok([])),
       agents: vi.fn(() => ok([])),
-      pendingPermission: vi.fn(() => ok(null)),
+      pendingPermissions: vi.fn(() => ok([])),
       usage: vi.fn(() => ok({ context: null, autoCompact: null })),
       sideQuestion: vi.fn(() => ok(null)),
       answerPermission: vi.fn(() => ok(undefined)),
@@ -151,6 +156,7 @@ export function installOctopusStub(): Api {
       pullRequestDetail: vi.fn(() => ok(detailFixture())),
       mergePullRequest: vi.fn(() => ok(undefined)),
       closePullRequest: vi.fn(() => ok(undefined)),
+      rerunChecks: vi.fn(() => ok(undefined)),
       replyToReviewThread: vi.fn(() => ok(undefined)),
       setReviewThreadResolved: vi.fn(() => ok(undefined)),
       instruction: vi.fn(() => ok('Describe what changed and why.')),
