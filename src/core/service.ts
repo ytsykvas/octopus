@@ -4352,7 +4352,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // is not there is at best untested — and until the first skill is written
     // neither of ours exists. A write, so it lives here rather than in
     // `skillRootsFor`, which only names them.
-    await Promise.all([
+    const [targets] = await Promise.all([
+      // With the stores rather than beside the window below: it is a git
+      // process, and one still running after the window was read would let a
+      // close be written before the record is read again.
+      pushTargets(makeExec(workspace.path)),
       ...[...roots, attachments].map((root) => ensureStore(root)),
       // The commands and subagents beside them, for the same reason: the roots
       // are passed once at session start, and a directory that was not there
@@ -4363,11 +4367,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Asked of the files this session will read, as it starts. The agent can
     // still take one from a settings file later; a reading that strays from the
     // window it started with is how that shows (`windowStrayed`).
-    // In one await with the push targets: the record is read after the last one.
-    const [override, targets] = await Promise.all([
-      windowOverrideFor(workspace.path, settingSources),
-      pushTargets(makeExec(workspace.path))
-    ])
+    // Last and alone: the record is read straight after it.
+    const override = await windowOverrideFor(workspace.path, settingSources)
 
     // The record as it is **now**, read after the last await and before the
     // session is registered, with nothing in between. What was asked for is a

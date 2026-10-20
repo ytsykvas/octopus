@@ -11947,11 +11947,23 @@ describe('the agent chat', () => {
      * written before the session is ended, so that session is there to be
      * ended — and the send's `running`, queued behind the close, must not
      * land on the closed record.
+     *
+     * With git slower than the close, as it was on CI: a git read still running
+     * after the start is let go would let the close be written first.
      */
     it('ends a session that registered while the close was being written', async () => {
       const start = heldStart()
       const { service, workspaceId } = await withWorkspace({
-        windowOverride: start.windowOverride
+        windowOverride: start.windowOverride,
+        makeExec: (cwd, options) => {
+          const exec = gitIn(cwd, options)
+          return async (args) => {
+            if (args[0] === 'config' && args[1] === '--get-regexp') {
+              await new Promise((resolve) => setTimeout(resolve, 200))
+            }
+            return exec(args)
+          }
+        }
       })
       const first = await service.openChat(workspaceId)
       await service.createChat(workspaceId)
