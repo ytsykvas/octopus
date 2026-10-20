@@ -66,6 +66,7 @@ describe('a new chat', () => {
       planMode: true,
       autoCompactWindow: null,
       knownCommands: [],
+      knownAgents: [],
       skillOverrides: {},
       closedAt: null,
       createdAt: '2026-08-11T09:00:00.000Z'
@@ -318,7 +319,8 @@ describe('a command the agent reported', () => {
       name: 'deploy',
       description: '',
       argumentHint: '',
-      aliases: []
+      aliases: [],
+      skill: false
     })
   })
 
@@ -339,7 +341,8 @@ describe('recognising the command that clears', () => {
     name: 'clear',
     description: 'Start a new session with empty context',
     argumentHint: '[name]',
-    aliases: ['reset', 'new']
+    aliases: ['reset', 'new'],
+    skill: false
   }
 
   it('knows the command by name, with or without arguments', () => {
@@ -400,7 +403,8 @@ describe('recognising the command that reports usage', () => {
     name: 'usage',
     description: 'Show plan usage limits',
     argumentHint: '',
-    aliases: ['cost', 'stats']
+    aliases: ['cost', 'stats'],
+    skill: false
   }
 
   it('knows the command by name', () => {
@@ -664,6 +668,7 @@ describe('what a conversation may be doing', () => {
     workingMode: 'default',
     planMode: false,
     knownCommands: [],
+    knownAgents: [],
     skillOverrides: {},
     createdAt: '2026-08-11T09:00:00.000Z'
   }
@@ -751,7 +756,10 @@ describe('a conversation continuing another', () => {
     workingMode: 'acceptEdits',
     planMode: true,
     autoCompactWindow: 500_000,
-    knownCommands: [{ name: 'deploy', description: '', argumentHint: '', aliases: [] }],
+    knownCommands: [
+      { name: 'deploy', description: '', argumentHint: '', aliases: [], skill: false }
+    ],
+    knownAgents: [{ name: 'reviewer', description: 'Reviews a change' }],
     skillOverrides: {},
     closedAt: null,
     createdAt: '2026-08-11T09:00:00.000Z'
@@ -787,6 +795,7 @@ describe('a conversation continuing another', () => {
     expect(forked.effort).toBe('high')
     expect(forked.workingMode).toBe('acceptEdits')
     expect(forked.knownCommands).toEqual(source.knownCommands)
+    expect(forked.knownAgents).toEqual(source.knownAgents)
     // How long a context is worth keeping is part of how the work is run.
     expect(forked.autoCompactWindow).toBe(500_000)
   })
@@ -937,7 +946,8 @@ describe('reading /model opusplan as a split', () => {
       name: 'model',
       description: 'Set the model',
       argumentHint: '[model]',
-      aliases: ['m']
+      aliases: ['m'],
+      skill: false
     }
 
     expect(opusPlanSplit('/m opusplan', [model], CATALOGUE)).not.toBeNull()

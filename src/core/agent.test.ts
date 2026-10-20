@@ -1,4 +1,5 @@
 import type {
+  AgentInfo,
   ModelInfo,
   PermissionUpdate,
   Query,
@@ -72,7 +73,9 @@ function fakeAgent(
     askPermission?: (ask: PermissionAsk) => Promise<PermissionOutcome>
     askElicitation?: (ask: ElicitationAsk) => Promise<ElicitationAnswer>
     models?: ModelInfo[]
-    commands?: SlashCommand[]
+    /** What the session answers when asked; an error is a request it refuses. */
+    commands?: SlashCommand[] | Error
+    agents?: AgentInfo[] | Error
     /** What the agent answers when asked to rewind files. */
     rewind?: Record<string, unknown>
     /** What the session's settings files say about skills; left out, it reads none. */
@@ -95,6 +98,7 @@ function fakeAgent(
   const rewinds: { messageId: string; dryRun: boolean | undefined }[] = []
   const offeredModels = hooks.models ?? []
   const offeredCommands = hooks.commands ?? []
+  const offeredAgents = hooks.agents ?? []
   let interrupted = 0
   let closed = 0
   let transportClosed = false
@@ -171,7 +175,12 @@ function fakeAgent(
       return whileOpen(hooks.rewind ?? { canRewind: true })
     },
     supportedModels: () => whileOpen(offeredModels),
-    supportedCommands: () => whileOpen(offeredCommands),
+    supportedCommands: () =>
+      offeredCommands instanceof Error
+        ? Promise.reject(offeredCommands)
+        : whileOpen(offeredCommands),
+    supportedAgents: () =>
+      offeredAgents instanceof Error ? Promise.reject(offeredAgents) : whileOpen(offeredAgents),
     getContextUsage: () => whileOpen(CONTEXT_RESPONSE),
     usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => whileOpen(USAGE_RESPONSE),
     close: () => {
@@ -671,9 +680,39 @@ describe('mapping SDK messages', () => {
     expect(mapMessage(message)).toEqual([
       {
         type: 'commands_changed',
-        commands: [{ name: 'deploy', description: 'Ship it', argumentHint: '<env>', aliases: [] }]
+        commands: [
+          {
+            name: 'deploy',
+            description: 'Ship it',
+            argumentHint: '<env>',
+            aliases: [],
+            skill: false
+          }
+        ]
       }
     ])
+  })
+
+  // The skills come from the session's `init`, which `startSession` hands in.
+  it('marks the commands that are skills in a new command list', () => {
+    const message = {
+      type: 'system',
+      subtype: 'commands_changed',
+      commands: [
+        { name: 'review', description: '', argumentHint: '' },
+        { name: 'clear', description: '', argumentHint: '' }
+      ]
+    } as unknown as SDKMessage
+
+    const [event] = mapMessage(message, new Set(['review']))
+
+    expect(event).toEqual({
+      type: 'commands_changed',
+      commands: [
+        expect.objectContaining({ name: 'review', skill: true }),
+        expect.objectContaining({ name: 'clear', skill: false })
+      ]
+    })
   })
 
   // One assistant message carries several blocks, and each is an event: the
@@ -2337,30 +2376,160 @@ describe('how large the prompt was', () => {
   })
 })
 
-describe('the commands a session offers', () => {
-  it('asks the running session, since that is the only thing that knows', async () => {
-    const { agent } = fakeAgent(
+describe('the lists a session announces', () => {
+  /** The message every turn opens with, naming the skills the session holds. */
+  const init = (skills: string[]): SDKMessage =>
+    ({
+      type: 'system',
+      subtype: 'init',
+      session_id: 'sess-1',
+      permissionMode: 'default',
+      skills
+    }) as unknown as SDKMessage
+
+  const announced = (events: AgentEvent[], type: string): AgentEvent[] =>
+    events.filter((event) => event.type === type)
+
+  // Nothing asks for the lists: the session says them once it has started,
+  // which is when it can say which commands are skills.
+  it('announces its commands once the first init has said which are skills', async () => {
+    const { agent, events } = fakeAgent(
+      {},
+      {
+        commands: [
+          { name: 'review', description: 'Review it', argumentHint: '' },
+          { name: 'clear', description: '', argumentHint: '[name]', aliases: ['reset'] }
+        ]
+      }
+    )
+    await settle()
+    expect(announced(events, 'commands_changed')).toEqual([])
+
+    agent.emit(init(['review']))
+    await settle()
+
+    expect(announced(events, 'commands_changed')).toEqual([
+      {
+        type: 'commands_changed',
+        commands: [
+          { name: 'review', description: 'Review it', argumentHint: '', aliases: [], skill: true },
+          {
+            name: 'clear',
+            description: '',
+            argumentHint: '[name]',
+            aliases: ['reset'],
+            skill: false
+          }
+        ]
+      }
+    ])
+  })
+
+  // Only what the `@` list shows: the model an agent runs on is its own
+  // business, and keeping it would be a stored field nothing reads.
+  it('announces its subagents with their names and descriptions', async () => {
+    const { agent, events } = fakeAgent(
+      {},
+      {
+        agents: [
+          { name: 'Explore', description: 'Searches the code', model: 'haiku' },
+          { name: 'my-plugin:review', description: 'Reviews a change' }
+        ]
+      }
+    )
+
+    agent.emit(init([]))
+    await settle()
+
+    expect(announced(events, 'agents_changed')).toEqual([
+      {
+        type: 'agents_changed',
+        agents: [
+          { name: 'Explore', description: 'Searches the code' },
+          { name: 'my-plugin:review', description: 'Reviews a change' }
+        ]
+      }
+    ])
+  })
+
+  // Every slash command brings a fresh init; the lists are said once, and a
+  // change after that arrives as the SDK's own `commands_changed`.
+  it('announces them once, however many inits follow', async () => {
+    const { agent, events } = fakeAgent()
+
+    agent.emit(init([]))
+    agent.emit(init([]))
+    await settle()
+
+    expect(announced(events, 'commands_changed')).toHaveLength(1)
+    expect(announced(events, 'agents_changed')).toHaveLength(1)
+  })
+
+  // A synced skill is typed by its short name and listed by it, while its
+  // qualified name rides along as an alias — and either is the same skill.
+  it('recognises a skill the init names by one of its aliases', async () => {
+    const { agent, events } = fakeAgent(
       {},
       {
         commands: [
           {
-            name: 'clear',
-            description: 'Start a new session with empty context',
-            argumentHint: '[name]',
-            aliases: ['reset', 'new']
+            name: 'xibo-hylab-support',
+            description: '',
+            argumentHint: '',
+            aliases: ['anthropic-skills:xibo-hylab-support']
           }
         ]
       }
     )
 
-    await expect(agent.session.commands()).resolves.toEqual([
-      {
-        name: 'clear',
-        description: 'Start a new session with empty context',
-        argumentHint: '[name]',
-        aliases: ['reset', 'new']
-      }
+    agent.emit(init(['anthropic-skills:xibo-hylab-support']))
+    await settle()
+
+    expect(announced(events, 'commands_changed')).toEqual([
+      { type: 'commands_changed', commands: [expect.objectContaining({ skill: true })] }
     ])
+  })
+
+  // One list that cannot be read must not take the other with it, and neither
+  // is an error in the chat: the list is a convenience.
+  it('announces the list it could read when the other fails', async () => {
+    const { agent, events } = fakeAgent({}, { agents: new Error('no such control request') })
+
+    agent.emit(init([]))
+    await settle()
+
+    expect(announced(events, 'commands_changed')).toHaveLength(1)
+    expect(announced(events, 'agents_changed')).toEqual([])
+    expect(announced(events, 'error')).toEqual([])
+  })
+
+  it('announces the agents when the commands cannot be read', async () => {
+    const { agent, events } = fakeAgent({}, { commands: new Error('no such control request') })
+
+    agent.emit(init([]))
+    await settle()
+
+    expect(announced(events, 'commands_changed')).toEqual([])
+    expect(announced(events, 'agents_changed')).toHaveLength(1)
+  })
+
+  // A list announced mid-session is marked against the latest init: a skill
+  // written while the session was open joins at the next turn.
+  it('marks the skills in a list the session announces later', async () => {
+    const { agent, events } = fakeAgent()
+    agent.emit(init([]))
+    agent.emit(init(['review']))
+    agent.emit({
+      type: 'system',
+      subtype: 'commands_changed',
+      commands: [{ name: 'review', description: '', argumentHint: '' }]
+    } as unknown as SDKMessage)
+    await settle()
+
+    expect(announced(events, 'commands_changed').at(-1)).toEqual({
+      type: 'commands_changed',
+      commands: [expect.objectContaining({ name: 'review', skill: true })]
+    })
   })
 
   // Most commands have no other name, and the SDK simply leaves the field out.

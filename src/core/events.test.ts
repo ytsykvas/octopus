@@ -386,7 +386,9 @@ describe('the event schema', () => {
     expect(parsed.success).toBe(true)
     expect(parsed.data).toEqual({
       type: 'commands_changed',
-      commands: [{ name: 'clear', description: '', argumentHint: '', aliases: ['reset'] }]
+      commands: [
+        { name: 'clear', description: '', argumentHint: '', aliases: ['reset'], skill: false }
+      ]
     })
   })
 

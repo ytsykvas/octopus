@@ -1,52 +1,10 @@
-import { parseStaged, parseUntracked } from './fileTree.js'
-import type { GitExec } from './git.js'
-
 /**
- * A file offered for a mention.
+ * Which files answer a query typed into the Files tab's filter.
  *
- * Both spellings travel: the relative one is what the list shows and what the
- * message reads, and the absolute one is what an attachment is — the window
- * has no `path.join` to make it with, and building one there would be a second
- * place that has to agree about separators.
+ * Pure and free of Node, so the window ranks with it directly: the tree already
+ * holds every path it knows of, and asking the main process again per
+ * keystroke would be a round trip for something the window can answer.
  */
-export interface MentionFile {
-  readonly path: string
-  readonly absolute: string
-}
-
-/** How many files the mention list shows; past this nobody is reading. */
-export const MAX_MENTION_RESULTS = 8
-
-/**
- * Every file of a worktree that git would let the agent see.
- *
- * Tracked and untracked alike, ignored ones left out: a file the user created a
- * minute ago is the likeliest thing to mention and is not in the index yet,
- * while `node_modules` is in the way of every query. Asking git rather than
- * walking the tree is what makes `.gitignore` apply without this module
- * knowing the rules.
- *
- * Files only. A submodule is one entry in the index and a repository nested in
- * the worktree one among the untracked, and either, picked, attached a folder's
- * path as a file. They are told apart the way the Files tab tells them — by the
- * mode in `--stage` and the trailing slash in `--others` — which is also why
- * this is two reads: `--stage` prints the untracked without a mode. Its costs
- * are `readFileTree`'s and are said there: the mode's bytes against git's
- * output ceiling, and `Promise.all` because `parallel.ts` is not safe for the
- * window.
- *
- * NUL-separated, because a path may contain anything but NUL and a newline in a
- * file name would otherwise split one file into two.
- */
-export async function listFiles(exec: GitExec): Promise<string[]> {
-  const [staged, others] = await Promise.all([
-    exec(['ls-files', '-z', '--stage']),
-    exec(['ls-files', '-z', '--others', '--exclude-standard'])
-  ])
-  return [...parseStaged(staged), ...parseUntracked(others)]
-    .filter((entry) => entry.kind === 'file')
-    .map((entry) => entry.path)
-}
 
 /**
  * How well a path answers what has been typed, lower being better; null is no
@@ -84,11 +42,7 @@ function rank(path: string, query: string): number | null {
  * go to the shorter path and then to the name, so the same query always
  * answers in the same order and the list does not shuffle under the caret.
  */
-export function rankFiles(
-  paths: readonly string[],
-  query: string,
-  limit = MAX_MENTION_RESULTS
-): string[] {
+export function rankFiles(paths: readonly string[], query: string, limit: number): string[] {
   const wanted = query.trim().toLowerCase()
 
   return paths

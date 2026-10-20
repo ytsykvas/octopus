@@ -866,24 +866,33 @@ text, and a digit there is a digit. A new heads-up is one entry in
 `components/chat/tips.ts` — an id and the condition on the log — and its
 `title` and `detail` under `tips.<id>` in the locales.
 
-**Typing `@` offers the workspace's files.** The fourth way to attach one — the
-paperclip, a drop and a paste being the others — and it lands in the same place:
-choosing a file adds its **path** as an attachment chip and takes the token out
-of the text, so the message still names the file once and the message the user
-reads back is still the whole of what was sent. It is read at the **caret**
-rather than at the end of the draft, because "look at @auth.ts and fix the
-expiry" has the file in the middle, and only when the `@` starts a word — inside
-an email address it would be noise. The list is the worktree's, asked of git
-(`.gitignore` applies, a file made a minute ago is found), searched as the user
-types with a short debounce. The last answer stays up while the next is on its
-way: the list used to vanish on every keystroke, and the Enter pressed in that
-gap sent the message with `@aut` in it. A reply that arrives after a newer one
-is already in is dropped, so the slow answer for `a` never takes the place of
-the quick one for `ab`. Arrows, Enter and Tab work as in
-the command list, Escape dismisses until the next keystroke, and the caret goes
-back to where the token was. A refused search is no suggestions rather than an
-error banner: the list is a convenience. Line ranges (`@file#10-20`) are not
-supported yet; a file is attached whole.
+**Typing `@` offers the session's subagents.** Read at the caret like a
+command, only when the `@` starts a word — inside an email address it would be
+noise. The list is the one the chat's session announced when it started
+(`agents_changed`), so it holds Claude Code's own (`Explore`, `Plan`), the
+project's `.claude/agents/` and a plugin's under its qualified name. A pick
+writes `@agent-<name>` into the text: Claude Code turns that into an
+instruction to hand the work to that agent rather than leave the choice to
+Claude — measured through the SDK, not only the CLI — and the message the user
+reads back says so. Typing the written form (`@agent-Exp`) finds the same row.
+Files are not offered: they are attached with the paperclip, a drop or a paste,
+and an `@` list of paths was a fourth way in nobody used.
+
+**Typing `/` offers commands, and where it is typed decides which.** The word
+is read at the caret, like a mention, and only when the slash starts a word —
+so `src/core/`, a date or a pasted path opens nothing (`components/chat/suggest.ts`).
+At the very start of the message every command is offered, since that is the
+one place Claude Code runs one. Anywhere else only **skills** are: a skill named
+after plain text is permission for Claude to run it in that reply, while a
+built-in such as `/clear` mid-sentence does nothing, and offering it would be
+offering a mistake. Which commands are skills is not in the command list —
+`SlashCommand.builtin` marks the bundled skills as Claude Code's own too — so
+the session marks them from its `init` message's `skills`, and announces both
+lists itself (`commands_changed`, `agents_changed`) once that first `init` has
+arrived — asked any earlier, every command read as no skill. A pick replaces the word and
+keeps the sentence around it; mid-sentence it always gets a trailing space, at
+the start only when the command takes arguments. Escape dismisses the list for
+that one word: the caret moving on to another `/` brings it back.
 
 **A command name is not unique**, and both places that use one had assumed it
 was. The agent can report two under one name — seen live, twice for

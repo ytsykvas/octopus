@@ -15,14 +15,16 @@ const CLEAR: AgentCommand = {
   name: 'clear',
   description: 'Start a new session with empty context',
   argumentHint: '[name]',
-  aliases: ['reset']
+  aliases: ['reset'],
+  skill: false
 }
 
 const DEPLOY: AgentCommand = {
   name: 'deploy',
   description: 'Ship it',
   argumentHint: '<env>',
-  aliases: []
+  aliases: [],
+  skill: false
 }
 
 /** Delivers an event the way the bridge does, to whoever subscribed. */
