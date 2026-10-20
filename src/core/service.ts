@@ -36,6 +36,7 @@ import { branchGuard } from './branchGuard.js'
 import { unpackedAgentBinary, withAgentBinary } from './agentBinary.js'
 import {
   type AgentCommand,
+  type AgentEntry,
   type AgentModel,
   type AutoCompactWindow,
   type Chat,
@@ -72,6 +73,13 @@ import {
 import { revertFile } from './revert.js'
 import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
 import { isListening, type PortProbe, settlePort } from './ports.js'
+import {
+  defaultStrayDeps,
+  findStrayServers,
+  type StrayDeps,
+  type StrayServer,
+  stopStrayServers
+} from './strayServers.js'
 import {
   type CarriedFile,
   carryInto,
@@ -121,7 +129,6 @@ import {
 import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
 import { liveCount } from './backgroundTasks.js'
 import { createTaskRegistry, type TaskEnding, type TasksEvent } from './taskRegistry.js'
-import { listFiles, type MentionFile, rankFiles } from './fileSearch.js'
 import { type DirectoryListing, type FileTreeSnapshot, readFileTree } from './fileTree.js'
 import { type FileContent, readWorkspaceDirectory, readWorkspaceFile } from './workspaceFiles.js'
 import {
@@ -313,7 +320,8 @@ import {
   findChat,
   findProject,
   loadState,
-  commandsUnchanged,
+  type KnownAnswer,
+  knownUnchanged,
   modelsUnchanged,
   type Project,
   rememberModels,
@@ -505,6 +513,12 @@ export interface ServiceOptions {
    * describes rather than the one it runs on (`docs/testing.md`).
    */
   readonly listening?: PortProbe
+  /**
+   * How servers left running in a worktree are found and stopped: `lsof`, the
+   * signal and the wait between signals. The real ones by default; a test
+   * describes a machine instead of signalling processes on this one.
+   */
+  readonly strays?: StrayDeps
   /**
    * Who outranks a chat's compaction window for a session about to start.
    *
@@ -969,6 +983,19 @@ export interface OctopusService {
   ensureWorkspacePort(workspaceId: string): Promise<number>
 
   /**
+   * Servers listening from this workspace's worktree that octopus did not
+   * start (`strayServers.ts`).
+   *
+   * Asked at the same moment as the port and for the same reason: with nothing
+   * of ours alive here, whatever is serving from the worktree is somebody
+   * else's — and it will stop the run from starting.
+   */
+  findStrayServers(workspaceId: string): Promise<StrayServer[]>
+
+  /** Stops those of `pids` still serving from the worktree, and only those. */
+  stopStrayServers(workspaceId: string, pids: readonly number[]): Promise<void>
+
+  /**
    * Guidance handed to the agent, or a starting template if none is written.
    *
    * `null` for the project is the installation's own, which every project falls
@@ -1238,18 +1265,9 @@ export interface OctopusService {
   resolveWorkspaceFile(workspaceId: string, path: string): Promise<string>
 
   /**
-   * The files of a workspace that match what is being typed after an `@`.
-   *
-   * Asked of git rather than walked, so `.gitignore` applies and a file made a
-   * minute ago is found. The listing is held for a few seconds: a query is
-   * asked on every keystroke and the worktree does not change that fast.
-   */
-  searchFiles(workspaceId: string, query: string): Promise<MentionFile[]>
-
-  /**
    * The worktree's files and what git says about each, for the Files tab.
    *
-   * Read fresh on every call, unlike `searchFiles`: the tab asks only when it
+   * Read fresh on every call: the tab asks only when it
    * is shown, a turn ends or the window comes back, and each of those is a
    * moment the answer may have changed.
    */
@@ -1420,6 +1438,13 @@ export interface OctopusService {
    * project's own live in `.claude/commands/`. Empty until a session has run.
    */
   chatCommands(chatId: string): readonly AgentCommand[]
+  /**
+   * Subagents this chat's agent last reported, for the `@` list.
+   *
+   * Per chat for the reason the commands are: a project's own agents live in
+   * its `.claude/agents/`. Empty until a session has run.
+   */
+  chatAgents(chatId: string): readonly AgentEntry[]
   /** Answers a pending permission request. Unknown ids are ignored. */
   /**
    * Answers a blocked tool call.
@@ -1553,10 +1578,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
 
-  // What a worktree held when it was last listed. A mention is searched on every
-  // keystroke, and `git ls-files` over a large checkout is not free.
-  const FILE_LIST_TTL_MS = 5000
-  const fileLists = new Map<string, { at: number; files: string[] }>()
   const commandExec = options.commandExec ?? defaultExec
   const makeGh = options.makeGh ?? ghIn
   const dataRoot = options.dataRoot ?? rootDir()
@@ -1564,6 +1585,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const windowOverrideFor = options.windowOverride ?? findWindowOverride
   const fileSkillsFor = options.skillsInFiles ?? skillsInFiles
   const listening = options.listening ?? isListening
+  const strays = options.strays ?? defaultStrayDeps
   const processExec = options.processExec ?? defaultProcessExec
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
@@ -2611,22 +2633,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * Writes down which commands a chat's agent offers.
+   * Writes down a list a chat's agent reported — its commands or its agents.
    *
    * Skipped when the list already matches, because this runs on every session
    * start and the answer is almost always the same one — see
-   * `commandsUnchanged`. A failure is reported into the chat rather than
+   * `knownUnchanged`. A failure is reported into the chat rather than
    * swallowed: it is a failed write like any other.
    */
-  function rememberCommands(chat: Chat, commands: readonly AgentCommand[]): void {
+  function rememberKnown(chat: Chat, answer: KnownAnswer): void {
     const current = findChat(state, chat.id)
-    if (current && commandsUnchanged(current, commands)) return
+    if (current && knownUnchanged(current, answer)) return
 
     background(
       chat,
-      commit((next) =>
-        findChat(next, chat.id) ? updateChat(next, chat.id, { knownCommands: [...commands] }) : next
-      )
+      commit((next) => (findChat(next, chat.id) ? updateChat(next, chat.id, answer) : next))
     )
   }
 
@@ -2698,7 +2718,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )
     }
 
-    if (event.type === 'commands_changed') rememberCommands(chat, event.commands)
+    // Both lists are announced by the session once it has started, and the
+    // commands again whenever they change; nothing asks for either.
+    if (event.type === 'commands_changed') rememberKnown(chat, { knownCommands: event.commands })
+    if (event.type === 'agents_changed') rememberKnown(chat, { knownAgents: event.agents })
 
     /*
      * The session says it is in `default` while the record says auto. Either
@@ -4438,20 +4461,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )
     )
 
-    // The same arrangement for the command list, and asked here rather than
-    // once at start-up because this is the only moment it can be asked: the
-    // answer comes from the running agent, and it is about this worktree —
-    // a project's own commands live in its `.claude/commands/`.
-    background(
-      chat,
-      session.commands().then(
-        (commands) => {
-          rememberCommands(chat, commands)
-        },
-        () => undefined
-      )
-    )
-
     return session
   }
 
@@ -4946,6 +4955,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async isWorkspaceServing(workspaceId) {
       return listening(requireWorkspace(workspaceId).port)
+    },
+
+    async findStrayServers(workspaceId) {
+      return findStrayServers(requireWorkspace(workspaceId).path, strays.lsof)
+    },
+
+    async stopStrayServers(workspaceId, pids) {
+      await stopStrayServers(requireWorkspace(workspaceId).path, pids, strays)
     },
 
     measureResources(rootPid, terminals) {
@@ -5499,9 +5516,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await discardWorkspace(workspace, execs, removal)
 
       await commit((current) => removeWorkspaceRecord(current, workspaceId))
-      // Nothing is left to search, and the listing would otherwise sit here for
-      // as long as the application runs.
-      fileLists.delete(workspaceId)
       await discardHistories(closing)
     },
 
@@ -5653,42 +5667,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // From the checkout rather than from a worktree: this is a question about
       // the repository, and a project can be open with no workspace in it.
       return readBranchRequests(makeGh(project.repoPath))
-    },
-
-    async searchFiles(workspaceId, query) {
-      const workspace = requireWorkspace(workspaceId)
-
-      /*
-       * Each candidate is proved inside the worktree before it is offered — the
-       * gate `resolveWorkspaceFile` puts in front of opening a file, for the
-       * same reason. A repository can hold a symlink called `README.md` that
-       * points at a key in the home directory; offered by name it would be
-       * attached as an ordinary file of the workspace, and the agent would read
-       * it through the link. Eight candidates at most, so eight `realpath`s.
-       *
-       * It also drops what git still lists but the disk no longer has.
-       */
-      const offered = async (files: readonly string[]): Promise<MentionFile[]> => {
-        const checked = await Promise.all(
-          rankFiles(files, query).map(async (path) =>
-            (await fileInWorkspace(workspace, path)) === null
-              ? null
-              : { path, absolute: join(workspace.path, path) }
-          )
-        )
-
-        return checked.filter((file) => file !== null)
-      }
-
-      const asked = Date.parse(now())
-      const held = fileLists.get(workspaceId)
-      if (held !== undefined && asked - held.at < FILE_LIST_TTL_MS) {
-        return await offered(held.files)
-      }
-
-      const files = await listFiles(makeExec(workspace.path))
-      fileLists.set(workspaceId, { at: asked, files })
-      return await offered(files)
     },
 
     async readFileTree(workspaceId) {
@@ -6214,6 +6192,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     chatCommands(chatId) {
       return requireChat(chatId).knownCommands
+    },
+
+    chatAgents(chatId) {
+      return requireChat(chatId).knownAgents
     },
 
     pendingPermissions(chatId) {

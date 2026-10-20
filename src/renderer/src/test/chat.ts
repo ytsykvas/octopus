@@ -27,6 +27,7 @@ export function chat(overrides: Partial<Chat> = {}): Chat {
     planMode: false,
     autoCompactWindow: null,
     knownCommands: [],
+    knownAgents: [],
     skillOverrides: {},
     closedAt: null,
     createdAt: '2026-08-11T09:00:00.000Z',

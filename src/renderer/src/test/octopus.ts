@@ -100,6 +100,7 @@ export function installOctopusStub(): Api {
       setPlanModel: vi.fn(() => ok(undefined)),
       models: vi.fn(() => ok([])),
       commands: vi.fn(() => ok([])),
+      agents: vi.fn(() => ok([])),
       pendingPermissions: vi.fn(() => ok([])),
       usage: vi.fn(() => ok({ context: null, autoCompact: null })),
       answerPermission: vi.fn(() => ok(undefined)),
@@ -166,11 +167,13 @@ export function installOctopusStub(): Api {
       // The port answers by default: a test about a script that ignores
       // `$OCTOPUS_PORT` says so, and the rest are not about ports at all.
       serving: vi.fn(() => ok(true)),
-      port: vi.fn(() => ok(3111))
+      port: vi.fn(() => ok(3111)),
+      // Nothing left serving in a workspace unless a test puts it there.
+      strays: vi.fn(() => ok([])),
+      stopStrays: vi.fn(() => ok(undefined))
     },
     files: {
       open: vi.fn(() => ok(undefined)),
-      search: vi.fn(() => ok([])),
       tree: vi.fn(() => ok({ entries: [], statuses: {}, truncated: false })),
       directory: vi.fn(() => ok({ entries: [], truncated: false })),
       read: vi.fn(() => ok({ kind: 'text' as const, text: '', bytes: 0 }))
@@ -335,6 +338,7 @@ function chatFixture(): Chat {
     planMode: false,
     autoCompactWindow: null,
     knownCommands: [],
+    knownAgents: [],
     skillOverrides: {},
     closedAt: null,
     createdAt: '2026-08-08T00:00:00.000Z'

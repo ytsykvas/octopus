@@ -1,11 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.js'
-import type { MentionFile } from '@core/fileSearch.js'
 import type { DirectoryListing, FileTreeSnapshot } from '@core/fileTree.js'
 import type { FileContent } from '@core/workspaceFiles.js'
 import type {
   AgentCommand,
+  AgentEntry,
   AgentModel,
   AutoCompactWindow,
   Chat,
@@ -27,6 +27,7 @@ import type {
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type { StrayServer } from '@core/strayServers.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { ResourceReading } from '@core/resources.js'
 import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
@@ -326,6 +327,10 @@ const api = {
      */
     commands: (chatId: string): Promise<Result<readonly AgentCommand[]>> =>
       ipcRenderer.invoke('chats:commands', chatId) as Promise<Result<readonly AgentCommand[]>>,
+
+    /** Subagents this chat's agent offers, for the `@` list; empty until a session has run. */
+    agents: (chatId: string): Promise<Result<readonly AgentEntry[]>> =>
+      ipcRenderer.invoke('chats:agents', chatId) as Promise<Result<readonly AgentEntry[]>>,
 
     /**
      * Answers the questions the agent asked, releasing the tool call.
@@ -671,17 +676,21 @@ const api = {
      * was made can belong to something else by the time anybody runs it.
      */
     port: (workspaceId: string): Promise<Result<number>> =>
-      ipcRenderer.invoke('workspaces:port', workspaceId) as Promise<Result<number>>
+      ipcRenderer.invoke('workspaces:port', workspaceId) as Promise<Result<number>>,
+
+    /** Servers serving from this workspace's worktree that octopus did not start. */
+    strays: (workspaceId: string): Promise<Result<StrayServer[]>> =>
+      ipcRenderer.invoke('workspaces:strays', workspaceId) as Promise<Result<StrayServer[]>>,
+
+    /** Stops those of `pids` still serving from the worktree. */
+    stopStrays: (workspaceId: string, pids: readonly number[]): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:stopStrays', workspaceId, pids) as Promise<Result<void>>
   },
 
   files: {
     /** Hands a file in a workspace to whatever the system opens it with. */
     open: (workspaceId: string, path: string): Promise<Result<void>> =>
       ipcRenderer.invoke('files:open', workspaceId, path) as Promise<Result<void>>,
-
-    /** The workspace's files matching what is typed after an `@`, best first. */
-    search: (workspaceId: string, query: string): Promise<Result<MentionFile[]>> =>
-      ipcRenderer.invoke('files:search', workspaceId, query) as Promise<Result<MentionFile[]>>,
 
     /** Every file of the worktree and what git says about each, for the Files tab. */
     tree: (workspaceId: string): Promise<Result<FileTreeSnapshot>> =>

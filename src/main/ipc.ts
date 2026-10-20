@@ -53,6 +53,7 @@ import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { terminalOwners } from '../core/resources.js'
 import { RevertPathSchema } from '../core/revert.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
+import { StrayPidsSchema } from '../core/strayServers.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
 import { SkillKeySchema, SkillNameSchema } from '../core/skillNames.js'
 import { FormValuesSchema } from '../core/elicitation.js'
@@ -188,9 +189,6 @@ const MessageIdSchema = z.uuid()
  * — so only bounded here; the session is what knows whether it names anything.
  */
 const TaskIdSchema = z.string().min(1).max(128)
-
-/** What is typed after an `@`; empty is a real query, meaning "nearest the root". */
-const MentionQuerySchema = z.string().max(256)
 
 /**
  * Writes the config and tells every window, from the one place that writes it.
@@ -507,6 +505,16 @@ export function registerIpc(
   // header is what keeps that true: `Run` is not offered while a server is up.
   host.handle('workspaces:port', (_event, workspaceId: string) =>
     attempt(() => service.ensureWorkspacePort(workspaceId))
+  )
+
+  // Asked at the same moment as the port, and only then: with nothing of ours
+  // running, a server in the worktree is one somebody else left there.
+  host.handle('workspaces:strays', (_event, workspaceId: string) =>
+    attempt(() => service.findStrayServers(workspaceId))
+  )
+
+  host.handle('workspaces:stopStrays', (_event, workspaceId: string, pids: unknown) =>
+    attempt(() => service.stopStrayServers(workspaceId, StrayPidsSchema.parse(pids)))
   )
 
   // `null` is the installation's own instruction rather than a project's, which
@@ -885,12 +893,6 @@ export function registerIpc(
     })
   )
 
-  // Typed after an `@`, so it is bounded: the query is a few letters and a
-  // path fragment, and a pasted paragraph is not one.
-  host.handle('files:search', (_event, workspaceId: string, query: unknown) =>
-    attempt(() => service.searchFiles(workspaceId, MentionQuerySchema.parse(query)))
-  )
-
   // The Files tab. The two that take a path validate it here and leave proving
   // it inside the workspace to the service, the split `files:open` uses.
   host.handle('files:tree', (_event, workspaceId: string) =>
@@ -1023,6 +1025,8 @@ export function registerIpc(
   host.handle('chats:commands', (_event, chatId: string) =>
     attempt(() => service.chatCommands(chatId))
   )
+
+  host.handle('chats:agents', (_event, chatId: string) => attempt(() => service.chatAgents(chatId)))
 
   host.handle('chats:answerQuestions', (_event, requestId: string, answers: unknown) =>
     attempt(() => service.answerQuestions(requestId, z.array(QuestionAnswerSchema).parse(answers)))

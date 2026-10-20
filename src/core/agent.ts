@@ -15,6 +15,7 @@ import type { UUID } from 'node:crypto'
 
 import type {
   HookCallback,
+  AgentInfo,
   ModelInfo,
   Options,
   PermissionUpdate,
@@ -27,7 +28,14 @@ import type {
   SlashCommand
 } from '@anthropic-ai/claude-agent-sdk'
 
-import type { AgentCommand, AgentModel, EffortChoice, FileRewind, PermissionMode } from './chats.js'
+import type {
+  AgentCommand,
+  AgentEntry,
+  AgentModel,
+  EffortChoice,
+  FileRewind,
+  PermissionMode
+} from './chats.js'
 import { sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
@@ -344,7 +352,6 @@ export interface AgentSession {
   /** What this account may use, as the agent reported when the session began. */
   models: () => Promise<AgentModel[]>
   /** The slash commands this session offers, agent's own and the project's. */
-  commands: () => Promise<AgentCommand[]>
   /** How full this conversation's context window is, or null if it cannot say. */
   contextUsage: () => Promise<ContextUsage | null>
   /**
@@ -518,6 +525,14 @@ export function toAgentModels(models: readonly ModelInfo[]): AgentModel[] {
   }))
 }
 
+/** The SDK's subagents, narrowed to what the `@` list shows. */
+export function toAgentEntries(agents: readonly AgentInfo[]): AgentEntry[] {
+  return agents.map((agent) => ({ name: agent.name, description: agent.description }))
+}
+
+/** What a message is read against before the session has said which skills it has. */
+const NO_SKILLS: ReadonlySet<string> = new Set()
+
 /**
  * The SDK's command descriptions, narrowed to what a suggestion list needs.
  *
@@ -530,14 +545,27 @@ export function toAgentModels(models: readonly ModelInfo[]): AgentModel[] {
  * required strings are taken at their word, exactly as `toAgentModels` does —
  * and the stored schema defaults them anyway, so a CLI that omits one loads
  * back as empty rather than as a record that will not parse.
+ *
+ * `skills` is the session's `init` list, which is the only place that says
+ * which commands are skills. Matched on aliases too: a skill synced from
+ * claude.ai is listed by the name it is typed as and may carry its qualified
+ * name as an alias.
  */
-export function toAgentCommands(commands: readonly SlashCommand[]): AgentCommand[] {
-  return commands.map((command) => ({
-    name: command.name,
-    description: command.description,
-    argumentHint: command.argumentHint,
-    aliases: command.aliases ? [...command.aliases] : []
-  }))
+export function toAgentCommands(
+  commands: readonly SlashCommand[],
+  skills: ReadonlySet<string> = NO_SKILLS
+): AgentCommand[] {
+  return commands.map((command) => {
+    const aliases = command.aliases ? [...command.aliases] : []
+
+    return {
+      name: command.name,
+      description: command.description,
+      argumentHint: command.argumentHint,
+      aliases,
+      skill: [command.name, ...aliases].some((name) => skills.has(name))
+    }
+  })
 }
 
 /**
@@ -901,6 +929,38 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   // SDK reports as a failure like any other.
   const closing = new AbortController()
 
+  /*
+   * The skills this session holds, as its latest `init` listed them — nothing
+   * else says which commands are skills.
+   */
+  let heldSkills: ReadonlySet<string> = NO_SKILLS
+  let announced = false
+
+  /*
+   * The two lists the composer suggests from, announced by the session itself
+   * once its first `init` has said which commands are skills.
+   *
+   * Announced rather than waited to be asked: a list asked for when the session
+   * starts was answered before the `init` — every command read as no skill —
+   * and one asked for on the `init` raced the window re-reading it. Each list
+   * on its own, so one that cannot be read does not take the other with it; a
+   * list missing is a convenience missing, and the stream reports real trouble.
+   */
+  const announceLists = (): void => {
+    conversation.supportedCommands().then(
+      (commands) => {
+        hooks.onEvent({ type: 'commands_changed', commands: toAgentCommands(commands, heldSkills) })
+      },
+      () => undefined
+    )
+    conversation.supportedAgents().then(
+      (agents) => {
+        hooks.onEvent({ type: 'agents_changed', agents: toAgentEntries(agents) })
+      },
+      () => undefined
+    )
+  }
+
   // Started and never awaited. `close` is what actually ends the session —
   // it kills the process the SDK spawned, and the loop then falls out on its
   // own. Waiting for it there would make closing depend on a stream ending,
@@ -917,7 +977,14 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
         if (message.type === 'result') {
           for (const [model, window] of windowsIn(message)) modelWindows.set(model, window)
         }
-        for (const event of mapMessage(message)) hooks.onEvent(event)
+        if (message.type === 'system' && message.subtype === 'init') {
+          heldSkills = new Set(message.skills)
+          if (!announced) {
+            announced = true
+            announceLists()
+          }
+        }
+        for (const event of mapMessage(message, heldSkills)) hooks.onEvent(event)
       }
     } catch (error) {
       // The SDK throws for a failed spawn, a lost subscription or an aborted
@@ -968,10 +1035,6 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
 
     async models() {
       return toAgentModels(await conversation.supportedModels())
-    },
-
-    async commands() {
-      return toAgentCommands(await conversation.supportedCommands())
     },
 
     contextUsage() {
@@ -1118,7 +1181,10 @@ function fromLifecycle(message: unknown): AgentEvent[] {
   ]
 }
 
-export function mapMessage(message: SDKMessage): AgentEvent[] {
+export function mapMessage(
+  message: SDKMessage,
+  skills: ReadonlySet<string> = NO_SKILLS
+): AgentEvent[] {
   switch (message.type) {
     case 'system':
       switch (message.subtype) {
@@ -1156,7 +1222,7 @@ export function mapMessage(message: SDKMessage): AgentEvent[] {
           ]
 
         case 'commands_changed':
-          return [{ type: 'commands_changed', commands: toAgentCommands(message.commands) }]
+          return [{ type: 'commands_changed', commands: toAgentCommands(message.commands, skills) }]
 
         case 'compact_boundary':
           return [compactionFrom(message)]

@@ -235,6 +235,12 @@ describe('channel names', () => {
     ],
     ['resources.read', () => method('resources', 'read')(), 'resources:read'],
     ['workspaces.port', () => method('workspaces', 'port')('w' as never), 'workspaces:port'],
+    ['workspaces.strays', () => method('workspaces', 'strays')('w' as never), 'workspaces:strays'],
+    [
+      'workspaces.stopStrays',
+      () => method('workspaces', 'stopStrays')('w' as never, [1] as never),
+      'workspaces:stopStrays'
+    ],
     [
       'workspaces.serving',
       () => method('workspaces', 'serving')('w' as never),
@@ -322,11 +328,6 @@ describe('channel names', () => {
       'instructions:effective'
     ],
     ['files.open', () => method('files', 'open')('w' as never, 'a.ts' as never), 'files:open'],
-    [
-      'files.search',
-      () => method('files', 'search')('w' as never, 'comp' as never),
-      'files:search'
-    ],
     ['files.tree', () => method('files', 'tree')('w' as never), 'files:tree'],
     [
       'files.directory',
@@ -394,6 +395,7 @@ describe('channel names', () => {
     ],
     ['chats.models', () => method('chats', 'models')(), 'chats:models'],
     ['chats.commands', () => method('chats', 'commands')('c' as never), 'chats:commands'],
+    ['chats.agents', () => method('chats', 'agents')('c' as never), 'chats:agents'],
     [
       'chats.answerQuestions',
       () => method('chats', 'answerQuestions')('r-1' as never, [] as never),

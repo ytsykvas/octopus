@@ -15,7 +15,7 @@
 
 import { z } from 'zod'
 
-import { AgentCommandSchema } from './chats.js'
+import { AgentCommandSchema, AgentEntrySchema } from './chats.js'
 import { ElicitationFieldSchema } from './elicitation.js'
 import { QuestionAnswerSchema } from './questions.js'
 import { UsageReportSchema } from './usage.js'
@@ -565,13 +565,22 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   }),
 
   /**
-   * The list of slash commands changed mid-session.
+   * The list of slash commands, as the session announced it — once it has
+   * started, and again whenever it changes.
    *
    * Ephemeral for the same reason as a rate limit: it describes what the agent
    * can do now, not something that happened in the conversation. Reading "the
    * command list changed" back a week later says nothing.
    */
   z.object({ type: z.literal('commands_changed'), commands: z.array(AgentCommandSchema) }),
+
+  /**
+   * The subagents the session can hand work to, announced once it has started.
+   *
+   * Ephemeral like the commands, and for the `@` list what those are for the
+   * `/` one. The SDK announces no change to it, so this is ours.
+   */
+  z.object({ type: z.literal('agents_changed'), agents: z.array(AgentEntrySchema) }),
 
   /**
    * Where a message the user sent is in the CLI's queue.
@@ -800,6 +809,7 @@ export function isEphemeral(event: AgentEvent): boolean {
     event.type === 'thinking_delta' ||
     event.type === 'rate_limit' ||
     event.type === 'commands_changed' ||
+    event.type === 'agents_changed' ||
     event.type === 'message_queue' ||
     event.type === 'conversation_rewound' ||
     event.type === 'mode_reported'
