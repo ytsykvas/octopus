@@ -88,14 +88,21 @@ vanishes while somebody is reading something else was never delivered. It is a
 `fixed` block drawn into the body, as the menus are, not a `<dialog>` — an open
 dialog switches off the window's own keys.
 
-A quiet chime goes with it (`sound.ts`): rising for finished, one note for a
-wait, falling for an error, at a twentieth of full volume and no more than once
-in 1.5s, so several agents finishing together ring once. Synthesised with Web
-Audio rather than played from a file, since Vite inlines a small file as a
-`data:` URL the window's CSP refuses for media. The workspace on screen gets no
-toast and no dot, but it **does** get the chime while the window is not in
-front: somebody in another application is not looking at it either. Settings →
-General turns the sound off (`notificationSound`).
+A quiet sound goes with it (`sound.ts`), no more than once in 1.5s, so several
+agents finishing together ring once. The default is a chime synthesised with Web
+Audio: rising for finished, one note for a wait, falling for an error, at a
+twentieth of full volume. Settings → General can pick one of the files in
+`assets/sounds/` instead (`notificationSoundId`); a file sounds the same for
+every kind of news. Files work because each is over 4KB: Vite inlines anything
+smaller as a `data:` URL, which the window's CSP refuses for media, and serves
+the rest from the window's own origin. The list is a `DropdownMenu` whose rows
+carry a ▶ (`aside`) that plays the sound without choosing it or closing the
+menu, skipping the gap; one audio element plays every file, so a new one cuts
+the last off rather than piling up. An id the build no longer ships plays, and
+shows as, the chime. The workspace on screen gets no toast and no dot, but it
+**does** get the sound while the window is not in front: somebody in another
+application is not looking at it either. Settings → General turns the sound off
+(`notificationSound`), which also disables the list.
 
 **The foot of the left column is one footer**, as wide as the strip and the list
 together: the account's limits, and under them a row holding Settings and the

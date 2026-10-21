@@ -26,13 +26,13 @@ const DONE: AgentEvent = { type: 'finished' }
 interface Props {
   readonly openId: string | null
   readonly list: readonly WorkspaceView[]
-  readonly sound?: boolean
+  readonly sound?: string | null
 }
 
 function render(
   open: string | null,
   workspaces: readonly WorkspaceView[] = [ANNA, BEN],
-  sound = false
+  sound: string | null = null
 ): RenderHookResult<Attention, Props> {
   return renderHook(
     ({ openId, list, sound: audible }: Props) =>
@@ -166,16 +166,16 @@ describe('useAttention', () => {
   describe('the sound', () => {
     it('chimes for news from a workspace out of sight', () => {
       focused(true)
-      render(BEN.id, [ANNA, BEN], true)
+      render(BEN.id, [ANNA, BEN], 'gong')
 
       emitAgentEvent(DONE, 'c-1', ANNA.id)
 
-      expect(chime).toHaveBeenCalledWith('done')
+      expect(chime).toHaveBeenCalledWith('done', 'gong')
     })
 
     it('stays quiet when the switch is off', () => {
       focused(false)
-      render(BEN.id, [ANNA, BEN], false)
+      render(BEN.id, [ANNA, BEN], null)
 
       emitAgentEvent(DONE, 'c-1', ANNA.id)
 
@@ -185,7 +185,7 @@ describe('useAttention', () => {
     // The workspace on screen is not news while somebody is looking at it —
     // but somebody in another application is not looking at it either.
     it('chimes for the workspace on screen only while the window is behind another', () => {
-      const { result } = render(ANNA.id, [ANNA, BEN], true)
+      const { result } = render(ANNA.id, [ANNA, BEN], 'chime')
 
       focused(true)
       emitAgentEvent(DONE, 'c-1', ANNA.id)
@@ -193,19 +193,19 @@ describe('useAttention', () => {
 
       focused(false)
       emitAgentEvent(DONE, 'c-1', ANNA.id)
-      expect(chime).toHaveBeenCalledWith('done')
+      expect(chime).toHaveBeenCalledWith('done', 'chime')
       // A sound only: no toast and no mark for the workspace already open.
       expect(result.current.notices).toEqual([])
     })
 
-    it('follows the switch after subscribing', () => {
+    it('follows the switch and the chosen sound after subscribing', () => {
       focused(true)
-      const { rerender } = render(BEN.id, [ANNA, BEN], false)
+      const { rerender } = render(BEN.id, [ANNA, BEN], null)
 
-      rerender({ openId: BEN.id, list: [ANNA, BEN], sound: true })
+      rerender({ openId: BEN.id, list: [ANNA, BEN], sound: 'wow' })
       emitAgentEvent(DONE, 'c-1', ANNA.id)
 
-      expect(chime).toHaveBeenCalledOnce()
+      expect(chime).toHaveBeenCalledExactlyOnceWith('done', 'wow')
     })
   })
 

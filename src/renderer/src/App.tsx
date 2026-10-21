@@ -173,7 +173,7 @@ export function App(): React.JSX.Element {
     projects.all,
     workspaces.flat,
     selectedWorkspaceId,
-    config?.notificationSound === true
+    config?.notificationSound === true ? config.notificationSoundId : null
   )
 
   /*

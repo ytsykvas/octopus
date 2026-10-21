@@ -1173,7 +1173,33 @@ export const uk: Translation = {
     languageHint: 'Англійська — типова. Перезапуск не потрібен.',
     notificationSound: 'Звук',
     notificationSoundHint:
-      'Тихий сигнал, коли агент закінчив, завершився з помилкою або чекає на вашу відповідь там, куди ви зараз не дивитесь.',
+      'Тихий звук, коли агент закінчив, завершився з помилкою або чекає на вашу відповідь там, куди ви зараз не дивитесь.',
+    notificationSoundChoice: 'Який звук',
+    notificationSoundChoiceHint:
+      'Натисніть ▶, щоб прослухати звук перед вибором. Лише дзвіночок звучить по-різному для «готово», «помилка» і «чекає».',
+    soundPreview: 'Прослухати «{{name}}»',
+    sounds: {
+      chime: 'Дзвіночок',
+      airport: 'Аеропорт',
+      'alarm-clock': 'Будильник',
+      bam: 'Бам',
+      'cell-phone': 'Мобільний',
+      craw: 'Ворона',
+      'door-bell': 'Дверний дзвінок',
+      drum: 'Барабан',
+      fairy: 'Фея',
+      'funny-sound': 'Кумедний звук',
+      gong: 'Гонг',
+      'hola-papa': 'Hola papa',
+      japanese: 'Японський',
+      oyoy: 'Ой-ой',
+      'sms-incoming': 'Вхідне SMS',
+      'uh-oh': 'Uh-oh',
+      'water-drop': 'Крапля',
+      whistle: 'Свист',
+      'whistle-here': 'Свист «сюди»',
+      wow: 'Вау'
+    },
 
     branchPrefix: 'Префікс гілок',
     branchPrefixHint:
