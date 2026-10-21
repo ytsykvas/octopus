@@ -2811,6 +2811,21 @@ describe('App', () => {
 
       expect(await screen.findByRole('button', { name: 'README.md' })).not.toHaveClass('italic')
     })
+
+    // The right button's "Add to chat": the file goes out as an attachment, so
+    // the conversation it lands in comes to the front to show it.
+    it('is attached to the conversation in front from its menu', async () => {
+      const user = await openReadme()
+      await screen.findByText('# Planner')
+
+      fireEvent.contextMenu(screen.getByRole('treeitem', { name: /^README\.md/ }))
+      await user.click(screen.getByRole('menuitem', { name: 'Add to chat' }))
+
+      await waitFor(() => {
+        expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
+      })
+      expect(screen.getByTitle('/tmp/planner/anna/README.md')).toHaveTextContent('README.md')
+    })
   })
 
   // Listed in §10.8 since before there was a tab for it to name, which is the

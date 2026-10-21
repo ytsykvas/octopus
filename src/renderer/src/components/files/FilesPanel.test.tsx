@@ -49,20 +49,24 @@ interface Options {
 
 function renderPanel({ workspace = ANNA, visible = true, activePath = null }: Options = {}): {
   onOpen: ReturnType<typeof vi.fn>
+  onAttach: ReturnType<typeof vi.fn>
   rerender: (next: Options) => void
 } {
   const onOpen = vi.fn()
+  const onAttach = vi.fn()
   const view = (options: Options): React.JSX.Element => (
     <FilesPanel
       workspace={options.workspace === undefined ? workspace : options.workspace}
       visible={options.visible ?? visible}
       activePath={options.activePath === undefined ? activePath : options.activePath}
       onOpen={onOpen}
+      onAttach={onAttach}
     />
   )
   const { rerender } = render(view({}))
   return {
     onOpen,
+    onAttach,
     rerender: (next) => {
       rerender(view(next))
     }
@@ -1011,6 +1015,117 @@ describe('FilesPanel', () => {
 
       expect(await screen.findByRole('treeitem', { name: /^pkg\.js/ })).toBeInTheDocument()
       expect(octopus().files.directory).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('a row’s path', () => {
+    let writeText: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      writeText = vi.fn(() => Promise.resolve())
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    })
+
+    async function menuOn(name: string): Promise<ReturnType<typeof renderPanel>> {
+      answering()
+      const view = renderPanel()
+      await shown()
+      fireEvent.contextMenu(row(name))
+      return view
+    }
+
+    it('offers both paths and the chat on a right-click, and nothing else happens', async () => {
+      const { onOpen } = await menuOn('src')
+
+      expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+        'Copy path (⌥⌘C)',
+        'Copy relative path (⌥⇧⌘C)',
+        'Add to chat'
+      ])
+      // The right button neither opens a file nor folds a folder.
+      expect(onOpen).not.toHaveBeenCalled()
+      expect(row('src')).toHaveAttribute('aria-expanded', 'false')
+    })
+
+    it('copies the whole path, and says it did', async () => {
+      await menuOn('README.md')
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Copy path (⌥⌘C)' }))
+
+      expect(writeText).toHaveBeenCalledExactlyOnceWith('/tmp/planner/anna/README.md')
+      expect(await screen.findByRole('status')).toHaveTextContent('Path copied')
+    })
+
+    it('copies a folder’s path relative to the workspace', async () => {
+      await menuOn('src')
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Copy relative path (⌥⇧⌘C)' }))
+
+      expect(writeText).toHaveBeenCalledExactlyOnceWith('src')
+    })
+
+    it('hands the whole path to the chat', async () => {
+      const { onAttach } = await menuOn('README.md')
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Add to chat' }))
+
+      expect(onAttach).toHaveBeenCalledExactlyOnceWith('/tmp/planner/anna/README.md')
+      expect(writeText).not.toHaveBeenCalled()
+    })
+
+    it('says so when the clipboard refused', async () => {
+      writeText.mockRejectedValue(new Error('not focused'))
+      await menuOn('README.md')
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Copy path (⌥⌘C)' }))
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Could not copy the path')
+    })
+
+    it('puts focus on the row it was opened on', async () => {
+      await menuOn('.env')
+
+      const tree = screen.getByRole('tree')
+      expect(tree).toHaveAttribute('aria-activedescendant', row('.env').id)
+    })
+
+    describe('from the keyboard', () => {
+      /* `ç` is what ⌥C types on macOS, so the key alone would never match:
+         the shortcut has to be read from the physical key. */
+      const press = (tree: HTMLElement, keys: { shiftKey?: boolean; altKey?: boolean }): void => {
+        fireEvent.keyDown(tree, { key: 'ç', code: 'KeyC', metaKey: true, altKey: true, ...keys })
+      }
+
+      async function onReadme(): Promise<HTMLElement> {
+        answering()
+        renderPanel()
+        const tree = await shown()
+        fireEvent.keyDown(tree, { key: 'End' })
+        return tree
+      }
+
+      it('copies the whole path with ⌥⌘C', async () => {
+        press(await onReadme(), {})
+
+        expect(writeText).toHaveBeenCalledExactlyOnceWith('/tmp/planner/anna/README.md')
+      })
+
+      it('copies the relative path with ⌥⇧⌘C', async () => {
+        press(await onReadme(), { shiftKey: true })
+
+        expect(writeText).toHaveBeenCalledExactlyOnceWith('README.md')
+      })
+
+      it('leaves ⌘C alone, and copies nothing with no row focused', async () => {
+        press(await onReadme(), { altKey: false })
+        expect(writeText).not.toHaveBeenCalled()
+
+        cleanup()
+        answering()
+        renderPanel()
+        press(await shown(), {})
+        expect(writeText).not.toHaveBeenCalled()
+      })
     })
   })
 })

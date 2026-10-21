@@ -1,8 +1,9 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, type RenderHookResult } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { octopus } from '../test/octopus.js'
-import { useAttachments } from './useAttachments.js'
+import { useAttachedFiles } from './useAttachedFiles.js'
+import { type AttachmentController, useAttachments } from './useAttachments.js'
 
 beforeEach(() => {
   octopus()
@@ -11,9 +12,15 @@ beforeEach(() => {
 /** A dropped file. Only the name matters — the double derives a path from it. */
 const dropped = (name: string): File => new File(['x'], name)
 
+/** The hook over a store of its own, as one conversation sees it. */
+const attachments = (
+  onError: (message: string) => void
+): RenderHookResult<AttachmentController, unknown> =>
+  renderHook(() => useAttachments(onError, useAttachedFiles('planner/anna'), 'first'))
+
 describe('files the next message points at', () => {
   it('starts with nothing attached', () => {
-    const { result } = renderHook(() => useAttachments(vi.fn()))
+    const { result } = attachments(vi.fn())
 
     expect(result.current.files).toEqual([])
   })
@@ -23,7 +30,7 @@ describe('files the next message points at', () => {
       ok: true,
       value: ['/a/one.png', '/b/two.log']
     })
-    const { result } = renderHook(() => useAttachments(vi.fn()))
+    const { result } = attachments(vi.fn())
 
     await act(async () => {
       await result.current.choose('Attach files')
@@ -35,7 +42,7 @@ describe('files the next message points at', () => {
 
   // Cancelling adds nothing, which is a choice rather than a failure.
   it('adds nothing when the dialog was cancelled', async () => {
-    const { result } = renderHook(() => useAttachments(vi.fn()))
+    const { result } = attachments(vi.fn())
 
     await act(async () => {
       await result.current.choose('Attach files')
@@ -51,7 +58,7 @@ describe('files the next message points at', () => {
       code: 'projectMissing'
     })
     const onError = vi.fn()
-    const { result } = renderHook(() => useAttachments(onError))
+    const { result } = attachments(onError)
 
     await act(async () => {
       await result.current.choose('Attach files')
@@ -64,7 +71,7 @@ describe('files the next message points at', () => {
   /* A `File` in the renderer stopped carrying a path years ago, so the bridge
      is the only thing that can say where a dropped file actually is. */
   it('takes a dropped file by the path the bridge reports', () => {
-    const { result } = renderHook(() => useAttachments(vi.fn()))
+    const { result } = attachments(vi.fn())
 
     act(() => {
       result.current.drop([dropped('shot.png')])
@@ -77,7 +84,7 @@ describe('files the next message points at', () => {
   // — and there is no path to carry for those.
   it('drops what never was a file on disk', () => {
     vi.mocked(octopus().attachments.pathFor).mockReturnValue('')
-    const { result } = renderHook(() => useAttachments(vi.fn()))
+    const { result } = attachments(vi.fn())
 
     act(() => {
       result.current.drop([dropped('from-a-browser.png')])
@@ -89,7 +96,7 @@ describe('files the next message points at', () => {
   /* The same file twice is one attachment: a message naming a path twice reads
      as though the two were different files. */
   it('takes the same file once', () => {
-    const { result } = renderHook(() => useAttachments(vi.fn()))
+    const { result } = attachments(vi.fn())
 
     act(() => {
       result.current.drop([dropped('shot.png')])
@@ -102,7 +109,7 @@ describe('files the next message points at', () => {
   })
 
   it('adds where a pasted image landed', async () => {
-    const { result } = renderHook(() => useAttachments(vi.fn()))
+    const { result } = attachments(vi.fn())
 
     await act(async () => {
       await result.current.paste(new Blob(['x'], { type: 'image/png' }))
@@ -120,7 +127,7 @@ describe('files the next message points at', () => {
       params: { limit: '12' }
     })
     const onError = vi.fn()
-    const { result } = renderHook(() => useAttachments(onError))
+    const { result } = attachments(onError)
 
     await act(async () => {
       await result.current.paste(new Blob(['x'], { type: 'image/png' }))
@@ -131,7 +138,7 @@ describe('files the next message points at', () => {
   })
 
   it('takes one back, and takes them all back when a message goes', () => {
-    const { result } = renderHook(() => useAttachments(vi.fn()))
+    const { result } = attachments(vi.fn())
 
     act(() => {
       result.current.drop([dropped('one.png'), dropped('two.png')])

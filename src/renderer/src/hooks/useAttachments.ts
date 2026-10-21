@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 
+import type { AttachedFileController } from './useAttachedFiles.js'
 import { useErrorMessage } from './useErrorMessage.js'
 
 export interface AttachmentController {
@@ -31,16 +32,24 @@ export interface AttachmentController {
  * A pasted image is the one exception and cannot be anything else — a clipboard
  * carries a picture rather than a file — so core writes it and answers with a
  * path like the others.
+ *
+ * The list itself is `store`'s, under `tabKey`: the Files tab adds to it from
+ * the other side of the window.
  */
-export function useAttachments(onError: (message: string) => void): AttachmentController {
+export function useAttachments(
+  onError: (message: string) => void,
+  store: AttachedFileController,
+  tabKey: string
+): AttachmentController {
   const describeFailure = useErrorMessage()
-  const [files, setFiles] = useState<readonly string[]>([])
+  const { filesFor, add: addTo, remove: removeFrom, clear: clearFrom } = store
 
-  /* Added once. The same file chosen twice is one attachment, and a message
-     naming a path twice reads as though the two were different files. */
-  const add = useCallback((paths: readonly string[]) => {
-    setFiles((current) => [...current, ...paths.filter((path) => !current.includes(path))])
-  }, [])
+  const add = useCallback(
+    (paths: readonly string[]) => {
+      addTo(tabKey, paths)
+    },
+    [addTo, tabKey]
+  )
 
   const choose = useCallback(
     async (title: string) => {
@@ -77,13 +86,16 @@ export function useAttachments(onError: (message: string) => void): AttachmentCo
     [add, onError, describeFailure]
   )
 
-  const remove = useCallback((path: string) => {
-    setFiles((current) => current.filter((item) => item !== path))
-  }, [])
+  const remove = useCallback(
+    (path: string) => {
+      removeFrom(tabKey, path)
+    },
+    [removeFrom, tabKey]
+  )
 
   const clear = useCallback(() => {
-    setFiles([])
-  }, [])
+    clearFrom(tabKey)
+  }, [clearFrom, tabKey])
 
-  return { files, choose, drop, paste, remove, clear }
+  return { files: filesFor(tabKey), choose, drop, paste, remove, clear }
 }

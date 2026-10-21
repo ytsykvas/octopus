@@ -9,6 +9,7 @@ import type { ChatTabsController } from '../../hooks/useChatTabs.js'
 import type { FileTabsController } from '../../hooks/useFileTabs.js'
 import { Button } from '../Button.js'
 import { RepoTrustReview } from '../RepoTrustReview.js'
+import type { AttachedFileController } from '../../hooks/useAttachedFiles.js'
 import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
@@ -52,6 +53,8 @@ interface ChatProps {
   readonly quotes: PullRequestQuoteController
   /** Notes from the file viewer, each held by the conversation it was sent to. */
   readonly codeNotes: CodeNoteController
+  /** Files each conversation's next message names, held per tab like the notes. */
+  readonly attachedFiles: AttachedFileController
   readonly sideQuestions: SideQuestionController
   /**
    * The project's colour, for the messages you sent and the active tab's rule.
@@ -109,6 +112,7 @@ export function Chat({
   comments,
   quotes,
   codeNotes,
+  attachedFiles,
   sideQuestions,
   color,
   defaultWorkingMode,
@@ -248,6 +252,7 @@ export function Chat({
           comments={comments}
           quotes={quotes}
           codeNotes={codeNotes}
+          attachedFiles={attachedFiles}
           sideQuestions={sideQuestions}
           defaultWorkingMode={defaultWorkingMode}
           planExecutionMode={planExecutionMode}

@@ -1,4 +1,4 @@
-import { ChevronsDownUp, LocateFixed, RefreshCw } from 'lucide-react'
+import { ChevronsDownUp, Copy, LocateFixed, Paperclip, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -11,9 +11,11 @@ import {
 } from '@core/fileTree.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { type CopyState, useCopy } from '../../hooks/useCopy.js'
 import { useFileFilter } from '../../hooks/useFileFilter.js'
 import { useFileTree } from '../../hooks/useFileTree.js'
 import { DisclosureChevron } from '../Disclosure.js'
+import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
 import { IconButton, Notice } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { FileIcon } from './FileIcon.js'
@@ -48,6 +50,8 @@ interface FilesPanelProps {
   readonly activePath: string | null
   /** A file was chosen: once for a preview, twice — or with Enter — to keep it open. */
   readonly onOpen: (path: string, pinned: boolean) => void
+  /** A row's absolute path, for the conversation in front to carry as an attachment. */
+  readonly onAttach: (path: string) => void
 }
 
 const NONE: ReadonlySet<string> = new Set()
@@ -97,6 +101,7 @@ export function FilesPanel({ workspace, ...rest }: FilesPanelProps): React.JSX.E
       key={id}
       {...rest}
       workspaceId={id}
+      root={workspace.path}
       expanded={expandedBy[id] ?? NONE}
       onExpanded={(change) => {
         setExpandedBy((current) => ({ ...current, [id]: change(current[id] ?? NONE) }))
@@ -107,6 +112,8 @@ export function FilesPanel({ workspace, ...rest }: FilesPanelProps): React.JSX.E
 
 interface WorkspaceTreeProps extends Omit<FilesPanelProps, 'workspace'> {
   readonly workspaceId: string
+  /** The worktree, which a workspace-relative path is relative to. */
+  readonly root: string
   readonly expanded: ReadonlySet<string>
   /** A change rather than a value, so two toggles in one frame both land. */
   readonly onExpanded: (change: (current: ReadonlySet<string>) => ReadonlySet<string>) => void
@@ -114,14 +121,48 @@ interface WorkspaceTreeProps extends Omit<FilesPanelProps, 'workspace'> {
 
 function WorkspaceTree({
   workspaceId,
+  root,
   visible,
   activePath,
   onOpen,
+  onAttach,
   expanded,
   onExpanded
 }: WorkspaceTreeProps): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const tree = useFileTree(workspaceId, visible, expanded)
+  const clipboard = useCopy()
+
+  // `/` rather than `path.join`, which the window has no `node:path` for: the
+  // root comes from `path.join` itself, so it carries no trailing separator.
+  const absolute = (path: string): string => `${root}/${path}`
+
+  const menuFor = (path: string): MenuAction[] => [
+    {
+      id: 'copyPath',
+      label: t('files.copyPath'),
+      icon: <Copy aria-hidden size={13} />,
+      onSelect: () => {
+        void clipboard.copy(absolute(path))
+      }
+    },
+    {
+      id: 'copyRelativePath',
+      label: t('files.copyRelativePath'),
+      icon: <Copy aria-hidden size={13} />,
+      onSelect: () => {
+        void clipboard.copy(path)
+      }
+    },
+    {
+      id: 'addToChat',
+      label: t('files.addToChat'),
+      icon: <Paperclip aria-hidden size={13} />,
+      onSelect: () => {
+        onAttach(absolute(path))
+      }
+    }
+  ]
 
   const [focus, setFocus] = useState<string | null>(null)
 
@@ -256,6 +297,18 @@ function WorkspaceTree({
     setRevealing(null)
     const at = located === undefined ? -1 : nodeRows.indexOf(located)
     const current = located?.row
+
+    /*
+     * An editor's explorer's keys: ⌥⌘C the whole path, with ⇧ the relative one.
+     * Read from `code`: ⌥ turns the `c` into `ç` on macOS, as it does the
+     * digits `App` reads the same way.
+     */
+    if (event.metaKey && event.altKey && !event.ctrlKey && event.code === 'KeyC') {
+      if (current === undefined) return
+      event.preventDefault()
+      void clipboard.copy(event.shiftKey ? current.node.path : absolute(current.node.path))
+      return
+    }
     // A slice of one rather than an index, which the type admits may miss:
     // the clamp keeps it in range whenever there are rows, and none is none.
     const step = (offset: number): void => {
@@ -375,6 +428,8 @@ function WorkspaceTree({
         </div>
       </div>
 
+      <CopyOutcome state={clipboard.state} />
+
       {tree.truncated && (
         <p className="text-ink-faint border-line shrink-0 border-b px-3 py-1.5 text-[11px]">
           {t('files.truncated', { limit: MAX_TREE_ENTRIES.toLocaleString(i18n.language) })}
@@ -428,6 +483,10 @@ function WorkspaceTree({
                 }
                 active={row.node.path === activePath}
                 focused={row.node.path === focused}
+                menu={menuFor(row.node.path)}
+                onContextMenu={() => {
+                  setFocus(row.node.path)
+                }}
                 onClick={() => {
                   setFocus(row.node.path)
                   if (row.node.kind === 'directory') toggle(row.node)
@@ -477,6 +536,9 @@ interface RowProps {
   readonly status: TreeStatus | undefined
   readonly active: boolean
   readonly focused: boolean
+  /** What a right-click on the row offers. */
+  readonly menu: readonly MenuAction[]
+  readonly onContextMenu: () => void
   readonly onClick: () => void
   readonly onDoubleClick: () => void
 }
@@ -486,6 +548,8 @@ function Row({
   status,
   active,
   focused,
+  menu,
+  onContextMenu,
   onClick,
   onDoubleClick
 }: RowProps): React.JSX.Element {
@@ -493,29 +557,64 @@ function Row({
   const directory = node.kind === 'directory'
 
   return (
-    <div
-      id={rowId(node.path)}
-      role="treeitem"
-      aria-level={level}
-      aria-setsize={row.setSize}
-      aria-posinset={row.position}
-      aria-selected={active}
-      {...(directory && { 'aria-expanded': expanded })}
-      title={node.path}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      style={{ height: ROW_HEIGHT, paddingLeft: GUTTER + (level - 1) * INDENT }}
-      className={`row relative flex cursor-default items-center gap-1 pr-3 text-[12px] select-none ${
-        active ? 'row-selected' : ''
-      } ${focused ? 'group-focus-visible/tree:outline-accent group-focus-visible/tree:outline group-focus-visible/tree:-outline-offset-1' : ''}`}
-    >
-      {directory ? (
-        <DisclosureChevron open={expanded} size={14} className="text-ink-faint" />
-      ) : (
-        <span aria-hidden className="w-3.5 shrink-0" />
+    <DropdownMenu
+      align="left"
+      actions={menu}
+      // The right button only, as on a project's tab: the left one opens.
+      trigger={({ onClick: openMenu }) => (
+        <div
+          id={rowId(node.path)}
+          role="treeitem"
+          aria-level={level}
+          aria-setsize={row.setSize}
+          aria-posinset={row.position}
+          aria-selected={active}
+          {...(directory && { 'aria-expanded': expanded })}
+          title={node.path}
+          onClick={onClick}
+          onDoubleClick={onDoubleClick}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            onContextMenu()
+            openMenu(event)
+          }}
+          style={{ height: ROW_HEIGHT, paddingLeft: GUTTER + (level - 1) * INDENT }}
+          className={`row relative flex cursor-default items-center gap-1 pr-3 text-[12px] select-none ${
+            active ? 'row-selected' : ''
+          } ${focused ? 'group-focus-visible/tree:outline-accent group-focus-visible/tree:outline group-focus-visible/tree:-outline-offset-1' : ''}`}
+        >
+          {directory ? (
+            <DisclosureChevron open={expanded} size={14} className="text-ink-faint" />
+          ) : (
+            <span aria-hidden className="w-3.5 shrink-0" />
+          )}
+          <FileIcon name={node.name} path={node.path} kind={node.kind} expanded={expanded} />
+          <EntryLabel node={node} status={status} />
+        </div>
       )}
-      <FileIcon name={node.name} path={node.path} kind={node.kind} expanded={expanded} />
-      <EntryLabel node={node} status={status} />
-    </div>
+    />
+  )
+}
+
+/**
+ * What the last copy did, said in the toolbar's place under it — the menu that
+ * asked has closed, and a shortcut has nothing of its own to show it on.
+ *
+ * Always mounted, so a reader is told when the words appear: a live region
+ * that arrives with its text is one some screen readers never announce.
+ */
+function CopyOutcome({ state }: { readonly state: CopyState }): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <p
+      role="status"
+      className={`shrink-0 px-3 text-[11px] ${state === 'failed' ? 'text-danger' : 'text-ink-faint'} ${
+        state === 'idle' ? 'sr-only' : 'border-line border-b py-1.5'
+      }`}
+    >
+      {state === 'done' && t('files.pathCopied')}
+      {state === 'failed' && t('files.copyFailed')}
+    </p>
   )
 }

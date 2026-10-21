@@ -374,6 +374,8 @@ The log says the same at the row that started the agent: the row keeps spinning 
 | `⌘⇧P`       | pull request                         |
 | `⌘W`        | close the file in front              |
 | `⌘C`        | in a file: copy the lines' reference |
+| `⌥⌘C`       | in the files: copy the whole path    |
+| `⌥⇧⌘C`      | in the files: copy the relative path |
 | `⌘O`        | open every step of the conversation  |
 | `⇧⇥`        | next mode                            |
 
