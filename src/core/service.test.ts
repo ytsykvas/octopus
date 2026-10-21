@@ -308,6 +308,10 @@ describe('GitHub projects', () => {
   })
 })
 
+/** Requests opened long before, and long after, any workspace a test makes. */
+const EARLIER = '2000-01-01T00:00:00Z'
+const LATER = '2999-01-01T00:00:00Z'
+
 describe('workspaces', () => {
   /** A service with one project already added, as the UI would have. */
   async function withProject(): Promise<{ service: OctopusService; projectId: string }> {
@@ -654,8 +658,6 @@ describe('workspaces', () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
 
-    // Opened once the workspace exists, as its own request would be.
-    let openedAt = ''
     const service = await createService({
       ...paths(dir),
       makeGh: () => (args) =>
@@ -667,7 +669,7 @@ describe('workspaces', () => {
                   state: 'MERGED',
                   title: 'Done',
                   url: 'https://x/pull/7',
-                  createdAt: openedAt
+                  createdAt: LATER
                 }
               ])
             : '[]'
@@ -675,7 +677,6 @@ describe('workspaces', () => {
     })
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
-    openedAt = workspace.createdAt
 
     const run = promisify(execFile)
     const inside = (args: string[]): Promise<string> =>
@@ -695,11 +696,7 @@ describe('workspaces', () => {
     await expect(outside(['branch', '--list', workspace.branch])).resolves.toBe('')
   })
 
-  /*
-   * Workspace names are recycled, and GitHub remembers the request of the last
-   * workspace to carry one. Taken as this workspace's own, that old merge was
-   * leave to delete a branch whose work had never been merged anywhere.
-   */
+  // An old merge on a recycled branch is not leave to delete this workspace's work.
   it('keeps refusing when the merged request predates the workspace', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
@@ -713,9 +710,9 @@ describe('workspaces', () => {
                 {
                   number: 7,
                   state: 'MERGED',
-                  title: 'Yesterday',
+                  title: 'Earlier',
                   url: 'https://x/pull/7',
-                  createdAt: '2000-01-01T00:00:00Z'
+                  createdAt: EARLIER
                 }
               ])
             : '[]'
@@ -760,41 +757,37 @@ describe('workspaces', () => {
     ).rejects.toMatchObject({ code: 'branchUnmerged' })
   })
 
-  /*
-   * The pane and the list beside it ask GitHub by branch, and a recycled name
-   * brings back the branch of a workspace long removed. Both have to be handed
-   * the workspace itself to tell its requests from its predecessor's.
-   */
-  it('shows neither in the pane nor in the list a request older than the workspace', async () => {
+  /** A `gh` answering one request on the workspace's branch, opened at `createdAt`. */
+  const oneRequest =
+    (createdAt: string, branch: () => string) =>
+    () =>
+    (args: readonly string[]): Promise<string> => {
+      const request = { number: 7, state: 'MERGED', url: 'https://x/pull/7', createdAt }
+      return Promise.resolve(
+        JSON.stringify([
+          args.includes('--head')
+            ? { ...request, title: 'Done' }
+            : {
+                ...request,
+                headRefName: branch(),
+                statusCheckRollup: [],
+                isDraft: false,
+                mergeable: 'UNKNOWN',
+                mergeStateStatus: 'UNKNOWN',
+                reviewDecision: ''
+              }
+        ])
+      )
+    }
+
+  it('leaves a request older than the workspace out of the pane and the list', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
 
     let branch = ''
-    const yesterday = {
-      number: 7,
-      state: 'MERGED',
-      title: 'Yesterday',
-      url: 'https://x/pull/7',
-      createdAt: '2000-01-01T00:00:00Z'
-    }
     const service = await createService({
       ...paths(dir),
-      makeGh: () => (args) =>
-        Promise.resolve(
-          args.includes('--head')
-            ? JSON.stringify([yesterday])
-            : JSON.stringify([
-                {
-                  ...yesterday,
-                  headRefName: branch,
-                  statusCheckRollup: [],
-                  isDraft: false,
-                  mergeable: 'UNKNOWN',
-                  mergeStateStatus: 'UNKNOWN',
-                  reviewDecision: ''
-                }
-              ])
-        )
+      makeGh: oneRequest(EARLIER, () => branch)
     })
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
@@ -802,6 +795,27 @@ describe('workspaces', () => {
 
     await expect(service.readPullRequest(workspace.id)).resolves.toMatchObject({ request: null })
     await expect(service.readBranchRequests(project.id)).resolves.toMatchObject({ requests: [] })
+  })
+
+  it("keeps the workspace's own request in the pane and the list", async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    let branch = ''
+    const service = await createService({
+      ...paths(dir),
+      makeGh: oneRequest(LATER, () => branch)
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    branch = workspace.branch
+
+    await expect(service.readPullRequest(workspace.id)).resolves.toMatchObject({
+      request: { number: 7 }
+    })
+    await expect(service.readBranchRequests(project.id)).resolves.toMatchObject({
+      requests: [{ number: 7 }]
+    })
   })
 
   // Nothing to commit means nothing to ask about: a commit message for a clean

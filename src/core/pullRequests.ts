@@ -29,13 +29,14 @@ import {
   type RerunScope,
   runsToRerun,
   ThreadsPayloadSchema,
+  type BranchOwner,
   openedFor,
+  ownRequests,
   toBranchRequests,
   toPullRequestDetail,
   toPullRequestState,
   toRerunPayload
 } from './pullRequestShapes.js'
-import type { Workspace } from './store.js'
 import { commitAll, hasUncommittedChanges } from './worktree.js'
 import { allOf } from './parallel.js'
 
@@ -115,13 +116,6 @@ const RemotePullRequestSchema = z.object({
 })
 
 /**
- * What a pull request is read for: the branch it is on, and when the workspace
- * on it began — which is what decides whether a request there is its own
- * (`openedFor`).
- */
-export type BranchOwner = Pick<Workspace, 'branch' | 'createdAt'>
-
-/**
  * The pull request for a branch, or the absence of one.
  *
  * `pr list --head` rather than `pr view`: `view` exits non-zero when there is no
@@ -158,11 +152,9 @@ export async function readPullRequest(
 
   // The newest, when a branch has been opened and closed and opened again:
   // `gh` lists most recent first, and the current one is what the pane is about.
-  // Older than the workspace and it is not the workspace's at all — nor is
-  // anything older still, which is why one is all `gh` is asked for.
+  // One too old to be the workspace's means everything older is too.
   const newest = remote[0]
-  const current =
-    newest !== undefined && openedFor(newest.createdAt, workspace) ? newest : undefined
+  const current = newest !== undefined && openedFor(newest, workspace) ? newest : undefined
 
   return {
     request:
@@ -861,8 +853,8 @@ export interface BranchRequestList {
  * network call per row every time the list refreshed.
  */
 export async function readBranchRequests(
-  gh: GhExec,
   workspaces: readonly BranchOwner[],
+  gh: GhExec,
   limit: number = BRANCH_REQUEST_LIMIT
 ): Promise<BranchRequestList> {
   const payload = shaped(
@@ -883,15 +875,7 @@ export async function readBranchRequests(
     )
   )
 
-  // Before the newest-per-branch pick rather than after it: every request older
-  // than one dropped here is older than the workspace too.
-  const owners = new Map(workspaces.map((workspace) => [workspace.branch, workspace]))
-  const requests = toBranchRequests(
-    payload.filter((entry) => {
-      const owner = owners.get(entry.headRefName)
-      return owner === undefined || openedFor(entry.createdAt, owner)
-    })
-  )
+  const requests = toBranchRequests(ownRequests(payload, workspaces))
 
   /*
    * Whether the answer came back full, decided here rather than by counting

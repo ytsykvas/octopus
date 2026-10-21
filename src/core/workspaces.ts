@@ -12,7 +12,7 @@ import { access, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
-import { shortBranchName } from './branches.js'
+import { remoteBranchName, shortBranchName } from './branches.js'
 import { CodedError } from './codedError.js'
 import { anyBranchExists, countAhead, type GitExec, reasonFrom, toSlug } from './git.js'
 import { fetchRemote, resolveBase } from './remotes.js'
@@ -292,6 +292,7 @@ export async function createWorkspace(
         options.answers
       )) ?? POOL_START,
     createdAt: new Date().toISOString(),
+    branchSince: null,
     // Following the project, which is what a workspace nobody has moved does.
     envProfile: null,
     notes: '',
@@ -308,11 +309,8 @@ export async function createWorkspace(
  * Only branches under the project's prefix count; anything else in the
  * repository is the user's own and none of our business.
  *
- * The remote's as well as the local ones. Removing a workspace deletes its
- * local branch, but the copy it pushed stays on `origin` — merged requests
- * rarely take their branch with them — so a name read off local branches alone
- * came back round onto a branch GitHub still holds, with its old request and a
- * tip the new work would not push over.
+ * `origin`'s count too: removal deletes the local branch but not the copy
+ * there, and a name drawn onto it inherits that branch's history.
  */
 async function takenByBranches(project: Project, exec: GitExec): Promise<string[]> {
   const prefix = `${project.branchPrefix}/`
@@ -357,7 +355,7 @@ export async function renameWorkspace(
   name: string,
   exec: GitExec,
   siblings: readonly Workspace[] = []
-): Promise<{ name: string; branch: string }> {
+): Promise<Pick<Workspace, 'name' | 'branch'> & Partial<Pick<Workspace, 'branchSince'>>> {
   const trimmed = name.trim()
   if (trimmed === '') {
     throw new WorkspaceError('nameEmpty', {}, 'A workspace name cannot be empty.')
@@ -387,7 +385,13 @@ export async function renameWorkspace(
   // rejection to "already exists" blamed the new name for whatever went wrong —
   // including the branch being renamed from a terminal, where the truth is that
   // the old one is gone.
-  if (await anyBranchExists(exec, branch)) {
+  // `origin`'s copy as well: a name still held there would bring that branch's
+  // history, and its requests, onto this workspace.
+  const [local, remote] = await allOf([
+    anyBranchExists(exec, branch),
+    anyBranchExists(exec, remoteBranchName(branch))
+  ])
+  if (local || remote) {
     throw new WorkspaceError('branchExists', { branch }, `Branch ${branch} already exists.`)
   }
 
@@ -395,7 +399,7 @@ export async function renameWorkspace(
   // guess would.
   await renameBranch(exec, workspace.branch, branch)
 
-  return { name: trimmed, branch }
+  return { name: trimmed, branch, branchSince: new Date().toISOString() }
 }
 
 export interface RemoveOptions {

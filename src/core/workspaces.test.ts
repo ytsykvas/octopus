@@ -252,7 +252,7 @@ describe('freshBase', () => {
     }
 
     await createWorkspace(project, state, exec, { root, answers: nothingListens, fetchExec })
-    expect(asked).toEqual([['fetch', 'origin']])
+    expect(asked).toEqual([['fetch', '--prune', 'origin']])
   })
 })
 
@@ -276,12 +276,6 @@ describe('createWorkspace', () => {
     expect((await create()).name).toBe(SECOND_NAME)
   })
 
-  /*
-   * Removal deletes the local branch, not the copy on `origin`, and GitHub keeps
-   * the request that was opened from it. A name read off local branches alone
-   * came back onto that branch: the new workspace showed its predecessor's
-   * merged request as its own.
-   */
   it('skips a name whose branch is still on the remote', async () => {
     await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/${FIRST_NAME}`, 'HEAD'], {
       cwd: repo
@@ -564,6 +558,27 @@ describe('renameWorkspace', () => {
     // Case is all `toSlug` would change, so the branch stays where it is.
     const renamed = await renameWorkspace(workspace, project, FIRST_NAME.toUpperCase(), exec)
     expect(renamed.branch).toBe(workspace.branch)
+    expect(renamed.branchSince).toBeUndefined()
+  })
+
+  it('marks when the workspace came onto its new branch', async () => {
+    const workspace = await create()
+    const before = Date.now()
+
+    const renamed = await renameWorkspace(workspace, project, 'fix auth', exec)
+
+    expect(Date.parse(renamed.branchSince ?? '')).toBeGreaterThanOrEqual(before)
+  })
+
+  it('refuses a name whose branch is still on the remote', async () => {
+    const workspace = await create()
+    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/fix-auth', 'HEAD'])
+
+    const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchExists')
   })
 
   it('refuses to collide with an existing branch', async () => {

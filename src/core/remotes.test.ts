@@ -245,6 +245,17 @@ describe('fetchRemote', () => {
     expect(after).toBe(landed)
   })
 
+  it('drops the tracking ref of a branch the remote no longer has', async () => {
+    const remote = await addRemote()
+    await run('git', ['--git-dir', remote, 'branch', '-D', 'develop'])
+
+    await fetchRemote(gitIn(dir), 'origin')
+
+    await expect(
+      run('git', ['rev-parse', '--verify', 'origin/develop'], { cwd: dir })
+    ).rejects.toThrow()
+  })
+
   // The unreachable remote, without a network: a bare repository that existed
   // when the refs were written and is gone by the time git goes looking.
   it('fails when the remote is not there', async () => {
@@ -254,7 +265,7 @@ describe('fetchRemote', () => {
     await expect(fetchRemote(gitIn(dir), 'origin')).rejects.toBeInstanceOf(GitError)
   })
 
-  it('names only the remote, so the repository decides what a fetch means', async () => {
+  it('names only the remote and pruning, so the repository decides the rest', async () => {
     const asked: string[][] = []
     const recording: GitExec = (args) => {
       asked.push([...args])
@@ -262,6 +273,6 @@ describe('fetchRemote', () => {
     }
 
     await fetchRemote(recording, 'origin')
-    expect(asked).toEqual([['fetch', 'origin']])
+    expect(asked).toEqual([['fetch', '--prune', 'origin']])
   })
 })

@@ -16,6 +16,8 @@
 
 import { z } from 'zod'
 
+import type { Workspace } from './store.js'
+
 /**
  * What has become of the branch.
  *
@@ -633,21 +635,36 @@ export const BranchListSchema = z.array(
 
 export type BranchListPayload = z.infer<typeof BranchListSchema>
 
+/** A workspace as far as the requests on its branch are concerned. */
+export type BranchOwner = Pick<Workspace, 'branch' | 'createdAt' | 'branchSince'>
+
+/** GitHub's clock against this machine's, which macOS keeps within seconds. */
+const CLOCK_SKEW_MS = 5 * 60_000
+
 /**
  * Whether a request could be this workspace's own.
  *
- * Workspace names are recycled, and a branch name with them: the `bella` made
- * today is on the same `octopus/bella` as the one removed yesterday, and GitHub
- * remembers yesterday's request long after its branch is gone. Asked by branch
- * alone, the new workspace inherited a merged request it never opened — and the
- * removal check took that merge as leave to delete its unmerged work.
- *
- * Time is what tells them apart. A workspace always makes its branch fresh
- * (`worktree add -b`), so nothing it did can predate it, and a request opened
- * before the workspace existed is somebody else's work in every state.
+ * Workspace names are recycled, so a branch name can carry the request of a
+ * workspace long removed — GitHub keeps it after the branch is gone. A
+ * workspace's branch is new from its creation or its last rename
+ * (`branchSince`), so a request opened before then is other work, in any state.
  */
-export function openedFor(openedAt: string, workspace: { readonly createdAt: string }): boolean {
-  return Date.parse(openedAt) >= Date.parse(workspace.createdAt)
+export function openedFor(request: { readonly createdAt: string }, owner: BranchOwner): boolean {
+  const since = Date.parse(owner.branchSince ?? owner.createdAt)
+  return Date.parse(request.createdAt) >= since - CLOCK_SKEW_MS
+}
+
+/** The requests that could be their branch's workspace's own; branches no workspace is on all pass. */
+export function ownRequests(
+  payload: BranchListPayload,
+  owners: readonly BranchOwner[]
+): BranchListPayload {
+  const byBranch = new Map(owners.map((owner) => [owner.branch, owner]))
+
+  return payload.filter((entry) => {
+    const owner = byBranch.get(entry.headRefName)
+    return owner === undefined || openedFor(entry, owner)
+  })
 }
 
 /**

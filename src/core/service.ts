@@ -5693,7 +5693,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // From the checkout rather than from a worktree: this is a question about
       // the repository, and a project can be open with no workspace in it.
-      return readBranchRequests(makeGh(project.repoPath), workspacesOfProject(state, projectId))
+      return readBranchRequests(workspacesOfProject(state, projectId), makeGh(project.repoPath))
     },
 
     async readFileTree(workspaceId) {

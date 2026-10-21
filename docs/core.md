@@ -175,13 +175,16 @@ A branch outlives the worktree it was made for — removal keeps it unless asked
 otherwise. So a name free in `state.json` may still be taken in the repository,
 and `worktree add` will refuse. `takenByBranches` in `workspaces.ts` exists for
 exactly this, and reads the remote-tracking branches as well as the local ones:
-the copy on `origin` outlives even a deleted local branch, and a new workspace
-landing on it inherited the old tip and the old request.
+the copy on `origin` outlives even a deleted local branch. A rename is refused
+onto either. The fetch before branching prunes, so a branch deleted on the
+remote frees its name again.
 
 GitHub remembers a request after its branch is gone, so no choice of name can
-settle that alone. A request opened before the workspace existed is never its
-own (`openedFor` in `pullRequestShapes.ts`), and the pane, the list beside it
-and the removal check all ask with the workspace rather than its branch name.
+settle that alone. A request opened before the workspace came onto its branch —
+created, or renamed onto it (`branchSince`) — is never its own (`openedFor` in
+`pullRequestShapes.ts`, with five minutes allowed for clock skew), and the
+pane, the list beside it and the removal check all ask with the workspace
+rather than its branch name.
 
 ### A workspace branches from a base that was just fetched
 
