@@ -162,17 +162,41 @@ describe('what a workspace has changed', () => {
 
   // Behind a hidden tab there is nobody to show it to; the read happens when
   // the tab comes back rather than for every turn that ends behind it.
-  it('ignores a turn that ends behind a hidden tab', async () => {
+  it('does not listen for turns behind a hidden tab', async () => {
     vi.useFakeTimers()
     answering(workspaceDiff([]))
     renderHook(() => useWorkspaceDiff(WORKSPACE, false))
 
-    emit(DONE)
     await act(async () => {
       await vi.runAllTimersAsync()
     })
 
+    expect(octopus().chats.onEvent).not.toHaveBeenCalled()
     expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+  })
+
+  it('holds a turn that ends while the window is hidden, and reads when it is shown', async () => {
+    vi.useFakeTimers()
+    answering(workspaceDiff([]))
+    renderHook(() => useWorkspaceDiff(WORKSPACE, true))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    emit(DONE)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+
+    hidden.mockReturnValue(false)
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
   })
 
   it('reads when the tab comes back', async () => {

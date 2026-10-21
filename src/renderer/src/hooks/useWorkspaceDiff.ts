@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FileSides, WorkspaceDiff } from '@core/diff.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
-import { onChatEvent } from './chatEvents.js'
+import { useTurnSettled } from './useTurnSettled.js'
 
 export interface WorkspaceDiffController {
   readonly diff: WorkspaceDiff | null
@@ -22,15 +22,6 @@ export interface WorkspaceDiffController {
   readonly error: string | null
   readonly refresh: () => Promise<void>
 }
-
-/**
- * How long the diff waits after a turn ends before reading git.
- *
- * Long enough that a turn ending twice over — an error and then a result — is
- * one read rather than two, and short enough that the pane is current by the
- * time the eye reaches it.
- */
-const SETTLE_MS = 300
 
 /** Shared so an empty answer stays the same object and colours nothing twice. */
 const NO_SIDES: Readonly<Record<string, FileSides>> = {}
@@ -71,20 +62,6 @@ export function useWorkspaceDiff(
 
   /** Rejects a reply that arrived after the workspace changed under it. */
   const generation = useRef(0)
-
-  /*
-   * The one read that is waiting to happen.
-   *
-   * Replaced rather than added to: a turn that fails emits an error and then a
-   * result, and two chats in one workspace regularly finish together. Each of
-   * those is one change to the tree, and a timer per event would read it once
-   * per event — which is the thing waiting was meant to avoid.
-   *
-   * A ref rather than a variable in the effect, because a local assigned only
-   * inside the callback reads as a constant to the type checker at the two
-   * places that have to test it.
-   */
-  const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const apply = useCallback(
     (
@@ -157,30 +134,9 @@ export function useWorkspaceDiff(
     }
   }, [workspaceId, enabled, apply])
 
-  useEffect(() => {
-    const unsubscribe = onChatEvent((announced) => {
-      // Any chat in this workspace writes to the same worktree, so this filters
-      // on the workspace rather than on the chat the way `useChat` does.
-      if (announced.workspaceId !== workspaceId) return
-      // A turn ends either way, and one that failed may well have written
-      // files before it did.
-      if (announced.event.type !== 'result' && announced.event.type !== 'error') return
-
-      // Behind a hidden tab there is nobody to show it to, and the effect
-      // above reads again when the tab comes back.
-      if (!enabled) return
-
-      if (pending.current !== null) clearTimeout(pending.current)
-      pending.current = setTimeout(() => {
-        void load(announced.workspaceId)
-      }, SETTLE_MS)
-    })
-
-    return () => {
-      unsubscribe()
-      if (pending.current !== null) clearTimeout(pending.current)
-    }
-  }, [workspaceId, enabled, load])
+  // Behind a hidden tab there is nobody to show it to, and the effect above
+  // reads again when the tab comes back.
+  useTurnSettled(workspaceId, enabled, () => void refresh())
 
   return {
     diff,

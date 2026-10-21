@@ -199,6 +199,26 @@ describe('what each branch of a project has become', () => {
     expect(octopus().projects.pullRequests).toHaveBeenCalledOnce()
   })
 
+  // A mark nobody can see is not worth a GraphQL query a minute, all day.
+  it('holds the next look while the window is hidden, and takes it once on the way back', async () => {
+    vi.useFakeTimers()
+    answer(request())
+    renderHook(() => useBranchRequests(PLANNER, ['ledger']))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(octopus().projects.pullRequests).toHaveBeenCalledTimes(2)
+
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    await act(() => vi.advanceTimersByTimeAsync(600_000))
+    expect(octopus().projects.pullRequests).toHaveBeenCalledTimes(2)
+
+    hidden.mockReturnValue(false)
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(octopus().projects.pullRequests).toHaveBeenCalledTimes(4)
+  })
+
   it('stops looking once the project is closed', async () => {
     vi.useFakeTimers()
     answer(request())

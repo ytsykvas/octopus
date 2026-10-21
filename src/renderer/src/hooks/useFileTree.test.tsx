@@ -7,7 +7,7 @@ import { emitAgentEvent } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useFileTree } from './useFileTree.js'
-import { SETTLE_MS } from './useWorkspaceSettled.js'
+import { SETTLE_MS } from './useTurnSettled.js'
 
 const WORKSPACE = 'planner/anna'
 const NONE: ReadonlySet<string> = new Set()

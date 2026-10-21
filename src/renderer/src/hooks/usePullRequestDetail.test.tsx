@@ -310,6 +310,27 @@ describe('waiting for something to settle', () => {
     expect(result.current.readAt).toEqual(expect.any(String))
   })
 
+  // A check finishing behind a minimised window is read once, when somebody
+  // can see the answer — not every fifteen seconds while nobody can.
+  it('holds the next look while the window is hidden, and takes it on the way back', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('pending')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+
+    hidden.mockReturnValue(false)
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+  })
+
   it('stops once everything has settled', async () => {
     vi.useFakeTimers()
     answer(detail({ checks: [check('passed')] }))

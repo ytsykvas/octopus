@@ -46,13 +46,15 @@ export interface SubscriptionController {
  * still filling, on the same event, one round trip later. The sidebar won that
  * race never, and drew the previous turn's figure every time.
  *
- * **Coming back to the window asks.** Whatever happened while it was in the
- * background did not announce itself here, and the figure informs a decision
- * taken the moment somebody looks: whether to start something at all.
+ * **Showing the window again asks.** Whatever happened while it was hidden did
+ * not announce itself here, and the figure informs a decision taken the moment
+ * somebody looks: whether to start something at all.
  *
- * **A slow timer while it is visible.** For the window left open and watched.
- * Stopped when the window is hidden, because nothing behind a hidden window is
- * worth spawning a process for.
+ * **A slow timer while it is visible.** For the window left open and watched,
+ * and what bounds the figure's age when somebody switches back to a window
+ * that stayed visible — so a switch between apps asks nothing. Stopped when the
+ * window is hidden, because nothing behind a hidden window is worth spawning a
+ * process for.
  *
  * The design this replaces said "nothing is polled, and nothing starts a
  * session on its own", on the reasoning that answering costs an agent.

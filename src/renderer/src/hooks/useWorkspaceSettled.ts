@@ -1,14 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useEffectEvent } from 'react'
 
-import { onChatEvent } from './chatEvents.js'
-
-/**
- * How long a read waits after a turn ends — the diff's own settle, for the
- * same reason: a turn that fails ends twice, an error and then a result, and
- * two chats in one workspace often finish together. That is one change to the
- * tree, and should be one read.
- */
-export const SETTLE_MS = 300
+import { useTurnSettled } from './useTurnSettled.js'
 
 /**
  * Calls back when a workspace's files have probably changed: a turn of any of
@@ -19,46 +11,30 @@ export const SETTLE_MS = 300
  * these are the moments a reader would expect the picture to be current, and
  * between them nothing on screen claims to be live. Nothing fires while
  * `enabled` is false — a hidden tab reads when it is shown again instead.
+ *
+ * The focus half is what the diff pane goes without: it is how an edit made in
+ * another editor reaches the tree, and a tree costs one `git status` where a
+ * diff costs a dozen processes on every switch back into the app.
  */
 export function useWorkspaceSettled(
   workspaceId: string | null,
   enabled: boolean,
   onSettled: () => void
 ): void {
-  // The newest callback, so a caller's fresh closure on every render does not
-  // resubscribe — and drop a pending read — each time.
-  const latest = useRef(onSettled)
-  useEffect(() => {
-    latest.current = onSettled
-  })
+  useTurnSettled(workspaceId, enabled, onSettled)
 
-  const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const focused = useEffectEvent(onSettled)
 
   useEffect(() => {
     if (workspaceId === null || !enabled) return
 
-    const unsubscribe = onChatEvent((announced) => {
-      // Any chat of the workspace writes to the same worktree.
-      if (announced.workspaceId !== workspaceId) return
-      if (announced.event.type !== 'result' && announced.event.type !== 'error') return
-
-      if (pending.current !== null) clearTimeout(pending.current)
-      pending.current = setTimeout(() => {
-        pending.current = null
-        latest.current()
-      }, SETTLE_MS)
-    })
-
-    const focused = (): void => {
-      latest.current()
+    const listener = (): void => {
+      focused()
     }
-    window.addEventListener('focus', focused)
+    window.addEventListener('focus', listener)
 
     return () => {
-      unsubscribe()
-      window.removeEventListener('focus', focused)
-      if (pending.current !== null) clearTimeout(pending.current)
-      pending.current = null
+      window.removeEventListener('focus', listener)
     }
   }, [workspaceId, enabled])
 }

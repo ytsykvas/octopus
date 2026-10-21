@@ -2133,7 +2133,8 @@ error sits under them. One `Result` could not say both.
 **The detail re-reads itself every 15 s** while a check is running _or_ while
 GitHub has not decided whether the branch is mergeable — a self-rescheduling
 `setTimeout` rather than an interval, so a slow reply never has a second read
-stacked on it. The second half of that condition is load-bearing: mergeability
+stacked on it — and held while the window is hidden, so a check finishing
+behind it is read once, when the window is shown. The second half of that condition is load-bearing: mergeability
 is computed asynchronously, so the first read after every push says it is
 unknown, and a request whose repository runs no CI has no pending check to wait
 on at all.
@@ -2143,7 +2144,7 @@ _failed_ is not pending, so the poll above stops at exactly the moment a fix is
 on its way — and an agent pushing that fix in its own worktree raised nothing
 the pane listened to. It subscribes the way the diff pane does: filtered on the
 workspace rather than the chat, on `error` as well as `result`, skipped while
-hidden, settled for the same 300 ms. Not a slow poll while a check is failed,
+the tab is hidden and held while the window is, settled for the same 300 ms. Not a slow poll while a check is failed,
 which would ask GitHub about an abandoned request for ever. The time of the last
 read sits beside the refresh control, because a push from the built-in terminal
 raises no event either, and a pane that says nothing about when it looked reads
@@ -2319,7 +2320,9 @@ in the label too.
 
 It costs one `gh` call per project rather than one per workspace, on a minute's
 timer while the project is open — and for every other project too while the
-status bar shows, on the same clock rather than a second poller of its own, and a failure is silent: there is no room on a
+status bar shows, on the same clock rather than a second poller of its own. A
+look that falls due while the window is hidden waits for it, and is taken once
+when it is shown. A failure is silent: there is no room on a
 row to explain one, the tab says it properly when opened, and a repository with
 no GitHub remote is an ordinary thing rather than a fault.
 
@@ -2350,7 +2353,7 @@ looking at the list rather than at a chat.
 in `state.json`, beside the model catalogue and for the reason already written
 on that field: so something is usable before the first message. It is a second
 of staleness now rather than a launch of it, since the first read lands as soon
-as the window takes focus — but a block drawn empty for that second would
+as the window opens — but a block drawn empty for that second would
 flicker on every launch.
 
 **It is polled, and it will start a session to answer.** This is a reversal, and
@@ -2364,12 +2367,17 @@ keep the figures current:
 
 - **the service announces a reading that moved**, so a finished turn reaches the
   block on that turn;
-- **coming back to the window asks**, because whatever happened in the
-  background announced itself to nobody here, and the figure informs a decision
+- **showing the window again asks**, because whatever happened while it was
+  hidden announced itself to nobody here, and the figure informs a decision
   taken the moment somebody looks;
 - **a slow timer while the window is visible** — three minutes — for the window
   left open and watched. Stopped while it is hidden: nothing behind a hidden
   window is worth spawning a process for.
+
+Focus alone asks nothing. A window that stayed visible kept its timer, so the
+figure is at most three minutes old when somebody switches back to it, and
+asking on every focus started the CLI once per switch between apps — twice on
+a return from the Dock, which fires a visibility change and a focus together.
 
 The control stays, because a press is still the right way to ask _now_. What it
 no longer is, is the only way.
@@ -2706,7 +2714,8 @@ and a reader learns where each one lives.
 
 **It reads only while it is looked at.** The machine is asked every ten seconds
 through `useVisibleInterval`, which stops while the window is hidden or
-minimised and asks at once on the way back; the other projects' requests ride
+minimised and asks at once when it is shown again — a switch between apps
+asks nothing, since the clock never stopped; the other projects' requests ride
 on `useBranchRequests`, and only while the bar shows. Folding it away is the
 switch for somebody who would rather the app did not run `ps` at all.
 
@@ -2795,7 +2804,8 @@ only the topmost untracked folder, so an empty `new/b` beside a written
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when
 the window regains focus — which is what catches an edit made in another editor
-— and on Refresh. Nothing is read while the tab is hidden. `git status` runs
+— and on Refresh. Nothing is read while the tab is hidden, and a turn that ends
+while the window is hidden is read once it is shown. `git status` runs
 with `--no-optional-locks`, so it never takes the index lock the agent's own git
 needs in the same worktree.
 
@@ -3671,7 +3681,19 @@ know what an IPC failure looks like.
 
 Two small hooks hold the clocks. `useVisibleInterval(tick, ms, active)` is
 "now, and every so often, while somebody can see it" — the account's limits and
-the status bar's resource reading both run on it. `useNow()` is the
+the status bar's resource reading both run on it.
+
+**Nothing the window starts on its own runs while it is hidden.** Agents are
+left to work exactly when nobody is looking, and every turn end used to cost the
+open tab its whole read — a dozen git processes for the diff — and every poll a
+`gh` call, for panes nobody could see. `setVisibleTimeout(run, ms)`
+(`hooks/visibleTimeout.ts`) is `setTimeout` with that rule: one that falls due
+while the window is hidden waits, and runs once when it is shown. The settle
+after a turn and both pull request polls are set with it, and
+`useTurnSettled(workspaceId, enabled, onSettled)` is the one subscription to a
+workspace's turn ends that the diff, the pull request detail and the Files tab
+share. The workspace list holds its own re-reads the same way, per workspace
+(`useWorkspaces`). `useNow()` is the
 second-by-second time for a running count, held by the component that shows the
 count so the tick redraws that line only: the working line and the status bar's
 turn timer.
