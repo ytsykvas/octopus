@@ -77,6 +77,15 @@ describe('how old the figures are', () => {
     expect(screen.getByText('As of 1h 5m ago')).toBeInTheDocument()
   })
 
+  // Beside the title, so the block keeps its height when a refresh clears it.
+  it('says it in the heading rather than under the bars', () => {
+    const old = { ...BOTH, asOf: '2026-08-11T14:55:00.000Z' }
+
+    render(<SubscriptionLimits subscription={controller({ usage: old })} />)
+
+    expect(screen.getByText('Claude').parentElement).toHaveTextContent('As of 1h 5m ago')
+  })
+
   it('explains what that means on hover', () => {
     const old = { ...BOTH, asOf: '2026-08-11T14:55:00.000Z' }
 
