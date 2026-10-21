@@ -66,6 +66,7 @@ Validated by `ConfigSchema` in [`config.ts`](../src/core/config.ts).
 | `rightPanelOpen`                  | whether the right pane is showing or folded away, kept across launches; `true` when absent                                                                                                                                            |
 | `statusBarOpen`                   | whether the status bar along the foot is showing; folding it also stops what it reads. `true` when absent                                                                                                                             |
 | `notificationSound`               | whether news from an agent out of sight plays a chime; `true` when absent                                                                                                                                                             |
+| `notificationSoundId`             | which sound a notice plays: `chime` (the synthesised one) or a file in `assets/sounds/`; `chime` when absent, and an id the build does not ship plays the chime                                                                       |
 | `diffView`                        | whether a diff is drawn in one column or two — a preference about how code is read, not a per-session mood                                                                                                                            |
 | `rightPanelTab`                   | which of the right pane's tabs is showing (`files`, `terminal`, `diff`, `scripts`, `pullRequest` or `notes`); whether it is folded away is `rightPanelOpen` — `build` and `server` are still read and become `scripts`, see below     |
 | `deviceId`, `installedAt`         | shown in Settings; no other reader                                                                                                                                                                                                    |
@@ -197,7 +198,10 @@ the next fetch. `resolveBase` in [`remotes.ts`](../src/core/remotes.ts) is where
 the question is asked, every time it is asked.
 
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
-`status`, `port`, `createdAt`, `writers`, `notes`, `ownerId`.
+`status`, `port`, `createdAt`, `branchSince`, `writers`, `notes`, `ownerId`.
+
+`branchSince` is when a rename brought the workspace onto its current branch, or
+null for "since `createdAt`".
 
 `notes` is a line the user wrote to themselves about this workspace, and the one
 thing a workspace carries that the agent never reads. On the record rather than

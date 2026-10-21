@@ -19,11 +19,18 @@ import { disconnectedAccounts } from './test/octopus.js'
 import type { ResolvedScript } from '@core/repoSource.js'
 import { workspaceView } from './test/workspaces.js'
 import { App } from './App.js'
+import { chime } from './sound.js'
+import type * as Sound from './sound.js'
 import i18n, { DEFAULT_LANGUAGE } from './i18n/index.js'
 
 // A workspace terminal is xterm.js against a real canvas, which jsdom has not
 // got. Standing it in as its working directory keeps the pane observable —
 // which terminal is on screen is exactly what the shortcut tests are about.
+vi.mock('./sound.js', async (original) => ({
+  ...(await original<typeof Sound>()),
+  chime: vi.fn()
+}))
+
 vi.mock('./components/Terminal.js', () => ({
   Terminal: ({ cwd }: { readonly cwd: string }) => <div>{cwd}</div>
 }))
@@ -71,6 +78,7 @@ function config(overrides: Partial<Config> = {}): Config {
     rightPanelOpen: true,
     statusBarOpen: true,
     notificationSound: true,
+    notificationSoundId: 'chime',
     rightPanelTab: 'diff',
     diffView: 'unified',
     sidebarWidth: 240,
@@ -3306,6 +3314,32 @@ describe('news from agents out of sight', () => {
     expect(await screen.findByRole('button', { name: /^Two/, current: 'page' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Finished' })).not.toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /finished here/ })).not.toBeInTheDocument()
+  })
+
+  /*
+   * The config is pushed inside `act` rather than read at start: a first read
+   * may still be on its way when the event arrives, and the sound is off until
+   * it lands — which would pass the second half for the wrong reason.
+   */
+  it('plays the sound chosen in settings, and none once the switch is off', async () => {
+    givenTwoProjects()
+    await openApp()
+    await findTab('PL')
+    const push = vi.mocked(window.octopus.config.onChange).mock.calls.at(-1)?.[0]
+    if (!push) throw new Error('the window never subscribed to config changes')
+    vi.mocked(chime).mockClear()
+
+    act(() => {
+      push(config({ notificationSoundId: 'gong' }))
+    })
+    emitAgentEvent(DONE, 'c-1', 'planner/anna')
+    expect(chime).toHaveBeenCalledExactlyOnceWith('done', 'gong')
+
+    act(() => {
+      push(config({ notificationSound: false, notificationSoundId: 'gong' }))
+    })
+    emitAgentEvent(DONE, 'c-1', 'planner/anna')
+    expect(chime).toHaveBeenCalledOnce()
   })
 })
 

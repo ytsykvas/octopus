@@ -1531,7 +1531,33 @@ export const en = {
     languageHint: 'English is the default. Restart is not required.',
     notificationSound: 'Sound',
     notificationSoundHint:
-      'A quiet chime when an agent finishes, fails or needs your answer somewhere you are not looking.',
+      'A quiet sound when an agent finishes, fails or needs your answer somewhere you are not looking.',
+    notificationSoundChoice: 'Which sound',
+    notificationSoundChoiceHint:
+      'Press ▶ to hear one before choosing it. The chime is the one that sounds different for finished, failed and waiting.',
+    soundPreview: 'Listen to {{name}}',
+    sounds: {
+      chime: 'Chime',
+      airport: 'Airport',
+      'alarm-clock': 'Alarm clock',
+      bam: 'Bam',
+      'cell-phone': 'Cell phone',
+      craw: 'Crow',
+      'door-bell': 'Doorbell',
+      drum: 'Drum',
+      fairy: 'Fairy',
+      'funny-sound': 'Funny sound',
+      gong: 'Gong',
+      'hola-papa': 'Hola papa',
+      japanese: 'Japanese',
+      oyoy: 'Oy-oy',
+      'sms-incoming': 'Incoming SMS',
+      'uh-oh': 'Uh-oh',
+      'water-drop': 'Water drop',
+      whistle: 'Whistle',
+      'whistle-here': 'Whistle here',
+      wow: 'Wow'
+    },
 
     branchPrefix: 'Branch prefix',
     branchPrefixHint:

@@ -139,6 +139,7 @@ describe('loadConfig', () => {
     expect(config.rightPanelOpen).toBe(true)
     expect(config.statusBarOpen).toBe(true)
     expect(config.notificationSound).toBe(true)
+    expect(config.notificationSoundId).toBe('chime')
     expect(config.rightPanelTab).toBe('diff')
     expect(config.sidebarWidth).toBe(240)
     expect(config.dismissedTips).toEqual([])

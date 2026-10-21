@@ -308,6 +308,33 @@ describe('GitHub projects', () => {
   })
 })
 
+/** Requests opened long before, and long after, any workspace a test makes. */
+const EARLIER = '2000-01-01T00:00:00Z'
+const LATER = '2999-01-01T00:00:00Z'
+
+/** A `gh` answering one request on the workspace's branch, opened at `createdAt`. */
+const oneRequest =
+  (createdAt: string, branch: () => string) =>
+  () =>
+  (args: readonly string[]): Promise<string> => {
+    const request = { number: 7, state: 'MERGED', url: 'https://x/pull/7', createdAt }
+    return Promise.resolve(
+      JSON.stringify([
+        args.includes('--head')
+          ? { ...request, title: 'Done' }
+          : {
+              ...request,
+              headRefName: branch(),
+              statusCheckRollup: [],
+              isDraft: false,
+              mergeable: 'UNKNOWN',
+              mergeStateStatus: 'UNKNOWN',
+              reviewDecision: ''
+            }
+      ])
+    )
+  }
+
 describe('workspaces', () => {
   /** A service with one project already added, as the UI would have. */
   async function withProject(): Promise<{ service: OctopusService; projectId: string }> {
@@ -654,17 +681,7 @@ describe('workspaces', () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
 
-    const service = await createService({
-      ...paths(dir),
-      makeGh: () => (args) =>
-        Promise.resolve(
-          args[1] === 'list'
-            ? JSON.stringify([
-                { number: 7, state: 'MERGED', title: 'Done', url: 'https://x/pull/7' }
-              ])
-            : '[]'
-        )
-    })
+    const service = await createService({ ...paths(dir), makeGh: oneRequest(LATER, () => '') })
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
 
@@ -684,6 +701,24 @@ describe('workspaces', () => {
     await service.removeWorkspaceById(workspace.id, { deleteBranch: true })
 
     await expect(outside(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  it('keeps refusing when the merged request predates the workspace', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService({ ...paths(dir), makeGh: oneRequest(EARLIER, () => '') })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const run = promisify(execFile)
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: workspace.path })
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: true })
+    ).rejects.toMatchObject({ code: 'branchUnmerged' })
   })
 
   // gh missing or signed out leaves the git answer as the only one there is,
@@ -710,6 +745,47 @@ describe('workspaces', () => {
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: true })
     ).rejects.toMatchObject({ code: 'branchUnmerged' })
+  })
+
+  it.each([
+    ['leaves out a request older than the workspace', EARLIER, null, []],
+    ["keeps the workspace's own request", LATER, { number: 7 }, [{ number: 7 }]]
+  ])('%s, in the pane and the list', async (_name, openedAt, request, requests) => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    let branch = ''
+    const service = await createService({
+      ...paths(dir),
+      makeGh: oneRequest(openedAt, () => branch)
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    branch = workspace.branch
+
+    await expect(service.readPullRequest(workspace.id)).resolves.toMatchObject({ request })
+    await expect(service.readBranchRequests(project.id)).resolves.toMatchObject({ requests })
+  })
+
+  it("takes no request opened before a rename as the renamed workspace's own", async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-21T12:00:00Z') })
+    try {
+      const repo = join(dir, 'planner')
+      await initRepo(repo)
+
+      const service = await createService({
+        ...paths(dir),
+        makeGh: oneRequest('2026-10-21T12:30:00Z', () => '')
+      })
+      const project = await service.addProjectFromPath(repo)
+      const workspace = await service.createWorkspaceIn(project.id)
+      vi.setSystemTime(new Date('2026-10-21T13:00:00Z'))
+      await service.renameWorkspaceById(workspace.id, 'fix auth')
+
+      await expect(service.readPullRequest(workspace.id)).resolves.toMatchObject({ request: null })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // Nothing to commit means nothing to ask about: a commit message for a clean

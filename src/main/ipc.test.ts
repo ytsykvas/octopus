@@ -2210,6 +2210,7 @@ describe('workspaces of a real project', () => {
               number: 7,
               state: 'OPEN',
               url: 'https://github.com/o/p/pull/7',
+              createdAt: '2026-02-01T00:00:00Z',
               statusCheckRollup: [],
               isDraft: false,
               mergeable: 'MERGEABLE',
