@@ -345,7 +345,14 @@ without creating one — the first message is what brings it into being.
 | `terminal:resize`  | `id`, `cols`, `rows` | a resize after the session ended is ignored, not an error |
 | `terminal:dispose` | `id`                 | resolves when the session has gone, not when it was asked |
 
-Output flows the other way, on `terminal:data` and `terminal:exit`.
+Output flows the other way, on `terminal:data` and `terminal:exit`. It is sent
+in batches: the first chunk at once, so typing does not lag, and what follows
+gathered for 16 ms or up to 64 K characters (`main/terminals.ts`). One message
+per read had a fast build at 30 000 a second and two cores busy. Whatever is
+still gathered goes before the exit, or a pane already told the run ended would
+drop its last lines. In the window, each channel has one listener however many
+terminals are open; the preload fans it out, and each terminal keeps the output
+carrying its own session id.
 
 ### The machine
 
