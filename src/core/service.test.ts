@@ -14553,4 +14553,51 @@ describe('reading one workspace', () => {
     await watched.readWorkspace(first.id)
     expect(remotes()).toBe(2)
   })
+
+  /** The repository stating both fields, and trusted, so each costs git a question. */
+  async function stating(watched: OctopusService, projectId: string): Promise<void> {
+    const repo = join(dir, 'planner')
+    await writeFile(join(repo, '.gitignore'), '.env.local\n', 'utf8')
+    await mkdir(join(repo, '.octopus'), { recursive: true })
+    await writeFile(
+      join(repo, '.octopus', 'project.json'),
+      '{"baseBranch":"develop","envFile":".env.local"}',
+      'utf8'
+    )
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'octopus'], { cwd: repo })
+    await run('git', ['branch', 'develop'], { cwd: repo })
+    await watched.updateProjectById(projectId, { trustRepository: true })
+  }
+
+  /*
+   * A reader of one live field pays for that field's check alone: the base
+   * costs a branch lookup, the env file a `check-ignore`, and every base
+   * resolution used to run both — a `check-ignore` twice a turn for nothing.
+   */
+  it('resolves the base without asking whether the env file is ignored', async () => {
+    const { service: watched, projectId, calls } = await recorded()
+    await stating(watched, projectId)
+    const workspace = await watched.createWorkspaceIn(projectId)
+    calls.length = 0
+
+    await watched.readWorkspace(workspace.id)
+
+    const asked = calls.map((call) => call.args)
+    expect(asked).toContainEqual(['rev-parse', '--verify', 'refs/heads/develop'])
+    expect(asked.map(([first]) => first)).not.toContain('check-ignore')
+  })
+
+  it('reads the env file without looking for the base branch', async () => {
+    const { service: watched, projectId, calls } = await recorded()
+    await stating(watched, projectId)
+    const workspace = await watched.createWorkspaceIn(projectId)
+    calls.length = 0
+
+    await watched.readWorkspaceEnv(workspace.id)
+
+    const asked = calls.map((call) => call.args)
+    expect(asked).toContainEqual(['check-ignore', '-q', '--', '.env.local'])
+    expect(asked).not.toContainEqual(['rev-parse', '--verify', 'refs/heads/develop'])
+  })
 })

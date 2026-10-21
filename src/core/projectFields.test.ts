@@ -6,8 +6,13 @@ import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { gitIn } from './git.js'
-import { type FieldsOf, resolveProjectFields } from './projectFields.js'
+import { type GitExec, gitIn } from './git.js'
+import {
+  type FieldsOf,
+  resolveBaseBranch,
+  resolveEnvFile,
+  resolveProjectFields
+} from './projectFields.js'
 
 const run = promisify(execFile)
 
@@ -137,5 +142,47 @@ describe('resolveProjectFields', () => {
       baseBranch: { value: 'main', repository: null, warning: 'projectFileUnreadable' },
       envFile: { value: '.env', repository: null, warning: 'projectFileUnreadable' }
     })
+  })
+})
+
+/*
+ * Most readers want one field, and each costs git a question the other does
+ * not need; asking for both on every read put a `check-ignore` on every base
+ * resolution.
+ */
+describe('one field on its own', () => {
+  const STATED = { baseBranch: 'develop', envFile: '.env.local' }
+
+  function recording(): { exec: GitExec; asked: string[] } {
+    const git = gitIn(repo)
+    const asked: string[] = []
+    const exec: GitExec = (args) => {
+      asked.push(args[0] ?? '')
+      return git(args)
+    }
+    return { exec, asked }
+  }
+
+  it('resolves the base branch without asking whether the env file is ignored', async () => {
+    const { exec, asked } = recording()
+
+    await expect(resolveBaseBranch(STATED, OWN, exec)).resolves.toMatchObject({
+      value: 'develop',
+      layer: 'repository'
+    })
+
+    expect(asked).not.toContain('check-ignore')
+    expect(asked).not.toHaveLength(0)
+  })
+
+  it('resolves the env file without looking for the base branch', async () => {
+    const { exec, asked } = recording()
+
+    await expect(resolveEnvFile(STATED, OWN, exec)).resolves.toMatchObject({
+      value: '.env.local',
+      layer: 'repository'
+    })
+
+    expect(asked).toEqual(['check-ignore'])
   })
 })
