@@ -4,6 +4,7 @@ import {
   type BranchRequest,
   BranchListSchema,
   commentKey,
+  openedFor,
   pullRequestStanding,
   runsToRerun,
   type DetailPayload,
@@ -709,6 +710,7 @@ describe('every branch of a project at once', () => {
     number: 12,
     state: 'OPEN',
     url: 'https://github.com/o/p/pull/12',
+    createdAt: '2026-02-01T00:00:00Z',
     statusCheckRollup: [PASSED],
     isDraft: false,
     mergeable: 'MERGEABLE',
@@ -832,5 +834,24 @@ describe('where an open request stands', () => {
     ['a state GitHub would block', { mergeState: 'blocked' }]
   ] as const)('is pending with %s', (_name, overrides) => {
     expect(pullRequestStanding(request(overrides))).toEqual({ kind: 'pending' })
+  })
+})
+
+describe('whose request it is', () => {
+  const workspace = { createdAt: '2026-10-21T12:38:54.241Z' }
+
+  it("is not the workspace's when it was opened before the workspace began", () => {
+    expect(openedFor('2026-10-20T15:52:20Z', workspace)).toBe(false)
+  })
+
+  // GitHub sends whole seconds and the store keeps milliseconds, so the two
+  // are compared as instants rather than as text.
+  it('compares instants, not strings', () => {
+    expect(openedFor('2026-10-21T12:38:54Z', workspace)).toBe(false)
+    expect(openedFor('2026-10-21T12:38:55Z', workspace)).toBe(true)
+  })
+
+  it("is the workspace's from the moment it began", () => {
+    expect(openedFor(workspace.createdAt, workspace)).toBe(true)
   })
 })

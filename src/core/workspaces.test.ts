@@ -276,6 +276,26 @@ describe('createWorkspace', () => {
     expect((await create()).name).toBe(SECOND_NAME)
   })
 
+  /*
+   * Removal deletes the local branch, not the copy on `origin`, and GitHub keeps
+   * the request that was opened from it. A name read off local branches alone
+   * came back onto that branch: the new workspace showed its predecessor's
+   * merged request as its own.
+   */
+  it('skips a name whose branch is still on the remote', async () => {
+    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/${FIRST_NAME}`, 'HEAD'], {
+      cwd: repo
+    })
+
+    expect((await create()).name).toBe(SECOND_NAME)
+  })
+
+  it('ignores remote branches outside the project prefix', async () => {
+    await run('git', ['update-ref', `refs/remotes/origin/${FIRST_NAME}`, 'HEAD'], { cwd: repo })
+
+    expect((await create()).name).toBe(FIRST_NAME)
+  })
+
   it('ignores branches outside the project prefix', async () => {
     // Same name, no prefix: the user's own branch, which we must not claim.
     await run('git', ['branch', FIRST_NAME], { cwd: repo })

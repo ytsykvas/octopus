@@ -5465,7 +5465,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         mergedRemotely: async (): Promise<boolean> => {
           try {
             const view = await readPullRequest(
-              workspace.branch,
+              workspace,
               baseRef,
               makeGh(workspace.path),
               makeExec(workspace.path)
@@ -5590,7 +5590,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Both run from the worktree: `gh` finds the repository from the
       // directory it is in, and the branch's own state is a fact about there.
       return readPullRequest(
-        workspace.branch,
+        workspace,
         await baseRefOf(project),
         makeGh(workspace.path),
         makeExec(workspace.path)
@@ -5693,7 +5693,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // From the checkout rather than from a worktree: this is a question about
       // the repository, and a project can be open with no workspace in it.
-      return readBranchRequests(makeGh(project.repoPath))
+      return readBranchRequests(makeGh(project.repoPath), workspacesOfProject(state, projectId))
     },
 
     async readFileTree(workspaceId) {

@@ -29,11 +29,13 @@ import {
   type RerunScope,
   runsToRerun,
   ThreadsPayloadSchema,
+  openedFor,
   toBranchRequests,
   toPullRequestDetail,
   toPullRequestState,
   toRerunPayload
 } from './pullRequestShapes.js'
+import type { Workspace } from './store.js'
 import { commitAll, hasUncommittedChanges } from './worktree.js'
 import { allOf } from './parallel.js'
 
@@ -108,8 +110,16 @@ const RemotePullRequestSchema = z.object({
   number: z.number().int(),
   state: RemoteStateSchema,
   title: z.string(),
-  url: z.string()
+  url: z.string(),
+  createdAt: z.iso.datetime()
 })
+
+/**
+ * What a pull request is read for: the branch it is on, and when the workspace
+ * on it began — which is what decides whether a request there is its own
+ * (`openedFor`).
+ */
+export type BranchOwner = Pick<Workspace, 'branch' | 'createdAt'>
 
 /**
  * The pull request for a branch, or the absence of one.
@@ -121,7 +131,7 @@ const RemotePullRequestSchema = z.object({
  * apart from a broken setup by reading stderr.
  */
 export async function readPullRequest(
-  branch: string,
+  workspace: BranchOwner,
   base: string,
   gh: GhExec,
   git: GitExec
@@ -131,6 +141,7 @@ export async function readPullRequest(
      the first of them left those three writing into a worktree the caller had
      already moved on from — which is the `ENOTEMPTY` that failed a full run in
      five for a month. */
+  const { branch } = workspace
   const [remote, dirty, tip, ahead, head] = await allOf([
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
@@ -147,7 +158,11 @@ export async function readPullRequest(
 
   // The newest, when a branch has been opened and closed and opened again:
   // `gh` lists most recent first, and the current one is what the pane is about.
-  const current = remote[0]
+  // Older than the workspace and it is not the workspace's at all — nor is
+  // anything older still, which is why one is all `gh` is asked for.
+  const newest = remote[0]
+  const current =
+    newest !== undefined && openedFor(newest.createdAt, workspace) ? newest : undefined
 
   return {
     request:
@@ -183,7 +198,7 @@ async function listPullRequests(
       '--limit',
       '1',
       '--json',
-      'number,state,title,url'
+      'number,state,title,url,createdAt'
     ])
   } catch {
     throw new GitHubError('notConnected', {}, 'Could not ask GitHub about this branch.')
@@ -847,6 +862,7 @@ export interface BranchRequestList {
  */
 export async function readBranchRequests(
   gh: GhExec,
+  workspaces: readonly BranchOwner[],
   limit: number = BRANCH_REQUEST_LIMIT
 ): Promise<BranchRequestList> {
   const payload = shaped(
@@ -861,13 +877,21 @@ export async function readBranchRequests(
           '--limit',
           String(limit),
           '--json',
-          'headRefName,number,state,url,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision'
+          'headRefName,number,state,url,createdAt,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision'
         ])
       )
     )
   )
 
-  const requests = toBranchRequests(payload)
+  // Before the newest-per-branch pick rather than after it: every request older
+  // than one dropped here is older than the workspace too.
+  const owners = new Map(workspaces.map((workspace) => [workspace.branch, workspace]))
+  const requests = toBranchRequests(
+    payload.filter((entry) => {
+      const owner = owners.get(entry.headRefName)
+      return owner === undefined || openedFor(entry.createdAt, owner)
+    })
+  )
 
   /*
    * Whether the answer came back full, decided here rather than by counting

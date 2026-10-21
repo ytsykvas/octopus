@@ -143,12 +143,13 @@ async function remoteCopy(
 /**
  * The remote-tracking ref, but only where it could be this branch's own copy.
  *
- * Workspace names are recycled. `takenByBranches` in `workspaces.ts` excludes
- * only names held by *local* branches, removing a workspace deletes the local
- * branch, and octopus fetches without `--prune` — so
- * `refs/remotes/origin/<prefix>/<name>` outlives the workspace that pushed it,
- * and the next workspace to draw that name inherits a dead ref as its "copy on
- * the remote". Measured: the strip claimed three commits to push where there
+ * Workspace names are recycled. `takenByBranches` in `workspaces.ts` now skips
+ * names the remote-tracking refs still hold, but it did not always, and a ref
+ * can arrive after the name was drawn — a fetch, a push from another checkout.
+ * Removing a workspace deletes the local branch and octopus fetches without
+ * `--prune`, so `refs/remotes/origin/<prefix>/<name>` outlives the workspace
+ * that pushed it, and a workspace on that name inherits a dead ref as its "copy
+ * on the remote". Measured: the strip claimed three commits to push where there
  * was one, files from somebody else's branch carried the stale warning, and
  * pressing Push revived a merged branch behind a closed request.
  *

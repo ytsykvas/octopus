@@ -654,19 +654,28 @@ describe('workspaces', () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
 
+    // Opened once the workspace exists, as its own request would be.
+    let openedAt = ''
     const service = await createService({
       ...paths(dir),
       makeGh: () => (args) =>
         Promise.resolve(
           args[1] === 'list'
             ? JSON.stringify([
-                { number: 7, state: 'MERGED', title: 'Done', url: 'https://x/pull/7' }
+                {
+                  number: 7,
+                  state: 'MERGED',
+                  title: 'Done',
+                  url: 'https://x/pull/7',
+                  createdAt: openedAt
+                }
               ])
             : '[]'
         )
     })
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
+    openedAt = workspace.createdAt
 
     const run = promisify(execFile)
     const inside = (args: string[]): Promise<string> =>
@@ -684,6 +693,45 @@ describe('workspaces', () => {
     await service.removeWorkspaceById(workspace.id, { deleteBranch: true })
 
     await expect(outside(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  /*
+   * Workspace names are recycled, and GitHub remembers the request of the last
+   * workspace to carry one. Taken as this workspace's own, that old merge was
+   * leave to delete a branch whose work had never been merged anywhere.
+   */
+  it('keeps refusing when the merged request predates the workspace', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService({
+      ...paths(dir),
+      makeGh: () => (args) =>
+        Promise.resolve(
+          args[1] === 'list'
+            ? JSON.stringify([
+                {
+                  number: 7,
+                  state: 'MERGED',
+                  title: 'Yesterday',
+                  url: 'https://x/pull/7',
+                  createdAt: '2000-01-01T00:00:00Z'
+                }
+              ])
+            : '[]'
+        )
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const run = promisify(execFile)
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: workspace.path })
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: true })
+    ).rejects.toMatchObject({ code: 'branchUnmerged' })
   })
 
   // gh missing or signed out leaves the git answer as the only one there is,
@@ -710,6 +758,50 @@ describe('workspaces', () => {
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: true })
     ).rejects.toMatchObject({ code: 'branchUnmerged' })
+  })
+
+  /*
+   * The pane and the list beside it ask GitHub by branch, and a recycled name
+   * brings back the branch of a workspace long removed. Both have to be handed
+   * the workspace itself to tell its requests from its predecessor's.
+   */
+  it('shows neither in the pane nor in the list a request older than the workspace', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    let branch = ''
+    const yesterday = {
+      number: 7,
+      state: 'MERGED',
+      title: 'Yesterday',
+      url: 'https://x/pull/7',
+      createdAt: '2000-01-01T00:00:00Z'
+    }
+    const service = await createService({
+      ...paths(dir),
+      makeGh: () => (args) =>
+        Promise.resolve(
+          args.includes('--head')
+            ? JSON.stringify([yesterday])
+            : JSON.stringify([
+                {
+                  ...yesterday,
+                  headRefName: branch,
+                  statusCheckRollup: [],
+                  isDraft: false,
+                  mergeable: 'UNKNOWN',
+                  mergeStateStatus: 'UNKNOWN',
+                  reviewDecision: ''
+                }
+              ])
+        )
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    branch = workspace.branch
+
+    await expect(service.readPullRequest(workspace.id)).resolves.toMatchObject({ request: null })
+    await expect(service.readBranchRequests(project.id)).resolves.toMatchObject({ requests: [] })
   })
 
   // Nothing to commit means nothing to ask about: a commit message for a clean

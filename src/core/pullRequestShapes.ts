@@ -621,6 +621,7 @@ export const BranchListSchema = z.array(
     number: z.number().int(),
     state: RemoteStateSchema,
     url: z.string(),
+    createdAt: z.iso.datetime(),
     statusCheckRollup: RollupSchema,
     isDraft: z.boolean(),
     mergeable: z.string(),
@@ -631,6 +632,23 @@ export const BranchListSchema = z.array(
 )
 
 export type BranchListPayload = z.infer<typeof BranchListSchema>
+
+/**
+ * Whether a request could be this workspace's own.
+ *
+ * Workspace names are recycled, and a branch name with them: the `bella` made
+ * today is on the same `octopus/bella` as the one removed yesterday, and GitHub
+ * remembers yesterday's request long after its branch is gone. Asked by branch
+ * alone, the new workspace inherited a merged request it never opened — and the
+ * removal check took that merge as leave to delete its unmerged work.
+ *
+ * Time is what tells them apart. A workspace always makes its branch fresh
+ * (`worktree add -b`), so nothing it did can predate it, and a request opened
+ * before the workspace existed is somebody else's work in every state.
+ */
+export function openedFor(openedAt: string, workspace: { readonly createdAt: string }): boolean {
+  return Date.parse(openedAt) >= Date.parse(workspace.createdAt)
+}
 
 /**
  * The newest request per branch.

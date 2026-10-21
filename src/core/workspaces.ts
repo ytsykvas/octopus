@@ -12,6 +12,7 @@ import { access, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
+import { shortBranchName } from './branches.js'
 import { CodedError } from './codedError.js'
 import { anyBranchExists, countAhead, type GitExec, reasonFrom, toSlug } from './git.js'
 import { fetchRemote, resolveBase } from './remotes.js'
@@ -25,6 +26,7 @@ import {
   addWorktree,
   changedFiles,
   listBranches,
+  listRemoteBranches,
   listWorktrees,
   deleteBranch,
   hasUncommittedChanges,
@@ -305,11 +307,18 @@ export async function createWorkspace(
  *
  * Only branches under the project's prefix count; anything else in the
  * repository is the user's own and none of our business.
+ *
+ * The remote's as well as the local ones. Removing a workspace deletes its
+ * local branch, but the copy it pushed stays on `origin` — merged requests
+ * rarely take their branch with them — so a name read off local branches alone
+ * came back round onto a branch GitHub still holds, with its old request and a
+ * tip the new work would not push over.
  */
 async function takenByBranches(project: Project, exec: GitExec): Promise<string[]> {
   const prefix = `${project.branchPrefix}/`
+  const [local, remote] = await allOf([listBranches(exec), listRemoteBranches(exec)])
 
-  return (await listBranches(exec))
+  return [...local, ...remote.map(shortBranchName)]
     .filter((branch) => branch.startsWith(prefix))
     .map((branch) => branch.slice(prefix.length))
 }
