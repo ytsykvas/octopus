@@ -55,7 +55,7 @@ export function SideQuestions({
         aria-expanded={open}
         aria-label={label}
         title={label}
-        className={`focus-ring pointer-events-auto absolute top-2 grid h-16 w-3.5 place-items-center text-[var(--on-accent)] ${open ? 'right-[380px]' : 'right-0'}`}
+        className={`focus-ring pointer-events-auto absolute top-2 grid h-16 w-3.5 place-items-center text-[var(--on-project)] ${open ? 'right-[380px]' : 'right-0'}`}
       >
         <svg
           aria-hidden

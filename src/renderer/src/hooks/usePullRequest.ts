@@ -4,6 +4,7 @@ import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
+import { useTurnSettled } from './useTurnSettled.js'
 
 export interface PullRequestController {
   readonly view: PullRequestView | null
@@ -44,10 +45,12 @@ export interface PullRequestController {
  * same rule the diff follows, and it matters more here: this one leaves the
  * machine, so a hidden tab would be a network call per workspace opened.
  *
- * Deliberately not kept in step with the agent the way the diff is. A turn
- * ending changes the working tree, and nothing about the working tree changes
- * whether a pull request exists; the read happens when the tab is opened, and
- * again after one is created.
+ * Kept in step with the agent the way the diff is. A turn ending does not
+ * change whether a pull request exists, but it does change what this pane
+ * draws beside it — uncommitted work, commits ahead of the base, commits not
+ * yet pushed. Read only when the tab opened, a pane left showing through a turn
+ * went on saying there was nothing to open after the agent had committed, until
+ * another tab was clicked and this one clicked back.
  */
 export function usePullRequest(
   workspaceId: string | null,
@@ -189,6 +192,9 @@ export function usePullRequest(
   const refresh = useCallback(() => {
     setNonce((count) => count + 1)
   }, [])
+
+  // Behind a hidden tab nothing fires; the effect above reads when it is shown.
+  useTurnSettled(workspaceId, enabled, refresh)
 
   return {
     view,

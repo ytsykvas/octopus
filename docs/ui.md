@@ -2086,6 +2086,12 @@ a branch that is not pushed, and that uncommitted work is committed with it. Pus
 touches somebody else's machine, and a button that does that silently is one
 people learn to distrust.
 
+The branch is read when the tab is shown and again whenever a turn of one of
+the workspace's chats settles, on the same 300ms the Changes pane uses. Read
+only on showing, a tab left open through a turn kept saying there was nothing
+to open after the agent had committed, until another tab was clicked and this
+one clicked back.
+
 Two buttons sit above all of that. **Instructions for a new PR** opens the
 project's own instruction where it lives, in project settings — one editor for
 one file, reached from the place it matters, which is the arrangement "Write the

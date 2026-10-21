@@ -1,8 +1,10 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { AgentEvent } from '@core/events.js'
 import type { PullRequestView } from '@core/pullRequests.js'
 
+import { refuseSilence } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { usePullRequest } from './usePullRequest.js'
@@ -17,6 +19,110 @@ const VIEW: PullRequestView = {
 }
 
 const DRAFT = { title: 'Rename', body: '', draft: false, commitMessage: null }
+
+const WORKSPACE = 'planner/anna'
+
+/** Delivers an event the way the bridge does, to whoever subscribed. */
+function emit(event: AgentEvent, workspaceId = WORKSPACE): void {
+  const calls = vi.mocked(octopus().chats.onEvent).mock.calls
+  refuseSilence(calls.length, 'chats.onEvent')
+
+  const [subscriber] = calls.at(-1) ?? []
+  act(() => {
+    subscriber?.({ chatId: 'chat-1', workspaceId, event })
+  })
+}
+
+const DONE: AgentEvent = {
+  type: 'result',
+  ok: true,
+  costUsd: null,
+  durationMs: 1,
+  inputTokens: null,
+  outputTokens: null,
+  terminalReason: null
+}
+
+const answering = (view: PullRequestView): void => {
+  vi.mocked(octopus().workspaces.pullRequest).mockResolvedValue({ ok: true, value: view })
+}
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+/*
+ * The pane open while the agent works. It used to be read once, when the tab
+ * opened, so a branch the agent committed to went on being drawn as having
+ * nothing to open until another tab was clicked and this one clicked back.
+ */
+describe('a pull request pane kept in step with the agent', () => {
+  it('reads again when a turn ends, and draws what the turn committed', async () => {
+    vi.useFakeTimers()
+    answering({ ...VIEW, ahead: 0 })
+    const { result } = renderHook(() => usePullRequest(WORKSPACE, true))
+    await vi.waitFor(() => {
+      expect(result.current.view?.ahead).toBe(0)
+    })
+
+    answering({ ...VIEW, ahead: 1 })
+    emit(DONE)
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
+    expect(result.current.view?.ahead).toBe(1)
+  })
+
+  // A turn that failed may well have committed before it did.
+  it('reads again when a turn ends in an error', async () => {
+    vi.useFakeTimers()
+    answering(VIEW)
+    renderHook(() => usePullRequest(WORKSPACE, true))
+    await vi.waitFor(() => {
+      expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(1)
+    })
+
+    emit({ type: 'error', message: 'stopped' })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a turn finishing in another workspace', async () => {
+    vi.useFakeTimers()
+    answering(VIEW)
+    renderHook(() => usePullRequest(WORKSPACE, true))
+    await vi.waitFor(() => {
+      expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(1)
+    })
+
+    emit(DONE, 'planner/bob')
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(1)
+  })
+
+  // This read leaves the machine, so a hidden tab must not make one per turn;
+  // it reads when it is shown instead.
+  it('does not listen for turns behind a hidden tab', async () => {
+    vi.useFakeTimers()
+    answering(VIEW)
+    renderHook(() => usePullRequest(WORKSPACE, false))
+
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(octopus().chats.onEvent).not.toHaveBeenCalled()
+    expect(octopus().workspaces.pullRequest).not.toHaveBeenCalled()
+  })
+})
 
 describe('the pull request of a workspace', () => {
   // Nothing to ask about, so nothing is asked — and `create` has nowhere to
