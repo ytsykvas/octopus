@@ -351,7 +351,9 @@ in batches: the first chunk at once, so typing does not lag, and what follows
 gathered for 16 ms or up to 64 K characters (`main/terminals.ts`). One message
 per read had a fast build at 30 000 a second and two cores busy. Whatever is
 still gathered goes before the exit, or a pane already told the run ended would
-drop its last lines. In the window, each channel has one listener however many
+drop its last lines. For a shell that exits on its own, the exit is sent once its
+process group has gone; after a stop it goes with the shell, and
+`terminal:dispose`'s answer is what waits for the group. In the window, each channel has one listener however many
 terminals are open; the preload fans it out, and each terminal keeps the output
 carrying its own session id.
 

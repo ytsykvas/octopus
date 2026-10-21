@@ -133,6 +133,18 @@ the SIGKILL it stops waiting regardless, since a process stuck in the kernel die
 only when it comes out. The renderer waits on it before opening the session that
 replaces it.
 
+**A shell that exits on its own takes its group with it** — any session's, a
+build's included. A server's child that outlived its script, or something the
+script started with `nohup … &`, stayed in the group after the shell had gone;
+the pane forgot the session on the exit, a Stop found nothing, and the next Run
+failed on the port. So the exit is followed by the same probe, and a member
+still there is sent SIGTERM, and SIGKILL when a stop would send it, at 2.5 s —
+the hangup is skipped, there being no shell to pass it on. What a build means to
+outlive it has to leave the group: a database or a container started through
+its own daemon already does.
+`terminal:exit` is held until the group has gone, so the pane does not offer Run
+while the port is held, and a Stop or a quit meanwhile waits on the same ending.
+
 **Sessions end with the document that started them.** A reload keeps the
 `WebContents` and loses everything the renderer knew, so `disposeFor` ends that
 window's sessions on `did-start-loading`. Without it a server carried on with
