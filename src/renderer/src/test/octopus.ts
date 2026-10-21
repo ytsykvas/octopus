@@ -366,6 +366,7 @@ function defaultConfig(): Config {
     rightPanelOpen: true,
     statusBarOpen: true,
     notificationSound: true,
+    notificationSoundId: 'chime',
     rightPanelTab: 'diff' as const,
     rightPanelWidth: 360,
     diffView: 'unified' as const,

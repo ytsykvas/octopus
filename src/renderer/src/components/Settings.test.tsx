@@ -5,9 +5,16 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AccountsStatus } from '@core/accounts.js'
 import type { Config } from '@core/config.js'
 
+import { preview } from '../sound.js'
+import type * as Sound from '../sound.js'
 import { stubDialogElement } from '../test/dialog.js'
 import { disconnectedAccounts, octopus } from '../test/octopus.js'
 import { Settings } from './Settings.js'
+
+vi.mock('../sound.js', async (original) => ({
+  ...(await original<typeof Sound>()),
+  preview: vi.fn()
+}))
 
 type SettingsProps = React.ComponentProps<typeof Settings>
 
@@ -31,6 +38,7 @@ function config(overrides: Partial<Config> = {}): Config {
     rightPanelOpen: true,
     statusBarOpen: true,
     notificationSound: true,
+    notificationSoundId: 'chime',
     rightPanelTab: 'diff',
     diffView: 'unified',
     sidebarWidth: 240,
@@ -200,6 +208,49 @@ describe('Settings', () => {
     await user.click(screen.getByRole('switch', { name: 'Sound' }))
 
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ notificationSound: false })
+  })
+
+  describe('the sound to play', () => {
+    it('names the one chosen and sends the one picked', async () => {
+      const user = userEvent.setup()
+      const props = await renderSettings({ config: config({ notificationSoundId: 'gong' }) })
+
+      await user.click(screen.getByRole('button', { name: 'Which sound' }))
+      expect(screen.getByRole('menuitemradio', { name: 'Gong' })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      )
+      await user.click(screen.getByRole('menuitemradio', { name: 'Water drop' }))
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ notificationSoundId: 'water-drop' })
+    })
+
+    // Heard before chosen: several in a row, and nothing saved for listening.
+    it('plays a sound to hear it without choosing it', async () => {
+      const user = userEvent.setup()
+      const props = await renderSettings()
+
+      await user.click(screen.getByRole('button', { name: 'Which sound' }))
+      await user.click(screen.getByRole('button', { name: 'Listen to Gong' }))
+      await user.click(screen.getByRole('button', { name: 'Listen to Wow' }))
+
+      expect(vi.mocked(preview).mock.calls).toEqual([['gong'], ['wow']])
+      expect(props.onChange).not.toHaveBeenCalled()
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+    })
+
+    // A config can name a sound a later build dropped; it plays the chime.
+    it('shows a sound this build does not ship as the chime it plays', async () => {
+      await renderSettings({ config: config({ notificationSoundId: 'kazoo' }) })
+
+      expect(screen.getByRole('button', { name: 'Which sound' })).toHaveTextContent('Chime')
+    })
+
+    it('cannot be changed while the sound is off', async () => {
+      await renderSettings({ config: config({ notificationSound: false }) })
+
+      expect(screen.getByRole('button', { name: 'Which sound' })).toBeDisabled()
+    })
   })
 
   it('shows one section at a time', async () => {

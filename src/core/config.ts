@@ -290,6 +290,16 @@ export const ConfigSchema = z.object({
   notificationSound: z.boolean().default(true),
 
   /**
+   * Which sound a notice plays: the synthesised chime, or one of the files the
+   * window ships.
+   *
+   * A string rather than an enum because the list is the window's — core knows
+   * no assets — and a sound dropped from a later build must not stop this file
+   * from parsing. The window plays the chime for an id it does not know.
+   */
+  notificationSoundId: z.string().max(64).default('chime'),
+
+  /**
    * How a diff is laid out: one column, or the two sides beside each other.
    *
    * Stored rather than kept per session because it is a preference about how
@@ -417,6 +427,7 @@ export function createDefaultConfig(
     rightPanelOpen: true,
     statusBarOpen: true,
     notificationSound: true,
+    notificationSoundId: 'chime',
     diffView: 'unified',
     rightPanelTab: 'diff',
     sidebarWidth: 240,

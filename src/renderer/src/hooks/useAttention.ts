@@ -36,12 +36,14 @@ export interface Attention {
  * looking at it — and opening a workspace clears what it had. The one thing
  * the open workspace still gets is the sound, when the window is not in front:
  * somebody in another application is not looking at it either.
+ *
+ * `sound` is the id of the sound to play, or `null` when the switch is off.
  */
 export function useAttention(
   projects: readonly Project[],
   workspaces: readonly WorkspaceView[],
   openWorkspaceId: string | null,
-  sound: boolean
+  sound: string | null
 ): Attention {
   const [held, setHeld] = useState<readonly Notice[]>([])
   // By identity: a newer notice for the same conversation is a new object, and
@@ -67,7 +69,9 @@ export function useAttention(
 
         const onScreen = chatEvent.workspaceId === open.current
         if (!onScreen) setHeld((list) => withNotice(list, notice))
-        if (audible.current && (!onScreen || !document.hasFocus())) chime(notice.kind)
+        if (audible.current !== null && (!onScreen || !document.hasFocus())) {
+          chime(notice.kind, audible.current)
+        }
       }),
     []
   )

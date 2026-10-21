@@ -317,6 +317,95 @@ describe('DropdownMenu', () => {
     expect(described).toBeLessThan(window.innerHeight - 60)
   })
 
+  describe('a row with a button of its own', () => {
+    // Hearing a sound before picking it: trying several in a row is the point.
+    it('runs its own action and leaves the menu open and the item unchosen', async () => {
+      const choose = vi.fn()
+      const listen = vi.fn()
+      renderMenu([
+        {
+          id: 'gong',
+          label: 'Gong',
+          selected: false,
+          aside: { label: 'Listen to Gong', icon: '▶', onSelect: listen },
+          onSelect: choose
+        }
+      ])
+
+      await userEvent.click(triggerButton())
+      await userEvent.click(screen.getByRole('button', { name: 'Listen to Gong' }))
+
+      expect(listen).toHaveBeenCalledOnce()
+      expect(choose).not.toHaveBeenCalled()
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+    })
+
+    it('still chooses the item from the row beside it', async () => {
+      const choose = vi.fn()
+      const listen = vi.fn()
+      renderMenu([
+        {
+          id: 'gong',
+          label: 'Gong',
+          selected: false,
+          aside: { label: 'Listen to Gong', icon: '▶', onSelect: listen },
+          onSelect: choose
+        }
+      ])
+
+      await userEvent.click(triggerButton())
+      await userEvent.click(screen.getByRole('menuitemradio', { name: 'Gong' }))
+
+      expect(choose).toHaveBeenCalledOnce()
+      expect(listen).not.toHaveBeenCalled()
+      expect(screen.queryByRole('menu')).toBeNull()
+    })
+  })
+
+  /*
+   * Twenty rows are taller than the space under a trigger in the middle of the
+   * settings dialog. Counted at full height, the menu would flip above for no
+   * reason; capped, it opens below and scrolls.
+   */
+  it('scrolls past its tallest, and counts only that much when deciding where to open', async () => {
+    const user = userEvent.setup()
+    render(
+      <DropdownMenu
+        maxHeight={240}
+        trigger={({ onClick }) => (
+          <button type="button" onClick={onClick}>
+            Open
+          </button>
+        )}
+        actions={Array.from({ length: 20 }, (_, index) => ({
+          id: String(index),
+          label: `Sound ${String(index)}`,
+          onSelect: vi.fn()
+        }))}
+      />
+    )
+
+    const trigger = screen.getByRole('button', { name: 'Open' })
+    const bottom = window.innerHeight - 300
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      top: bottom - 16,
+      bottom,
+      left: 10,
+      right: 40,
+      width: 30,
+      height: 16,
+      x: 10,
+      y: bottom - 16,
+      toJSON: () => ({})
+    })
+
+    await user.click(trigger)
+
+    const panel = screen.getByRole('menu')
+    expect(panel.style.maxHeight).toBe('240px')
+    expect(Number.parseInt(panel.style.top, 10)).toBeGreaterThan(bottom)
+  })
+
   /*
    * The descriptions come from outside — the agent writes the ones on the
    * models — and "Fable 5 · Most capable for your hardest and longest-running

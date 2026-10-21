@@ -2,10 +2,12 @@ import {
   Blocks,
   BookText,
   Bot,
+  ChevronsUpDown,
   GitBranch,
   Info,
   type LucideIcon,
   Monitor,
+  Play,
   Sparkles,
   SquareSlash
 } from 'lucide-react'
@@ -33,8 +35,10 @@ import type {
 import { type StandingPermission, standingKey } from '@core/standingPermissions.js'
 
 import { useModels } from '../hooks/useModels.js'
+import { preview, SOUND_IDS, type SoundId, soundFor } from '../sound.js'
 import { InstructionEditors } from './InstructionEditors.js'
 import { Button } from './Button.js'
+import { DropdownMenu } from './DropdownMenu.js'
 import { modelRows } from './chat/modelRows.js'
 import { Field } from './Field.js'
 import { Mascot } from './Mascot.js'
@@ -222,7 +226,64 @@ function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
           label={t('settings.notificationSound')}
         />
       </Field>
+
+      <Field
+        label={t('settings.notificationSoundChoice')}
+        hint={t('settings.notificationSoundChoiceHint')}
+      >
+        {(id) => <SoundChoice id={id} config={config} onChange={onChange} />}
+      </Field>
     </div>
+  )
+}
+
+/** About eight rows: the list scrolls rather than reaching past the dialog. */
+const SOUND_MENU_HEIGHT = 288
+
+/**
+ * The sound a notice plays, each one with a button to hear it first.
+ *
+ * Off while the switch above is: a sound chosen there would never be heard,
+ * which reads as the choice not working.
+ */
+function SoundChoice({ id, config, onChange }: SectionProps & { id: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  // Through the catalogue, so a sound since removed shows as the chime it plays.
+  const chosen = soundFor(config.notificationSoundId).id
+  const name = (sound: SoundId): string => t(`settings.sounds.${sound}`)
+
+  return (
+    <DropdownMenu
+      align="left"
+      maxHeight={SOUND_MENU_HEIGHT}
+      actions={SOUND_IDS.map((sound) => ({
+        id: sound,
+        label: name(sound),
+        selected: sound === chosen,
+        aside: {
+          label: t('settings.soundPreview', { name: name(sound) }),
+          icon: <Play aria-hidden size={12} />,
+          onSelect: () => {
+            preview(sound)
+          }
+        },
+        onSelect: () => void onChange({ notificationSoundId: sound })
+      }))}
+      trigger={({ onClick, open }) => (
+        <button
+          id={id}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          disabled={!config.notificationSound}
+          onClick={onClick}
+          className="input focus-ring hover:bg-muted flex max-w-sm items-center gap-2 text-left transition-colors disabled:pointer-events-none disabled:opacity-50"
+        >
+          <span className="min-w-0 flex-1 truncate">{name(chosen)}</span>
+          <ChevronsUpDown aria-hidden size={12} className="text-ink-faint shrink-0" />
+        </button>
+      )}
+    />
   )
 }
 

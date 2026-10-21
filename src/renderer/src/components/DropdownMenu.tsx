@@ -36,6 +36,19 @@ export interface MenuAction {
    * rows would read as three more commands.
    */
   readonly section?: MenuSection
+  /**
+   * A second, icon-only button at the end of the row, for something to do
+   * with the item short of choosing it — hearing a sound before picking it.
+   * It leaves the menu open, so several can be tried in a row.
+   */
+  readonly aside?: MenuAside
+  readonly onSelect: () => void
+}
+
+export interface MenuAside {
+  /** What a screen reader and the tooltip say; the icon alone says nothing. */
+  readonly label: string
+  readonly icon: React.ReactNode
   readonly onSelect: () => void
 }
 
@@ -62,6 +75,11 @@ interface DropdownMenuProps {
    * which would leave the short ones full of air.
    */
   readonly width?: number
+  /**
+   * The tallest the panel may grow before it scrolls, for a menu with more
+   * rows than the window is sure to hold.
+   */
+  readonly maxHeight?: number
 }
 
 const PANEL_WIDTH = 232
@@ -98,7 +116,8 @@ export function DropdownMenu({
   trigger,
   actions,
   align = 'right',
-  width: asked
+  width: asked,
+  maxHeight
 }: DropdownMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
@@ -155,7 +174,7 @@ export function DropdownMenu({
     // is worth two rows of its own. Erring high is the safe way to be wrong: it
     // flips the menu above the trigger sooner than it must, where erring low
     // would run it off the bottom of the window.
-    const height = actions.reduce(
+    const rows = actions.reduce(
       (total, action) =>
         total +
         ROW_HEIGHT +
@@ -164,6 +183,7 @@ export function DropdownMenu({
         (action.section?.note === undefined ? 0 : NOTE_HEIGHT),
       8
     )
+    const height = maxHeight === undefined ? rows : Math.min(rows, maxHeight)
 
     setPosition({
       // Flips above the trigger when there is no room below — near the bottom
@@ -216,65 +236,97 @@ export function DropdownMenu({
           <div
             ref={panel}
             role="menu"
-            style={{ top: position.top, left: position.left, width }}
-            className="border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-1 shadow-[var(--shadow-pop)]"
+            style={{ top: position.top, left: position.left, width, maxHeight }}
+            className="overflow-y-auto border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-1 shadow-[var(--shadow-pop)]"
           >
             {actions.map((action) => (
               <Fragment key={action.id}>
                 {action.section !== undefined && <SectionHead section={action.section} />}
-                <button
-                  type="button"
-                  // A choice among several is a radio group, not a list of commands.
-                  // The role is what carries that to a screen reader, and it is also
-                  // the only part of this a jsdom test can see.
-                  {...(action.selected === undefined
-                    ? { role: 'menuitem' }
-                    : { role: 'menuitemradio', 'aria-checked': action.selected })}
-                  disabled={action.disabled ?? false}
-                  onClick={() => {
-                    setOpen(false)
-                    action.onSelect()
-                  }}
-                  className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left disabled:pointer-events-none disabled:opacity-40 ${
-                    action.destructive === true
-                      ? 'text-danger hover:bg-danger-bg'
-                      : 'text-ink-soft hover:text-ink'
-                  }`}
-                >
-                  <span className="flex size-4 shrink-0 items-center justify-center">
-                    {/* The tick keeps its space when it is not the current choice,
-                    so the labels of a picker line up instead of stepping left
-                    and right as the selection moves. */}
-                    {action.selected === undefined ? (
-                      action.icon
-                    ) : (
-                      <Check
-                        aria-hidden
-                        size={12}
-                        className={action.selected ? 'text-accent' : 'opacity-0'}
-                      />
-                    )}
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{action.label}</span>
-                    {/* Wrapped rather than truncated, unlike the label above it.
-                    A name cut short is still a name; a sentence cut short at
-                    "Most capable for your …" is the half that says nothing.
-                    Two lines is the cap — past that the menu is a document. */}
-                    {action.description !== undefined && (
-                      <span className="text-ink-faint line-clamp-2 text-[11px] leading-4">
-                        {action.description}
-                      </span>
-                    )}
-                  </span>
-                </button>
+                {action.aside === undefined ? (
+                  <MenuItem action={action} onChosen={close} />
+                ) : (
+                  // Two buttons side by side rather than one inside the other:
+                  // a button in a button is invalid HTML, and its click would
+                  // choose the item as well.
+                  <div className="flex items-center">
+                    <MenuItem action={action} onChosen={close} />
+                    <AsideButton aside={action.aside} />
+                  </div>
+                )}
               </Fragment>
             ))}
           </div>,
           document.body
         )}
     </div>
+  )
+}
+
+function MenuItem({
+  action,
+  onChosen
+}: {
+  readonly action: MenuAction
+  readonly onChosen: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      // A choice among several is a radio group, not a list of commands.
+      // The role is what carries that to a screen reader, and it is also
+      // the only part of this a jsdom test can see.
+      {...(action.selected === undefined
+        ? { role: 'menuitem' }
+        : { role: 'menuitemradio', 'aria-checked': action.selected })}
+      disabled={action.disabled ?? false}
+      onClick={() => {
+        onChosen()
+        action.onSelect()
+      }}
+      className={`row focus-ring flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left disabled:pointer-events-none disabled:opacity-40 ${
+        action.destructive === true
+          ? 'text-danger hover:bg-danger-bg'
+          : 'text-ink-soft hover:text-ink'
+      }`}
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        {/* The tick keeps its space when it is not the current choice,
+        so the labels of a picker line up instead of stepping left
+        and right as the selection moves. */}
+        {action.selected === undefined ? (
+          action.icon
+        ) : (
+          <Check aria-hidden size={12} className={action.selected ? 'text-accent' : 'opacity-0'} />
+        )}
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{action.label}</span>
+        {/* Wrapped rather than truncated, unlike the label above it.
+        A name cut short is still a name; a sentence cut short at
+        "Most capable for your …" is the half that says nothing.
+        Two lines is the cap — past that the menu is a document. */}
+        {action.description !== undefined && (
+          <span className="text-ink-faint line-clamp-2 text-[11px] leading-4">
+            {action.description}
+          </span>
+        )}
+      </span>
+    </button>
+  )
+}
+
+function AsideButton({ aside }: { readonly aside: MenuAside }): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={aside.label}
+      title={aside.label}
+      onClick={aside.onSelect}
+      className="row focus-ring text-ink-faint hover:text-ink flex size-7 shrink-0 items-center justify-center"
+    >
+      {aside.icon}
+    </button>
   )
 }
 
