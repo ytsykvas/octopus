@@ -90,6 +90,11 @@ export interface TreeNode {
  */
 export type TreeIndex = ReadonlyMap<string, readonly TreeNode[]>
 
+/** The row for `path`, if its folder's children are in the index and name it. */
+export function nodeAt(index: TreeIndex, path: string): TreeNode | undefined {
+  return index.get(parentOf(path))?.find((node) => node.path === path)
+}
+
 /**
  * Past this the tree stops listing.
  *
@@ -434,6 +439,24 @@ export function foldersFromDisk(
     }
     return false
   })
+}
+
+/**
+ * The open folders a row is drawn open for: those with every folder above them
+ * open too.
+ *
+ * The panel remembers a folder left open inside one closed since, as an
+ * editor's explorer does, so the open set is larger than what is drawn.
+ */
+export function drawnOpen(expanded: ReadonlySet<string>): Set<string> {
+  return new Set(
+    [...expanded].filter((folder) => {
+      for (let at = parentOf(folder); at !== ''; at = parentOf(at)) {
+        if (!expanded.has(at)) return false
+      }
+      return true
+    })
+  )
 }
 
 /**

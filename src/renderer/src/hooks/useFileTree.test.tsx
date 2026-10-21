@@ -65,21 +65,21 @@ describe('the tree of a workspace', () => {
     })
   })
 
-  it('reads an ignored folder when asked, into the tree', async () => {
+  it('reads an ignored folder once it is opened, into the tree', async () => {
     answering()
     vi.mocked(octopus().files.directory).mockResolvedValue({
       ok: true,
       value: { entries: [{ name: 'pkg', kind: 'directory' }], truncated: true }
     })
-    const { result } = renderHook(() => useFileTree(WORKSPACE, true, NONE))
+    const { result, rerender } = renderHook(({ open }) => useFileTree(WORKSPACE, true, open), {
+      initialProps: { open: NONE }
+    })
     await waitFor(() => {
       expect(result.current.index).not.toBeNull()
     })
+    expect(octopus().files.directory).not.toHaveBeenCalled()
 
-    act(() => {
-      result.current.openFolder('node_modules')
-    })
-    expect(result.current.listings.get('node_modules')).toEqual({ status: 'loading' })
+    rerender({ open: OPEN })
 
     await waitFor(() => {
       expect(result.current.listings.get('node_modules')).toEqual({
@@ -152,13 +152,45 @@ describe('the tree of a workspace', () => {
       expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual(['pkg'])
     })
 
-    // Its read starts only once the tree is in, so a newer read can overtake it.
-    it('keeps what a newer read found when an older one finishes late', async () => {
+    // A refresh re-reads what is held; one still on its way is not asked twice,
+    // nor is it asked again by a render while it is under way.
+    it('is read once when a refresh comes while its read is under way', async () => {
       answering()
       const slow = held<ReturnType<typeof listing>>()
-      vi.mocked(octopus().files.directory)
-        .mockReturnValueOnce(slow.promise)
-        .mockResolvedValue(listing('newer'))
+      vi.mocked(octopus().files.directory).mockReturnValue(slow.promise)
+      const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
+      await waitFor(() => {
+        expect(octopus().files.directory).toHaveBeenCalledOnce()
+      })
+
+      const trees = vi.mocked(octopus().files.tree).mock.calls.length
+      act(() => {
+        result.current.refresh()
+      })
+      await waitFor(() => {
+        expect(octopus().files.tree).toHaveBeenCalledTimes(trees + 1)
+      })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(octopus().files.directory).toHaveBeenCalledOnce()
+
+      await act(async () => {
+        slow.resolve(listing('pkg'))
+        await slow.promise
+      })
+      expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual(['pkg'])
+    })
+
+    // Landed while the refresh was reading the tree: that read did not re-read
+    // it, and must not drop the listing it finds held, or it is read again.
+    it('keeps a listing that lands while a refresh reads the tree', async () => {
+      const tree = held<{ ok: true; value: FileTreeSnapshot }>()
+      vi.mocked(octopus().files.tree)
+        .mockResolvedValueOnce({ ok: true, value: SNAPSHOT })
+        .mockReturnValueOnce(tree.promise)
+      const slow = held<ReturnType<typeof listing>>()
+      vi.mocked(octopus().files.directory).mockReturnValue(slow.promise)
       const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
       await waitFor(() => {
         expect(octopus().files.directory).toHaveBeenCalledOnce()
@@ -167,17 +199,18 @@ describe('the tree of a workspace', () => {
       act(() => {
         result.current.refresh()
       })
-      await waitFor(() => {
-        expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual([
-          'newer'
-        ])
-      })
       await act(async () => {
-        slow.resolve(listing('older'))
+        slow.resolve(listing('pkg'))
         await slow.promise
       })
+      expect(result.current.listings.get('node_modules')?.status).toBe('ready')
+      await act(async () => {
+        tree.resolve({ ok: true, value: SNAPSHOT })
+        await tree.promise
+      })
 
-      expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual(['newer'])
+      expect(result.current.index?.get('node_modules')?.map((node) => node.name)).toEqual(['pkg'])
+      expect(octopus().files.directory).toHaveBeenCalledOnce()
     })
 
     // A folder git lists has its children from git; reading it from disk too
@@ -194,21 +227,14 @@ describe('the tree of a workspace', () => {
     })
   })
 
-  // Opened before the first read of the tree came back; that read must not
-  // drop it.
-  it('marks an ignored folder that could not be read, opened while the tree was reading', async () => {
+  it('marks an ignored folder that could not be read, asked for once', async () => {
     answering()
     vi.mocked(octopus().files.directory).mockResolvedValue({ ok: false, error: 'gone' })
     const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
 
-    act(() => {
-      result.current.openFolder('node_modules')
-    })
-
     await waitFor(() => {
       expect(result.current.listings.get('node_modules')).toEqual({ status: 'failed' })
     })
-    // Asked for by the click; the read that was under way does not ask again.
     expect(octopus().files.directory).toHaveBeenCalledOnce()
   })
 
@@ -221,9 +247,6 @@ describe('the tree of a workspace', () => {
     const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
     await waitFor(() => {
       expect(result.current.index).not.toBeNull()
-    })
-    act(() => {
-      result.current.openFolder('node_modules')
     })
     await waitFor(() => {
       expect(result.current.listings.get('node_modules')?.status).toBe('ready')
@@ -252,9 +275,6 @@ describe('the tree of a workspace', () => {
     const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
     await waitFor(() => {
       expect(result.current.index).not.toBeNull()
-    })
-    act(() => {
-      result.current.openFolder('node_modules')
     })
     await waitFor(() => {
       expect(result.current.listings.get('node_modules')?.status).toBe('ready')
@@ -326,23 +346,25 @@ describe('the tree of a workspace', () => {
 
   it('drops a folder read that lands after the workspace changed', async () => {
     answering()
-    let finish: (value: { ok: false; error: string }) => void = () => undefined
-    vi.mocked(octopus().files.directory).mockReturnValueOnce(
-      new Promise((resolve) => {
-        finish = resolve
-      })
+    const late = held<{ ok: false; error: string }>()
+    vi.mocked(octopus().files.directory).mockImplementation((id) =>
+      id === WORKSPACE ? late.promise : new Promise(() => undefined)
     )
-    const { result, rerender } = renderHook(({ id }) => useFileTree(id, true, NONE), {
+    const { result, rerender } = renderHook(({ id }) => useFileTree(id, true, OPEN), {
       initialProps: { id: WORKSPACE }
     })
-    act(() => {
-      result.current.openFolder('node_modules')
+    await waitFor(() => {
+      expect(octopus().files.directory).toHaveBeenCalledWith(WORKSPACE, 'node_modules')
     })
 
     rerender({ id: 'planner/bob' })
+    // The same folder in the next workspace is its own read, not the one under way.
+    await waitFor(() => {
+      expect(octopus().files.directory).toHaveBeenCalledWith('planner/bob', 'node_modules')
+    })
     await act(async () => {
-      finish({ ok: false, error: 'late' })
-      await Promise.resolve()
+      late.resolve({ ok: false, error: 'late' })
+      await late.promise
     })
 
     expect(result.current.listings.size).toBe(0)
@@ -356,17 +378,14 @@ describe('the tree of a workspace', () => {
       ok: true,
       value: { entries: [], truncated: false }
     })
-    const { result } = renderHook(() => useFileTree(WORKSPACE, true, NONE))
-    await waitFor(() => {
-      expect(result.current.index).not.toBeNull()
-    })
-    act(() => {
-      result.current.openFolder('node_modules')
+    const { result, rerender } = renderHook(({ open }) => useFileTree(WORKSPACE, true, open), {
+      initialProps: { open: OPEN }
     })
     await waitFor(() => {
       expect(result.current.listings.get('node_modules')?.status).toBe('ready')
     })
 
+    rerender({ open: NONE })
     act(() => {
       result.current.refresh()
     })
@@ -387,9 +406,6 @@ describe('the tree of a workspace', () => {
     const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
     await waitFor(() => {
       expect(result.current.index).not.toBeNull()
-    })
-    act(() => {
-      result.current.openFolder('node_modules')
     })
     await waitFor(() => {
       expect(result.current.index?.get('node_modules')?.[0]?.name).toBe('stale.js')
@@ -535,10 +551,6 @@ describe('the tree of a workspace', () => {
     )
     const open = new Set(['node_modules', 'node_modules/pkg'])
     const { result } = renderHook(() => useFileTree(WORKSPACE, true, open))
-    act(() => {
-      result.current.openFolder('node_modules')
-    })
-    expect(result.current.listings.get('node_modules')?.status).toBe('loading')
 
     await act(async () => {
       tree.resolve({ ok: true, value: SNAPSHOT })
@@ -547,7 +559,7 @@ describe('the tree of a workspace', () => {
     await waitFor(() => {
       expect(result.current.listings.get('node_modules/pkg')?.status).toBe('ready')
     })
-    expect(result.current.listings.get('node_modules')?.status).toBe('loading')
+    expect(result.current.listings.has('node_modules')).toBe(false)
   })
 
   // A parent that could not be read says nothing about what is inside it.
@@ -595,14 +607,9 @@ describe('the tree of a workspace', () => {
         }
       })
     )
-    const { result } = renderHook(() => useFileTree(WORKSPACE, true, OPEN))
-    await waitFor(() => {
-      expect(result.current.index).not.toBeNull()
-    })
-    act(() => {
-      result.current.openFolder('node_modules/pkg')
-      result.current.openFolder('node_modules')
-    })
+    const { result } = renderHook(() =>
+      useFileTree(WORKSPACE, true, new Set(['node_modules', 'node_modules/pkg']))
+    )
 
     await waitFor(() => {
       expect(result.current.index?.get('node_modules/pkg')).toEqual([])
@@ -641,11 +648,83 @@ describe('the tree of a workspace', () => {
     expect(result.current.statuses).toEqual({ 'src/a.ts': 'added' })
   })
 
-  it('ignores a folder or a refresh asked for with no workspace', () => {
-    const { result } = renderHook(() => useFileTree(null, true, NONE))
+  /*
+   * Left open inside a folder closed since, it is in the open set and held, and
+   * was read after every turn for a listing no row draws — the cost the closed
+   * folder's own drop exists to avoid. Opened again, the parent brings it back
+   * read afresh rather than stuck reading.
+   */
+  it('reads a folder left open inside a closed one only once that one is opened again', async () => {
+    answering()
+    vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          entries: path === 'node_modules' ? [{ name: 'pkg', kind: 'directory' as const }] : [],
+          truncated: false
+        }
+      })
+    )
+    const both = new Set(['node_modules', 'node_modules/pkg'])
+    const { result, rerender } = renderHook(({ open }) => useFileTree(WORKSPACE, true, open), {
+      initialProps: { open: both }
+    })
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules/pkg')?.status).toBe('ready')
+    })
+    const reads = (): number =>
+      vi
+        .mocked(octopus().files.directory)
+        .mock.calls.filter(([, path]) => path === 'node_modules/pkg').length
+    expect(reads()).toBe(1)
+
+    rerender({ open: new Set(['node_modules/pkg']) })
+    act(() => {
+      result.current.refresh()
+    })
+    await waitFor(() => {
+      expect(result.current.listings.has('node_modules/pkg')).toBe(false)
+    })
+    expect(reads()).toBe(1)
+
+    rerender({ open: both })
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules/pkg')?.status).toBe('ready')
+    })
+    expect(reads()).toBe(2)
+  })
+
+  // Like the tree, a folder is read only while the tab is shown.
+  it('reads no folder while the tab is hidden', async () => {
+    answering()
+    vi.mocked(octopus().files.directory).mockResolvedValue({
+      ok: true,
+      value: { entries: [], truncated: false }
+    })
+    const { result, rerender } = renderHook(
+      ({ shown, open }) => useFileTree(WORKSPACE, shown, open),
+      { initialProps: { shown: true, open: NONE } }
+    )
+    await waitFor(() => {
+      expect(result.current.index).not.toBeNull()
+    })
+
+    rerender({ shown: false, open: OPEN })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(octopus().files.directory).not.toHaveBeenCalled()
+
+    rerender({ shown: true, open: OPEN })
+    await waitFor(() => {
+      expect(result.current.listings.get('node_modules')?.status).toBe('ready')
+    })
+  })
+
+  it('reads nothing for an open folder or a refresh with no workspace', () => {
+    const { result } = renderHook(() => useFileTree(null, true, OPEN))
 
     act(() => {
-      result.current.openFolder('node_modules')
       result.current.refresh()
     })
 

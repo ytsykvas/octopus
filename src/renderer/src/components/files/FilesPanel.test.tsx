@@ -901,6 +901,43 @@ describe('FilesPanel', () => {
       expect(tree).not.toHaveFocus()
     })
 
+    /*
+     * `pkg` removed by a reinstall while `node_modules` is held: no row names it,
+     * so it is never read, and waiting on it kept the reveal armed until a later
+     * re-read brought it back and moved the tree long after the click.
+     */
+    it('gives up on a folder its parent no longer names', async () => {
+      answering()
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(ROW_HEIGHT)
+      let installed = false
+      vi.mocked(octopus().files.directory).mockImplementation((_, folder) =>
+        Promise.resolve({
+          ok: true,
+          value: {
+            entries:
+              folder === 'node_modules'
+                ? installed
+                  ? [{ name: 'pkg', kind: 'directory' as const }]
+                  : []
+                : [{ name: 'index.js', kind: 'file' as const }],
+            truncated: false
+          }
+        })
+      )
+      renderPanel({ activePath: 'node_modules/pkg/index.js' })
+      const tree = await shown()
+      await userEvent.click(row('node_modules'))
+      await screen.findByText('Nothing in this folder.')
+      await userEvent.click(button())
+
+      installed = true
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+      await screen.findByRole('treeitem', { name: /^index\.js/ })
+
+      expect(tree.scrollTop).toBe(0)
+      expect(tree).not.toHaveFocus()
+    })
+
     // Still waiting on a folder read from disk when the reader moved on.
     it.each([
       ['another file comes to the centre', 'activePath'],

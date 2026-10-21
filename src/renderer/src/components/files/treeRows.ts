@@ -1,15 +1,13 @@
 import { rankFiles } from '@core/fileSearch.js'
-import type { TreeIndex, TreeNode } from '@core/fileTree.js'
+import { nodeAt, type TreeIndex, type TreeNode } from '@core/fileTree.js'
 
 /**
- * Where reading a folder from disk has got to. Absent from the map means it was
- * never asked for, which reads the same as `loading`: an expanded folder asks
- * the moment it is opened.
+ * What reading a folder from disk came to. Absent from the map means its
+ * listing is not in yet, and the row reads as loading: a folder drawn open is
+ * read as soon as it is.
  */
 export type ListingState =
-  | { readonly status: 'loading' }
-  | { readonly status: 'failed' }
-  | { readonly status: 'ready'; readonly truncated: boolean }
+  { readonly status: 'failed' } | { readonly status: 'ready'; readonly truncated: boolean }
 
 /**
  * One line of the tree as drawn: an entry, or a note standing in for the
@@ -73,9 +71,14 @@ export function visibleRows(
       return
     }
 
-    const listing = listings.get(node.path) ?? { status: 'loading' }
-    if (listing.status !== 'ready') {
-      rows.push({ type: 'note', key: `${node.path}\0note`, level, note: listing.status })
+    const listing = listings.get(node.path)
+    if (listing?.status !== 'ready') {
+      rows.push({
+        type: 'note',
+        key: `${node.path}\0note`,
+        level,
+        note: listing?.status ?? 'loading'
+      })
       return
     }
 
@@ -147,11 +150,7 @@ export function revealPath(
     open.unshift(path.slice(0, at))
   }
 
-  const nodeAt = (folder: string): TreeNode | undefined => {
-    const parent = folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : ''
-    return index.get(parent)?.find((node) => node.path === folder)
-  }
-  const first = open.findIndex((folder) => nodeAt(folder)?.childrenFromDisk === true)
+  const first = open.findIndex((folder) => nodeAt(index, folder)?.childrenFromDisk === true)
 
   return { open, fromDisk: first === -1 ? [] : open.slice(first) }
 }
