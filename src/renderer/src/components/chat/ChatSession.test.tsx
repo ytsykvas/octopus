@@ -12,6 +12,7 @@ import type { Result } from '../../../../preload/index.js'
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
 import { STEP_MARGIN } from '../../hooks/useMessageSteps.js'
+import { useAttachedFiles } from '../../hooks/useAttachedFiles.js'
 import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import { useSideQuestions } from '../../hooks/useSideQuestions.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
@@ -86,6 +87,7 @@ function ChatPane({
   const tabs = useChatTabs(target.id, vi.fn(), onError)
   const files = useFileTabs(target.id)
   const codeNotes = useCodeNotes(target.id)
+  const attachedFiles = useAttachedFiles(target.id)
   const sideQuestions = useSideQuestions()
 
   return (
@@ -102,6 +104,7 @@ function ChatPane({
       comments={comments}
       quotes={quotes}
       codeNotes={codeNotes}
+      attachedFiles={attachedFiles}
       sideQuestions={sideQuestions}
       color={color}
       defaultWorkingMode={defaultWorkingMode}

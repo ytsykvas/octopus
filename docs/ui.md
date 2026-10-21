@@ -713,8 +713,9 @@ which are clicked where it is mostly read — mostly, because it is also the way
 out of what it reports.
 
 **A file is attached by pointing at it, not by copying it.** The paperclip is
-live now, and it is one of three ways in: a file can be dragged onto the
-composer or, for a screenshot, pasted straight into the field. What goes out is
+live now, and it is one of four ways in: a file can be dragged onto the
+composer, added from the Files tab's right-click menu or, for a screenshot,
+pasted straight into the field. What goes out is
 the file's **path**, written into the message beside the review notes — §4's
 rule that nothing implicit reaches the agent, in the plainest form it takes, and
 what makes the message the sender reads back the whole of what was sent.
@@ -723,7 +724,9 @@ Nothing is copied anywhere, which is the decision the rest follows from. A copy
 would put a second version of somebody's file somewhere they did not put it, and
 it would go stale the moment they edited the original. The chip above the field
 names the file and holds the whole path on hover; taking it back before sending
-is a click.
+is a click. The list is held per conversation in `App` (`useAttachedFiles`),
+the way the viewer's notes are, because the Files tab adds to it from the other
+side of the window.
 
 **One strip carries both the files and the review notes**, and it is drawn only
 when it has something on it — the way the attic above it is. An empty rule over
@@ -2803,6 +2806,16 @@ key or a scroll in the tree, the tab put away. Left armed, a row turning up in a
 later re-read moved the tree long after the click. The scroll is measured from
 the tree as it is at that moment, which is also why the tree measures itself
 when it comes back from under the filter.
+
+**A row's path is copied the way an editor's explorer copies it.** `⌥⌘C` puts
+the whole path on the clipboard, `⌥⇧⌘C` the one relative to the worktree, and
+a right-click offers both beside **Add to chat**, which attaches the whole path
+to the conversation in front — the paperclip's attachment, brought forward so
+the chip is seen landing. Folders as well as files. The keys are read from
+`code`, because ⌥ turns the `c` into `ç` on macOS. What the copy did is said on
+a line under the toolbar for two seconds: the menu that asked has closed, and a
+refused clipboard is worth saying. Neither the menu nor the keys are on the
+filter's list of matches.
 
 **The icons are Catppuccin Icons**, the VS Code theme, resolved by the rules VS
 Code applies to the same manifest: the whole name, then each extension from the

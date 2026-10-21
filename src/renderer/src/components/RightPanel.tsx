@@ -236,6 +236,8 @@ interface RightPanelProps {
   readonly activeFilePath: string | null
   /** Opens a file in the centre — from the Files tab as a preview or kept, from a changed file's menu kept. */
   readonly onOpenFile: (path: string, pinned: boolean) => void
+  /** Attaches an absolute path to the conversation in front — the Files tab's "Add to chat". */
+  readonly onAttachFile: (path: string) => void
   /** Brings the conversation in front of any open file, before a prompt is sent to it. */
   readonly onConversation: () => void
   readonly onError: (message: string | null) => void
@@ -281,6 +283,7 @@ export function RightPanel({
   onRemoveWorkspace,
   activeFilePath,
   onOpenFile,
+  onAttachFile,
   onConversation,
   onError,
   server
@@ -666,6 +669,7 @@ export function RightPanel({
             visible={showing === 'files'}
             activePath={activeFilePath}
             onOpen={onOpenFile}
+            onAttach={onAttachFile}
           />
         </div>
 

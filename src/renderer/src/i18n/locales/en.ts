@@ -490,7 +490,14 @@ export const en = {
     statusConflictedLabel: 'Conflicted',
     tabs: 'Open files',
     preview: '{{name}} — preview. Opening another file replaces it; double-click to keep it open.',
-    close: 'Close {{name}}'
+    close: 'Close {{name}}',
+    /* A row's right-click menu. The keys are an editor's explorer's. */
+    copyPath: 'Copy path (⌥⌘C)',
+    copyRelativePath: 'Copy relative path (⌥⇧⌘C)',
+    /* Attaches the row's path to the conversation in front, as a dropped file. */
+    addToChat: 'Add to chat',
+    pathCopied: 'Path copied',
+    copyFailed: 'Could not copy the path'
   },
 
   /* A file opened from the Files tab, read-only. */

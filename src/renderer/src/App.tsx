@@ -35,6 +35,7 @@ import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
 
+import { useAttachedFiles } from './hooks/useAttachedFiles.js'
 import { useCodeNotes } from './hooks/useCodeNotes.js'
 import { useSideQuestions } from './hooks/useSideQuestions.js'
 import { useDiffComments } from './hooks/useDiffComments.js'
@@ -207,6 +208,9 @@ export function App(): React.JSX.Element {
      tab key like the drafts, so a conversation closed and reopened from the
      history finds its notes where they were left. */
   const codeNotes = useCodeNotes(selectedWorkspaceId)
+  /* The paths each conversation's next message names. Up here because the
+     Files tab attaches to the conversation in front as well as the composer. */
+  const attachedFiles = useAttachedFiles(selectedWorkspaceId)
   const sideQuestions = useSideQuestions()
 
   /*
@@ -296,6 +300,13 @@ export function App(): React.JSX.Element {
       }
     }),
     [reviewQuotes, fileTabs]
+  )
+  const attachFile = useCallback(
+    (path: string) => {
+      fileTabs.showChat()
+      attachedFiles.add(chatTabs.activeKey, [path])
+    },
+    [attachedFiles, chatTabs.activeKey, fileTabs]
   )
 
   /*
@@ -1100,6 +1111,7 @@ export function App(): React.JSX.Element {
               comments={diffComments}
               quotes={reviewQuotes}
               codeNotes={codeNotes}
+              attachedFiles={attachedFiles}
               sideQuestions={sideQuestions}
               defaultWorkingMode={defaultWorkingMode}
               planExecutionMode={planExecutionMode}
@@ -1206,6 +1218,7 @@ export function App(): React.JSX.Element {
             if (pinned) fileTabs.open(path)
             else fileTabs.preview(path)
           }}
+          onAttachFile={attachFile}
           onError={setError}
           // The room the pane must leave alone. Folded away, the list takes
           // none of it — and the pane may have that room too.

@@ -145,6 +145,7 @@ function renderPanel(overrides: Partial<Props> = {}): {
     onRemoveWorkspace: vi.fn(),
     activeFilePath: null,
     onOpenFile: vi.fn(),
+    onAttachFile: vi.fn(),
     onConversation: vi.fn(),
     onError: vi.fn(),
     ...overrides

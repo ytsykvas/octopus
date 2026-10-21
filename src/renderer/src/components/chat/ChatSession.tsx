@@ -26,6 +26,7 @@ import { onChatEvent } from '../../hooks/chatEvents.js'
 import { stopTask, useChatTasks, useMainWorking } from '../../hooks/backgroundTasks.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
+import type { AttachedFileController } from '../../hooks/useAttachedFiles.js'
 import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
@@ -92,6 +93,8 @@ interface ChatSessionProps {
    * this conversation shows and sends only the ones addressed to its tab.
    */
   readonly codeNotes: CodeNoteController
+  /** The files this conversation's next message names, under its tab's key. */
+  readonly attachedFiles: AttachedFileController
   /** Each conversation's `/btw` thread, held by `App` so it outlives this pane. */
   readonly sideQuestions: SideQuestionController
   /**
@@ -143,6 +146,7 @@ export function ChatSession({
   comments,
   quotes,
   codeNotes,
+  attachedFiles,
   sideQuestions,
   defaultWorkingMode,
   planExecutionMode,
@@ -216,7 +220,7 @@ export function ChatSession({
   // done to the conversation from its log — one banner for both, as the log has
   // one place it says things.
   const [notice, setNotice] = useState<string | null>(null)
-  const attachments = useAttachments(setNotice)
+  const attachments = useAttachments(setNotice, attachedFiles, tab.key)
   const { choose: chooseRewind, dialog: rewindDialog } = useRewindChoice()
   /* A rewound message on its way back into the composer. The id is what makes
      the same text handed back twice a second instruction rather than nothing. */

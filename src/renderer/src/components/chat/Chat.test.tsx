@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { useChatTabs } from '../../hooks/useChatTabs.js'
 import { useFileTabs } from '../../hooks/useFileTabs.js'
+import { useAttachedFiles } from '../../hooks/useAttachedFiles.js'
 import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import { useSideQuestions } from '../../hooks/useSideQuestions.js'
 import { chat, emitAgentEvent, givenChats } from '../../test/chat.js'
@@ -35,6 +36,7 @@ function Pane({
   const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
   const files = useFileTabs(workspace.id)
   const codeNotes = useCodeNotes(workspace.id)
+  const attachedFiles = useAttachedFiles(workspace.id)
   const held = useSideQuestions()
   const sideQuestions = {
     ...held,
@@ -56,6 +58,7 @@ function Pane({
         comments={commentController()}
         quotes={quoteController()}
         codeNotes={codeNotes}
+        attachedFiles={attachedFiles}
         sideQuestions={sideQuestions}
         color="blue"
         defaultWorkingMode="default"
