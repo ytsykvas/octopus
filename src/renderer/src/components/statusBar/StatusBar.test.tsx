@@ -43,22 +43,26 @@ interface Setup {
   readonly front?: { readonly workspace: WorkspaceView; readonly chatId: string } | null
 }
 
-function renderBar({
-  open = true,
-  workspaces = [],
-  requests = [],
-  resources = null,
-  front = null
-}: Setup = {}): { onToggle: ReturnType<typeof vi.fn>; onOpen: ReturnType<typeof vi.fn> } {
+function renderBar(setup: Setup = {}): {
+  onToggle: ReturnType<typeof vi.fn>
+  onOpen: ReturnType<typeof vi.fn>
+  rerender: (next: Partial<Setup>) => void
+} {
   const onToggle = vi.fn()
   const onOpen = vi.fn()
+  const { resources = null } = setup
   // The bar takes its own reading; null is one that has not landed yet.
   vi.mocked(window.octopus.resources.read).mockReturnValue(
     resources === null
       ? new Promise(() => undefined)
       : Promise.resolve({ ok: true, value: resources })
   )
-  render(
+  const bar = ({
+    open = true,
+    workspaces = [],
+    requests = [],
+    front = null
+  }: Setup): React.JSX.Element => (
     <StatusBar
       open={open}
       onToggle={onToggle}
@@ -69,7 +73,14 @@ function renderBar({
       onOpen={onOpen}
     />
   )
-  return { onToggle, onOpen }
+  const { rerender } = render(bar(setup))
+  return {
+    onToggle,
+    onOpen,
+    rerender: (next) => {
+      rerender(bar({ ...setup, ...next }))
+    }
+  }
 }
 
 afterEach(() => {
@@ -230,6 +241,50 @@ describe('the turn under way', () => {
     renderBar({ workspaces: [anna], front: { workspace: anna, chatId: 'c-1' } })
 
     expect(screen.queryByRole('timer')).toBeNull()
+  })
+
+  // The bar has a clock of its own for the machine's reading; this is about
+  // the one the turn adds, which used to tick every second for a line drawing
+  // nothing.
+  it('sets no clock between turns', () => {
+    vi.useFakeTimers()
+    const idle = workspaceView('anna', { chats: [chat({ turnStartedAt: null })] })
+    const busy = workspaceView('anna', {
+      chats: [chat({ status: 'running', turnStartedAt: '2026-10-20T09:00:00.000Z' })]
+    })
+    // Measured against a bar with nothing in front, so a clock the idle line
+    // kept for itself counts as one too many rather than as the baseline.
+    const { rerender } = renderBar({ workspaces: [idle] })
+    const none = vi.getTimerCount()
+
+    rerender({ front: { workspace: idle, chatId: 'c-1' } })
+    expect(vi.getTimerCount()).toBe(none)
+
+    rerender({ workspaces: [busy], front: { workspace: busy, chatId: 'c-1' } })
+    expect(vi.getTimerCount()).toBe(none + 1)
+
+    rerender({ workspaces: [idle], front: { workspace: idle, chatId: 'c-1' } })
+    expect(vi.getTimerCount()).toBe(none)
+  })
+
+  // A clock started when the bar mounted would count this turn from a stale
+  // now: zero for a second, then the truth.
+  it('starts from the right time when it switches to a turn already under way', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T09:00:00.000Z'))
+    const anna = workspaceView('anna', { chats: [chat({ turnStartedAt: null })] })
+    const bob = workspaceView('bob', {
+      chats: [chat({ status: 'running', turnStartedAt: '2026-10-20T09:00:00.000Z' })]
+    })
+    const { rerender } = renderBar({
+      workspaces: [anna, bob],
+      front: { workspace: anna, chatId: 'c-1' }
+    })
+
+    vi.setSystemTime(new Date('2026-10-20T09:05:00.000Z'))
+    rerender({ front: { workspace: bob, chatId: 'c-1' } })
+
+    expect(screen.getByRole('timer')).toHaveTextContent('Claude 1 · 5m 0s')
   })
 
   // A turn that failed has a start the core may not have cleared yet; the

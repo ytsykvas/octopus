@@ -2324,7 +2324,12 @@ in the label too.
 
 It costs one `gh` call per project rather than one per workspace, on a minute's
 timer while the project is open — and for every other project too while the
-status bar shows, on the same clock rather than a second poller of its own. A
+status bar shows, on the same clock rather than a second poller of its own.
+While a check runs, the open project is read every 15 s instead, so its row
+stops spinning when the pull request tab says the checks are done; a watched
+project stays on the minute, since nothing of it is on screen but the bar's
+count, and a few repositories with long CI runs on the fast clock were a
+GraphQL query every 15 s each, all day. A
 look that falls due while the window is hidden waits for it, and is taken once
 when it is shown. A failure is silent: there is no room on a
 row to explain one, the tab says it properly when opened, and a repository with
@@ -3709,7 +3714,10 @@ share. The workspace list holds its own re-reads the same way, per workspace
 (`useWorkspaces`). `useNow()` is the
 second-by-second time for a running count, held by the component that shows the
 count so the tick redraws that line only: the working line and the status bar's
-turn timer.
+turn timer. That component is mounted only while there is a count to show, so
+nothing ticks between turns — and the clock, read when it mounts, starts from
+the right time rather than from a stale zero when the front switches to a
+conversation already at its turn.
 
 `useRateLimit` is separate from `useChat` because the figure belongs to the
 account rather than to a conversation: every workspace reports the same one, and

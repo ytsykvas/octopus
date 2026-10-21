@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { BranchRequest, StandingReason } from '@core/pullRequestShapes.js'
 import type { ResourceReading } from '@core/resources.js'
 import type { Project } from '@core/store.js'
-import type { WorkspaceView } from '@core/workspaces.js'
+import type { WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
 import { useNow } from '../../hooks/useNow.js'
 import { useResources } from '../../hooks/useResources.js'
@@ -230,9 +230,13 @@ export function StatusBar({
 /**
  * How long the conversation in front has been at its turn.
  *
- * Its own component because it holds the second-by-second clock, and the tick
- * should redraw this line and not the rest of the bar. Nothing while the
- * conversation is between turns.
+ * Nothing while the conversation is between turns — and the clock itself is
+ * in a child mounted only while there is a turn, for two reasons. One: the
+ * second-by-second tick should redraw that line and not the rest of the bar,
+ * and should not happen at all between turns, when this used to tick for a
+ * component drawing nothing. Two: the clock reads the time when it mounts, so
+ * switching from an idle conversation to one that has been at its turn for
+ * five minutes starts at five minutes rather than at a stale zero.
  */
 function TurnTimer({
   workspace,
@@ -241,18 +245,30 @@ function TurnTimer({
   readonly workspace: WorkspaceView
   readonly chatId: string
 }): React.JSX.Element | null {
-  const { t } = useTranslation()
-  const now = useNow()
-
   const index = workspace.chats.findIndex((chat) => chat.id === chatId)
   const chat = workspace.chats[index]
   if (chat?.turnStartedAt == null || chat.status === 'idle' || chat.status === 'error') return null
+
+  return <TurnClock chat={chat} startedAt={chat.turnStartedAt} index={index} />
+}
+
+function TurnClock({
+  chat,
+  startedAt,
+  index
+}: {
+  readonly chat: WorkspaceChat
+  readonly startedAt: string
+  readonly index: number
+}): React.JSX.Element {
+  const { t } = useTranslation()
+  const now = useNow()
 
   return (
     <span role="timer" className="text-ink-soft flex shrink-0 items-center px-2 tabular-nums">
       {t('statusBar.turn', {
         chat: chatName(t, chat, index + 1),
-        elapsed: formatDuration(now - Date.parse(chat.turnStartedAt), {
+        elapsed: formatDuration(now - Date.parse(startedAt), {
           minutes: t('usage.minutes'),
           seconds: t('usage.seconds')
         })

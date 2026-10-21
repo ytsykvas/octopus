@@ -380,6 +380,25 @@ describe('the other projects the status bar counts', () => {
     })
   })
 
+  // The fast clock is for the open project's rows, which stop spinning the
+  // moment the checks are done. A watched project has no rows; its count can
+  // lag a minute, and a few repositories with long CI runs were a GraphQL
+  // query every 15 s each, all day.
+  it('keeps a watched project on the slow clock while its check runs', async () => {
+    vi.useFakeTimers()
+    answer(request({ checks: 'running' }))
+    renderHook(() => useBranchRequests(PLANNER, ['ledger']))
+    const asked = (id: string): number =>
+      vi.mocked(octopus().projects.pullRequests).mock.calls.filter(([of]) => of === id).length
+
+    await act(() => vi.advanceTimersByTimeAsync(RUNNING_INTERVAL_MS + 100))
+    expect(asked(PLANNER)).toBe(2)
+    expect(asked('ledger')).toBe(1)
+
+    await act(() => vi.advanceTimersByTimeAsync(50_000))
+    expect(asked('ledger')).toBe(2)
+  })
+
   // The caller builds the list every render; the same projects in a fresh
   // array must not start every read over.
   it('does not start over for the same projects in a fresh list', async () => {

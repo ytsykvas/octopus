@@ -44,7 +44,11 @@ const INTERVAL_MS = 60_000
  * The pull request tab reads on this clock, and the mark on a row is the same
  * fact: left at a minute, the row kept spinning for up to a minute after the tab
  * had already said the checks were done. Only while something is running, so a
- * project with nothing in flight costs what it did.
+ * project with nothing in flight costs what it did — and only for the open
+ * project, which is the one with rows on screen. A watched project has no
+ * row; its one reader is the status bar's count, which can lag a minute
+ * without harm, and a few repositories with long CI runs on this clock were a
+ * GraphQL query every 15 s each, all day.
  */
 export const RUNNING_INTERVAL_MS = 15_000
 
@@ -150,7 +154,10 @@ export function useBranchRequests(
       // GraphQL query a minute, and the one due is read on the way back.
       timers.set(
         id,
-        setVisibleTimeout(() => void read(id), running ? RUNNING_INTERVAL_MS : INTERVAL_MS)
+        setVisibleTimeout(
+          () => void read(id),
+          running && id === projectId ? RUNNING_INTERVAL_MS : INTERVAL_MS
+        )
       )
     }
 
@@ -161,7 +168,8 @@ export function useBranchRequests(
       for (const cancel of timers.values()) cancel()
     }
     // `nonce` is not read in here; it is what makes a refresh re-run the effect.
-  }, [watched, nonce])
+    // `projectId` is in `watched` already; listed for the pace it also sets.
+  }, [watched, nonce, projectId])
 
   const open = projectId === null ? undefined : answers.get(projectId)
   const byProject = useMemo(
