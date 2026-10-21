@@ -57,9 +57,19 @@ export function openedDirectories(): string[] {
   return vi.mocked(octopus().terminal.create).mock.calls.map(([spec]) => spec.cwd)
 }
 
-/** Sessions are requested asynchronously; waits until the count settles. */
+/**
+ * Sessions are requested asynchronously; waits until the count settles.
+ *
+ * The count changes in an effect, not in the DOM, so nothing wakes the wait
+ * but its own poll — and Testing Library's 50 ms between polls was most of
+ * what every run test cost. Polling is a comparison of a mock's call count,
+ * so it is made often.
+ */
 export async function sessionsOpened(count: number): Promise<void> {
-  await waitFor(() => {
-    expect(octopus().terminal.create).toHaveBeenCalledTimes(count)
-  })
+  await waitFor(
+    () => {
+      expect(octopus().terminal.create).toHaveBeenCalledTimes(count)
+    },
+    { interval: 5 }
+  )
 }

@@ -862,6 +862,11 @@ describe('the real CLI runner', () => {
 
   it('starts from the home directory by default', async () => {
     const binary = await script(PWD_AND_ARGS)
+    // The suite's `HOME` is a scratch directory nothing creates on purpose
+    // (`vitest.shared.ts`); it existed only when another file's worker had
+    // made it first, and `spawn` reports a missing working directory as the
+    // binary missing — `ENOENT` on the script just written.
+    await mkdir(homedir(), { recursive: true })
 
     const { stdout } = await pluginCli({ binary })(['plugin'])
 
