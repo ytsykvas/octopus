@@ -90,10 +90,20 @@ interface Session {
   readonly target: WebContents
   /** Whose it is, kept because `main` cannot work it out from a spec. */
   readonly owner: TerminalOwner
+  /** A tab's shell, started with no command — `buildTerminalArgv`'s own test. */
+  readonly bareShell: boolean
 }
 
 export class TerminalManager {
   private readonly sessions = new Map<TerminalId, Session>()
+  /**
+   * Disposals still waiting for their group to empty.
+   *
+   * A session leaves `sessions` the moment it is disposed, so a quit asked for
+   * within the grace of a Stop, a closed window or a reload found nothing to
+   * wait for, and left the stopped run's child behind with its port.
+   */
+  private readonly ending = new Set<Promise<void>>()
   private nextId = 1
 
   /**
@@ -183,7 +193,12 @@ export class TerminalManager {
       target.send('terminal:exit', { id, exitCode: signal ? null : exitCode })
     })
 
-    this.sessions.set(id, { pty, target, owner: spec.owner })
+    this.sessions.set(id, {
+      pty,
+      target,
+      owner: spec.owner,
+      bareShell: spec.command.length === 0
+    })
     return id
   }
 
@@ -214,6 +229,14 @@ export class TerminalManager {
    * that way — while SIGTERM is the shutdown it cleans up after, pid file
    * included.
    *
+   * A bare shell — a tab — is the exception, and gets the hangup at once. An
+   * interactive zsh ignores SIGTERM outright: sent one, every tab sat out the
+   * whole grace, which a quit waiting on its terminals turned into two seconds
+   * added to every quit. The hangup is what closing any terminal sends, and
+   * what the shell answers by hanging up its own jobs. The price is a server
+   * somebody started in a tab with `exec`: it is the shell's pid, gets the
+   * hangup rather than SIGTERM, and is killed with its pid file in place.
+   *
    * Whatever ignores SIGTERM is hung up on once the grace is over, and the
    * whole group is killed `HANGUP_MS` later. Both wait: where a run script
    * `exec`s into its server that server *is* this pid, and anything stronger
@@ -230,7 +253,8 @@ export class TerminalManager {
     const { pty } = session
     this.sessions.delete(id)
 
-    this.signalGroup(pty.pid, 'SIGTERM')
+    if (session.bareShell) pty.kill()
+    else this.signalGroup(pty.pid, 'SIGTERM')
 
     /*
      * Answers when the group has gone, not when it was signalled — nor when
@@ -243,7 +267,7 @@ export class TerminalManager {
      * SIGTERM stayed behind with the port, and the stop answered in a
      * millisecond. The only thing that knows when to stop waiting is here.
      */
-    return new Promise((resolve) => {
+    const ending = new Promise<void>((resolve) => {
       let shellGone = false
       let done = false
       let poll: ReturnType<typeof setTimeout> | undefined
@@ -284,6 +308,10 @@ export class TerminalManager {
         settle()
       })
     })
+
+    this.ending.add(ending)
+    void ending.then(() => this.ending.delete(ending))
+    return ending
   }
 
   /** Signals the group a session's shell leads, which may have ended since. */
@@ -323,9 +351,17 @@ export class TerminalManager {
     await Promise.all(theirs.map((id) => this.dispose(id)))
   }
 
-  /** Kills every session — called when the application quits. */
-  disposeAll(): void {
+  /**
+   * Kills every session — called when the application quits.
+   *
+   * Every signal goes out before the first `await`, and the answer comes once
+   * every group has gone, those already being stopped included: a quit that
+   * did not wait exited long before the kill was due, and a run's child that
+   * ignored SIGTERM outlived the application.
+   */
+  async disposeAll(): Promise<void> {
     for (const id of [...this.sessions.keys()]) void this.dispose(id)
+    await Promise.all(this.ending)
   }
 
   /**

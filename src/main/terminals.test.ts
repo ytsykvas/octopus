@@ -174,6 +174,18 @@ const SPEC = {
   rows: 24
 }
 
+/**
+ * A run: a command rather than a shell to type into.
+ *
+ * What the stopping order is written for — a script that may `exec` into its
+ * server, which has a SIGTERM handler and a pid file. A tab is ended otherwise.
+ */
+const RUN = {
+  ...SPEC,
+  owner: { workspaceId: null, purpose: 'run' as const },
+  command: ['bin/dev']
+}
+
 describe('creating a session', () => {
   it('starts one pty and hands back an id', () => {
     const id = manager.create(SPEC, renderer as never)
@@ -410,7 +422,7 @@ describe('exit', () => {
 describe('disposal', () => {
   // An orphaned pty keeps a shell process alive after its window is gone.
   it('ends the session and forgets it', () => {
-    const id = manager.create(SPEC, renderer as never)
+    const id = manager.create(RUN, renderer as never)
     void manager.dispose(id)
 
     expect(signals).toEqual([[-(spawned[0]?.pid ?? 0), 'SIGTERM']])
@@ -426,7 +438,7 @@ describe('disposal', () => {
    * with "a server is already running".
    */
   it('signals the whole process group, not just the shell', () => {
-    const id = manager.create(SPEC, renderer as never)
+    const id = manager.create(RUN, renderer as never)
     const pid = spawned[0]?.pid ?? 0
 
     void manager.dispose(id)
@@ -446,7 +458,7 @@ describe('disposal', () => {
   it('does not hang up in the same tick as the graceful signal', () => {
     vi.useFakeTimers()
     try {
-      const id = manager.create(SPEC, renderer as never)
+      const id = manager.create(RUN, renderer as never)
 
       void manager.dispose(id)
 
@@ -461,7 +473,7 @@ describe('disposal', () => {
   it('hangs up on the shell once the grace is over, then kills the group', () => {
     vi.useFakeTimers()
     try {
-      const id = manager.create(SPEC, renderer as never)
+      const id = manager.create(RUN, renderer as never)
       const pid = spawned[0]?.pid ?? 0
       void manager.dispose(id)
 
@@ -490,7 +502,7 @@ describe('disposal', () => {
   it('lets a shell that leaves on the hangup go without killing its group', async () => {
     vi.useFakeTimers()
     try {
-      const id = manager.create(SPEC, renderer as never)
+      const id = manager.create(RUN, renderer as never)
       const answer = manager.dispose(id)
 
       await vi.advanceTimersByTimeAsync(2_000)
@@ -507,7 +519,7 @@ describe('disposal', () => {
   it('leaves a session that shut down politely alone', () => {
     vi.useFakeTimers()
     try {
-      const id = manager.create(SPEC, renderer as never)
+      const id = manager.create(RUN, renderer as never)
       void manager.dispose(id)
 
       spawned[0]?.end({ exitCode: 0 })
@@ -528,7 +540,7 @@ describe('disposal', () => {
   it('waits for a member that outlives the shell, and kills it at the grace', async () => {
     vi.useFakeTimers()
     try {
-      const id = manager.create(SPEC, renderer as never)
+      const id = manager.create(RUN, renderer as never)
       const pty = spawned[0]
       if (!pty) throw new Error('nothing spawned')
       pty.lingering = true
@@ -557,7 +569,7 @@ describe('disposal', () => {
   it('answers once a lingering member leaves on its own', async () => {
     vi.useFakeTimers()
     try {
-      const id = manager.create(SPEC, renderer as never)
+      const id = manager.create(RUN, renderer as never)
       const pty = spawned[0]
       if (!pty) throw new Error('nothing spawned')
       pty.lingering = true
@@ -584,7 +596,7 @@ describe('disposal', () => {
       const stubborn = new TerminalManager((pid, signal) => {
         if (signal !== 0) signals.push([pid, signal])
       })
-      const id = stubborn.create(SPEC, renderer as never)
+      const id = stubborn.create(RUN, renderer as never)
 
       let ended = false
       const answer = stubborn.dispose(id).then(() => {
@@ -611,7 +623,7 @@ describe('disposal', () => {
    * only wait if something tells it when the waiting is over.
    */
   it('answers when the session has gone, not when it was signalled', async () => {
-    const id = manager.create(SPEC, renderer as never)
+    const id = manager.create(RUN, renderer as never)
 
     let ended = false
     const answer = manager.dispose(id).then(() => {
@@ -635,7 +647,7 @@ describe('disposal', () => {
   it('answers once the group has been killed for ignoring SIGTERM', async () => {
     vi.useFakeTimers()
     try {
-      const id = manager.create(SPEC, renderer as never)
+      const id = manager.create(RUN, renderer as never)
       const answer = manager.dispose(id)
 
       vi.advanceTimersByTime(5_000)
@@ -653,8 +665,8 @@ describe('disposal', () => {
    */
   it('ends one window\u2019s sessions and leaves another\u2019s alone', async () => {
     const other = target()
-    const mine = manager.create(SPEC, renderer as never)
-    const theirs = manager.create(SPEC, other as never)
+    const mine = manager.create(RUN, renderer as never)
+    const theirs = manager.create(RUN, other as never)
 
     const ended = manager.disposeFor(renderer as never)
     spawned[0]?.end({ exitCode: 0 })
@@ -669,7 +681,7 @@ describe('disposal', () => {
   })
 
   it('has nothing to end for a window with no sessions', async () => {
-    manager.create(SPEC, renderer as never)
+    manager.create(RUN, renderer as never)
 
     await expect(manager.disposeFor(target() as never)).resolves.toBeUndefined()
     expect(manager.size).toBe(1)
@@ -681,7 +693,7 @@ describe('disposal', () => {
     const throwing = new TerminalManager(() => {
       throw new Error('ESRCH')
     })
-    const id = throwing.create(SPEC, renderer as never)
+    const id = throwing.create(RUN, renderer as never)
 
     expect(() => {
       void throwing.dispose(id)
@@ -697,7 +709,7 @@ describe('disposal', () => {
       const throwing = new TerminalManager(() => {
         throw new Error('ESRCH')
       })
-      const answer = throwing.dispose(throwing.create(SPEC, renderer as never))
+      const answer = throwing.dispose(throwing.create(RUN, renderer as never))
 
       await vi.advanceTimersByTimeAsync(2_500)
       spawned[0]?.end({ exitCode: 0, signal: 9 })
@@ -709,7 +721,7 @@ describe('disposal', () => {
   })
 
   it('disposing twice is harmless', () => {
-    const id = manager.create(SPEC, renderer as never)
+    const id = manager.create(RUN, renderer as never)
     void manager.dispose(id)
 
     expect(() => {
@@ -727,8 +739,8 @@ describe('disposal', () => {
   // cleanup in Terminal.tsx never runs. On macOS the app outlives its last
   // window, and the shell would keep running with nothing to talk to.
   it('kills the sessions of a window that closes', () => {
-    manager.create(SPEC, renderer as never)
-    manager.create(SPEC, renderer as never)
+    manager.create(RUN, renderer as never)
+    manager.create(RUN, renderer as never)
 
     renderer.close()
 
@@ -741,9 +753,9 @@ describe('disposal', () => {
    * lives all day; after ten of them Node warned, and the count kept climbing.
    */
   it('takes its listener off the window when the session ends', () => {
-    manager.create(SPEC, renderer as never)
-    manager.create(SPEC, renderer as never)
-    const stopped = manager.create(SPEC, renderer as never)
+    manager.create(RUN, renderer as never)
+    manager.create(RUN, renderer as never)
+    const stopped = manager.create(RUN, renderer as never)
     expect(renderer.listening()).toBe(3)
 
     void manager.dispose(stopped)
@@ -754,8 +766,8 @@ describe('disposal', () => {
 
   it('leaves the sessions of other windows alone', () => {
     const other = target()
-    manager.create(SPEC, renderer as never)
-    manager.create(SPEC, other as never)
+    manager.create(RUN, renderer as never)
+    manager.create(RUN, other as never)
 
     renderer.close()
 
@@ -764,13 +776,126 @@ describe('disposal', () => {
   })
 
   it('kills every session when the application quits', () => {
-    manager.create(SPEC, renderer as never)
-    manager.create(SPEC, renderer as never)
+    manager.create(RUN, renderer as never)
+    manager.create(RUN, renderer as never)
 
-    manager.disposeAll()
+    void manager.disposeAll()
 
     expect(signals.map(([pid]) => pid)).toEqual(spawned.map((pty) => -pty.pid))
     expect(manager.size).toBe(0)
+  })
+
+  /*
+   * Reproduced: a quit sent SIGTERM and exited 50 ms later, long before the
+   * hangup and the kill were due, and a run's child that ignored both was left
+   * holding its port after the application had gone. The quit can wait only on
+   * something that says when every group is empty.
+   */
+  it('answers for the quit once every group has gone', async () => {
+    vi.useFakeTimers()
+    try {
+      manager.create(RUN, renderer as never)
+      manager.create(RUN, renderer as never)
+      const [polite, stubborn] = spawned
+      if (!polite || !stubborn) throw new Error('nothing spawned')
+      stubborn.lingering = true
+
+      let ended = false
+      const answer = manager.disposeAll().then(() => {
+        ended = true
+      })
+      polite.end({ exitCode: 0 })
+      stubborn.end({ exitCode: 0 })
+
+      await vi.advanceTimersByTimeAsync(2_400)
+      expect(ended).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(100)
+      await answer
+      expect(stubborn.groupAlive()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /*
+   * Found in review: a session leaves the list the moment it is stopped, so a
+   * quit within the grace of a Stop found nothing to wait for and left in 50 ms
+   * — the stopped run's child with it, still holding its port.
+   */
+  it('waits for the quit on a run stopped just before it', async () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(RUN, renderer as never)
+      const pty = spawned[0]
+      if (!pty) throw new Error('nothing spawned')
+      pty.lingering = true
+
+      void manager.dispose(id)
+      pty.end({ exitCode: 0 })
+
+      let ended = false
+      const answer = manager.disposeAll().then(() => {
+        ended = true
+      })
+
+      await vi.advanceTimersByTimeAsync(2_400)
+      expect(ended).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(100)
+      await answer
+      expect(pty.groupAlive()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+// Why a tab is hung up on rather than sent SIGTERM is on `dispose`.
+describe('disposal of a tab', () => {
+  it('hangs up on the shell at once, and sends its group nothing', () => {
+    const id = manager.create(SPEC, renderer as never)
+
+    void manager.dispose(id)
+
+    expect(spawned[0]?.killed).toBe(true)
+    expect(signals).toEqual([])
+  })
+
+  it('answers as soon as the shell has left on the hangup', async () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      let ended = false
+      const answer = manager.dispose(id).then(() => {
+        ended = true
+      })
+
+      spawned[0]?.end({ exitCode: 0, signal: 1 })
+      await vi.advanceTimersByTimeAsync(0)
+      await answer
+
+      expect(ended).toBe(true)
+      expect(signals).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The rest of the order still stands for a shell that did not go.
+  it('kills the group of a shell that ignored the hangup', () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      const pid = spawned[0]?.pid ?? 0
+      void manager.dispose(id)
+
+      vi.advanceTimersByTime(2_500)
+
+      expect(signals).toEqual([[-pid, 'SIGKILL']])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

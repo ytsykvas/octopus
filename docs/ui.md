@@ -1940,6 +1940,17 @@ rather than the write: a filesystem write in flight cannot be called back, and
 transcript is worse than a slow quit up to about a second and worse than nothing
 after it, which is where the number comes from rather than from any measurement.
 
+**It waits for the terminals too, and only a stubborn run makes that longer.**
+They are signalled first and synchronously, and the second quit also waits until every process group has emptied — a run
+stopped a moment before the quit included, which leaves the list at once and
+was not waited for at first. Signalling is not the same as having
+gone: a quit that left 50 ms after the SIGTERM went long before the kill was
+due, and a run's child that ignored SIGTERM kept its port after the app had
+gone. Tabs are hung up on at once, and a polite server leaves on SIGTERM, so an
+ordinary quit stays as fast as it was (measured at 52 ms with a tab and a server
+open). A run that ignores SIGTERM holds it for 2.5 s, until its group is killed,
+and `dispose`'s own ceiling bounds the wait at 3.5 s.
+
 **About says how much the pasted images weigh, with a way to empty them.** It is
 the one place octopus quietly uses disk: nothing removes a pasted image on its
 own, and nothing should — a path in a sent message is a promise the file is

@@ -188,9 +188,8 @@ async function start(): Promise<void> {
     app,
     // First and synchronously: each holds a pseudo-terminal, and one not
     // disposed outlives the application whatever happens after this line.
-    () => {
-      terminals.disposeAll()
-    },
+    // Then waited for, since a group is gone only once it has emptied.
+    () => terminals.disposeAll(),
     () => service.closeChats()
   )
 

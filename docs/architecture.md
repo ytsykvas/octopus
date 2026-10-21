@@ -116,6 +116,13 @@ cancelled the moment the group has emptied. The hangup used to be the last step,
 and a child ignoring both signals outlived the stop with its port; SIGKILL in its
 place, a tab closed with `npm run dev &` in it left the server running.
 
+**A tab is hung up on at once.** An interactive zsh ignores SIGTERM outright,
+so a tab sent one sat out the whole two-second grace. The hangup is what closing
+any terminal sends, and what the shell answers by hanging up its jobs. The rest
+of the order still applies to a shell that does not go. The price is a server
+somebody started in a tab with `exec`: it is the shell's pid, gets the hangup
+rather than SIGTERM, and is killed with its pid file in place.
+
 **Ending one answers when its group has ended**, not when it was asked to, and
 not when its shell went. A restart is a disposal and a start with nothing in
 between, and a dev server does not release its port the instant it is told to —

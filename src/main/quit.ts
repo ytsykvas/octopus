@@ -12,7 +12,7 @@ export interface QuittingApp {
 }
 
 /**
- * Holds the first quit until `work` settles, then quits again.
+ * Holds the first quit until `before` and `work` have settled, then quits again.
  *
  * `will-quit` is synchronous, so waiting means the usual dance: refuse the first
  * pass, quit again once the promise settles, and a flag so the second pass falls
@@ -29,11 +29,14 @@ export interface QuittingApp {
  * A launcher restarted onto it lost the single-instance lock to the old build.
  *
  * `before` runs first and synchronously, for what must go whatever happens
- * after this line — the terminals, each of which holds a pseudo-terminal.
+ * after this line — the terminals, each of which holds a pseudo-terminal. What
+ * it returns is waited for beside `work`: signalling the terminals is not the
+ * same as their having gone, and a run's child that ignored SIGTERM outlived a
+ * quit that left before its kill was due.
  */
 export function quitAfter(
   app: QuittingApp,
-  before: () => void,
+  before: () => Promise<unknown>,
   work: () => Promise<unknown>
 ): void {
   let leaving = false
@@ -43,15 +46,14 @@ export function quitAfter(
 
     leaving = true
     event.preventDefault()
-    before()
+    const first = before()
 
-    const again = (): void => {
+    // Settled rather than fulfilled, either way: a write that failed is no
+    // reason to stay open, and `finally` would hand its rejection on to nobody.
+    void Promise.allSettled([first, work()]).then(() => {
       setTimeout(() => {
         app.quit()
       }, 0)
-    }
-    // Either way: a write that failed is no reason to stay open, and `finally`
-    // would hand its rejection on to nobody.
-    void work().then(again, again)
+    })
   })
 }
