@@ -6,6 +6,8 @@ import '@xterm/xterm/css/xterm.css'
 
 import type { TerminalOwner } from '@core/terminal.js'
 
+import { holdSelectionWhilePaused } from './xtermPause.js'
+
 /**
  * The design tokens, as values.
  *
@@ -148,6 +150,8 @@ export function Terminal({
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(container)
+    // So a terminal out of sight stops drawing its output — see the module.
+    holdSelectionWhilePaused(term)
 
     /*
      * `fit.fit()`, except in a box with a width and no height — the folded

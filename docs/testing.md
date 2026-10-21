@@ -261,8 +261,11 @@ vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: false, error: 'n
 asserts on styling breaks on every refactor while proving nothing. This is what
 makes a 100% threshold on UI survivable.
 
-Native things are stubbed: xterm.js measures glyphs against a canvas jsdom does
-not have, and `node-pty` spawns a real shell.
+Native things are stubbed: `node-pty` spawns a real shell. xterm.js is stubbed
+in `Terminal.test.tsx`, which is about the component, but six suites run the
+real one — it opens and draws its DOM rows in jsdom. jsdom has no
+IntersectionObserver, so a real xterm there never pauses; `xtermPause.test.ts`
+stubs one to say when the screen leaves and comes back.
 
 **jsdom lays nothing out**, which bites in three places and always the same way
 — a measurement comes back as zero, or the method is missing entirely, and the

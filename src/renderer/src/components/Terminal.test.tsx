@@ -5,6 +5,7 @@ import type { TerminalExit, TerminalOutput } from '@core/terminal.js'
 import type { Result } from '../../../preload/index.js'
 
 import { Terminal } from './Terminal.js'
+import { holdSelectionWhilePaused } from './xtermPause.js'
 
 /**
  * xterm.js measures glyphs against a real canvas, which jsdom does not have —
@@ -35,8 +36,12 @@ const { FakeXTerm, FakeFitAddon } = vi.hoisted(() => {
       // Addons are the real emulator's business; nothing here needs them.
     }
 
+    /** Whether `open` has run, which the pause guard must come after. */
+    opened = false
+
     open(): void {
       // Attaching to the DOM is what a canvas renderer would do.
+      this.opened = true
     }
 
     write(data: string): void {
@@ -79,6 +84,8 @@ const { FakeXTerm, FakeFitAddon } = vi.hoisted(() => {
 
 vi.mock('@xterm/xterm', () => ({ Terminal: FakeXTerm }))
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
+// Its own suite runs it against the real xterm; here only the call is asked about.
+vi.mock('./xtermPause.js', () => ({ holdSelectionWhilePaused: vi.fn(() => false) }))
 
 // The class itself lives inside the hoisted factory, which runs before this
 // module's body; only its instance type can be named out here.
@@ -162,6 +169,24 @@ async function sessionStarted(): Promise<void> {
 }
 
 describe('Terminal', () => {
+  /*
+   * A terminal out of sight would otherwise go on drawing every line it logs.
+   * After `open`, because the guard wraps a service xterm only builds there.
+   */
+  it('holds back selection redraws while it is paused, once it is open', () => {
+    let openedFirst = false
+    vi.mocked(holdSelectionWhilePaused).mockImplementationOnce((term) => {
+      openedFirst = (term as unknown as { opened: boolean }).opened
+      return true
+    })
+
+    render(<Terminal cwd="/tmp/planner/anna" />)
+
+    expect(holdSelectionWhilePaused).toHaveBeenCalledOnce()
+    expect(holdSelectionWhilePaused).toHaveBeenCalledWith(emulator())
+    expect(openedFirst).toBe(true)
+  })
+
   it('opens a session in the directory it was given', async () => {
     render(<Terminal cwd="/tmp/planner/anna" />)
 

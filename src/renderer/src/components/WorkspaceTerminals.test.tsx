@@ -55,6 +55,28 @@ describe('WorkspaceTerminals', () => {
     expect(octopus().terminal.dispose).not.toHaveBeenCalled()
   })
 
+  /*
+   * Kept laid out, so its size survives, and moved out of a box that clips, so
+   * xterm's IntersectionObserver sees it go and stops drawing. With `invisible`
+   * a hidden terminal went on drawing a dev server's log; without the clip it
+   * would land on the column beside the pane and go on being drawn there.
+   * jsdom lays nothing out, so the classes are what can be asserted.
+   */
+  it('moves the terminal of a workspace off screen while another is shown', async () => {
+    const { container, rerender } = render(
+      <WorkspaceTerminals visible workspaces={[anna, bob]} activeId={anna.id} />
+    )
+    await sessionsOpened(1)
+    rerender(<WorkspaceTerminals visible workspaces={[anna, bob]} activeId={bob.id} />)
+    await sessionsOpened(2)
+
+    const root = container.firstElementChild
+    const [annas, bobs] = [...(root?.children ?? [])]
+    expect(root).toHaveClass('overflow-clip')
+    expect(annas).toHaveClass('offstage')
+    expect(bobs).not.toHaveClass('offstage')
+  })
+
   it('does not open a second terminal when a workspace is revisited', async () => {
     const { rerender } = render(
       <WorkspaceTerminals visible workspaces={[anna, bob]} activeId={anna.id} />

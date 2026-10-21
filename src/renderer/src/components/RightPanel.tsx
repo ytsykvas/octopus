@@ -1057,7 +1057,11 @@ export function RightPanel({
               columns. Refitting when the pane opens is already wired and is not
               enough on its own: the pty was created at the wrong width and the
               program running in it has already wrapped its output to it, which
-              is exactly the mangled log somebody opens this pane to read. */}
+              is exactly the mangled log somebody opens this pane to read.
+
+              Its runners also go offstage while it is folded (`shown`): a box
+              of no height still counts as on screen to xterm, so a fast build
+              running here folded — the ordinary case — went on being drawn. */}
             <div
               aria-hidden={!buildOpen}
               className={
@@ -1067,6 +1071,7 @@ export function RightPanel({
               <WorkspaceScripts
                 workspaces={scriptable}
                 activeId={activeWorkspaceId}
+                shown={buildOpen}
                 kind="setup"
                 scriptFor={(id) => scripts.get(id)?.scripts.setup ?? null}
                 projectFor={projectFor}
