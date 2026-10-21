@@ -788,11 +788,13 @@
   }
 
   /*
-   * A terminal kept mounted but not on screen: another workspace's, or the
-   * folded build half.
+   * A terminal kept mounted but not on screen: another workspace's, the folded
+   * build half — or everything around one that a run can start in unseen, the
+   * Scripts tab behind another tab and the folded right pane.
    *
    * Still laid out, so the fit addon keeps the size the pty was made at — a box
-   * that measures nothing would have it resized to nothing. And moved out of
+   * that measures nothing would have it resized to nothing, and a terminal
+   * created in one starts at xterm's 80 columns. And moved out of
    * the box that clips it, because xterm stops drawing only when its
    * IntersectionObserver says the screen has gone: `visibility` alone does not
    * end an intersection, and neither does a box of no height, so a hidden dev

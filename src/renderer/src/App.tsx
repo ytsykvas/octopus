@@ -988,7 +988,9 @@ export function App(): React.JSX.Element {
         </span>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {/* Positioned for the right pane, which folds offstage against this row
+          and so keeps the height it has here. */}
+      <div className="relative flex min-h-0 flex-1">
         {/* Tabs and workspaces are one column, so the footer — limits, Settings
           and the fold — can span the corner of the window rather than be inset
           by the width of the tab strip. */}
@@ -1134,9 +1136,9 @@ export function App(): React.JSX.Element {
           )}
         </main>
 
-        {/* Always mounted, and hidden when folded: the terminals in it and the
-            servers running there belong to their workspaces, and unmounting
-            the pane used to end every one of them. */}
+        {/* Always mounted, and moved offstage when folded: the terminals in it
+            and the servers running there belong to their workspaces, and
+            unmounting the pane used to end every one of them. */}
         <RightPanel
           open={rightPanelOpen}
           onOpenChange={(open) => {
