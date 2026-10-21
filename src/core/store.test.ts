@@ -79,6 +79,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     status: 'idle',
     port: 3100,
     createdAt: '2026-08-07T12:00:00.000Z',
+    branchSince: null,
     envProfile: null,
     writers: {},
     notes: '',
@@ -1412,6 +1413,21 @@ describe('the env file a workspace last wrote to', () => {
     )
 
     expect((await loadState(file)).workspaces[0]?.envFileApplied).toBeNull()
+  })
+})
+
+describe('when a workspace came onto its branch', () => {
+  it('loads a workspace written before it was recorded, as since its creation', async () => {
+    const older: Record<string, unknown> = { ...makeWorkspace() }
+    delete older.branchSince
+
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, projects: [project], workspaces: [older], chats: [] }),
+      'utf8'
+    )
+
+    expect((await loadState(file)).workspaces[0]?.branchSince).toBeNull()
   })
 })
 

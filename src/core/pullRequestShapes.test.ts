@@ -4,6 +4,8 @@ import {
   type BranchRequest,
   BranchListSchema,
   commentKey,
+  openedFor,
+  ownRequests,
   pullRequestStanding,
   runsToRerun,
   type DetailPayload,
@@ -709,12 +711,24 @@ describe('every branch of a project at once', () => {
     number: 12,
     state: 'OPEN',
     url: 'https://github.com/o/p/pull/12',
+    createdAt: '2026-02-01T00:00:00Z',
     statusCheckRollup: [PASSED],
     isDraft: false,
     mergeable: 'MERGEABLE',
     mergeStateStatus: 'CLEAN',
     reviewDecision: '',
     ...overrides
+  })
+
+  it("keeps a workspace's own requests and every branch no workspace is on", () => {
+    const payload = BranchListSchema.parse([
+      entry({ headRefName: 'octopus/anna', number: 1, createdAt: '2026-10-22T00:00:00Z' }),
+      entry({ headRefName: 'octopus/anna', number: 2, createdAt: '2026-10-01T00:00:00Z' }),
+      entry({ headRefName: 'octopus/bo', number: 3, createdAt: '2026-10-01T00:00:00Z' })
+    ])
+    const anna = { branch: 'octopus/anna', createdAt: '2026-10-21T00:00:00Z', branchSince: null }
+
+    expect(ownRequests(payload, [anna]).map((request) => request.number)).toEqual([1, 3])
   })
 
   it('summarises each branch down to what a row can say', () => {
@@ -832,5 +846,39 @@ describe('where an open request stands', () => {
     ['a state GitHub would block', { mergeState: 'blocked' }]
   ] as const)('is pending with %s', (_name, overrides) => {
     expect(pullRequestStanding(request(overrides))).toEqual({ kind: 'pending' })
+  })
+})
+
+describe('whose request it is', () => {
+  const owner = {
+    branch: 'octopus/anna',
+    createdAt: '2026-10-21T12:38:54.241Z',
+    branchSince: null
+  }
+  const opened = (createdAt: string): { createdAt: string } => ({ createdAt })
+
+  it("is not the workspace's when it was opened before the workspace began", () => {
+    expect(openedFor(opened('2026-10-20T15:52:20Z'), owner)).toBe(false)
+  })
+
+  it("is the workspace's from the moment it began", () => {
+    expect(openedFor(opened(owner.createdAt), owner)).toBe(true)
+  })
+
+  it("allows five minutes for this machine's clock running ahead of GitHub's", () => {
+    expect(openedFor(opened('2026-10-21T12:34:54Z'), owner)).toBe(true)
+    expect(openedFor(opened('2026-10-21T12:32:54Z'), owner)).toBe(false)
+  })
+
+  it('compares instants, not strings', () => {
+    expect(openedFor(opened('2026-10-21T12:33:54Z'), owner)).toBe(false)
+    expect(openedFor(opened('2026-10-21T12:33:55Z'), owner)).toBe(true)
+  })
+
+  it('counts from the rename that brought the workspace onto its branch', () => {
+    const renamed = { ...owner, branchSince: '2026-10-25T09:00:00.000Z' }
+
+    expect(openedFor(opened('2026-10-22T10:00:00Z'), owner)).toBe(true)
+    expect(openedFor(opened('2026-10-22T10:00:00Z'), renamed)).toBe(false)
   })
 })

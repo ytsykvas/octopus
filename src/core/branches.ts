@@ -33,6 +33,11 @@ export function shortBranchName(branch: string): string {
     : branch
 }
 
+/** Prepends the `origin/` that `shortBranchName` strips. */
+export function remoteBranchName(branch: string): string {
+  return `${DEFAULT_REMOTE_PREFIX}${branch}`
+}
+
 /** What a new install names its branches after, and the fallback for a prefix with nothing usable in it. */
 export const DEFAULT_BRANCH_PREFIX = 'octopus'
 

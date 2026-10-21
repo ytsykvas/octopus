@@ -328,6 +328,15 @@ export async function resolveRef(exec: GitExec, ref: string): Promise<string | n
   }
 }
 
+/** The remote-tracking branch a local one tracks, such as `origin/x`, or null where it has none. */
+export async function upstreamOf(exec: GitExec, branch: string): Promise<string | null> {
+  try {
+    return (await exec(['rev-parse', '--abbrev-ref', `${branch}@{upstream}`])).trim()
+  } catch {
+    return null
+  }
+}
+
 /** Whether a local branch with this name exists. */
 export async function branchExists(exec: GitExec, branch: string): Promise<boolean> {
   return refExists(exec, `refs/heads/${branch}`)

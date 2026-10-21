@@ -30,6 +30,7 @@ import {
   setReviewThreadResolved,
   ThreadIdSchema
 } from './pullRequests.js'
+import type { BranchOwner } from './pullRequestShapes.js'
 
 const run = promisify(execFile)
 
@@ -63,8 +64,20 @@ function fakeGh(answers: Partial<Record<string, string | Error>> = {}): {
   return { gh, calls }
 }
 
+/** When the fixtures' workspace began, and when their requests were opened — after it. */
+const BEGAN = '2026-01-01T00:00:00Z'
+const OPENED = '2026-02-01T00:00:00Z'
+
+const owner = (branch: string): BranchOwner => ({ branch, createdAt: BEGAN, branchSince: null })
+
 const OPEN_PR = JSON.stringify([
-  { number: 7, state: 'OPEN', title: 'Rename the thing', url: 'https://github.com/o/p/pull/7' }
+  {
+    number: 7,
+    state: 'OPEN',
+    title: 'Rename the thing',
+    url: 'https://github.com/o/p/pull/7',
+    createdAt: OPENED
+  }
 ])
 
 let dir: string
@@ -115,7 +128,7 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh()
 
-    const view = await readPullRequest(branch, 'main', gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', gh, workExec())
 
     expect(view.request).toBeNull()
   })
@@ -129,7 +142,7 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     const { gh, calls } = fakeGh()
 
-    await readPullRequest(branch, 'main', gh, workExec())
+    await readPullRequest(owner(branch), 'main', gh, workExec())
 
     expect(calls[0]).toEqual([
       'pr',
@@ -141,7 +154,7 @@ describe('reading a branch', () => {
       '--limit',
       '1',
       '--json',
-      'number,state,title,url'
+      'number,state,title,url,createdAt'
     ])
   })
 
@@ -149,7 +162,7 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh({ list: OPEN_PR })
 
-    const view = await readPullRequest(branch, 'main', gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', gh, workExec())
 
     expect(view.request).toEqual({
       number: 7,
@@ -161,17 +174,40 @@ describe('reading a branch', () => {
 
   it('lowers the state `gh` shouts', async () => {
     const branch = await branchWithCommit()
-    const merged = JSON.stringify([{ number: 7, state: 'MERGED', title: 't', url: 'u' }])
+    const merged = JSON.stringify([
+      { number: 7, state: 'MERGED', title: 't', url: 'u', createdAt: OPENED }
+    ])
 
-    const view = await readPullRequest(branch, 'main', fakeGh({ list: merged }).gh, workExec())
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: merged }).gh,
+      workExec()
+    )
 
     expect(view.request?.state).toBe('merged')
+  })
+
+  it("takes a request opened before the workspace began as somebody else's", async () => {
+    const branch = await branchWithCommit()
+    const earlier = JSON.stringify([
+      { number: 7, state: 'MERGED', title: 't', url: 'u', createdAt: '2025-12-01T00:00:00Z' }
+    ])
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: earlier }).gh,
+      workExec()
+    )
+
+    expect(view.request).toBeNull()
   })
 
   it('counts what the branch has that the base does not', async () => {
     const branch = await branchWithCommit()
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
 
     expect(view.ahead).toBe(1)
   })
@@ -179,7 +215,7 @@ describe('reading a branch', () => {
   // Nothing to open is the ordinary state of a branch nobody has worked in yet,
   // and the pane says so rather than offering a button that would fail.
   it('counts nothing on a branch that has not moved', async () => {
-    const view = await readPullRequest('main', 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner('main'), 'main', fakeGh().gh, workExec())
 
     expect(view.ahead).toBe(0)
   })
@@ -189,7 +225,7 @@ describe('reading a branch', () => {
   it('counts nothing against a base that does not exist', async () => {
     const branch = await branchWithCommit()
 
-    const view = await readPullRequest(branch, 'no-such-branch', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner(branch), 'no-such-branch', fakeGh().gh, workExec())
 
     expect(view.ahead).toBe(0)
   })
@@ -200,7 +236,9 @@ describe('reading a branch', () => {
    * no way to produce it — which is the point of the guard being here at all.
    */
   it('counts nothing when git answers something that is not a number', async () => {
-    const view = await readPullRequest('b', 'main', fakeGh().gh, () => Promise.resolve('plenty'))
+    const view = await readPullRequest(owner('b'), 'main', fakeGh().gh, () =>
+      Promise.resolve('plenty')
+    )
 
     expect(view.ahead).toBe(0)
   })
@@ -215,7 +253,7 @@ describe('reading a branch', () => {
     const work = join(dir, 'work')
     await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: work })
 
-    const sent = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const sent = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
     expect(sent.ahead).toBe(1)
     expect(sent.unpushedCommits).toBe(0)
 
@@ -223,7 +261,7 @@ describe('reading a branch', () => {
     await run('git', ['add', '.'], { cwd: work })
     await run('git', [...IDENTITY, 'commit', '-q', '-m', 'more'], { cwd: work })
 
-    const behind = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const behind = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
     expect(behind.unpushedCommits).toBe(1)
   })
 
@@ -232,7 +270,7 @@ describe('reading a branch', () => {
   it('falls back to the count against the base where the remote has no copy', async () => {
     const branch = await branchWithCommit()
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
 
     expect(view.unpushedCommits).toBe(1)
   })
@@ -249,7 +287,7 @@ describe('reading a branch', () => {
     // What the server does on merge, leaving this clone's ref behind.
     await run('git', ['--git-dir', join(dir, 'origin.git'), 'branch', '-D', branch])
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
 
     // Both together: either alone still passes with the two left disagreeing.
     expect(view.pushed).toBe(false)
@@ -270,7 +308,7 @@ describe('reading a branch', () => {
     await run('git', ['branch', '--unset-upstream', branch], { cwd: work })
     await run('git', ['update-ref', '-d', `refs/remotes/origin/${branch}`], { cwd: work })
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
 
     expect(view.pushed).toBe(true)
     expect(view.unpushedCommits).toBe(0)
@@ -288,7 +326,7 @@ describe('reading a branch', () => {
         ? Promise.resolve(`${absent}\trefs/heads/${branch}\n`)
         : workExec()(args)
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, git)
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, git)
 
     expect(view.pushed).toBe(true)
     expect(view.unpushedCommits).toBeNull()
@@ -302,7 +340,7 @@ describe('reading a branch', () => {
     await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: work })
     await run('git', ['checkout', '-q', '-b', 'side'], { cwd: work })
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
 
     expect(view.unpushedCommits).toBeNull()
   })
@@ -318,7 +356,7 @@ describe('reading a branch', () => {
       return Promise.resolve('plenty')
     }
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, git)
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, git)
 
     expect(view.unpushedCommits).toBeNull()
   })
@@ -332,7 +370,7 @@ describe('reading a branch', () => {
     await run('git', ['push', '-q', 'origin', 'octopus/anna'], { cwd: work })
     await run('git', ['checkout', '-q', '-b', 'anna'], { cwd: work })
 
-    const view = await readPullRequest('anna', 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner('anna'), 'main', fakeGh().gh, workExec())
 
     expect(view.pushed).toBe(false)
   })
@@ -341,9 +379,9 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     const work = join(dir, 'work')
 
-    const before = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const before = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
     await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: work })
-    const after = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const after = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
 
     expect(before.pushed).toBe(false)
     expect(after.pushed).toBe(true)
@@ -355,7 +393,7 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     await run('git', ['remote', 'remove', 'origin'], { cwd: join(dir, 'work') })
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
 
     expect(view.pushed).toBe(false)
   })
@@ -364,7 +402,7 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     await writeFile(join(dir, 'work', 'b.txt'), 'two\n', 'utf8')
 
-    const view = await readPullRequest(branch, 'main', fakeGh().gh, workExec())
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec())
 
     expect(view.dirty).toBe(true)
   })
@@ -373,7 +411,7 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh({ list: new Error('gh: not logged in') })
 
-    await expect(readPullRequest(branch, 'main', gh, workExec())).rejects.toMatchObject({
+    await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
       code: 'notConnected'
     })
   })
@@ -382,7 +420,7 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh({ list: 'not json' })
 
-    await expect(readPullRequest(branch, 'main', gh, workExec())).rejects.toMatchObject({
+    await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
     })
   })
@@ -412,7 +450,7 @@ describe('reading a branch', () => {
 
     const { gh } = fakeGh({ list: 'not json' })
 
-    await expect(readPullRequest('b', 'main', gh, slowGit)).rejects.toMatchObject({
+    await expect(readPullRequest(owner('b'), 'main', gh, slowGit)).rejects.toMatchObject({
       code: 'listFailed'
     })
 
@@ -424,7 +462,7 @@ describe('reading a branch', () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh({ list: JSON.stringify([{ number: 'seven' }]) })
 
-    await expect(readPullRequest(branch, 'main', gh, workExec())).rejects.toMatchObject({
+    await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
     })
   })
@@ -1340,6 +1378,7 @@ describe('reading one request in full', () => {
 
 /** What `gh pr list` sends about review and merge, for a request with nothing in the way. */
 const REVIEW_FIELDS = {
+  createdAt: OPENED,
   isDraft: false,
   mergeable: 'MERGEABLE',
   mergeStateStatus: 'CLEAN',
@@ -1366,7 +1405,7 @@ describe('every branch of a project at once', () => {
   it('asks once for every branch, not once per branch', async () => {
     const { gh, calls } = fakeGh({ list: LIST })
 
-    const answer = await readBranchRequests(gh)
+    const answer = await readBranchRequests([], gh)
 
     expect(answer.requests).toEqual([
       {
@@ -1390,7 +1429,7 @@ describe('every branch of a project at once', () => {
   it('takes a smaller limit when one is given', async () => {
     const { gh, calls } = fakeGh({ list: LIST })
 
-    await readBranchRequests(gh, 5)
+    await readBranchRequests([], gh, 5)
 
     expect(calls[0]?.[calls[0].indexOf('--limit') + 1]).toBe('5')
   })
@@ -1398,15 +1437,19 @@ describe('every branch of a project at once', () => {
   it('says GitHub could not be asked when it refuses', async () => {
     const { gh } = fakeGh({ list: new Error('gh: no remote') })
 
-    await expect(readBranchRequests(gh)).rejects.toMatchObject({ code: 'notConnected' })
+    await expect(readBranchRequests([], gh)).rejects.toMatchObject({ code: 'notConnected' })
   })
 
   it('reports an answer it cannot read, and one shaped like something else', async () => {
     const unreadable = fakeGh({ list: 'not json' })
-    await expect(readBranchRequests(unreadable.gh)).rejects.toMatchObject({ code: 'listFailed' })
+    await expect(readBranchRequests([], unreadable.gh)).rejects.toMatchObject({
+      code: 'listFailed'
+    })
 
     const unexpected = fakeGh({ list: JSON.stringify({ pullRequests: [] }) })
-    await expect(readBranchRequests(unexpected.gh)).rejects.toMatchObject({ code: 'listFailed' })
+    await expect(readBranchRequests([], unexpected.gh)).rejects.toMatchObject({
+      code: 'listFailed'
+    })
   })
 })
 
@@ -1440,8 +1483,15 @@ describe('the state map', () => {
       ['MERGED', 'merged'],
       ['CLOSED', 'closed']
     ] as const) {
-      const answer = JSON.stringify([{ number: 1, state: shouted, title: 't', url: 'u' }])
-      const view = await readPullRequest(branch, 'main', fakeGh({ list: answer }).gh, workExec())
+      const answer = JSON.stringify([
+        { number: 1, state: shouted, title: 't', url: 'u', createdAt: OPENED }
+      ])
+      const view = await readPullRequest(
+        owner(branch),
+        'main',
+        fakeGh({ list: answer }).gh,
+        workExec()
+      )
 
       expect(view.request?.state).toBe(quiet)
     }
@@ -1476,7 +1526,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    await expect(readBranchRequests(gh, 2)).resolves.toMatchObject({ capped: true })
+    await expect(readBranchRequests([], gh, 2)).resolves.toMatchObject({ capped: true })
   })
 
   it('says nothing of the sort when it came back short', async () => {
@@ -1487,7 +1537,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    const answer = await readBranchRequests(gh, 2)
+    const answer = await readBranchRequests([], gh, 2)
 
     expect(answer.capped).toBe(false)
     expect(answer.requests).toHaveLength(1)
@@ -1506,7 +1556,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    const answer = await readBranchRequests(gh, 2)
+    const answer = await readBranchRequests([], gh, 2)
 
     expect(answer.requests).toHaveLength(1)
     expect(answer.capped).toBe(true)

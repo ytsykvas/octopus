@@ -19,9 +19,12 @@ import { shortBranchName } from './branches.js'
 import { GitHubError } from './github.js'
 import { countAhead, currentBranch, type GitExec, reasonFrom } from './git.js'
 import {
+  type BranchOwner,
   type BranchRequest,
   BranchListSchema,
   DetailPayloadSchema,
+  openedFor,
+  ownRequests,
   type PullRequestDetail,
   type PullRequestState,
   RemoteStateSchema,
@@ -108,7 +111,8 @@ const RemotePullRequestSchema = z.object({
   number: z.number().int(),
   state: RemoteStateSchema,
   title: z.string(),
-  url: z.string()
+  url: z.string(),
+  createdAt: z.iso.datetime()
 })
 
 /**
@@ -121,7 +125,7 @@ const RemotePullRequestSchema = z.object({
  * apart from a broken setup by reading stderr.
  */
 export async function readPullRequest(
-  branch: string,
+  owner: BranchOwner,
   base: string,
   gh: GhExec,
   git: GitExec
@@ -131,6 +135,7 @@ export async function readPullRequest(
      the first of them left those three writing into a worktree the caller had
      already moved on from — which is the `ENOTEMPTY` that failed a full run in
      five for a month. */
+  const { branch } = owner
   const [remote, dirty, tip, ahead, head] = await allOf([
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
@@ -147,7 +152,9 @@ export async function readPullRequest(
 
   // The newest, when a branch has been opened and closed and opened again:
   // `gh` lists most recent first, and the current one is what the pane is about.
-  const current = remote[0]
+  // One too old to be the workspace's means everything older is too.
+  const newest = remote[0]
+  const current = newest !== undefined && openedFor(newest, owner) ? newest : undefined
 
   return {
     request:
@@ -183,7 +190,7 @@ async function listPullRequests(
       '--limit',
       '1',
       '--json',
-      'number,state,title,url'
+      'number,state,title,url,createdAt'
     ])
   } catch {
     throw new GitHubError('notConnected', {}, 'Could not ask GitHub about this branch.')
@@ -846,6 +853,7 @@ export interface BranchRequestList {
  * network call per row every time the list refreshed.
  */
 export async function readBranchRequests(
+  owners: readonly BranchOwner[],
   gh: GhExec,
   limit: number = BRANCH_REQUEST_LIMIT
 ): Promise<BranchRequestList> {
@@ -861,13 +869,13 @@ export async function readBranchRequests(
           '--limit',
           String(limit),
           '--json',
-          'headRefName,number,state,url,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision'
+          'headRefName,number,state,url,createdAt,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision'
         ])
       )
     )
   )
 
-  const requests = toBranchRequests(payload)
+  const requests = toBranchRequests(ownRequests(payload, owners))
 
   /*
    * Whether the answer came back full, decided here rather than by counting

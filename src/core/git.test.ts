@@ -33,6 +33,7 @@ import {
   resolveRef,
   toSlug,
   reasonFrom,
+  upstreamOf,
   withIndexCopy
 } from './git.js'
 
@@ -315,6 +316,22 @@ describe('resolveRef', () => {
   it('answers null for an upstream that was never set', async () => {
     await initRepo(dir)
     await expect(resolveRef(exec, 'main@{upstream}')).resolves.toBeNull()
+  })
+})
+
+describe('upstreamOf', () => {
+  it('answers null for a branch that tracks nothing', async () => {
+    await initRepo(dir)
+    await expect(upstreamOf(exec, 'main')).resolves.toBeNull()
+  })
+
+  it('names the remote-tracking branch a branch tracks', async () => {
+    await initRepo(dir)
+    await run('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: dir })
+    await run('git', ['remote', 'add', 'origin', dir], { cwd: dir })
+    await run('git', ['branch', '--set-upstream-to=origin/main', 'main'], { cwd: dir })
+
+    await expect(upstreamOf(exec, 'main')).resolves.toBe('origin/main')
   })
 })
 

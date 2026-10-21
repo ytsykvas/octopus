@@ -276,6 +276,14 @@ describe('createWorkspace', () => {
     expect((await create()).name).toBe(SECOND_NAME)
   })
 
+  it('skips a name whose branch is still on the remote', async () => {
+    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/${FIRST_NAME}`, 'HEAD'], {
+      cwd: repo
+    })
+
+    expect((await create()).name).toBe(SECOND_NAME)
+  })
+
   it('ignores branches outside the project prefix', async () => {
     // Same name, no prefix: the user's own branch, which we must not claim.
     await run('git', ['branch', FIRST_NAME], { cwd: repo })
@@ -544,6 +552,39 @@ describe('renameWorkspace', () => {
     // Case is all `toSlug` would change, so the branch stays where it is.
     const renamed = await renameWorkspace(workspace, project, FIRST_NAME.toUpperCase(), exec)
     expect(renamed.branch).toBe(workspace.branch)
+    expect(renamed.branchSince).toBe(workspace.branchSince)
+  })
+
+  it('marks when the workspace came onto its new branch', async () => {
+    const workspace = await create()
+    const before = Date.now()
+
+    const renamed = await renameWorkspace(workspace, project, 'fix auth', exec)
+
+    expect(Date.parse(renamed.branchSince ?? '')).toBeGreaterThanOrEqual(before)
+  })
+
+  it('refuses a name whose branch is still on the remote', async () => {
+    const workspace = await create()
+    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/fix-auth', 'HEAD'])
+
+    const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchExists')
+    expect((error as WorkspaceError).params).toMatchObject({ branch: 'origin/ytsykvas/fix-auth' })
+  })
+
+  it('lets a workspace back onto its own branch on the remote', async () => {
+    await addRemote()
+    const workspace = await create()
+    await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
+    const away = { ...workspace, ...(await renameWorkspace(workspace, project, 'fix auth', exec)) }
+
+    const back = await renameWorkspace(away, project, workspace.name, exec)
+
+    expect(back).toMatchObject({ branch: workspace.branch, branchSince: null })
   })
 
   it('refuses to collide with an existing branch', async () => {

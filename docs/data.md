@@ -197,7 +197,10 @@ the next fetch. `resolveBase` in [`remotes.ts`](../src/core/remotes.ts) is where
 the question is asked, every time it is asked.
 
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
-`status`, `port`, `createdAt`, `writers`, `notes`, `ownerId`.
+`status`, `port`, `createdAt`, `branchSince`, `writers`, `notes`, `ownerId`.
+
+`branchSince` is when a rename brought the workspace onto its current branch, or
+null for "since `createdAt`".
 
 `notes` is a line the user wrote to themselves about this workspace, and the one
 thing a workspace carries that the agent never reads. On the record rather than
