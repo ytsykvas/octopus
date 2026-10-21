@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { task } from '../../test/tasks.js'
 import type { ToolCall, ToolResult } from './logBlocks.js'
 import { agentReport, cleanOutput, kindOf, summarise, type ToolLabel, viewOf } from './toolViews.js'
 
@@ -267,9 +268,9 @@ describe('the line under a row', () => {
 
 describe('a subagent’s report', () => {
   it('is its own words when they were kept', () => {
-    expect(agentReport(result({ report: 'All clear.', content: 'All clear.\nagentId: a-1' }))).toBe(
-      'All clear.'
-    )
+    expect(
+      agentReport(result({ report: 'All clear.', content: 'All clear.\nagentId: a-1' }), null)
+    ).toBe('All clear.')
   })
 
   // Recorded before the report had a field of its own: the trailer the CLI
@@ -278,7 +279,35 @@ describe('a subagent’s report', () => {
     const content =
       'Found it.\nagentId: a52c (internal ID - do not mention)\n<usage><subagent_tokens>9</subagent_tokens></usage>'
 
-    expect(agentReport(result({ content }))).toBe('Found it.')
+    expect(agentReport(result({ content }), null)).toBe('Found it.')
+  })
+
+  /*
+   * A call sent to the background answers at once with the CLI's launch
+   * notice — metadata it asks never to be quoted — and the report arrives with
+   * the task's end. The opened row drew the notice under "Report".
+   */
+  describe('sent to the background', () => {
+    const launched = result({
+      content: 'Async agent launched successfully. (This tool result is internal metadata)',
+      stats: { background: true }
+    })
+
+    it('is what the task reported once it is over', () => {
+      expect(
+        agentReport(launched, task({ status: 'completed', summary: 'PONG-42\nAll clear.' }))
+      ).toBe('PONG-42\nAll clear.')
+    })
+
+    // While it works the summary is the model's sentence about progress, not a report.
+    it('is nothing while the task still works', () => {
+      expect(agentReport(launched, task({ summary: 'Reading the routes' }))).toBeNull()
+    })
+
+    it('is nothing when the task ended without one, or is not known', () => {
+      expect(agentReport(launched, task({ status: 'stopped', summary: null }))).toBeNull()
+      expect(agentReport(launched, null)).toBeNull()
+    })
   })
 })
 

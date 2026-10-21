@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import type { TaskView } from '@core/backgroundTasks.js'
 import { countLines, type ToolStats } from '@core/events.js'
 
 import type { LogBlock, ToolCall, ToolResult } from './logBlocks.js'
@@ -374,8 +375,18 @@ export function summarise(call: ToolCall): ResultSummary {
 /**
  * A subagent's report: its own words, or — for a conversation recorded before
  * they were kept apart — the result's text with the CLI's trailer taken off.
+ *
+ * A call sent to the background is answered at once with the CLI's launch
+ * notice, which is metadata for the model and asks never to be quoted. Its
+ * report comes with the task's end instead, so it is read from the task —
+ * once it is over, since while it runs the task's summary is the model's
+ * sentence about progress. Null until there is a report to show.
  */
-export function agentReport(result: ToolResult): string {
+export function agentReport(result: ToolResult, task: TaskView | null): string | null {
+  if (result.stats?.background === true) {
+    return task === null || task.status === 'running' ? null : task.summary
+  }
+
   if (result.report !== undefined) return result.report
 
   return result.content

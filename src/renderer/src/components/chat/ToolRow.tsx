@@ -17,7 +17,7 @@ import type { Change } from './changeSummary.js'
 import { DiffPreview } from './DiffPreview.js'
 import { formatTokens } from './format.js'
 import { FileLinkContext, useExpanded } from './expansion.js'
-import type { LogBlock, ToolCall } from './logBlocks.js'
+import type { LogBlock, ToolCall, ToolResult } from './logBlocks.js'
 import { Markdown } from './Markdown.js'
 import { OutputPreview } from './OutputPreview.js'
 import { TodoChecklist } from './TodoChecklist.js'
@@ -197,9 +197,7 @@ export const ToolRow = memo(function ToolRow({
 
             {call.result !== null &&
               (call.result.ok && view.output === 'report' ? (
-                <Section title={t('chat.agentReport')}>
-                  <Markdown text={agentReport(call.result)} />
-                </Section>
+                <ReportSection result={call.result} task={task} />
               ) : (
                 (!call.result.ok || view.output === 'raw') && (
                   <Section title={t('chat.toolOutput')}>
@@ -213,6 +211,30 @@ export const ToolRow = memo(function ToolRow({
     </div>
   )
 })
+
+/**
+ * An opened agent row's report, or nothing while there is none yet.
+ *
+ * A component of its own so the report is worked out only once a row is open:
+ * a result's text can be long, and most rows are never opened.
+ */
+function ReportSection({
+  result,
+  task
+}: {
+  readonly result: ToolResult
+  readonly task: TaskView | null
+}): React.JSX.Element | null {
+  const { t } = useTranslation()
+  const report = agentReport(result, task)
+  if (report === null) return null
+
+  return (
+    <Section title={t('chat.agentReport')}>
+      <Markdown text={report} />
+    </Section>
+  )
+}
 
 /**
  * Model, time and tokens at the right of a row that started a task — the same
