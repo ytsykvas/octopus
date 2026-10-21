@@ -65,7 +65,25 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
   return (
     <div className="border-line shrink-0 border-t px-3 py-2.5">
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className="section-label">{t('limits.title')}</p>
+        <div className="flex min-w-0 items-baseline gap-1.5">
+          <p className="section-label shrink-0">{t('limits.title')}</p>
+
+          {/* Only when the figures are known to be old. Most reads are live and
+              say nothing here, which is what keeps this from being the line
+              everybody learns to ignore. Beside the title rather than under
+              the bars, so a refresh that clears it does not change the
+              block's height. */}
+          {windows.length > 0 && usage?.asOf != null && (
+            <span className="text-ink-faint truncate text-[11px]" title={t('limits.asOfHint')}>
+              {t('limits.asOf', {
+                age: formatAge(usage.asOf, {
+                  hours: t('limits.hours'),
+                  minutes: t('limits.minutes')
+                })
+              })}
+            </span>
+          )}
+        </div>
 
         <button
           type="button"
@@ -163,20 +181,6 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
               </div>
             )
           })}
-
-          {/* Only when the figures are known to be old. Most reads are live and
-              say nothing here, which is what keeps this from being the line
-              everybody learns to ignore. */}
-          {usage?.asOf != null && (
-            <p className="text-ink-faint text-[11px] leading-snug" title={t('limits.asOfHint')}>
-              {t('limits.asOf', {
-                age: formatAge(usage.asOf, {
-                  hours: t('limits.hours'),
-                  minutes: t('limits.minutes')
-                })
-              })}
-            </p>
-          )}
         </div>
       )}
     </div>
