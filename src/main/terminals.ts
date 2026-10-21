@@ -27,13 +27,36 @@ import {
  */
 
 /**
- * How long a session has to end on its own before it is hung up on.
+ * How long a session has to end on its own before its shell is hung up on.
  *
  * Long enough for a dev server to run its SIGTERM handler — closing sockets,
  * removing its pid file — and short enough that a process which ignores the
  * signal does not sit there holding a port.
  */
 const GRACE_MS = 2_000
+
+/**
+ * How long after the hangup the whole group is killed.
+ *
+ * The hangup is what an interactive shell answers by hanging up its own jobs,
+ * and job control has put each of those in a group of its own, out of reach of
+ * a signal to the shell's. Killed in the same tick, the shell would die before
+ * passing it on: a tab closed with `npm run dev &` in it left the server
+ * running.
+ */
+const HANGUP_MS = 500
+
+/** How often a group the shell has left is asked whether it is empty yet. */
+const POLL_MS = 50
+
+/**
+ * How long past the kill a stop still waits for the group to empty.
+ *
+ * SIGKILL cannot be ignored, but a process stuck in the kernel dies only when
+ * it comes out — and a restart held on it for ever is worse than a port that
+ * frees itself a moment late.
+ */
+const KILL_WAIT_MS = 1_000
 
 /**
  * How long output is gathered before it is sent, after the first chunk.
@@ -53,8 +76,13 @@ export const BATCH_MS = 16
  */
 export const BATCH_CHARS = 64 * 1024
 
-/** How a signal reaches a process, injected so tests never send a real one. */
-export type Kill = (pid: number, signal: NodeJS.Signals) => void
+/**
+ * How a signal reaches a process, injected so tests never send a real one.
+ *
+ * Signal 0 sends nothing: it throws when no such process — or, for a negative
+ * pid, no such group — exists, which is how a stop knows a group has emptied.
+ */
+export type Kill = (pid: number, signal: NodeJS.Signals | 0) => void
 
 /** A live session, and the window it belongs to. */
 interface Session {
@@ -186,12 +214,14 @@ export class TerminalManager {
    * that way — while SIGTERM is the shutdown it cleans up after, pid file
    * included.
    *
-   * `pty.kill()` is the fallback for a process that ignores SIGTERM, and it
-   * waits. node-pty's kill sends SIGHUP, and where a run script `exec`s into
-   * its server that server *is* this pid: fired in the same tick, the hangup
-   * arrives first, kills it outright, and the SIGTERM handler never runs — so
-   * the pid file it would have removed survives, which is the "a server is
-   * already running" this whole thing set out to end.
+   * Whatever ignores SIGTERM is hung up on once the grace is over, and the
+   * whole group is killed `HANGUP_MS` later. Both wait: where a run script
+   * `exec`s into its server that server *is* this pid, and anything stronger
+   * fired in the same tick arrives first and kills it outright — the SIGTERM
+   * handler never runs, and the pid file it would have removed survives, the
+   * "a server is already running" this whole thing set out to end. The hangup
+   * alone used to be the end of it, and a child ignoring both signals kept its
+   * port.
    */
   dispose(id: TerminalId): Promise<void> {
     const session = this.sessions.get(id)
@@ -200,34 +230,82 @@ export class TerminalManager {
     const { pty } = session
     this.sessions.delete(id)
 
-    try {
-      this.kill(-pty.pid, 'SIGTERM')
-    } catch {
-      // The group ended between being read and being signalled, which is the
-      // ordinary case for a script that has just finished.
-    }
+    this.signalGroup(pty.pid, 'SIGTERM')
 
     /*
-     * Answers when the session has gone, not when it has been signalled.
+     * Answers when the group has gone, not when it was signalled — nor when
+     * its shell went.
      *
      * A restart is a disposal and a start with nothing in between, and a dev
      * server does not release its port the instant it is asked to: the next one
      * then binds against the last one and fails on the port, blaming itself.
-     * The caller can now wait, and the only thing that knows when to stop
-     * waiting is here.
+     * Answering on the shell's exit was not enough either: a child that ignored
+     * SIGTERM stayed behind with the port, and the stop answered in a
+     * millisecond. The only thing that knows when to stop waiting is here.
      */
     return new Promise((resolve) => {
-      const fallback = setTimeout(() => {
+      let shellGone = false
+      let done = false
+      let poll: ReturnType<typeof setTimeout> | undefined
+
+      // Every timer goes on the way out, so none holds the process open and
+      // none signals a group that has already been answered for.
+      const finish = (): void => {
+        done = true
+        clearTimeout(hangup)
+        clearTimeout(kill)
+        clearTimeout(ceiling)
+        clearTimeout(poll)
+        resolve()
+      }
+
+      const settle = (): void => {
+        if (done || !shellGone) return
+        if (this.groupGone(pty.pid)) {
+          finish()
+          return
+        }
+
+        clearTimeout(poll)
+        poll = setTimeout(settle, POLL_MS)
+      }
+
+      const hangup = setTimeout(() => {
         pty.kill()
       }, GRACE_MS)
+      const kill = setTimeout(() => {
+        this.signalGroup(pty.pid, 'SIGKILL')
+        settle()
+      }, GRACE_MS + HANGUP_MS)
+      const ceiling = setTimeout(finish, GRACE_MS + HANGUP_MS + KILL_WAIT_MS)
 
-      // Cleared on the way out, so a session that shut down politely is never
-      // signalled again — and so the timer does not hold the process open.
       pty.onExit(() => {
-        clearTimeout(fallback)
-        resolve()
+        shellGone = true
+        settle()
       })
     })
+  }
+
+  /** Signals the group a session's shell leads, which may have ended since. */
+  private signalGroup(leader: number, signal: NodeJS.Signals): void {
+    try {
+      this.kill(-leader, signal)
+    } catch {
+      // The group ended between being read and being signalled, which is the
+      // ordinary case for a script that has just finished.
+    }
+  }
+
+  /** Whether nothing is left in the group a session's shell led. */
+  private groupGone(leader: number): boolean {
+    try {
+      this.kill(-leader, 0)
+      return false
+    } catch {
+      // ESRCH is the answer asked for. Any other failure counts as gone too:
+      // a probe that cannot tell must not hold a stop for ever.
+      return true
+    }
   }
 
   /**

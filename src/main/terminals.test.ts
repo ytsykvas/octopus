@@ -19,6 +19,13 @@ const { FakePty, spawned } = vi.hoisted(() => {
     killed = false
     /** A real pty has one, and `dispose` signals the group it leads. */
     readonly pid = nextPid++
+    /** Whether the shell itself is still running. */
+    running = true
+    /**
+     * A member of the group that outlives the shell — a server's child that
+     * ignores SIGTERM. It goes only when the whole group is killed.
+     */
+    lingering = false
 
     private data: ((chunk: string) => void) | null = null
     /* A list, not a field: `dispose` subscribes beside the one `create` made,
@@ -58,7 +65,19 @@ const { FakePty, spawned } = vi.hoisted(() => {
 
     /** Pretends the shell ended. */
     end(event: Exit): void {
+      this.running = false
       for (const notify of [...this.exits]) notify(event)
+    }
+
+    /** Whether anything in the group the shell leads is still running. */
+    groupAlive(): boolean {
+      return this.running || this.lingering
+    }
+
+    /** What SIGKILL to the group does: everyone goes, the shell included. */
+    killGroup(): void {
+      this.lingering = false
+      if (this.running) this.end({ exitCode: 0, signal: 9 })
     }
   }
 
@@ -121,12 +140,28 @@ let renderer: ReturnType<typeof target>
 /** Every signal the manager sent, instead of sending it. */
 let signals: [number, NodeJS.Signals][]
 
+/**
+ * `process.kill` against the fake groups.
+ *
+ * Signal 0 is only a question — is anything left in the group — so it answers
+ * as the real call does, by throwing once nothing is, and is not counted among
+ * the signals sent.
+ */
+function groupKill(pid: number, signal: NodeJS.Signals | 0): void {
+  const pty = spawned.find((candidate) => candidate.pid === -pid)
+  if (signal === 0) {
+    if (pty?.groupAlive() !== true) throw new Error('ESRCH')
+    return
+  }
+
+  signals.push([pid, signal])
+  if (signal === 'SIGKILL') pty?.killGroup()
+}
+
 beforeEach(() => {
   spawned.length = 0
   signals = []
-  manager = new TerminalManager((pid, signal) => {
-    signals.push([pid, signal])
-  })
+  manager = new TerminalManager(groupKill)
   renderer = target()
 })
 
@@ -423,15 +458,47 @@ describe('disposal', () => {
   })
 
   // The fallback is for a process that ignores SIGTERM, and only for that one.
-  it('hangs up on a session that has not gone once the grace is over', () => {
+  it('hangs up on the shell once the grace is over, then kills the group', () => {
     vi.useFakeTimers()
     try {
       const id = manager.create(SPEC, renderer as never)
+      const pid = spawned[0]?.pid ?? 0
       void manager.dispose(id)
 
-      vi.advanceTimersByTime(5_000)
-
+      vi.advanceTimersByTime(2_000)
       expect(spawned[0]?.killed).toBe(true)
+      expect(signals).toEqual([[-pid, 'SIGTERM']])
+
+      vi.advanceTimersByTime(500)
+      expect(signals).toEqual([
+        [-pid, 'SIGTERM'],
+        [-pid, 'SIGKILL']
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /*
+   * Found in review against a real zsh: an interactive shell ignores SIGTERM,
+   * and the hangup is what it answers by hanging up its jobs — each in a group
+   * of its own, which a signal to the shell's never reaches. Killed instead of
+   * hung up on, the shell died first and a tab closed with `npm run dev &` in
+   * it left the server running. A shell that leaves on the hangup takes nothing
+   * stronger.
+   */
+  it('lets a shell that leaves on the hangup go without killing its group', async () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      const answer = manager.dispose(id)
+
+      await vi.advanceTimersByTimeAsync(2_000)
+      spawned[0]?.end({ exitCode: 0, signal: 1 })
+      await answer
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      expect(signals.map(([, signal]) => signal)).toEqual(['SIGTERM'])
     } finally {
       vi.useRealTimers()
     }
@@ -446,7 +513,93 @@ describe('disposal', () => {
       spawned[0]?.end({ exitCode: 0 })
       vi.advanceTimersByTime(5_000)
 
-      expect(spawned[0]?.killed).toBe(false)
+      expect(signals.map(([, signal]) => signal)).toEqual(['SIGTERM'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /*
+   * Reproduced against a real pty: a run whose child ignored SIGTERM and
+   * SIGHUP was "stopped" in a millisecond — the shell went, and the stop
+   * answered on the shell — while the child kept its port. The restart then
+   * started the next server against it.
+   */
+  it('waits for a member that outlives the shell, and kills it at the grace', async () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      const pty = spawned[0]
+      if (!pty) throw new Error('nothing spawned')
+      pty.lingering = true
+
+      let ended = false
+      const answer = manager.dispose(id).then(() => {
+        ended = true
+      })
+
+      pty.end({ exitCode: 0, signal: 15 })
+      await vi.advanceTimersByTimeAsync(2_400)
+      expect(ended).toBe(false)
+      expect(signals.map(([, signal]) => signal)).toEqual(['SIGTERM'])
+
+      await vi.advanceTimersByTimeAsync(100)
+      await answer
+
+      expect(signals).toContainEqual([-pty.pid, 'SIGKILL'])
+      expect(pty.groupAlive()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The member that lingered may leave on its own before the grace is over.
+  it('answers once a lingering member leaves on its own', async () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      const pty = spawned[0]
+      if (!pty) throw new Error('nothing spawned')
+      pty.lingering = true
+
+      const answer = manager.dispose(id)
+      pty.end({ exitCode: 0 })
+      await vi.advanceTimersByTimeAsync(200)
+
+      pty.lingering = false
+      await vi.advanceTimersByTimeAsync(100)
+      await answer
+
+      expect(signals.map(([, signal]) => signal)).toEqual(['SIGTERM'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Something stuck in the kernel survives even SIGKILL for a while; a restart
+  // must not wait on it for ever.
+  it('stops waiting for a group that never empties', async () => {
+    vi.useFakeTimers()
+    try {
+      const stubborn = new TerminalManager((pid, signal) => {
+        if (signal !== 0) signals.push([pid, signal])
+      })
+      const id = stubborn.create(SPEC, renderer as never)
+
+      let ended = false
+      const answer = stubborn.dispose(id).then(() => {
+        ended = true
+      })
+      spawned[0]?.end({ exitCode: 0 })
+
+      await vi.advanceTimersByTimeAsync(3_000)
+      expect(ended).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(500)
+      await answer
+      expect(ended).toBe(true)
+      // Nothing keeps polling once it has given up.
+      expect(vi.getTimerCount()).toBe(0)
     } finally {
       vi.useRealTimers()
     }
@@ -479,18 +632,16 @@ describe('disposal', () => {
   })
 
   // Otherwise a process that ignores SIGTERM would hold the caller for ever.
-  it('answers once the fallback has hung up on a process that ignored it', async () => {
+  it('answers once the group has been killed for ignoring SIGTERM', async () => {
     vi.useFakeTimers()
     try {
       const id = manager.create(SPEC, renderer as never)
       const answer = manager.dispose(id)
 
       vi.advanceTimersByTime(5_000)
-      // `pty.kill()` is what a real pty answers with; the fake says so itself.
-      spawned[0]?.end({ exitCode: 0, signal: 1 })
 
       await expect(answer).resolves.toBeUndefined()
-      expect(spawned[0]?.killed).toBe(true)
+      expect(spawned[0]?.groupAlive()).toBe(false)
     } finally {
       vi.useRealTimers()
     }
@@ -537,6 +688,24 @@ describe('disposal', () => {
     }).not.toThrow()
 
     expect(throwing.size).toBe(0)
+  })
+
+  // The same at the grace: the group can go between the probe and the kill.
+  it('carries on when the group has gone by the time it is killed', async () => {
+    vi.useFakeTimers()
+    try {
+      const throwing = new TerminalManager(() => {
+        throw new Error('ESRCH')
+      })
+      const answer = throwing.dispose(throwing.create(SPEC, renderer as never))
+
+      await vi.advanceTimersByTimeAsync(2_500)
+      spawned[0]?.end({ exitCode: 0, signal: 9 })
+
+      await expect(answer).resolves.toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('disposing twice is harmless', () => {
