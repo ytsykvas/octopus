@@ -66,6 +66,35 @@ describe('SideQuestions', () => {
     expect(bump(false)).toHaveFocus()
   })
 
+  it('moves the caret in and back without scrolling anything to reach it', async () => {
+    const user = userEvent.setup()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    render(<Harness />)
+
+    await user.click(bump(false))
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+    expect(field()).toHaveFocus()
+
+    focus.mockClear()
+    await user.keyboard('{Escape}')
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+    expect(bump(false)).toHaveFocus()
+  })
+
+  it('keeps the newest exchange in view by scrolling its own list, never the window', () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const first: SideItem = { id: 1, question: 'q1', state: 'pending' }
+    const { rerender } = render(<Harness initiallyOpen items={[first]} />)
+    const list = screen.getByRole('list').parentElement
+    if (list === null) throw new Error('the list has no scroller')
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, value: 640 })
+
+    rerender(<Harness initiallyOpen items={[first, { id: 2, question: 'q2', state: 'pending' }]} />)
+
+    expect(list.scrollTop).toBe(640)
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
   it('says what it is for while the thread is empty', () => {
     render(<Harness initiallyOpen />)
 

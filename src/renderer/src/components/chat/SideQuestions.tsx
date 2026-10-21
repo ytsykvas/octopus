@@ -92,25 +92,34 @@ function Drawer({
   const [draft, setDraft] = useState('')
   const section = useRef<HTMLElement | null>(null)
   const field = useRef<HTMLTextAreaElement | null>(null)
-  const end = useRef<HTMLDivElement | null>(null)
+  const list = useRef<HTMLDivElement | null>(null)
 
   // Focus goes back where it came from, unless a click outside already moved it.
+  // Neither move may scroll: a scroll the browser picks lands in whichever
+  // ancestor it can, the window's own included.
   useEffect(() => {
     const before = document.activeElement
     const drawer = section.current
-    field.current?.focus()
+    field.current?.focus({ preventScroll: true })
 
     return () => {
       const now = document.activeElement
       if (before instanceof HTMLElement && (now === document.body || drawer?.contains(now))) {
-        before.focus()
+        before.focus({ preventScroll: true })
       }
     }
   }, [])
 
+  // The list's own scroller, set directly: `scrollIntoView` aligns in every
+  // scrollable ancestor as well, up to the window.
   const last = items.at(-1)
   useEffect(() => {
-    end.current?.scrollIntoView({ block: 'end' })
+    const scroller = list.current
+    // Attached before effects run; guarded only because the ref's type admits null.
+    /* v8 ignore next */
+    if (!scroller) return
+
+    scroller.scrollTop = scroller.scrollHeight
   }, [items.length, last?.state])
 
   const submit = (): void => {
@@ -138,7 +147,7 @@ function Drawer({
         </IconButton>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div ref={list} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {items.length === 0 ? (
           <p className="text-ink-faint leading-relaxed">{t('chat.side.hint')}</p>
         ) : (
@@ -148,7 +157,6 @@ function Drawer({
             ))}
           </ol>
         )}
-        <div ref={end} />
       </div>
 
       <div className="border-line border-t p-2">
