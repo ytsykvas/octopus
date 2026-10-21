@@ -1555,7 +1555,7 @@ named: that is the ordinary case, and a notice that cried about it would teach
 the reader to skip the one that matters.
 
 **The folded build keeps its box.** It is hidden with height zero and
-`overflow: hidden` rather than with `display: none`, unlike the tab panes above
+`overflow: hidden` rather than with `display: none`, unlike most tab panes above
 — and the difference matters here because this half starts folded on every
 mount, so the hidden state is the ordinary one. A display-hidden element
 measures zero, and the terminal inside is sized from that measurement before a
@@ -2588,7 +2588,13 @@ therefore ends its runs, which is the remaining edge and is written down.
 
 **Every tab is kept mounted** behind whichever one is showing, and hidden with a
 class — `display: none`, which xterm does see as off screen, so a terminal in a
-hidden tab stops being drawn through the pause guard alone. A terminal unmounted is a process killed — and so is a script, because
+hidden tab stops being drawn through the pause guard alone. The Scripts tab is
+the exception: the title bar starts a build or a server there while another tab
+is showing, and a terminal created under `display: none` has no size to fit — it
+starts at xterm's 80 columns, and its program lays the log out for them before
+anybody looks. So that tab goes `.offstage` instead, laid out at the size it
+will have and moved out of the clip that the box around the tabs provides; the
+others create nothing while hidden. A terminal unmounted is a process killed — and so is a script, because
 ceasing to render its terminal is the entire implementation of its Stop button,
 which made leaving the Build or Server tab press Stop without saying so. A diff
 unmounted loses which files were collapsed and where the pane was scrolled to,
@@ -2661,12 +2667,15 @@ width comes back by itself once the room does.
 **Folding the pane hides it; it never unmounts it.** Its terminals and the
 servers running in them belong to their workspaces, and unmounting a terminal is
 how one is ended — so the fold used to close every shell and stop every dev
-server in the project. Hidden with `display: none`, a terminal keeps its size:
-the fit addon reads no height there and does nothing, and the `ResizeObserver`
-fits it again when the pane comes back. It also stops being drawn, like a
-terminal in a hidden tab. While folded no tab counts as visible,
-so nothing in it reads git, and the tab row is measured again on unfolding — a
-pane that started folded measured it at nothing.
+server in the project. It is not hidden with `display: none` either, for the
+Scripts tab's reason above: the title bar runs a build with the pane folded,
+and a terminal born in a box with no size is born 80 columns wide. Folded, the
+pane goes `.offstage` — positioned against the row it sits in, so it keeps its
+width and its height, and moved off the window's left edge, where xterm stops
+drawing it and nothing can scroll it back into view. Keeping the height too
+means a fold resizes no terminal, so a running server is not sent a resize on
+every fold and unfold. While folded no tab counts as visible,
+so nothing in it reads git, and the tab row is measured again on unfolding.
 
 The fold is kept across launches (`rightPanelOpen`), and every way of unfolding
 — the header's button, ⌘⇧D, ⌘⇧E, opening a pull request — writes it, the tab

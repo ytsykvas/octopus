@@ -545,8 +545,17 @@ export function RightPanel({
       }}
       // Hidden, never unmounted — see `open`. `aria-hidden` beside the class,
       // as the tabs below do it: the class means nothing without a stylesheet.
+      //
+      // Folded offstage rather than to `display: none`, because the title bar
+      // can start a build or a server with the pane folded, and a terminal
+      // created in a box with no size gets xterm's 80 columns: the program
+      // lays its output out for them, and refitting on unfold cannot undo a
+      // log already written. Offstage keeps the box its size and moves it off
+      // the window's left edge, where xterm stops drawing it. Positioned
+      // against the row around the pane, so it keeps its height as well and a
+      // fold does not resize every terminal in it.
       aria-hidden={!open}
-      className={`border-line bg-surface relative flex shrink-0 flex-col border-l ${open ? '' : 'hidden'}`}
+      className={`border-line bg-surface flex shrink-0 flex-col border-l ${open ? 'relative' : 'absolute inset-y-0 left-0 offstage'}`}
     >
       {/* Outside every tab pane, where the other dialogs of the app are.
           Mounted inside one, it survived a tab change — the pane is hidden with
@@ -655,8 +664,11 @@ export function RightPanel({
           where the chosen tab ends — the tab is the colour the gradient begins
           with, and a row's height of drift is enough for the join to show.
           Without a project the class is left off and the pane keeps its plain
-          surface. */}
-      <div className={`flex min-h-0 flex-1 flex-col ${color ? 'project-tinted-top' : ''}`}>
+          surface. Positioned and clipping for the Scripts tab, which hides
+          offstage inside it rather than with `display: none`. */}
+      <div
+        className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${color ? 'project-tinted-top' : ''}`}
+      >
         {/* Hidden rather than unmounted, like the rest: which folders were open
           and where the tree was scrolled are what a look elsewhere must not
           cost. `visible` is what stops it reading git meanwhile. */}
@@ -729,10 +741,15 @@ export function RightPanel({
 
           Each half gets `min-h-0` and half the height. A terminal measures
           itself against the box it is in, and a box that has not been told it
-          may be shorter than its content grows instead of scrolling. */}
+          may be shorter than its content grows instead of scrolling.
+
+          Hidden offstage, unlike the other tabs, for the reason the folded pane
+          is: the title bar starts a run here while another tab is showing, and
+          a terminal created under `display: none` is made 80 columns wide. The
+          other tabs create nothing while hidden, so they keep `hidden`. */}
         <div
           aria-hidden={tab !== 'scripts'}
-          className={`flex min-h-0 flex-1 flex-col ${tab === 'scripts' ? '' : 'hidden'}`}
+          className={`flex min-h-0 flex-1 flex-col ${tab === 'scripts' ? '' : 'absolute inset-0 offstage'}`}
         >
           {/* The whole point of the tab in one row: the first thing anybody does
             with a new workspace is these two steps in this order, and the

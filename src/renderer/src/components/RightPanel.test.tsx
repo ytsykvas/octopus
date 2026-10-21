@@ -1816,6 +1816,33 @@ describe('RightPanel', () => {
     })
   })
 
+  /*
+   * The title bar starts a build or a server with the pane folded, and a
+   * terminal created under `display: none` has no size to fit: it starts at
+   * xterm's 80 columns, the program lays its output out for them, and
+   * refitting on unfold cannot undo a log already written. Folded, the pane
+   * keeps its box and goes offstage instead, positioned against the row around
+   * it so its height stays too. jsdom has no layout, so the classes are what
+   * can be asserted — and they are the fix.
+   */
+  it('folds offstage with its size kept, rather than to display: none', () => {
+    const { rerender } = renderPanel({ open: false })
+    const section = (): HTMLElement | null =>
+      screen.getByRole('button', { name: 'Changes', hidden: true }).closest('section')
+
+    expect(section()).toHaveAttribute('aria-hidden', 'true')
+    expect(section()).toHaveClass('absolute', 'offstage')
+    expect(section()).not.toHaveClass('hidden')
+    // Two positions on one element would be decided by the stylesheet's order.
+    expect(section()).not.toHaveClass('relative')
+
+    rerender({ open: true })
+
+    expect(section()).toHaveClass('relative')
+    expect(section()).not.toHaveClass('absolute')
+    expect(section()).not.toHaveClass('offstage')
+  })
+
   // A drag well past the floor folds the pane, as a sidebar does elsewhere,
   // and the same drag coming back brings it out again.
   it('asks to fold when its edge is dragged well past the floor, and back', () => {
@@ -2253,6 +2280,35 @@ describe('RightPanel', () => {
     expect(buildBody()).toHaveAttribute('aria-hidden', 'true')
     expect(buildBody()).not.toHaveClass('hidden')
     expect(buildBody()).toHaveClass('h-0', 'overflow-hidden')
+  })
+
+  /*
+   * The title bar starts a run here while another tab is showing, so this tab
+   * hides offstage — laid out, so a terminal created in it is sized — where
+   * the rest create nothing while hidden and keep `display: none`.
+   */
+  it('hides the Scripts tab offstage behind another tab, and only that one', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS, tab: 'files' })
+    const body = (name: string): Element | null | undefined =>
+      [...pane().querySelectorAll(':scope > div > [aria-hidden]')].find((candidate) =>
+        within(candidate as HTMLElement).queryByRole('region', { name, hidden: true })
+      )
+    const scriptsBody = (): Element | null | undefined => body('Build')
+
+    expect(scriptsBody()).toHaveAttribute('aria-hidden', 'true')
+    expect(scriptsBody()).toHaveClass('absolute', 'inset-0', 'offstage')
+    expect(scriptsBody()).not.toHaveClass('hidden')
+    expect(shownTab()).not.toHaveClass('hidden')
+
+    await user.click(scriptsTab())
+
+    expect(scriptsBody()).toHaveAttribute('aria-hidden', 'false')
+    expect(scriptsBody()).not.toHaveClass('offstage')
+    expect(scriptsBody()).not.toHaveClass('absolute')
+    // The tab it left is hidden the ordinary way.
+    const files = pane().querySelector(':scope > div > [aria-hidden="true"]')
+    expect(files).toHaveClass('hidden')
   })
 
   /*
