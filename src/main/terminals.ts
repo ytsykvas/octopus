@@ -97,13 +97,14 @@ interface Session {
 export class TerminalManager {
   private readonly sessions = new Map<TerminalId, Session>()
   /**
-   * Disposals still waiting for their group to empty.
+   * Sessions out of `sessions` whose group has not emptied yet, by id.
    *
-   * A session leaves `sessions` the moment it is disposed, so a quit asked for
-   * within the grace of a Stop, a closed window or a reload found nothing to
-   * wait for, and left the stopped run's child behind with its port.
+   * A session leaves `sessions` the moment it is disposed or its shell exits,
+   * so a quit asked for within the grace of a Stop, a closed window or a reload
+   * found nothing to wait for, and left the run's child behind with its port.
+   * Kept by id so a Stop arriving meanwhile waits on the same thing.
    */
-  private readonly ending = new Set<Promise<void>>()
+  private readonly ending = new Map<TerminalId, Promise<void>>()
   private nextId = 1
 
   /**
@@ -180,17 +181,36 @@ export class TerminalManager {
       batch = null
       flush()
 
-      this.sessions.delete(id)
       // Taken off here rather than in `dispose`: a script that finishes on its
       // own never goes through `dispose`, and every session ends here. Left
       // on, one listener per run piled up on a window that lives all day.
       target.off('destroyed', closeWithWindow)
-      if (target.isDestroyed()) return
 
-      // The typings say `signal?: number`, but a normal exit reports 0 rather
-      // than undefined — checking for undefined reported every run as killed.
-      // Signal numbers start at 1, so falsy means "no signal".
-      target.send('terminal:exit', { id, exitCode: signal ? null : exitCode })
+      const report = (): void => {
+        if (target.isDestroyed()) return
+        // The typings say `signal?: number`, but a normal exit reports 0 rather
+        // than undefined — checking for undefined reported every run as killed.
+        // Signal numbers start at 1, so falsy means "no signal".
+        target.send('terminal:exit', { id, exitCode: signal ? null : exitCode })
+      }
+
+      // Gone already means a stop took it, and is ending the group itself.
+      const stopped = !this.sessions.delete(id)
+      if (stopped || this.groupGone(pty.pid)) {
+        report()
+        return
+      }
+
+      /*
+       * The shell left on its own and a member of its group carries on — a
+       * server's child that outlived the script, something it started with
+       * `&`. The pane forgets the session on the exit, so nothing could reach
+       * that member any more, and the next Run failed on its port. It belonged
+       * to the run, and goes the way a Stop would have sent it; the exit is
+       * reported once it has, so Run is not offered while the port is held.
+       */
+      this.signalGroup(pty.pid, 'SIGTERM')
+      void this.untilGroupEnds(id, pty, true).then(report)
     })
 
     this.sessions.set(id, {
@@ -248,7 +268,7 @@ export class TerminalManager {
    */
   dispose(id: TerminalId): Promise<void> {
     const session = this.sessions.get(id)
-    if (!session) return Promise.resolve()
+    if (!session) return this.ending.get(id) ?? Promise.resolve()
 
     const { pty } = session
     this.sessions.delete(id)
@@ -256,19 +276,25 @@ export class TerminalManager {
     if (session.bareShell) pty.kill()
     else this.signalGroup(pty.pid, 'SIGTERM')
 
-    /*
-     * Answers when the group has gone, not when it was signalled — nor when
-     * its shell went.
-     *
-     * A restart is a disposal and a start with nothing in between, and a dev
-     * server does not release its port the instant it is asked to: the next one
-     * then binds against the last one and fails on the port, blaming itself.
-     * Answering on the shell's exit was not enough either: a child that ignored
-     * SIGTERM stayed behind with the port, and the stop answered in a
-     * millisecond. The only thing that knows when to stop waiting is here.
-     */
+    return this.untilGroupEnds(id, pty, false)
+  }
+
+  /**
+   * Answers when a session's group has gone, not when it was signalled — nor
+   * when its shell went.
+   *
+   * A restart is a disposal and a start with nothing in between, and a dev
+   * server does not release its port the instant it is asked to: the next one
+   * then binds against the last one and fails on the port, blaming itself.
+   * Answering on the shell's exit was not enough either: a child that ignored
+   * SIGTERM stayed behind with the port, and the stop answered in a
+   * millisecond. The only thing that knows when to stop waiting is here.
+   *
+   * The caller has sent the first signal; this runs the rest of the order.
+   */
+  private untilGroupEnds(id: TerminalId, pty: IPty, exited: boolean): Promise<void> {
     const ending = new Promise<void>((resolve) => {
-      let shellGone = false
+      let shellGone = exited
       let done = false
       let poll: ReturnType<typeof setTimeout> | undefined
 
@@ -294,8 +320,9 @@ export class TerminalManager {
         poll = setTimeout(settle, POLL_MS)
       }
 
+      // The hangup is for a shell still there to pass it on to its jobs.
       const hangup = setTimeout(() => {
-        pty.kill()
+        if (!shellGone) pty.kill()
       }, GRACE_MS)
       const kill = setTimeout(() => {
         this.signalGroup(pty.pid, 'SIGKILL')
@@ -303,14 +330,16 @@ export class TerminalManager {
       }, GRACE_MS + HANGUP_MS)
       const ceiling = setTimeout(finish, GRACE_MS + HANGUP_MS + KILL_WAIT_MS)
 
-      pty.onExit(() => {
-        shellGone = true
-        settle()
-      })
+      if (shellGone) settle()
+      else
+        pty.onExit(() => {
+          shellGone = true
+          settle()
+        })
     })
 
-    this.ending.add(ending)
-    void ending.then(() => this.ending.delete(ending))
+    this.ending.set(id, ending)
+    void ending.then(() => this.ending.delete(id))
     return ending
   }
 
@@ -361,7 +390,7 @@ export class TerminalManager {
    */
   async disposeAll(): Promise<void> {
     for (const id of [...this.sessions.keys()]) void this.dispose(id)
-    await Promise.all(this.ending)
+    await Promise.all(this.ending.values())
   }
 
   /**
