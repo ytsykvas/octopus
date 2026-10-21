@@ -40,7 +40,10 @@ describe('quitAfter', () => {
     const order: string[] = []
     quitAfter(
       app,
-      () => order.push('terminals'),
+      () => {
+        order.push('terminals')
+        return Promise.resolve()
+      },
       () => {
         order.push('chats')
         return Promise.resolve()
@@ -64,7 +67,7 @@ describe('quitAfter', () => {
     const app = fakeApp()
     quitAfter(
       app,
-      () => undefined,
+      () => Promise.resolve(),
       () => Promise.resolve()
     )
 
@@ -83,7 +86,7 @@ describe('quitAfter', () => {
     const app = fakeApp()
     quitAfter(
       app,
-      () => undefined,
+      () => Promise.resolve(),
       () => Promise.reject(new Error('a write failed'))
     )
 
@@ -93,11 +96,37 @@ describe('quitAfter', () => {
     expect(app.quit).toHaveBeenCalledOnce()
   })
 
+  /*
+   * The terminals are signalled first and synchronously, and then waited for:
+   * a run's child that ignores SIGTERM is killed only once the grace is over,
+   * and a quit that went before then left it holding its port.
+   */
+  it('waits for what went first as well as for the work', async () => {
+    const app = fakeApp()
+    let release = (): void => undefined
+    quitAfter(
+      app,
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+      () => Promise.resolve()
+    )
+
+    app.willQuit()
+    await vi.runAllTimersAsync()
+    expect(app.quit).not.toHaveBeenCalled()
+
+    release()
+    await vi.runAllTimersAsync()
+    expect(app.quit).toHaveBeenCalledOnce()
+  })
+
   // The second pass is the quit this function asked for, and goes through.
   it('lets the second pass through', async () => {
     const app = fakeApp()
     const work = vi.fn(() => Promise.resolve())
-    quitAfter(app, () => undefined, work)
+    quitAfter(app, () => Promise.resolve(), work)
 
     app.willQuit()
     await vi.runAllTimersAsync()
