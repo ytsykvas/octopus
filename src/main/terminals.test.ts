@@ -74,7 +74,7 @@ vi.mock('node-pty', () => ({
   }
 }))
 
-const { TerminalManager } = await import('./terminals.js')
+const { BATCH_CHARS, BATCH_MS, TerminalManager } = await import('./terminals.js')
 
 /** Stands in for a renderer's WebContents. */
 function target(): {
@@ -201,6 +201,107 @@ describe('streaming', () => {
 
     spawned[0]?.emit('into the void')
     expect(renderer.sent).toHaveLength(0)
+  })
+
+  /** What reached the window on `terminal:data`, in order. */
+  const output = (): unknown[] =>
+    renderer.sent.filter(([channel]) => channel === 'terminal:data').map(([, payload]) => payload)
+
+  /*
+   * node-pty reads about a kilobyte at a time, and each read used to be its own
+   * message: a fast build was 30 000 a second, a full core here and another in
+   * the window before anything was drawn.
+   */
+  it('gathers what follows the first chunk into one message', () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      spawned[0]?.emit('a')
+      spawned[0]?.emit('b')
+      spawned[0]?.emit('c')
+      expect(output()).toEqual([{ id, data: 'a' }])
+
+      vi.advanceTimersByTime(BATCH_MS)
+
+      expect(output()).toEqual([
+        { id, data: 'a' },
+        { id, data: 'bc' }
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The echo of a key somebody typed is a chunk on its own; held for a window
+  // it would make typing lag.
+  it('sends output at once when nothing was sent a moment ago', () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      spawned[0]?.emit('l')
+      vi.advanceTimersByTime(BATCH_MS)
+      spawned[0]?.emit('s')
+
+      expect(output()).toEqual([
+        { id, data: 'l' },
+        { id, data: 's' }
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sends a full batch without waiting for the window to end', () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      spawned[0]?.emit('first')
+      spawned[0]?.emit('x'.repeat(BATCH_CHARS))
+
+      expect(output()).toEqual([
+        { id, data: 'first' },
+        { id, data: 'x'.repeat(BATCH_CHARS) }
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Told of the exit first, the pane forgets the session and drops the run's
+  // last lines when they land — the failure at the bottom of a build log.
+  it('sends what is still gathered before it reports the exit', () => {
+    vi.useFakeTimers()
+    try {
+      const id = manager.create(SPEC, renderer as never)
+      spawned[0]?.emit('building')
+      spawned[0]?.emit('error: the last line')
+      spawned[0]?.end({ exitCode: 1 })
+
+      expect(renderer.sent).toEqual([
+        ['terminal:data', { id, data: 'building' }],
+        ['terminal:data', { id, data: 'error: the last line' }],
+        ['terminal:exit', { id, exitCode: 1 }]
+      ])
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sends nothing gathered to a window that closed meanwhile', () => {
+    vi.useFakeTimers()
+    try {
+      manager.create(SPEC, renderer as never)
+      spawned[0]?.emit('first')
+      spawned[0]?.emit('into the void')
+      renderer.destroyed = true
+
+      vi.advanceTimersByTime(BATCH_MS)
+
+      expect(output()).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('accepts input for a live session', () => {

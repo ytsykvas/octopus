@@ -35,6 +35,24 @@ import {
  */
 const GRACE_MS = 2_000
 
+/**
+ * How long output is gathered before it is sent, after the first chunk.
+ *
+ * node-pty reads about a kilobyte at a time, and each read used to be a
+ * message of its own: a build printing fast was 30 000 messages a second,
+ * which held this process and the window at a full core each before anything
+ * had been drawn. Gathered over 16 ms that is under a hundred.
+ */
+export const BATCH_MS = 16
+
+/**
+ * How much may be gathered before it is sent without waiting for the window.
+ *
+ * Characters rather than bytes, which is close enough for a limit whose job
+ * is only to keep a single message from growing without bound.
+ */
+export const BATCH_CHARS = 64 * 1024
+
 /** How a signal reaches a process, injected so tests never send a real one. */
 export type Kill = (pid: number, signal: NodeJS.Signals) => void
 
@@ -71,9 +89,40 @@ export class TerminalManager {
       rows: spec.rows
     })
 
-    pty.onData((data) => {
+    const send = (data: string): void => {
       // The window can close while the shell is still writing.
       if (!target.isDestroyed()) target.send('terminal:data', { id, data })
+    }
+
+    /*
+     * Output is sent the moment it starts and gathered after that.
+     *
+     * The first chunk goes at once, so the echo of a key somebody typed is not
+     * held back; whatever follows within `BATCH_MS` travels together. Not
+     * dropped on `dispose`: a stopped run keeps its log on screen, and the
+     * exit that always follows sends what is left.
+     */
+    let pending = ''
+    let batch: ReturnType<typeof setTimeout> | null = null
+    const flush = (): void => {
+      if (pending === '') return
+      const data = pending
+      pending = ''
+      send(data)
+    }
+
+    pty.onData((data) => {
+      if (batch === null) {
+        send(data)
+        batch = setTimeout(() => {
+          batch = null
+          flush()
+        }, BATCH_MS)
+        return
+      }
+
+      pending += data
+      if (pending.length >= BATCH_CHARS) flush()
     })
 
     // Closing a window destroys its WebContents without unmounting React, so
@@ -87,6 +136,12 @@ export class TerminalManager {
     target.once('destroyed', closeWithWindow)
 
     pty.onExit(({ exitCode, signal }) => {
+      // What is still gathered goes first. Told of the exit before it, the pane
+      // forgets the session and drops the run's last lines on arrival.
+      if (batch !== null) clearTimeout(batch)
+      batch = null
+      flush()
+
       this.sessions.delete(id)
       // Taken off here rather than in `dispose`: a script that finishes on its
       // own never goes through `dispose`, and every session ends here. Left
