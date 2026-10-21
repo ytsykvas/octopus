@@ -286,7 +286,13 @@ import {
 import { readScript, type ScriptKind, scriptExists, scriptPath, writeScript } from './scripts.js'
 import { instructionItem, type SourceView } from './sourceItems.js'
 import { readSources } from './sources.js'
-import { type ProjectFields, resolveProjectFields } from './projectFields.js'
+import {
+  type FieldsOf,
+  type ProjectFields,
+  resolveBaseBranch,
+  resolveEnvFile,
+  resolveProjectFields
+} from './projectFields.js'
 import {
   compareRepoItem,
   formatRepoProject,
@@ -1971,7 +1977,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   async function resolveBaseRefOf(project: Project): Promise<string> {
     // The base in effect: the repository's own when it states one git has.
-    const { baseBranch } = await liveProject(project)
+    const baseBranch = await liveBaseBranch(project)
     try {
       return (await resolveBase(makeExec(project.repoPath), baseBranch)).ref
     } catch {
@@ -2021,7 +2027,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   ): Promise<void> {
     // The file in effect, before and after: with the repository stating one,
     // editing the project's own changes nothing on disk until it is chosen.
-    const wasEnvFile = (await liveProject(requireProject(projectId))).envFile
+    const wasEnvFile = await liveEnvFile(requireProject(projectId))
 
     await commit(change)
     // Straight after the write, so a failure in the clean-up below cannot
@@ -2029,7 +2035,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     await pushSkillsToRunning()
 
     // After the commit, so a rejected change leaves the old file alone.
-    const { envFile } = await liveProject(requireProject(projectId))
+    const envFile = await liveEnvFile(requireProject(projectId))
     if (envFile !== wasEnvFile) {
       for (const workspace of workspacesOfProject(state, projectId)) {
         await removeEnvBlock(workspace.path, wasEnvFile)
@@ -2063,33 +2069,69 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function fieldsOf(project: Project): Promise<ProjectFields> {
     return resolveProjectFields(
       await readStatedProject(project.repoPath),
-      {
-        baseBranch: project.baseBranch,
-        envFile: project.envFile,
-        preferBaseBranch: project.preferLocal.includes('project.baseBranch'),
-        preferEnvFile: project.preferLocal.includes('project.envFile'),
-        trusted: project.trustRepository
-      },
+      fieldInputsOf(project),
       makeExec(project.repoPath)
     )
   }
+
+  /** What the resolution needs to know about the project's own side. */
+  function fieldInputsOf(project: Project): FieldsOf {
+    return {
+      baseBranch: project.baseBranch,
+      envFile: project.envFile,
+      preferBaseBranch: project.preferLocal.includes('project.baseBranch'),
+      preferEnvFile: project.preferLocal.includes('project.envFile'),
+      trusted: project.trustRepository
+    }
+  }
+
+  /**
+   * One live field, as it is in effect — or the project's own where the
+   * checkout cannot answer.
+   *
+   * A reader that wants one field takes that one: the base costs git a branch
+   * lookup and the env file a `check-ignore`, and every base resolution used
+   * to pay for both, twice a turn.
+   */
+  async function liveField(
+    project: Project,
+    resolve: typeof resolveBaseBranch,
+    own: string
+  ): Promise<string> {
+    try {
+      const field = await resolve(
+        await readStatedProject(project.repoPath),
+        fieldInputsOf(project),
+        makeExec(project.repoPath)
+      )
+      return field.value
+    } catch {
+      return own
+    }
+  }
+
+  const liveBaseBranch = (project: Project): Promise<string> =>
+    liveField(project, resolveBaseBranch, project.baseBranch)
+
+  const liveEnvFile = (project: Project): Promise<string> =>
+    liveField(project, resolveEnvFile, project.envFile)
 
   /**
    * The project with the two live fields as they are in effect.
    *
    * The stored record is left alone — it holds the user's own values, which
    * "use mine instead" has to be able to return to — and the places that act
-   * on a base branch or an env file ask this instead. A checkout git cannot
-   * answer for (moved, deleted) keeps the stored values, so the reads this
-   * serves go on working and the workspace is reported missing as before.
+   * on both ask this instead; a place that acts on one asks `liveBaseBranch`
+   * or `liveEnvFile`. A checkout git cannot answer for (moved, deleted) keeps
+   * the stored values, so the reads this serves go on working and the
+   * workspace is reported missing as before.
+   *
+   * The two fields, which reads `project.json` twice: a small file, and this
+   * is asked once per workspace created, beside a fetch.
    */
   async function liveProject(project: Project): Promise<Project> {
-    try {
-      const { baseBranch, envFile } = await fieldsOf(project)
-      return { ...project, baseBranch: baseBranch.value, envFile: envFile.value }
-    } catch {
-      return project
-    }
+    const [baseBranch, envFile] = await Promise.all([liveBaseBranch(project), liveEnvFile(project)])
+    return { ...project, baseBranch, envFile }
   }
 
   /**
@@ -3713,7 +3755,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * `git add -A` would commit.
    */
   async function envFileFor(project: Project, workspace: Workspace): Promise<string> {
-    const { envFile } = await liveProject(project)
+    const envFile = await liveEnvFile(project)
     if (envFile === project.envFile) return envFile
 
     return (await isIgnored(makeExec(workspace.path), envFile)) ? envFile : project.envFile
@@ -4987,14 +5029,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async isProjectEnvIgnored(projectId) {
       const project = requireProject(projectId)
-      return isIgnored(makeExec(project.repoPath), (await liveProject(project)).envFile)
+      return isIgnored(makeExec(project.repoPath), await liveEnvFile(project))
     },
 
     async readWorkspaceEnv(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      return readWorkspaceEnv(workspace.path, (await liveProject(project)).envFile)
+      return readWorkspaceEnv(workspace.path, await liveEnvFile(project))
     },
 
     async prepareWorkspace(workspaceId) {

@@ -125,23 +125,58 @@ async function envFileOf(
 }
 
 /**
- * Both fields, from what the checkout states and what the project holds.
+ * What the checkout states, or nothing, or that it could not be read.
  *
- * `stated` is `null` for a `project.json` that could not be read — malformed,
- * or behind a link — which is not the same as a repository stating nothing:
- * the project's own values stand either way, but the window says why.
+ * `stated` is `'unreadable'` for a `project.json` that could not be read —
+ * malformed, or behind a link — which is not the same as a repository stating
+ * nothing: the project's own values stand either way, but the window says why.
  */
+export type Stated = RepoProject | null | 'unreadable'
+
+function unpack(stated: Stated): { readonly fields: RepoProject; readonly unreadable: boolean } {
+  return {
+    fields: stated === null || stated === 'unreadable' ? {} : stated,
+    unreadable: stated === 'unreadable'
+  }
+}
+
+/*
+ * Each field on its own as well as both together, because each costs git a
+ * question the other does not need — a branch lookup for the base, a
+ * `check-ignore` for the env file — and most readers want one: the base to
+ * diff against, the env file to write into. Asking for both on every read put
+ * a `check-ignore` on every base resolution, twice a turn.
+ */
+
+/** The base branch in effect. */
+export function resolveBaseBranch(
+  stated: Stated,
+  project: FieldsOf,
+  exec: GitExec
+): Promise<FieldSource> {
+  const { fields, unreadable } = unpack(stated)
+  return baseBranchOf(fields.baseBranch, project, exec, unreadable)
+}
+
+/** The env file in effect. */
+export function resolveEnvFile(
+  stated: Stated,
+  project: FieldsOf,
+  exec: GitExec
+): Promise<FieldSource> {
+  const { fields, unreadable } = unpack(stated)
+  return envFileOf(fields.envFile, project, exec, unreadable)
+}
+
+/** Both fields, from what the checkout states and what the project holds. */
 export async function resolveProjectFields(
-  stated: RepoProject | null | 'unreadable',
+  stated: Stated,
   project: FieldsOf,
   exec: GitExec
 ): Promise<ProjectFields> {
-  const unreadable = stated === 'unreadable'
-  const fields = stated === null || stated === 'unreadable' ? {} : stated
-
   const [baseBranch, envFile] = await Promise.all([
-    baseBranchOf(fields.baseBranch, project, exec, unreadable),
-    envFileOf(fields.envFile, project, exec, unreadable)
+    resolveBaseBranch(stated, project, exec),
+    resolveEnvFile(stated, project, exec)
   ])
 
   return { baseBranch, envFile }
