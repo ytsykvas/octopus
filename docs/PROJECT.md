@@ -184,7 +184,7 @@ Versions below are **actually installed and verified** (`npm run check` and `ele
 
 | Package              | Version       | Role                           |
 | -------------------- | ------------- | ------------------------------ |
-| react                | 19.2.8        | rendering                      |
+| react                | 19.3.1        | rendering                      |
 | tailwindcss          | 4.3.3         | styles (CSS-first config)      |
 | @vitejs/plugin-react | 6.0.5         | React in Vite                  |
 | i18next              | 26.3.6        | localisation                   |
