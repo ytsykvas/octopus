@@ -11,7 +11,9 @@ import {
   collectTreeEntries,
   compareNodes,
   folderStatuses,
+  drawnOpen,
   foldersFromDisk,
+  nodeAt,
   listingNodes,
   MAX_TREE_ENTRIES,
   parseEmptyFolders,
@@ -403,6 +405,35 @@ describe('foldersFromDisk', () => {
   // prefix with an ignored folder.
   it('leaves out a folder git lists the inside of', () => {
     expect(foldersFromDisk(entries, ['src', 'vendor', 'node_modules2'])).toEqual([])
+  })
+})
+
+describe('drawnOpen', () => {
+  it('keeps a folder whose every folder above is open', () => {
+    expect(drawnOpen(new Set(['src', 'src/a', 'src/a/b', 'lib']))).toEqual(
+      new Set(['src', 'src/a', 'src/a/b', 'lib'])
+    )
+  })
+
+  // Left open inside a folder closed since: the panel remembers it, nothing draws it.
+  it('leaves out one under a closed folder, at any depth', () => {
+    expect(drawnOpen(new Set(['node_modules/pkg', 'src', 'src/a/b']))).toEqual(new Set(['src']))
+    // Its own parent open, the one above that closed.
+    expect(drawnOpen(new Set(['node_modules/pkg', 'node_modules/pkg/lib']))).toEqual(new Set())
+  })
+})
+
+describe('nodeAt', () => {
+  const index = buildTree([file('src/core/a.ts'), file('README.md')])
+
+  it('finds a row at any depth, and at the top', () => {
+    expect(nodeAt(index, 'src/core/a.ts')?.kind).toBe('file')
+    expect(nodeAt(index, 'README.md')?.name).toBe('README.md')
+  })
+
+  it('finds nothing where its folder does not name it, or is not in the index', () => {
+    expect(nodeAt(index, 'src/b.ts')).toBeUndefined()
+    expect(nodeAt(index, 'lib/c.ts')).toBeUndefined()
   })
 })
 

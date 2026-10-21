@@ -2796,18 +2796,21 @@ path the status names.
 **Ignored entries are shown greyed**, and an ignored folder opens: git reports
 `node_modules/` as one entry, and its contents are read from disk only when it
 is expanded, through the same containment check as opening a file. A folder
-lists at most 5 000 entries and says so under the last. A refresh reads again
-only the ignored folders still open — one opened once and closed must not cost a
-long read on every turn after. An open folder with no listing yet is read along
-with them: every one of them after a switch to another workspace and back, since
-the open folders outlive the switch and the listings do not. A listing is laid
-into the tree only while git still names its folder whole, so `git add -f`, an
-edited `.gitignore` or a first file in an empty folder hands it back to git's
-own children and marks — and the listing is let go on the next read, as it is
-for a folder deleted whole, rather than read again on every turn for nothing. A
-folder inside one read from disk goes the same way once that one's listing
-stops naming it — `node_modules/pkg` after a reinstall, which git cannot report,
-since it still names `node_modules` whole.
+lists at most 5 000 entries and says so under the last. One rule decides what
+is read (`useFileTree`): a folder drawn open whose rows come from disk is read
+whenever no listing holds it — the one just clicked, those opened to show the
+open file, and every one after a switch to another workspace and back, since the
+open folders outlive the switch and the listings do not. A refresh reads again
+only those still drawn open; one closed, or left open inside a folder closed
+since (`drawnOpen`), is let go rather than read on every turn after, and read
+afresh once it is drawn again. A listing is laid into the tree only while git
+still names its folder whole, so `git add -f`, an edited `.gitignore` or a first
+file in an empty folder hands it back to git's own children and marks — and the
+listing is let go on the next read, as it is for a folder deleted whole, rather
+than read again on every turn for nothing. A folder inside one read from disk
+goes the same way once that one's listing stops naming it — `node_modules/pkg`
+after a reinstall, which git cannot report, since it still names `node_modules`
+whole.
 
 **A submodule is a folder, read from disk the same way**, and nothing inside it
 is greyed or marked: the outer repository has nothing to say about it, its own
@@ -2874,7 +2877,8 @@ request. A folder above it that is read from disk — `node_modules`, a submodul
 — is read along the way, and every folder inside that one too, since the tree
 cannot know them before their parent's listing arrives; the scroll waits for
 the row rather than for the click. It stops waiting once nothing it opened is
-still being read, or when the reader moves on — another file in the centre, a
+still being read — a folder the listing above it no longer names is never read,
+and not waited on — or when the reader moves on — another file in the centre, a
 key or a scroll in the tree, the tab put away. Left armed, a row turning up in a
 later re-read moved the tree long after the click. The scroll is measured from
 the tree as it is at that moment, which is also why the tree measures itself

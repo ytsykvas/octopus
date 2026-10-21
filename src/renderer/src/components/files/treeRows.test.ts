@@ -59,16 +59,13 @@ describe('visibleRows', () => {
     expect(rows[0]).toMatchObject({ level: 1, setSize: 3, position: 1 })
   })
 
-  it('stands a note in for an ignored folder not read yet, or still being read', () => {
+  it('stands a note in for an ignored folder whose listing is not in yet', () => {
     const open = new Set(['node_modules'])
 
     expect(drawn(visibleRows(tree, open, NO_LISTINGS)).slice(0, 2)).toEqual([
       'node_modules/',
       '  (loading)'
     ])
-    expect(
-      drawn(visibleRows(tree, open, new Map([['node_modules', { status: 'loading' }]]))).slice(0, 2)
-    ).toEqual(['node_modules/', '  (loading)'])
   })
 
   // Read from disk like an ignored folder, though nothing about it is ignored.

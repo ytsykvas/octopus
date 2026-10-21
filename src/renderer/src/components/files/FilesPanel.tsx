@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import {
   MAX_DIRECTORY_ENTRIES,
   MAX_TREE_ENTRIES,
+  nodeAt,
   type TreeIndex,
   type TreeNode,
   type TreeStatus
@@ -219,12 +220,14 @@ function WorkspaceTree({
    */
   if (revealing !== null) {
     const position = rows.findIndex((row) => row.type === 'node' && row.node.path === revealing)
+    const { index, listings } = tree
+    // Outermost first, so a folder with no row is one whose parent's listing
+    // no longer names it: never read, it must not hold the reveal open.
     const reading =
-      tree.index !== null &&
-      revealPath(tree.index, revealing).fromDisk.some((folder) => {
-        const status = tree.listings.get(folder)?.status
-        return status === undefined || status === 'loading'
-      })
+      index !== null &&
+      revealPath(index, revealing).fromDisk.some(
+        (folder) => !listings.has(folder) && nodeAt(index, folder) !== undefined
+      )
     if (position !== -1) {
       setRevealing(null)
       setScrollRequest({ position })
@@ -234,8 +237,7 @@ function WorkspaceTree({
   }
 
   const showOpenFile = (path: string, index: TreeIndex): void => {
-    const { open, fromDisk } = revealPath(index, path)
-    for (const folder of fromDisk) if (!tree.listings.has(folder)) tree.openFolder(folder)
+    const { open } = revealPath(index, path)
     onExpanded((current) => new Set([...current, ...open]))
     filter.clear()
     setFocus(path)
@@ -245,12 +247,6 @@ function WorkspaceTree({
   const toggle = (node: TreeNode): void => {
     setRevealing(null)
     const opening = !expanded.has(node.path)
-    // The contents of a folder git names whole — ignored, a submodule, a nested
-    // repository — come from disk, asked for the first time it is opened;
-    // after that a refresh keeps them current.
-    if (opening && node.childrenFromDisk && !tree.listings.has(node.path))
-      tree.openFolder(node.path)
-
     onExpanded((current) => {
       const next = new Set(current)
       if (opening) next.add(node.path)
