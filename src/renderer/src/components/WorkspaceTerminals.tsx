@@ -61,7 +61,9 @@ export function WorkspaceTerminals({
     )
 
   return (
-    <div className="relative flex-1">
+    // Clipped, so a terminal moved offstage leaves the screen rather than
+    // landing on the column beside it, where xterm would go on drawing it.
+    <div className="relative flex-1 overflow-clip">
       {/* Shown over the terminals rather than instead of them. Returning a
           different element here would unmount every session — and clicking the
           already-active project clears the selection, so a stray click used to
@@ -77,10 +79,9 @@ export function WorkspaceTerminals({
       {opened.map((workspace) => (
         <div
           key={workspace.id}
-          // Hidden with `visibility`, never `display: none`: a display-hidden
-          // element measures zero, so FitAddon would size the terminal to no
-          // columns at all and the session would come back mangled.
-          className={`absolute inset-0 ${workspace.id === activeId ? '' : 'invisible'}`}
+          // Offstage rather than `invisible`, which xterm cannot tell from on
+          // screen: see `.offstage` in styles.css.
+          className={`absolute inset-0 ${workspace.id === activeId ? '' : 'offstage'}`}
         >
           <Terminal cwd={workspace.path} owner={{ workspaceId: workspace.id, purpose: 'shell' }} />
         </div>

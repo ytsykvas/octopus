@@ -51,6 +51,11 @@ interface WorkspaceScriptsProps {
   readonly onGone?: (workspaceId: string) => void
   /** Whether a half has something running, whenever that changes. */
   readonly onRunning?: (workspaceId: string, running: boolean) => void
+  /**
+   * Whether this half is on screen at all. The folded build is not, and its
+   * runners go offstage with the others so xterm stops drawing them.
+   */
+  readonly shown?: boolean
 }
 
 /**
@@ -80,7 +85,8 @@ export function WorkspaceScripts({
   onPort,
   onProfile,
   onRunning,
-  onGone
+  onGone,
+  shown = true
 }: WorkspaceScriptsProps): React.JSX.Element {
   /*
    * Every workspace selected so far, whether or not this tab was on screen.
@@ -136,10 +142,10 @@ export function WorkspaceScripts({
       {opened.map((workspace) => (
         <div
           key={workspace.id}
-          // Hidden with `visibility`, never `display: none`: a display-hidden
-          // element measures zero, so FitAddon would size the terminal to no
-          // columns at all and the output would come back mangled.
-          className={`absolute inset-0 flex flex-col ${workspace.id === activeId ? '' : 'invisible'}`}
+          // Offstage rather than `invisible`, which xterm cannot tell from on
+          // screen: see `.offstage` in styles.css. The root's own clip is what
+          // it leaves, a box of no height while the build is folded.
+          className={`absolute inset-0 flex flex-col ${shown && workspace.id === activeId ? '' : 'offstage'}`}
           aria-hidden={workspace.id !== activeId}
         >
           <ScriptRunner

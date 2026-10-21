@@ -786,6 +786,24 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+
+  /*
+   * A terminal kept mounted but not on screen: another workspace's, or the
+   * folded build half.
+   *
+   * Still laid out, so the fit addon keeps the size the pty was made at — a box
+   * that measures nothing would have it resized to nothing. And moved out of
+   * the box that clips it, because xterm stops drawing only when its
+   * IntersectionObserver says the screen has gone: `visibility` alone does not
+   * end an intersection, and neither does a box of no height, so a hidden dev
+   * server went on being drawn. Twice its width, since a box that only touches
+   * the clip's edge still counts as seen; to the left, since an overflow to
+   * the right could be scrolled to. The parent must clip.
+   */
+  .offstage {
+    visibility: hidden;
+    translate: -200% 0;
+  }
 }
 
 /* A toast arriving (AttentionToasts.tsx): a short fade and lift, so the eye

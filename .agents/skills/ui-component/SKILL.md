@@ -138,6 +138,11 @@ Existing pieces, worth checking before writing another: `Modal`,
 `DisclosureButton` for the toggle, `DisclosureChevron` alone where the control
 is not a plain button (a `Button`, a tree row, a `<summary>`).
 
+A mounted `Terminal` that is not on screen is hidden with `.offstage` inside a
+box that clips, or with `display: none` — never `invisible` or a box of no
+height, which xterm cannot tell from on screen and goes on drawing
+(`docs/ui.md`, "A terminal not on screen stops being drawn").
+
 `Modal` deliberately leaves its body without padding so a list can span the
 full width — a form inside it brings its own.
 

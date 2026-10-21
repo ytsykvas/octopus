@@ -1561,6 +1561,20 @@ box with its width and no height keeps the terminal's rows and takes only its
 columns: fitted to one row there, a progress display could not move above it
 and every frame would land in the scrollback.
 
+**A terminal not on screen stops being drawn.** Two things make that so.
+xterm pauses a terminal its IntersectionObserver says has left the screen, but
+in 6.0.0 every line that scrolls asks for the selection to be drawn again, and
+the answer redrew every row past the pause — one dev server logging behind
+another workspace held a fifth of a core. `components/xtermPause.ts` keeps that
+request while paused, for xterm's own resume to draw (xtermjs/xterm.js#6208;
+`docs/PROJECT.md` says why xterm is pinned). And the observer has to see the
+terminal go at all: `visibility: hidden` does not end an intersection, nor does
+a box of no height, so another workspace's terminal or runner, and every runner
+of the folded build, carry `.offstage` (`styles.css`) — still laid out, so the
+size holds, and moved twice its width out of a box that clips. Measured on a
+bare window, one log at 66 lines a second: 25–30% of a core hidden, 4–6% after,
+which is xterm parsing the output. A visible terminal costs what it did.
+
 **A build can be stopped while it runs**, beside `Building…` — one that hangs
 otherwise left `Run` disabled with nothing to press. It ends through the
 terminal's stop token rather than by unmounting it, so the log stays on screen;
@@ -2553,7 +2567,8 @@ this project's `setup.sh` somewhere that never asked for it. Leaving a project
 therefore ends its runs, which is the remaining edge and is written down.
 
 **Every tab is kept mounted** behind whichever one is showing, and hidden with a
-class. A terminal unmounted is a process killed — and so is a script, because
+class — `display: none`, which xterm does see as off screen, so a terminal in a
+hidden tab stops being drawn through the pause guard alone. A terminal unmounted is a process killed — and so is a script, because
 ceasing to render its terminal is the entire implementation of its Stop button,
 which made leaving the Build or Server tab press Stop without saying so. A diff
 unmounted loses which files were collapsed and where the pane was scrolled to,
@@ -2628,7 +2643,8 @@ servers running in them belong to their workspaces, and unmounting a terminal is
 how one is ended — so the fold used to close every shell and stop every dev
 server in the project. Hidden with `display: none`, a terminal keeps its size:
 the fit addon reads no height there and does nothing, and the `ResizeObserver`
-fits it again when the pane comes back. While folded no tab counts as visible,
+fits it again when the pane comes back. It also stops being drawn, like a
+terminal in a hidden tab. While folded no tab counts as visible,
 so nothing in it reads git, and the tab row is measured again on unfolding — a
 pane that started folded measured it at nothing.
 

@@ -1292,6 +1292,8 @@ describe('RightPanel', () => {
   // Neither half's runners may paint outside it: the build's log once ran on
   // over the server's name and log. jsdom lays nothing out, so the class is the
   // only handle there is.
+  // Each half's clip is also what a runner moved offstage leaves: without it,
+  // xterm would see the terminal still on screen and go on drawing it.
   it('clips each half to its own box', async () => {
     renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
 
@@ -2251,6 +2253,24 @@ describe('RightPanel', () => {
     expect(buildBody()).toHaveAttribute('aria-hidden', 'true')
     expect(buildBody()).not.toHaveClass('hidden')
     expect(buildBody()).toHaveClass('h-0', 'overflow-hidden')
+  })
+
+  /*
+   * A box of no height still counts as on screen to xterm, so a fast build —
+   * which runs here folded — went on being drawn. Folded, its runner is moved
+   * offstage; open, it is back.
+   */
+  it('moves the folded build’s runner off screen, and back when it opens', async () => {
+    const user = userEvent.setup()
+    renderPanel({ workspaces: [anna], activeWorkspaceId: anna.id, scripts: SCRIPTS })
+    const runner = (): Element | null | undefined =>
+      buildBody().firstElementChild?.querySelector(':scope > [aria-hidden]')
+
+    await user.click(scriptsTab())
+    expect(runner()).toHaveClass('offstage')
+
+    await user.click(buildHeading())
+    expect(runner()).not.toHaveClass('offstage')
   })
 
   it('brings the build back and folds it away again', async () => {
