@@ -431,6 +431,43 @@ describe('a row that started a background task', () => {
     expect(screen.getAllByText('Needs your answer')).not.toHaveLength(0)
   })
 
+  /*
+   * The call's own answer is the CLI's launch notice, which it asks never to
+   * be quoted; the report comes with the task's end. Opened, the row drew the
+   * notice under "Report" and the report nowhere.
+   */
+  it('opens on the task’s report once it is over, never on the launch notice', async () => {
+    const user = userEvent.setup()
+    renderTask(
+      task({ status: 'completed', summary: 'Found **three** handlers.' }),
+      called({
+        name: 'Agent',
+        input: { description: 'Audit', prompt: 'p' },
+        toolUseId: 'call-1',
+        result: answer({
+          content: 'Async agent launched successfully. (This tool result is internal metadata)',
+          stats: { background: true }
+        })
+      })
+    )
+
+    await user.click(screen.getByRole('button', { name: /Agent/ }))
+
+    expect(screen.getByText('Report')).toBeInTheDocument()
+    expect(screen.getByText('three').tagName).toBe('STRONG')
+    expect(screen.queryByText(/Async agent launched/)).not.toBeInTheDocument()
+  })
+
+  it('has no report to open while the task still works', async () => {
+    const user = userEvent.setup()
+    renderTask(task({ summary: 'Reading the routes' }))
+
+    await user.click(screen.getByRole('button', { name: /Agent/ }))
+
+    expect(screen.queryByText('Report')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Async agent launched/)).not.toBeInTheDocument()
+  })
+
   it('says how it ended and how many calls it took', () => {
     renderTask(task({ status: 'completed', toolUses: 5, durationMs: 12_000 }))
 

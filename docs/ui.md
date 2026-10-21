@@ -605,6 +605,10 @@ The report is the subagent's own words, from its structured output (`report`),
 because the result's text carries the CLI's trailer after it — the agent's id
 and a usage block meant for the model. A subagent sent off to run on its own
 answers its call at once, and its row says it is running in the background.
+That answer is the CLI's launch notice — metadata it asks never to be quoted —
+so it is never drawn: the report arrives with the task's end
+(`task_notification`), and the opened row takes it from the task once it is
+over. While it works there is no report to show, only its steps.
 A step whose call is not in the log (a conversation cleared halfway) stays at
 the top level rather than vanishing.
 
