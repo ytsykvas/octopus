@@ -27,6 +27,9 @@
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --on-accent: #ffffff;
+  /* The same in both themes: a mark drawn over a project colour, which is
+     light enough in the dark theme that white would vanish on it. */
+  --on-project: #16181d;
 
   --success: #16a34a;
   --danger: #dc2626;
@@ -86,6 +89,7 @@
   --accent: #3b82f6;
   --accent-hover: #60a5fa;
   --on-accent: #ffffff;
+  --on-project: #16181d;
 
   --success: #22c55e;
   --danger: #ef4444;
