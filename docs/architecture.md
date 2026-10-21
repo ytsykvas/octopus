@@ -103,21 +103,28 @@ holding its port and its pid file. node-pty gives each session its own group
 through `setsid`, so a negative pid reaches the whole tree and nothing outside
 it, and the group outlives its leader while a member is still in it.
 
-**SIGTERM, and only later a hangup.** To a server a hangup often means "reopen
-your logs" and it carries on; SIGTERM is the shutdown it cleans up after. The
-`pty.kill()` node-pty offers sends SIGHUP, and where a run script `exec`s into
-its server that server _is_ the pty's pid — fired in the same tick, the hangup
-arrives first and the SIGTERM handler never runs, so the pid file survives and
-the next start reports a server already running. It stays as the fallback for a
-process that ignores SIGTERM, two seconds later, cancelled the moment the
-session exits on its own.
+**SIGTERM, then a hangup, then SIGKILL to the group.** To a server a hangup
+often means "reopen your logs" and it carries on; SIGTERM is the shutdown it
+cleans up after. Anything stronger fired in the same tick arrives first: where a
+run script `exec`s into its server that server _is_ the pty's pid, its SIGTERM
+handler never runs, the pid file survives, and the next start reports a server
+already running. So two seconds pass before node-pty's `pty.kill()` hangs up on
+the shell — which an interactive shell, deaf to SIGTERM, answers by hanging up
+its jobs, each in a group of its own that no signal to the shell's reaches — and
+half a second more before SIGKILL goes to the whole group. Each step is
+cancelled the moment the group has emptied. The hangup used to be the last step,
+and a child ignoring both signals outlived the stop with its port; SIGKILL in its
+place, a tab closed with `npm run dev &` in it left the server running.
 
-**Ending one answers when it has ended**, not when it was asked to. A restart is
-a disposal and a start with nothing in between, and a dev server does not
-release its port the instant it is told to — so the next one bound against the
-last and failed on the port, blaming itself. `dispose` returns a promise that
-resolves on the pty's exit, and the renderer waits on it before opening the
-session that replaces it.
+**Ending one answers when its group has ended**, not when it was asked to, and
+not when its shell went. A restart is a disposal and a start with nothing in
+between, and a dev server does not release its port the instant it is told to —
+so the next one bound against the last and failed on the port, blaming itself.
+`dispose` returns a promise that resolves once the shell has exited and a
+signal-0 probe finds nothing left in its group, polled every 50 ms; a second past
+the SIGKILL it stops waiting regardless, since a process stuck in the kernel dies
+only when it comes out. The renderer waits on it before opening the session that
+replaces it.
 
 **Sessions end with the document that started them.** A reload keeps the
 `WebContents` and loses everything the renderer knew, so `disposeFor` ends that
