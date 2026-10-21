@@ -128,6 +128,29 @@ describe('a load that outlives the hook', () => {
   })
 })
 
+/*
+ * Fragments are gathered and drawn a few times a second; the finished block
+ * carries the whole text. A fragment still waiting when it lands would be drawn
+ * under it afterwards as a second copy of its last words.
+ */
+describe('the answer being written, once its block has finished', () => {
+  it('leaves nothing waiting to be drawn under the finished block', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({ type: 'text_delta', text: 'Look' })
+    emitAgentEvent({ type: 'text', text: 'Looking at auth.rb' })
+    // Longer than a flush, so one still waiting would have landed by now.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 100)))
+
+    expect(result.current.streaming.text).toBe('')
+    expect(result.current.entries).toHaveLength(1)
+  })
+})
+
 describe('a reading that belongs to the account rather than the conversation', () => {
   const READING: AgentEvent = {
     type: 'rate_limit',
@@ -156,7 +179,9 @@ describe('a reading that belongs to the account rather than the conversation', (
     emitAgentEvent({ type: 'text_delta', text: 'Look' })
     emitAgentEvent(READING)
 
-    expect(result.current.streaming.text).toBe('Look')
+    await waitFor(() => {
+      expect(result.current.streaming.text).toBe('Look')
+    })
     expect(result.current.entries).toEqual([])
   })
 })
@@ -185,7 +210,9 @@ describe('a background agent starting or ending', () => {
       ambient: false
     })
 
-    expect(result.current.streaming.text).toBe('Look')
+    await waitFor(() => {
+      expect(result.current.streaming.text).toBe('Look')
+    })
     expect(result.current.entries).toHaveLength(2)
   })
 })

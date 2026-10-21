@@ -540,13 +540,20 @@ or an arrow function rebuilt inside the render makes every row re-render by
 itself: measured under jsdom, 592 ms for one update at a thousand turns with
 them inline and 18 ms with them hoisted. `toThreadMessages` is held against the
 blocks, and the part map, the message renderer and the converter are module
-constants. Token streaming never goes through the runtime — the buffer is drawn
-below the thread, as it always was — which also sidesteps an open upstream issue
-where the cost of each update grows with the thread's length. Dependency pinned
+constants. Token streaming never goes through the runtime, which also sidesteps
+an open upstream issue where the cost of each update grows with the thread's
+length. Nor does it go through the log's props: `useStreaming` gathers the
+fragments and draws them every 50 ms, and hands them to `StreamingContext`,
+which only the tail below the thread reads — so a token renders that tail and
+nothing above it. Dependency pinned
 to an exact version: it is 0.x and its minors have broken things.
 
 The rows' own props travel in a context rebuilt on every render, so every row
-re-renders with the log. `ToolRow` is memoised on its call and the turn's
+re-renders with the log — which is why the log is memoised and `ChatSession`
+holds every prop it hands it still. It then renders when the conversation does,
+not on each poll or keystroke in the pane around it. `Markdown` is memoised on
+its text, so a row drawn again does not parse it again; parsing was what a poll
+or a token used to cost across the whole conversation. `ToolRow` is memoised on its call and the turn's
 state, and reads what it needs to open a file from a context held still, so a
 streamed token leaves the tool rows alone. The blocks are rebuilt each time the
 log grows, but a call none of whose parts moved is handed back as the same
@@ -2671,6 +2678,12 @@ through `useVisibleInterval`, which stops while the window is hidden or
 minimised and asks at once on the way back; the other projects' requests ride
 on `useBranchRequests`, and only while the bar shows. Folding it away is the
 switch for somebody who would rather the app did not run `ps` at all.
+
+**A reading redraws the bar and nothing else.** The bar takes the machine's
+reading itself, rather than `App` holding it — every reading differs from the
+last, and held in `App` it redrew the whole window every ten seconds, every
+open conversation included. A request read that brings nothing new leaves the
+state as it was for the same reason.
 
 **What floats in the corner sits above it.** The root sets
 `--status-bar-height` while the bar shows, and the notices add it to their

@@ -68,8 +68,9 @@ function stateOf(call: ToolCall, busy: boolean, task: TaskView | null): CallStat
  * only summarises — the input, the whole output, a subagent's steps and report
  * — and ⌘O opens every row at once.
  *
- * Memoised on the call and the turn's state, because the log re-renders on
- * every streamed token and nothing here changes while text arrives.
+ * Memoised on the call and the turn's state, because the log re-renders every
+ * row whenever the conversation grows or a question is answered, and a call
+ * none of whose parts moved has nothing new to draw.
  */
 export const ToolRow = memo(function ToolRow({
   call,

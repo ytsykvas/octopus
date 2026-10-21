@@ -12,6 +12,9 @@ import {
   type WorkingMode
 } from '@core/chats.js'
 import { byToolUse, callsAbove } from '@core/backgroundTasks.js'
+import type { FormValues } from '@core/elicitation.js'
+import type { QuestionAnswer } from '@core/questions.js'
+import type { PermissionAnswer } from '@core/service.js'
 import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -41,7 +44,7 @@ import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
 import { useSkills } from '../../hooks/useSkills.js'
 import { shortModel } from './agentFormat.js'
 import { AgentLogContext, type Agents, AgentsContext } from './agentTasks.js'
-import { ChatLog } from './ChatLog.js'
+import { ChatLog, StreamingContext } from './ChatLog.js'
 import { COLLAPSED, type Expansion } from './expansion.js'
 import { DayChip } from './DayChip.js'
 import { Composer } from './Composer.js'
@@ -279,9 +282,9 @@ export function ChatSession({
   // Moved once a choice that moves the session has been applied — a window, a
   // model, a mode — so the reading is taken again; see `useSessionUsage`.
   const [sessionMoves, setSessionMoves] = useState(0)
-  const moved = (): void => {
+  const moved = useCallback(() => {
     setSessionMoves((count) => count + 1)
-  }
+  }, [])
   const usage = useSessionUsage(chat.chat?.id ?? null, sessionMoves)
   const skills = useSkills(chat.chat?.id ?? null, workspace.id, chat.ensure)
 
@@ -450,39 +453,90 @@ export function ChatSession({
    * a click alone.
    */
   const recordId = record?.id ?? null
-  const rewind = async (messageId: string): Promise<void> => {
-    // The log draws a message's mark only once there is a conversation record,
-    // so this cannot be reached without one; the guard is for the type.
-    /* v8 ignore next */
-    if (recordId === null) return
+  const rewind = useCallback(
+    async (messageId: string): Promise<void> => {
+      // The log draws a message's mark only once there is a conversation record,
+      // so this cannot be reached without one; the guard is for the type.
+      /* v8 ignore next */
+      if (recordId === null) return
 
-    setNotice(null)
-    const preview = await window.octopus.chats.rewindPreview(recordId, messageId)
-    if (!preview.ok) {
-      setNotice(describeFailure(preview))
-      return
-    }
+      setNotice(null)
+      const preview = await window.octopus.chats.rewindPreview(recordId, messageId)
+      if (!preview.ok) {
+        setNotice(describeFailure(preview))
+        return
+      }
 
-    const scope = await chooseRewind(preview.value)
-    if (scope === null) return
+      const scope = await chooseRewind(preview.value)
+      if (scope === null) return
 
-    const done = await window.octopus.chats.rewind(recordId, messageId, scope)
-    if (!done.ok) {
-      setNotice(describeFailure(done))
-      return
-    }
+      const done = await window.octopus.chats.rewind(recordId, messageId, scope)
+      if (!done.ok) {
+        setNotice(describeFailure(done))
+        return
+      }
 
-    const text = done.value.text
-    if (text === null) return
+      const text = done.value.text
+      if (text === null) return
 
-    // The message, back in the field to be edited and sent again; the log is
-    // re-read by `useChat` when the core says the conversation was rewound.
-    // The end of the log is where the reader now is, and the session the
-    // context gauge read from has been closed.
-    setSeed((current) => ({ text, id: (current?.id ?? 0) + 1 }))
-    pinnedToBottom.current = true
-    moved()
-  }
+      // The message, back in the field to be edited and sent again; the log is
+      // re-read by `useChat` when the core says the conversation was rewound.
+      // The end of the log is where the reader now is, and the session the
+      // context gauge read from has been closed.
+      setSeed((current) => ({ text, id: (current?.id ?? 0) + 1 }))
+      pinnedToBottom.current = true
+      moved()
+    },
+    [recordId, chooseRewind, describeFailure, moved]
+  )
+
+  /*
+   * What the log is handed, held still.
+   *
+   * The log is memoised, and a handler rebuilt on every render here would undo
+   * that: every row drawn again on each streamed token, each poll, each key
+   * pressed in the composer.
+   */
+  const { answer, answerElicitation, answerQuestions, setMode } = chat
+  const answerInLog = useCallback(
+    (requestId: string, decision: PermissionAnswer) => void answer(requestId, decision),
+    [answer]
+  )
+  const answerElicitationInLog = useCallback(
+    (requestId: string, decision: 'accept' | 'decline', values?: FormValues) =>
+      void answerElicitation(requestId, decision, values),
+    [answerElicitation]
+  )
+  const answerQuestionsInLog = useCallback(
+    (requestId: string, answers: readonly QuestionAnswer[]) =>
+      void answerQuestions(requestId, answers),
+    [answerQuestions]
+  )
+  const rewindInLog = useCallback((messageId: string) => void rewind(messageId), [rewind])
+  // Sent as an ordinary message, because that is what it is: the request it
+  // belonged to was answered when the dialog closed, and there is nothing left
+  // to approve. Naming the plan matters — by the time anyone comes back to one
+  // the conversation may hold several, and "the plan above" would be the
+  // agent's guess.
+  //
+  // Planning is turned off first, and not only for the control's sake: that is
+  // what hands the session the mode the footer names. Without it the message
+  // went out while the conversation was still recorded as planning, and the
+  // agent worked in whatever mode it happened to fall back to. The mode an
+  // approved plan gets in the core — this is the same plan, approved later —
+  // and, as there, only out of planning: a plan the agent offered unasked does
+  // not lift a conversation out of Manual.
+  const executePlan = useCallback(
+    (plan: string) => {
+      void (async () => {
+        if (record?.planMode === true) {
+          await setMode(modeAfterPlan(record, planExecutionMode))
+        }
+        await sendMessage(t('chat.executePlanMessage', { title: planTitle(plan) }))
+      })()
+    },
+    [record, planExecutionMode, setMode, sendMessage, t]
+  )
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
   /* Null until a conversation says otherwise, which is most of them: there is
@@ -656,47 +710,23 @@ export function ChatSession({
               </Placeholder>
             ) : (
               <div ref={logContent}>
-                <ChatLog
-                  entries={chat.entries}
-                  streaming={chat.streaming}
-                  busy={chat.busy}
-                  waiting={chat.waiting}
-                  answerable={chat.answerable}
-                  pendingElicitationId={chat.pendingElicitation}
-                  onAnswer={(requestId, answer) => void chat.answer(requestId, answer)}
-                  onAnswerElicitation={(requestId, answer, values) =>
-                    void chat.answerElicitation(requestId, answer, values)
-                  }
-                  onAnswerQuestions={(requestId, answers) =>
-                    void chat.answerQuestions(requestId, answers)
-                  }
-                  // Sent as an ordinary message, because that is what it is: the
-                  // request it belonged to was answered when the dialog closed, and
-                  // there is nothing left to approve. Naming the plan matters — by
-                  // the time anyone comes back to one the conversation may hold
-                  // several, and "the plan above" would be the agent's guess.
-                  //
-                  // Planning is turned off first, and not only for the control's
-                  // sake: that is what hands the session the mode the footer names.
-                  // Without it the message went out while the conversation was still
-                  // recorded as planning, and the agent worked in whatever mode it
-                  // happened to fall back to. The mode an approved plan gets in the
-                  // core — this is the same plan, approved later — and, as there,
-                  // only out of planning: a plan the agent offered unasked does not
-                  // lift a conversation out of Manual.
-                  onRewind={(messageId) => void rewind(messageId)}
-                  expansion={expansion}
-                  workspacePath={workspace.path}
-                  onOpenFile={openFile}
-                  onExecutePlan={(plan) => {
-                    void (async () => {
-                      if (record?.planMode === true) {
-                        await chat.setMode(modeAfterPlan(record, planExecutionMode))
-                      }
-                      await chat.send(t('chat.executePlanMessage', { title: planTitle(plan) }))
-                    })()
-                  }}
-                />
+                <StreamingContext.Provider value={chat.streaming}>
+                  <ChatLog
+                    entries={chat.entries}
+                    busy={chat.busy}
+                    waiting={chat.waiting}
+                    answerable={chat.answerable}
+                    pendingElicitationId={chat.pendingElicitation}
+                    onAnswer={answerInLog}
+                    onAnswerElicitation={answerElicitationInLog}
+                    onAnswerQuestions={answerQuestionsInLog}
+                    onRewind={rewindInLog}
+                    expansion={expansion}
+                    workspacePath={workspace.path}
+                    onOpenFile={openFile}
+                    onExecutePlan={executePlan}
+                  />
+                </StreamingContext.Provider>
               </div>
             )}
             {farFromEnd && (

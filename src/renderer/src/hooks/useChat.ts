@@ -19,6 +19,7 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { Failure, Result } from '../../../preload/index.js'
 import { useMainWorking } from './backgroundTasks.js'
 import { onChatEvent } from './chatEvents.js'
+import { type Streaming, useStreaming } from './useStreaming.js'
 
 /** A tool call the agent is blocked on, waiting to be told whether it may run. */
 /**
@@ -71,14 +72,6 @@ function without(
     ? requests.filter((request) => request.requestId !== requestId)
     : requests
 }
-
-/** Prose and reasoning still being written, kept apart so they render apart. */
-export interface Streaming {
-  readonly text: string
-  readonly thinking: string
-}
-
-const NOTHING_STREAMING: Streaming = { text: '', thinking: '' }
 
 const NOTHING_WAITING: ReadonlySet<string> = new Set()
 
@@ -250,7 +243,12 @@ export function useChat(
 
   const [chat, setChat] = useState<Chat | null>(initial)
   const [entries, setEntries] = useState<readonly ChatEntry[]>([])
-  const [streaming, setStreaming] = useState<Streaming>(NOTHING_STREAMING)
+  const {
+    streaming,
+    append: appendStreaming,
+    discard: discardStreaming,
+    reset: resetStreaming
+  } = useStreaming(chat?.id ?? null)
   const [busy, setBusy] = useState(false)
   const [waiting, setWaiting] = useState<ReadonlySet<string>>(NOTHING_WAITING)
   /** Messages queued too recently to mark yet, each with the timer that will. */
@@ -296,7 +294,7 @@ export function useChat(
     if (chatId !== chat?.id) {
       setChat(initial)
       setEntries([])
-      setStreaming(NOTHING_STREAMING)
+      resetStreaming()
       setBusy(false)
       setRequests(NO_REQUESTS)
       setError(null)
@@ -365,12 +363,12 @@ export function useChat(
 
     const release = onChatEvent(({ event }) => {
       if (event.type === 'text_delta') {
-        setStreaming((current) => ({ ...current, text: current.text + event.text }))
+        appendStreaming('text', event.text)
         return
       }
 
       if (event.type === 'thinking_delta') {
-        setStreaming((current) => ({ ...current, thinking: current.thinking + event.text }))
+        appendStreaming('thinking', event.text)
         return
       }
 
@@ -380,7 +378,7 @@ export function useChat(
          of where it falls. Every window holding this log hears it; only the
          one that asked puts the message back in its field. */
       if (event.type === 'conversation_rewound') {
-        setStreaming(NOTHING_STREAMING)
+        discardStreaming()
         void window.octopus.chats.history(openChatId).then((history) => {
           if (!listening) return
           if (history.ok) setEntries(history.value)
@@ -424,7 +422,7 @@ export function useChat(
       // disk has already been deleted, so leaving the log would show a
       // history that no longer exists anywhere and that nothing can continue.
       if (event.type === 'conversation_reset' && event.cleared) {
-        setStreaming(NOTHING_STREAMING)
+        discardStreaming()
         setEntries([])
         return
       }
@@ -433,7 +431,7 @@ export function useChat(
       // complete form is in the event now arriving — except a background task
       // starting or ending, which is said by the CLI between the main agent's
       // words and would otherwise wipe the sentence being typed out.
-      if (!isTaskBoundary(event)) setStreaming(NOTHING_STREAMING)
+      if (!isTaskBoundary(event)) discardStreaming()
       setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
 
       // The core gave up auto mode on its own. This line is the only word of
@@ -498,7 +496,7 @@ export function useChat(
       release()
       forgetQueuing(pendingMarks)
     }
-  }, [openChatId, describeFailure])
+  }, [openChatId, describeFailure, appendStreaming, discardStreaming])
 
   /**
    * The conversation's record, created if this is the first thing done to it.
@@ -536,7 +534,7 @@ export function useChat(
       // waiting for the disk to confirm it makes typing feel unresponsive.
       const drawn: ChatEntry = { role: 'user', at: new Date().toISOString(), text }
       setEntries((current) => [...current, drawn])
-      setStreaming(NOTHING_STREAMING)
+      discardStreaming()
       setBusy(true)
       setError(null)
 
@@ -580,7 +578,7 @@ export function useChat(
 
       return true
     },
-    [ensureChat, describeFailure]
+    [ensureChat, describeFailure, discardStreaming]
   )
 
   const interrupt = useCallback(async () => {

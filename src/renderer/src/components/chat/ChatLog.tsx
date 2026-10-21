@@ -23,7 +23,7 @@ import {
   useExternalStoreRuntime
 } from '@assistant-ui/react'
 import type { TFunction } from 'i18next'
-import { createContext, useContext, useMemo } from 'react'
+import { createContext, memo, useContext, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FormValues } from '@core/elicitation.js'
@@ -38,7 +38,7 @@ import { Button } from '../Button.js'
 import { DisclosureButton } from '../Disclosure.js'
 import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { shown } from '../diff/shown.js'
-import type { Streaming } from '../../hooks/useChat.js'
+import { NOTHING_STREAMING, type Streaming } from '../../hooks/useStreaming.js'
 import { DaySeparator } from './DayChip.js'
 import { exitCodeOf, formatClock, formatFullTime, formatTokens } from './format.js'
 import { Markdown } from './Markdown.js'
@@ -86,7 +86,6 @@ const OUTCOME_LABELS: Record<
 
 interface ChatLogProps {
   readonly entries: readonly ChatEntry[]
-  readonly streaming: Streaming
   readonly busy: boolean
   /** Every question still open, by request id — the turn's and its agents'. */
   readonly answerable: ReadonlySet<string>
@@ -121,16 +120,29 @@ interface ChatLogProps {
 }
 
 /**
+ * The answer being typed out, for the one component that draws it.
+ *
+ * A context rather than a prop of the log: it changes many times a second
+ * while a reply streams, and as a prop it made the whole log render again
+ * with it — every row, every markdown block re-parsed — for a change that is
+ * only ever at the bottom.
+ */
+export const StreamingContext = createContext<Streaming>(NOTHING_STREAMING)
+
+/**
  * The conversation itself.
  *
  * Shaped like Claude Code's own transcript: what the agent said as prose, and
  * every tool call as one row with what came back under it — a turn is mostly
  * tool calls, and folding them away hid the part that says what the agent
  * actually did.
+ *
+ * Memoised, and every prop the pane hands it is held still: a render here
+ * renders every row, so the log draws again when the conversation does and
+ * not when the pane around it does — a poll, a keystroke, a streamed token.
  */
-export function ChatLog({
+export const ChatLog = memo(function ChatLog({
   entries,
-  streaming,
   busy,
   answerable,
   pendingElicitationId,
@@ -145,13 +157,12 @@ export function ChatLog({
   onOpenFile
 }: ChatLogProps): React.JSX.Element {
   /*
-   * Both walks are held against `entries` rather than run on every render.
+   * The walks are held against `entries` rather than run on every render.
    *
-   * A `text_delta` re-renders this pane, and grouping re-runs the line diff for
-   * every edit in the conversation: an `Edit` replacing a 400-line block is a
-   * 160,000-cell table, rebuilt on every chunk of the answer being typed out.
-   * The streamed text is its own state, so keyed this way the work happens when
-   * the log actually grows and not while it is being read.
+   * Grouping re-runs the line diff for every edit in the conversation: an
+   * `Edit` replacing a 400-line block is a 160,000-cell table. Keyed this way
+   * the work happens when the log actually grows, and not when a question is
+   * answered or the turn ends.
    */
   // Gathered once for the whole log: an answer is recorded as its own event, so
   // it sits further down than the question whose card draws it.
@@ -160,8 +171,8 @@ export function ChatLog({
   const blocks = useMemo(() => buildBlocks(entries), [entries])
   // What the working line counts from.
   const turnStart = useMemo(() => turnStartedAt(entries), [entries])
-  // Held still, so the rows reading it are not re-rendered by every token the
-  // answer streams in: the pane hands over a callback that keeps its identity.
+  // Held still, so the rows reading it are left alone when the log renders for
+  // some other reason: the pane hands over a callback that keeps its identity.
   const links = useMemo(() => ({ workspacePath, onOpenFile }), [workspacePath, onOpenFile])
   // Which calls handed over a plan, so that a plan sent back for another round
   // is not drawn as something that broke.
@@ -218,9 +229,8 @@ export function ChatLog({
       </AssistantRuntimeProvider>
 
       <ExpandContext.Provider value={expansion}>
-        {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
+        <StreamingTail />
       </ExpandContext.Provider>
-      {streaming.text !== '' && <Prose text={streaming.text} />}
 
       {/* With the main agent's turn over, what is still at work is the agents it
           sent off, and a clock from the turn's start would be counting the
@@ -229,6 +239,23 @@ export function ChatLog({
         <WorkingLine since={busy ? turnStart : null} agents={busy ? 0 : agentsAway} />
       )}
     </div>
+  )
+})
+
+/**
+ * The block still being written, below the rows that are done.
+ *
+ * The only reader of `StreamingContext`, so a streamed token renders this and
+ * nothing above it.
+ */
+function StreamingTail(): React.JSX.Element {
+  const streaming = useContext(StreamingContext)
+
+  return (
+    <>
+      {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
+      {streaming.text !== '' && <Prose text={streaming.text} />}
+    </>
   )
 }
 
@@ -242,9 +269,10 @@ export function ChatLog({
  * renderer below are module constants for that reason.
  *
  * The rows' own props are not: they travel in a context whose value is built
- * per render, so every row re-renders when the log does — as they did before
- * the library, and no worse. Holding that value still would need the callbacks
- * stabilised first, which the pane does not do.
+ * per render, so every row re-renders when the log does. That is now only when
+ * the conversation changes — the log is memoised on props the pane holds still
+ * — and a row drawn again with the same text does not parse it again, because
+ * `Markdown` is memoised on it.
  */
 const asIs = (message: ThreadMessageLike): ThreadMessageLike => message
 

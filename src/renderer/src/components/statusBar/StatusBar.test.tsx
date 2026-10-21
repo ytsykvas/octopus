@@ -52,6 +52,12 @@ function renderBar({
 }: Setup = {}): { onToggle: ReturnType<typeof vi.fn>; onOpen: ReturnType<typeof vi.fn> } {
   const onToggle = vi.fn()
   const onOpen = vi.fn()
+  // The bar takes its own reading; null is one that has not landed yet.
+  vi.mocked(window.octopus.resources.read).mockReturnValue(
+    resources === null
+      ? new Promise(() => undefined)
+      : Promise.resolve({ ok: true, value: resources })
+  )
   render(
     <StatusBar
       open={open}
@@ -59,7 +65,6 @@ function renderBar({
       projects={[PLANNER]}
       workspaces={workspaces}
       requests={new Map([['planner', new Map(requests.map((item) => [item.branch, item]))]])}
-      resources={resources}
       front={front}
       onOpen={onOpen}
     />
@@ -262,7 +267,7 @@ describe('what the machine is paying', () => {
   it('totals the tree, then breaks it down by workspace with the application last', async () => {
     const { onOpen } = renderBar({ workspaces: [anna], resources: reading })
 
-    await userEvent.click(screen.getByRole('button', { name: /^CPU 40%/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^CPU 40%/ }))
     const list = screen.getByRole('dialog', { name: 'What octopus is using' })
     const items = within(list).getAllByRole('listitem')
 
