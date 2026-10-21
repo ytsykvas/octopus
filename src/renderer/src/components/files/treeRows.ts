@@ -3,8 +3,8 @@ import { nodeAt, type TreeIndex, type TreeNode } from '@core/fileTree.js'
 
 /**
  * What reading a folder from disk came to. Absent from the map means its
- * listing is not in yet, and the row reads as loading: a folder drawn open is
- * read as soon as it is.
+ * listing is not in yet, and a folder whose rows come from disk reads as
+ * loading: one drawn open is read as soon as it is.
  */
 export type ListingState =
   { readonly status: 'failed' } | { readonly status: 'ready'; readonly truncated: boolean }

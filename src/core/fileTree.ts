@@ -51,11 +51,19 @@ export interface TreeEntry {
 export interface FileTreeSnapshot {
   readonly entries: readonly TreeEntry[]
   readonly statuses: Readonly<Record<string, TreeStatus>>
+  /**
+   * The untracked folders git names whole that hold something, a nested
+   * repository or an ignored folder — entries of their own — aside. An empty
+   * folder inside one is never printed — git names only the topmost untracked
+   * folder — so each, and every folder of git's inside it, is completed from
+   * disk when it is opened.
+   */
+  readonly untrackedFolders: readonly string[]
   /** The list was cut at `MAX_TREE_ENTRIES`; the window says so. */
   readonly truncated: boolean
 }
 
-/** One entry of a folder read from disk, for a folder git says nothing inside of. */
+/** One entry of a folder read from disk: one git says nothing inside of, or an untracked one it says too little of. */
 export interface DirectoryEntry {
   readonly name: string
   readonly kind: TreeEntryKind
@@ -247,42 +255,53 @@ export function parseUntracked(output: string): TreeEntry[] {
 }
 
 /**
- * Reads `git ls-files --others --exclude-standard --directory -z` for the
- * folders no other listing names: the ones with no file in them.
+ * Reads `git ls-files --others --exclude-standard --directory -z`: the folders
+ * no other listing names, and the ones an empty folder may hide in.
  *
  * A folder the agent has just made, before it writes into it, is in every
  * editor's explorer and was nowhere here. `--directory` names it — `a/` for a
  * folder holding only an empty `b`, too — and names a folder of untracked files
- * the same way, so a folder is kept only when neither the untracked listing nor
- * the ignored one has anything at or under it. What is kept is a folder read
- * from disk when opened, like a nested repository, and one with nothing in it
- * says so.
+ * the same way, so a folder is `empty` only when neither the untracked listing
+ * nor the ignored one has anything at or under it. What is kept is a folder
+ * read from disk when opened, like a nested repository, and one with nothing in
+ * it says so.
  *
  * Not every empty folder: `--directory` names only the topmost untracked one,
- * so an empty `new/b` beside a written `new/a/x.ts` is never printed, and only
- * a read of the disk could find it.
+ * so an empty `new/b` beside a written `new/a/x.ts` is never printed, and git
+ * cannot be made to. The folders it names that do hold something are
+ * `holding`, for the tree to complete from disk when one is opened — not a walk
+ * of the worktree.
  *
  * One more walk of the untracked files, run beside the others: 24ms against
  * the untracked listing's 23ms and the status's 35ms, on a checkout of 1,700
  * files (2026-10-19).
  */
-export function parseEmptyFolders(
+export function parseUntrackedFolders(
   output: string,
   untracked: readonly TreeEntry[],
   ignored: readonly TreeEntry[]
-): TreeEntry[] {
+): { readonly empty: TreeEntry[]; readonly holding: string[] } {
   // Every listed path and every folder above one: a folder in here holds
   // something, or is something. An untracked file `--directory` prints is in
   // the untracked listing too, so only folders get through. A hidden name does
   // not count: the tree drops it, and a folder holding only Finder's
   // `.DS_Store` would then be drawn nowhere.
-  const holding = new Set<string>()
+  const held = new Set<string>()
   for (const { path } of [...untracked, ...ignored]) {
     if (hidden(path)) continue
-    for (let at = path; at !== ''; at = parentOf(at)) holding.add(at)
+    for (let at = path; at !== ''; at = parentOf(at)) held.add(at)
   }
 
-  return othersIn(output, false).filter((entry) => !holding.has(entry.path))
+  // A nested repository or an ignored folder is an entry of its own, read from
+  // disk whole, and not one to complete.
+  const entries = new Set([...untracked, ...ignored].map((entry) => entry.path))
+  const folders = othersIn(output, false)
+  return {
+    empty: folders.filter((entry) => !held.has(entry.path)),
+    holding: folders
+      .filter((entry) => held.has(entry.path) && !entries.has(entry.path))
+      .map((entry) => entry.path)
+  }
 }
 
 function hidden(path: string): boolean {
@@ -419,20 +438,23 @@ export function buildTree(entries: readonly TreeEntry[]): Map<string, TreeNode[]
 }
 
 /**
- * Which of these folders have their children read from disk: one git names
- * whole — ignored, a submodule, a nested repository or an empty folder — and
- * any folder inside one.
+ * Which of these folders are read from disk: one git names whole — ignored, a
+ * submodule, a nested repository or an empty folder — and any folder inside
+ * one, which the listing replaces git's children for; and an untracked folder
+ * holding something, and any inside one, which the listing completes with
+ * the empty folders git never prints (`withFoldersOnDisk`).
  *
- * Told from the entries alone, so a folder open inside another is found
+ * Told from the snapshot alone, so a folder open inside another is found
  * without waiting for the outer one's listing.
  */
 export function foldersFromDisk(
-  entries: readonly TreeEntry[],
+  snapshot: Pick<FileTreeSnapshot, 'entries' | 'untrackedFolders'>,
   folders: Iterable<string>
 ): string[] {
-  const whole = new Set(
-    entries.filter((entry) => entry.kind === 'directory').map((entry) => entry.path)
-  )
+  const whole = new Set([
+    ...snapshot.entries.filter((entry) => entry.kind === 'directory').map((entry) => entry.path),
+    ...snapshot.untrackedFolders
+  ])
   return [...folders].filter((folder) => {
     for (let at = folder; at !== ''; at = parentOf(at)) {
       if (whole.has(at)) return true
@@ -480,6 +502,45 @@ export function listingNodes(
       childrenFromDisk: entry.kind === 'directory'
     }))
     .sort(compareNodes)
+}
+
+/**
+ * Whether a listing read from disk names a folder git calls `name`.
+ *
+ * git prints a name composed on macOS (`core.precomposeunicode`), while the
+ * disk gives it back as it was stored — decomposed, often, for a name Finder
+ * made with `й` or `é`. Compared as they came, such a folder was drawn twice,
+ * and taken for gone.
+ */
+export function listsFolder(listing: DirectoryListing, name: string): boolean {
+  return listing.entries.some(
+    (entry) => entry.kind === 'directory' && composed(entry.name) === composed(name)
+  )
+}
+
+function composed(name: string): string {
+  return name.normalize('NFC')
+}
+
+/**
+ * A folder git lists the inside of, with the folders on disk it does not name.
+ *
+ * In an untracked folder git names only the topmost, so `new/b` beside a
+ * written `new/a/x.ts` is never printed. Only folders are added: every file is
+ * in git's listings already, and the rows git gives carry its marks. Each one
+ * added is empty to git, so it is read from disk in turn when opened.
+ */
+export function withFoldersOnDisk(
+  index: TreeIndex,
+  folder: Pick<TreeNode, 'path' | 'ignored'>,
+  listing: DirectoryListing
+): TreeNode[] {
+  const children = index.get(folder.path) ?? []
+  const named = new Set(children.map((node) => composed(node.name)))
+  const missing = listing.entries.filter(
+    (entry) => entry.kind === 'directory' && !named.has(composed(entry.name))
+  )
+  return [...children, ...listingNodes(folder, { ...listing, entries: missing })].sort(compareNodes)
 }
 
 /**
@@ -552,16 +613,13 @@ export async function readFileTree(exec: GitExec): Promise<FileTreeSnapshot> {
   const { statuses, movedAway } = parseStatus(status)
   const untracked = parseUntracked(others)
   const ignoredEntries = parseIgnored(ignored)
+  const { empty, holding } = parseUntrackedFolders(folders, untracked, ignoredEntries)
   const { entries, truncated } = collectTreeEntries(
-    [
-      ...parseStaged(staged),
-      ...untracked,
-      ...parseEmptyFolders(folders, untracked, ignoredEntries)
-    ],
+    [...parseStaged(staged), ...untracked, ...empty],
     ignoredEntries,
     statuses,
     movedAway
   )
 
-  return { entries, statuses, truncated }
+  return { entries, statuses, untrackedFolders: holding, truncated }
 }

@@ -8,9 +8,11 @@ import {
   folderStatuses,
   foldersFromDisk,
   listingNodes,
+  listsFolder,
   nodeAt,
   type TreeIndex,
-  type TreeStatus
+  type TreeStatus,
+  withFoldersOnDisk
 } from '@core/fileTree.js'
 
 import type { ListingState } from '../components/files/treeRows.js'
@@ -70,12 +72,7 @@ function unnamed(listings: ReadonlyMap<string, Held>, folder: string): boolean {
     const slash = at.lastIndexOf('/')
     const above = listings.get(at.slice(0, slash))
     const name = at.slice(slash + 1)
-    if (
-      typeof above === 'object' &&
-      !above.entries.some((entry) => entry.kind === 'directory' && entry.name === name)
-    ) {
-      return true
-    }
+    if (typeof above === 'object' && !listsFolder(above, name)) return true
   }
   return false
 }
@@ -85,9 +82,11 @@ function unnamed(listings: ReadonlyMap<string, Held>, folder: string): boolean {
  * agent the way the Changes tab is: read when the tab is shown, after a turn
  * ends, and when the window comes back — never while the tab is hidden.
  *
- * A folder whose rows come from disk — ignored, a submodule, a nested
- * repository, an empty folder — is read once it is drawn open, and again with
- * the tree for as long as it stays so.
+ * A folder read from disk — ignored, a submodule, a nested repository or an
+ * empty folder, whose rows come from there, and an untracked folder holding
+ * something, whose rows git's listing leaves short of its empty folders — is
+ * read once it is drawn open, and again with the tree for as long as it stays
+ * so.
  */
 export function useFileTree(
   workspaceId: string | null,
@@ -106,7 +105,7 @@ export function useFileTree(
   const drawn = useMemo(() => drawnOpen(expanded), [expanded])
 
   /*
-   * The folders read from disk, held, still drawn open and still named whole,
+   * The folders read from disk, held, still drawn open and still read so,
    * so a re-read refreshes them with the rest — and only them:
    * `node_modules/.pnpm` opened once and closed again must not cost a
    * 5 000-entry read on every turn from then on, nor may `node_modules/pkg`
@@ -143,7 +142,7 @@ export function useFileTree(
         // go, and read afresh once it is drawn again. So is one git no longer
         // names whole, deleted or taken back in: held, it would be read on
         // every turn for a listing nothing lays out.
-        const fromDisk = new Set(foldersFromDisk(tree.value.entries, open.current))
+        const fromDisk = new Set(foldersFromDisk(tree.value, open.current))
         const kept = new Map<string, Held>(
           [...current.listings].filter(([folder]) => fromDisk.has(folder))
         )
@@ -171,12 +170,13 @@ export function useFileTree(
   useWorkspaceSettled(workspaceId, enabled, refresh)
 
   /*
-   * Every folder drawn open whose rows come from disk is read when no listing
+   * Every folder drawn open that is read from disk is read when no listing
    * holds it — the one just clicked, those opened to show the open file, one
    * left open inside a folder opened again, and every one after a switch to
    * another workspace and back, since the open folders outlive the switch and
    * the listings do not. One rule rather than a call from each of those, so
-   * none can be missed; until its listing lands the row reads as loading.
+   * none can be missed; until its listing lands, a folder whose rows come
+   * from disk reads as loading, and an untracked one shows git's rows.
    *
    * Checked against what is held, so `node_modules/pkg` back after a reinstall
    * is read as soon as the outer listing names it again. Each read is noted
@@ -189,7 +189,7 @@ export function useFileTree(
     const { id, snapshot, listings } = state
     if (id === null || snapshot === null || !enabled) return
 
-    for (const folder of foldersFromDisk(snapshot.entries, drawn)) {
+    for (const folder of foldersFromDisk(snapshot, drawn)) {
       const key = `${id}\0${folder}`
       if (listings.has(folder) || unnamed(listings, folder) || reading.current.has(key)) continue
 
@@ -217,10 +217,12 @@ export function useFileTree(
   )
 
   /*
-   * Git's tree with the folders read from disk laid into it — each only while
-   * its own row is still one git names whole. A folder that stops being ignored
-   * (`.gitignore` edited, `git add -f`) goes back to git's children and marks,
-   * rather than staying a grey listing that git no longer describes.
+   * Git's tree with the folders read from disk laid into it. A folder whose row
+   * git names whole has its rows from the listing; any other keeps git's rows
+   * and marks, and gains only the folders on disk git does not name — an
+   * untracked folder's empty ones, which git never prints. So one that stops
+   * being ignored (`.gitignore` edited, `git add -f`) goes back to git's
+   * children rather than staying a grey listing git no longer describes.
    *
    * Shallowest first, so a folder read inside another read folder finds its
    * row already laid in.
@@ -232,7 +234,11 @@ export function useFileTree(
     for (const [folder, listing] of folders) {
       if (typeof listing === 'string') continue
       const row = nodeAt(merged, folder)
-      if (row?.childrenFromDisk === true) merged.set(folder, listingNodes(row, listing))
+      if (row === undefined) continue
+      merged.set(
+        folder,
+        row.childrenFromDisk ? listingNodes(row, listing) : withFoldersOnDisk(merged, row, listing)
+      )
     }
     return merged
   }, [base, state.listings])

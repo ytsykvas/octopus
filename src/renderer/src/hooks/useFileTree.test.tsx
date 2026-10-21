@@ -19,6 +19,7 @@ const SNAPSHOT: FileTreeSnapshot = {
     { path: 'node_modules', kind: 'directory', ignored: true }
   ],
   statuses: { 'src/a.ts': 'modified' },
+  untrackedFolders: [],
   truncated: false
 }
 
@@ -414,6 +415,7 @@ describe('the tree of a workspace', () => {
     answering({
       entries: [{ path: 'node_modules/kept.js', kind: 'file', ignored: false }],
       statuses: {},
+      untrackedFolders: [],
       truncated: false
     })
     act(() => {
@@ -441,7 +443,7 @@ describe('the tree of a workspace', () => {
       expect(result.current.listings.get('node_modules')?.status).toBe('ready')
     })
 
-    answering({ entries: [], statuses: {}, truncated: false })
+    answering({ entries: [], statuses: {}, untrackedFolders: [], truncated: false })
     act(() => {
       result.current.refresh()
     })
@@ -719,6 +721,101 @@ describe('the tree of a workspace', () => {
     await waitFor(() => {
       expect(result.current.listings.get('node_modules')?.status).toBe('ready')
     })
+  })
+
+  /*
+   * git names only the topmost untracked folder: after `mkdir -p feature/{a,b}`
+   * and a file in `a`, it prints `feature/` and never the empty `b`. The disk
+   * completes what git lists inside, and the folder it adds is read in turn.
+   */
+  it('completes an untracked folder with the empty folders git never prints', async () => {
+    answering({
+      entries: [{ path: 'feature/a/x.ts', kind: 'file', ignored: false }],
+      statuses: { 'feature/a/x.ts': 'untracked' },
+      untrackedFolders: ['feature'],
+      truncated: false
+    })
+    vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          entries:
+            path === 'feature'
+              ? [
+                  { name: 'a', kind: 'directory' as const },
+                  { name: 'b', kind: 'directory' as const }
+                ]
+              : path === 'feature/a'
+                ? [
+                    { name: 'deep', kind: 'directory' as const },
+                    { name: 'x.ts', kind: 'file' as const }
+                  ]
+                : [],
+          truncated: false
+        }
+      })
+    )
+
+    const { result } = renderHook(() =>
+      useFileTree(WORKSPACE, true, new Set(['feature', 'feature/a', 'feature/b']))
+    )
+
+    await waitFor(() => {
+      expect(
+        result.current.index
+          ?.get('feature')
+          ?.map(({ name, childrenFromDisk }) => [name, childrenFromDisk])
+      ).toEqual([
+        ['a', false],
+        ['b', true]
+      ])
+    })
+    await waitFor(() => {
+      expect(result.current.listings.get('feature/b')?.status).toBe('ready')
+    })
+    expect(result.current.index?.get('feature/b')).toEqual([])
+    // A folder of git's inside one is completed the same way.
+    await waitFor(() => {
+      expect(
+        result.current.index
+          ?.get('feature/a')
+          ?.map(({ name, childrenFromDisk }) => [name, childrenFromDisk])
+      ).toEqual([
+        ['deep', true],
+        ['x.ts', false]
+      ])
+    })
+  })
+
+  // git prints `café` composed and the disk gives it back decomposed: the
+  // folder is the same one, and is read rather than taken for gone.
+  it('reads a folder of git’s whose name the disk stores decomposed', async () => {
+    answering({
+      entries: [{ path: 'feature/caf\u00e9/x.ts', kind: 'file', ignored: false }],
+      statuses: {},
+      untrackedFolders: ['feature'],
+      truncated: false
+    })
+    vi.mocked(octopus().files.directory).mockImplementation((_, path) =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          entries:
+            path === 'feature'
+              ? [{ name: 'cafe\u0301', kind: 'directory' as const }]
+              : [{ name: 'empty', kind: 'directory' as const }],
+          truncated: false
+        }
+      })
+    )
+    const cafe = 'feature/caf\u00e9'
+
+    const { result } = renderHook(() => useFileTree(WORKSPACE, true, new Set(['feature', cafe])))
+
+    await waitFor(() => {
+      expect(result.current.index?.get(cafe)?.map(({ name }) => name)).toEqual(['empty', 'x.ts'])
+    })
+    expect(result.current.index?.get('feature')).toHaveLength(1)
   })
 
   it('reads nothing for an open folder or a refresh with no workspace', () => {

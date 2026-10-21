@@ -2810,20 +2810,23 @@ path the status names.
 `node_modules/` as one entry, and its contents are read from disk only when it
 is expanded, through the same containment check as opening a file. A folder
 lists at most 5 000 entries and says so under the last. One rule decides what
-is read (`useFileTree`): a folder drawn open whose rows come from disk is read
-whenever no listing holds it — the one just clicked, those opened to show the
-open file, and every one after a switch to another workspace and back, since the
-open folders outlive the switch and the listings do not. A refresh reads again
-only those still drawn open; one closed, or left open inside a folder closed
-since (`drawnOpen`), is let go rather than read on every turn after, and read
-afresh once it is drawn again. A listing is laid into the tree only while git
-still names its folder whole, so `git add -f`, an edited `.gitignore` or a first
-file in an empty folder hands it back to git's own children and marks — and the
-listing is let go on the next read, as it is for a folder deleted whole, rather
-than read again on every turn for nothing. A folder inside one read from disk
-goes the same way once that one's listing stops naming it — `node_modules/pkg`
-after a reinstall, which git cannot report, since it still names `node_modules`
-whole.
+is read (`useFileTree`): a folder drawn open that is read from disk — one git
+names whole, or an untracked one holding something (below) — is read whenever no
+listing holds it: the one just clicked, those opened to show the open file, and
+every one after a switch to another workspace and back, since the open folders
+outlive the switch and the listings do not. A refresh reads again only those
+still drawn open; one closed, or left open inside a folder closed since
+(`drawnOpen`), is let go rather than read on every turn after, and read afresh
+once it is drawn again. A listing replaces the children of a folder git names
+whole and completes those of an untracked folder holding something; `git add
+-f`, an edited `.gitignore` or a commit hands the folder back to git's own
+children and marks, and the listing is let go on the next read, as it is for a
+folder deleted whole, rather than read again on every turn for nothing. A first
+file in an empty folder turns replacing into completing. A folder inside one
+read from disk goes the same way once that one's listing stops naming it —
+`node_modules/pkg` after a reinstall, which git cannot report, since it still
+names `node_modules` whole. Names are compared composed: git prints them so on
+macOS, and the disk gives back a name Finder stored decomposed.
 
 **A submodule is a folder, read from disk the same way**, and nothing inside it
 is greyed or marked: the outer repository has nothing to say about it, its own
@@ -2841,16 +2844,21 @@ folder: git names it `nested/` among the untracked and never looks inside, and
 taken as a path that drew a folder holding a row with no name. It now opens like
 a submodule, ungreyed, with the untracked mark on its own row.
 
-**An empty folder is in the tree too**, mostly. git lists files, so a folder the
-agent has just made — before it writes into it — was nowhere here while every
-editor's explorer showed it. `ls-files --others --directory` names it, and names
-a folder of untracked files the same way, so `parseEmptyFolders` keeps only the
-folders with nothing at or under them in the untracked or the ignored listing —
-a hidden name like `.DS_Store` not counting, since the tree drops it. Each is
-read from disk when opened, and says it holds nothing; a folder holding only an
-empty folder is named whole and opens onto it. What is still missed: git names
-only the topmost untracked folder, so an empty `new/b` beside a written
-`new/a/x.ts` is never printed, and only a read of the disk could find it.
+**An empty folder is in the tree too.** git lists files, so a folder the agent
+has just made — before it writes into it — was nowhere here while every editor's
+explorer showed it. `ls-files --others --directory` names it, and names a folder
+of untracked files the same way, so `parseUntrackedFolders` keeps as empty only
+the folders with nothing at or under them in the untracked or the ignored
+listing — a hidden name like `.DS_Store` not counting, since the tree drops it.
+Each is read from disk when opened, and says it holds nothing; a folder holding
+only an empty folder is named whole and opens onto it. git names only the
+topmost untracked folder, though, so the agent's usual scaffold — `mkdir -p
+new/{a,b}`, then a file in `a` — prints `new/` alone and never the empty `b`.
+The folders it names that do hold something travel with the tree
+(`untrackedFolders`), and each of them, and every folder of git's inside one, is
+read from disk when opened: its rows stay git's, with their marks, and the
+folders on disk git does not name are added (`withFoldersOnDisk`). One read per
+open untracked folder, never a walk of the worktree.
 
 **Read when it could have changed, never watched**: when the tab is shown, when
 a turn of any of the workspace's chats ends (settled 300ms, like the diff), when
