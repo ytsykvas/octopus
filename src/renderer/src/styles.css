@@ -187,6 +187,23 @@
     overflow: hidden;
   }
 
+  /*
+   * And not even from script.
+   *
+   * `hidden` only takes the scrollbar away: `focus()` and `scrollIntoView()`
+   * still scroll the box. A tool row's `sr-only` status label is absolute with
+   * no positioned ancestor inside the log, so it is placed against the row
+   * around the panes, escapes the conversation's own scroller and leaves
+   * `#root` thousands of pixels of nothing below the status bar — one scroll
+   * landing there moved the whole window up, and it stayed there.
+   * `clip` cannot be scrolled at all. `html` keeps `hidden`: on the root
+   * element, `clip` reaches the viewport as `hidden` anyway.
+   */
+  body,
+  #root {
+    overflow: clip;
+  }
+
   body {
     background-color: var(--canvas);
     color: var(--ink);

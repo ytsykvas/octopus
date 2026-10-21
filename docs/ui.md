@@ -39,6 +39,18 @@ dot — with the pane folded, that is the only place the failure can show.
 both in one tree outgrows the window and makes a click mean two things — select
 and fold. Splitting them means neither list grows with the other.
 
+**The page itself never scrolls, from script included.** `body` and `#root` are
+`overflow: clip` rather than `hidden` (`styles.css`, pinned by `page.test.ts`):
+`hidden` only removes the scrollbar, and `focus()` or `scrollIntoView()` still
+move the box. The room for that move is always there — a tool row's `sr-only`
+label is absolute with no positioned ancestor inside the log, so it is placed
+against the row around the panes, escapes the log's scroller and hangs
+thousands of pixels below the status bar — and one scroll that landed
+in it carried the whole window up and left it there. Inside a pane, scroll the
+pane's own list by `scrollTop`, and focus with `preventScroll` when the target is
+already on screen: `scrollIntoView` aligns in every scrollable ancestor, not
+only the nearest.
+
 **A project's tile says when its agents need you.** Several agents run at once,
 and without this the only way to learn that one had finished or stopped to ask
 was to open each workspace. A dot in the tile's corner, in the workspace list's
@@ -965,9 +977,10 @@ the separator into the chat; it sits on the chat's side of the line, so it stays
 when the right panel is folded. The drawer lies over the chat — nothing under it
 moves — and closes on a click anywhere else or Escape, but only for the
 conversation on screen and not while a dialog is open. Focus returns to where it
-was unless the click that closed it moved it. It has a field and a send button
-and nothing else: no model, no effort, no mode, because a side question uses the
-session as it is.
+was unless the click that closed it moved it, and neither move of focus scrolls
+anything; the newest exchange is kept in view by the drawer's own list. It has a
+field and a send button and nothing else: no model, no effort, no mode, because
+a side question uses the session as it is.
 
 Each conversation has its own thread, held for the window by `App`
 (`useSideQuestions`) so it survives the pane being rebuilt, and lost when the
