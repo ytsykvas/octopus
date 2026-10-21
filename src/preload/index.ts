@@ -529,6 +529,10 @@ const api = {
     list: (projectId: string): Promise<Result<WorkspaceView[]>> =>
       ipcRenderer.invoke('workspaces:list', projectId) as Promise<Result<WorkspaceView[]>>,
 
+    /** One workspace, read as the list reads it; null when it is gone. */
+    read: (workspaceId: string): Promise<Result<WorkspaceView | null>> =>
+      ipcRenderer.invoke('workspaces:read', workspaceId) as Promise<Result<WorkspaceView | null>>,
+
     create: (projectId: string): Promise<Result<Workspace>> =>
       ipcRenderer.invoke('workspaces:create', projectId) as Promise<Result<Workspace>>,
 

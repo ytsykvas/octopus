@@ -102,23 +102,31 @@ export function useWorkspaces(
    * search would otherwise be written out at each of them — and each of them
    * would have to remember to leave the other projects' arrays alone, which is
    * what keeps their rows from redrawing.
+   *
+   * A patch that hands the row back unchanged leaves the state as it was. This
+   * state lives in `App`, so a fresh map — even one equal to the last — redrew
+   * the whole window, several times a turn, for changes that were not there.
    */
   const patchWorkspace = useCallback(
     (workspaceId: string, patch: (workspace: WorkspaceView) => WorkspaceView) => {
       setByProject((current) => {
-        const next = new Map(current)
+        let next: Map<string, readonly WorkspaceView[]> | null = null
 
         for (const [projectId, workspaces] of current) {
-          if (!workspaces.some((workspace) => workspace.id === workspaceId)) continue
-          next.set(
-            projectId,
-            workspaces.map((workspace) =>
-              workspace.id === workspaceId ? patch(workspace) : workspace
-            )
-          )
+          let changed = false
+          const patched: WorkspaceView[] = []
+          for (const workspace of workspaces) {
+            const after = workspace.id === workspaceId ? patch(workspace) : workspace
+            if (after !== workspace) changed = true
+            patched.push(after)
+          }
+          if (!changed) continue
+
+          next ??= new Map(current)
+          next.set(projectId, patched)
         }
 
-        return next
+        return next ?? current
       })
     },
     []
@@ -142,15 +150,21 @@ export function useWorkspaces(
   /**
    * The pending re-read, so a turn ending twice over is one of them.
    *
-   * One per project rather than one in all. A single timer was cleared by
-   * whichever project the next event came from, so two turns finishing within
-   * the settle window in **different** projects left one of them with no
-   * re-read at all — its rows going on showing the count they had before the
-   * agent touched anything, until something else happened to refresh the list.
-   * Several agents working at once is this application's whole premise, so that
-   * is not a corner.
+   * One per workspace. A single timer was cleared by whichever workspace the
+   * next event came from, so two turns finishing within the settle window left
+   * one of them with no re-read at all — its row going on showing the count it
+   * had before the agent touched anything. Several agents working at once is
+   * this application's whole premise, so that is not a corner.
    */
   const settle = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+
+  /**
+   * Workspaces whose turn ended while the window was hidden, read on its return.
+   *
+   * Nobody can see the row then, and an agent's turns go on ending while the
+   * window is in the background — which is when somebody leaves agents to it.
+   */
+  const unseen = useRef(new Map<string, string>())
 
   /*
    * The changed-file count, re-read when the work that changes it stops.
@@ -160,49 +174,78 @@ export function useWorkspaces(
    * what it said an hour ago — beside a diff pane that re-reads itself on the
    * same event, and now inside the same dot that carries the agent's state.
    *
-   * Only the project the workspace belongs to: a turn ending is a poor reason
-   * to run `git status` over every workspace of every project.
+   * Only the workspace whose turn ended: nothing else had an agent at work in
+   * it. Re-reading its whole project ran `git status` and `rev-list` for every
+   * sibling after every turn of every agent. A sibling's row catches up on its
+   * own turn's end, or on a full refresh.
    */
   useEffect(() => {
-    // Read into a variable here rather than in the cleanup: a ref may point at
+    // Read into variables here rather than in the cleanup: a ref may point at
     // something else by the time a cleanup runs, and the timers to clear are
     // the ones this subscription started.
     const timers = settle.current
+    const hidden = unseen.current
+
+    const projectOf = (workspaceId: string): string | undefined =>
+      latestProjects.current.find((project) => workspaceId.startsWith(`${project.id}/`))?.id
+
+    const reread = async (workspaceId: string, projectId: string): Promise<void> => {
+      const result = await window.octopus.workspaces.read(workspaceId)
+      if (!result.ok) return
+
+      const read = result.value
+      if (read !== null) {
+        // Compared whole, nested lists included, so a field added later is never
+        // skipped; a needless miss costs one render, never a stale row.
+        patchWorkspace(workspaceId, (held) =>
+          JSON.stringify(held) === JSON.stringify(read) ? held : read
+        )
+        return
+      }
+
+      // Gone — the one thing a single read cannot draw. The project's list can.
+      const listed = await window.octopus.workspaces.list(projectId)
+      if (listed.ok) setByProject((current) => new Map(current).set(projectId, listed.value))
+    }
 
     const unsubscribe = onChatEvent((announced) => {
       // A turn ends either way, and one that failed may well have written files
       // before it did.
       if (announced.event.type !== 'result' && announced.event.type !== 'error') return
 
-      const projectId = latestProjects.current.find((project) =>
-        announced.workspaceId.startsWith(`${project.id}/`)
-      )?.id
+      const { workspaceId } = announced
+      const projectId = projectOf(workspaceId)
       if (projectId === undefined) return
 
-      const pending = timers.get(projectId)
+      const pending = timers.get(workspaceId)
       if (pending !== undefined) clearTimeout(pending)
 
       timers.set(
-        projectId,
+        workspaceId,
         setTimeout(() => {
-          timers.delete(projectId)
-
-          void (async () => {
-            const result = await window.octopus.workspaces.list(projectId)
-            if (!result.ok) return
-
-            setByProject((current) => new Map(current).set(projectId, result.value))
-          })()
+          timers.delete(workspaceId)
+          // Asked when the timer fires rather than when the turn ended, so a
+          // window hidden within the settle window is held too.
+          if (document.hidden) hidden.set(workspaceId, projectId)
+          else void reread(workspaceId, projectId)
         }, SETTLE_MS)
       )
     })
 
+    const onVisibility = (): void => {
+      if (document.hidden) return
+      for (const [workspaceId, projectId] of hidden) void reread(workspaceId, projectId)
+      hidden.clear()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
     return () => {
       unsubscribe()
+      document.removeEventListener('visibilitychange', onVisibility)
       for (const pending of timers.values()) clearTimeout(pending)
       timers.clear()
     }
-  }, [])
+  }, [patchWorkspace])
 
   /*
    * What a workspace is doing, patched in as the core says so.
@@ -215,7 +258,9 @@ export function useWorkspaces(
   useEffect(
     () =>
       window.octopus.workspaces.onStatus(({ workspaceId, status }) => {
-        patchWorkspace(workspaceId, (workspace) => ({ ...workspace, status }))
+        patchWorkspace(workspaceId, (workspace) =>
+          workspace.status === status ? workspace : { ...workspace, status }
+        )
       }),
     [patchWorkspace]
   )
@@ -232,12 +277,19 @@ export function useWorkspaces(
   useEffect(
     () =>
       window.octopus.chats.onStatus(({ chatId, workspaceId, status, turnStartedAt }) => {
-        patchWorkspace(workspaceId, (workspace) => ({
-          ...workspace,
-          chats: workspace.chats.map((chat) =>
-            chat.id === chatId ? { ...chat, status, turnStartedAt } : chat
-          )
-        }))
+        patchWorkspace(workspaceId, (workspace) => {
+          const held = workspace.chats.find((chat) => chat.id === chatId)
+          // Unchanged, or a conversation this window has not read: nothing to draw.
+          if (held === undefined) return workspace
+          if (held.status === status && held.turnStartedAt === turnStartedAt) return workspace
+
+          return {
+            ...workspace,
+            chats: workspace.chats.map((chat) =>
+              chat === held ? { ...chat, status, turnStartedAt } : chat
+            )
+          }
+        })
       }),
     [patchWorkspace]
   )

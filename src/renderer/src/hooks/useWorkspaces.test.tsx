@@ -280,9 +280,11 @@ describe('useWorkspaces', () => {
    * same dot also carries the agent's state, the two now sit inside one mark.
    */
   it('re-reads the count when a turn ends', async () => {
-    vi.mocked(window.octopus.workspaces.list)
-      .mockResolvedValueOnce({ ok: true, value: [anna] })
-      .mockResolvedValue({ ok: true, value: [{ ...anna, changedFiles: 8 }] })
+    workspacesPerProject({ planner: [anna] })
+    vi.mocked(window.octopus.workspaces.read).mockResolvedValue({
+      ok: true,
+      value: { ...anna, changedFiles: 8 }
+    })
     const projects = [planner]
 
     const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
@@ -295,13 +297,16 @@ describe('useWorkspaces', () => {
     await waitFor(() => {
       expect(result.current.flat[0]?.changedFiles).toBe(8)
     })
+    expect(window.octopus.workspaces.read).toHaveBeenCalledWith(anna.id)
   })
 
   // A turn that failed may well have written files before it did.
   it('re-reads after a turn that ended badly too', async () => {
-    vi.mocked(window.octopus.workspaces.list)
-      .mockResolvedValueOnce({ ok: true, value: [anna] })
-      .mockResolvedValue({ ok: true, value: [{ ...anna, changedFiles: 2 }] })
+    workspacesPerProject({ planner: [anna] })
+    vi.mocked(window.octopus.workspaces.read).mockResolvedValue({
+      ok: true,
+      value: { ...anna, changedFiles: 2 }
+    })
     const projects = [planner]
 
     const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
@@ -316,6 +321,131 @@ describe('useWorkspaces', () => {
     })
   })
 
+  /*
+   * Only the workspace whose turn ended. Re-reading its project ran `git status`
+   * and `rev-list` for every sibling after every turn of every agent, for rows
+   * nothing had touched.
+   */
+  it('reads the workspace that finished and leaves its siblings alone', async () => {
+    workspacesPerProject({ planner: [anna, bob] })
+    vi.mocked(window.octopus.workspaces.read).mockResolvedValue({
+      ok: true,
+      value: { ...anna, changedFiles: 4 }
+    })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna, bob])
+    })
+    vi.mocked(window.octopus.workspaces.list).mockClear()
+    const bobs = result.current.flat[1]
+
+    emitTurnEnd(anna.id)
+    await waitFor(() => {
+      expect(result.current.flat[0]?.changedFiles).toBe(4)
+    })
+
+    expect(window.octopus.workspaces.list).not.toHaveBeenCalled()
+    expect(window.octopus.workspaces.read).toHaveBeenCalledTimes(1)
+    expect(result.current.flat[1]).toBe(bobs)
+  })
+
+  /*
+   * The list lives in `App`, so a fresh map — even one equal to the last —
+   * redrew the whole window. A turn that changed nothing changes nothing here.
+   */
+  it('keeps what it holds when the re-read says the same', async () => {
+    workspacesPerProject({ planner: [anna] })
+    vi.mocked(window.octopus.workspaces.read).mockResolvedValue({ ok: true, value: { ...anna } })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+    const held = result.current.byProject
+
+    emitTurnEnd(anna.id)
+    await waitFor(() => {
+      expect(window.octopus.workspaces.read).toHaveBeenCalledTimes(1)
+    })
+    await settled()
+
+    expect(result.current.byProject).toBe(held)
+  })
+
+  it('takes a new turn start even when the status stays the same', async () => {
+    const chat = {
+      id: 'chat-1',
+      agent: 'claude' as const,
+      title: null,
+      status: 'running' as const,
+      started: true,
+      turnStartedAt: 'a'
+    }
+    workspacesPerProject({ planner: [{ ...anna, chats: [chat] }] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat[0]?.chats[0]?.turnStartedAt).toBe('a')
+    })
+
+    emitChatStatus({
+      chatId: 'chat-1',
+      workspaceId: anna.id,
+      status: 'running',
+      turnStartedAt: 'b'
+    })
+
+    expect(result.current.flat[0]?.chats[0]?.turnStartedAt).toBe('b')
+  })
+
+  it('keeps what it holds when a status says what it already knew', async () => {
+    workspacesPerProject({ planner: [{ ...anna, status: 'running' }] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat[0]?.status).toBe('running')
+    })
+    const held = result.current.byProject
+
+    emitStatus({ workspaceId: anna.id, status: 'running' })
+    emitChatStatus({ chatId: 'chat-nobody-has', workspaceId: anna.id, status: 'idle' })
+
+    expect(result.current.byProject).toBe(held)
+  })
+
+  it('keeps what it holds when a conversation’s status is the one it has', async () => {
+    const chat = {
+      id: 'chat-1',
+      agent: 'claude' as const,
+      title: null,
+      status: 'running' as const,
+      started: true,
+      turnStartedAt: 'a'
+    }
+    workspacesPerProject({ planner: [{ ...anna, chats: [chat] }] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat[0]?.chats).toHaveLength(1)
+    })
+    const held = result.current.byProject
+
+    emitChatStatus({
+      chatId: 'chat-1',
+      workspaceId: anna.id,
+      status: 'running',
+      turnStartedAt: 'a'
+    })
+
+    expect(result.current.byProject).toBe(held)
+  })
+
   // A turn can end twice over — an error and then a result — and one read is
   // the answer to both.
   it('reads once for two endings in quick succession', async () => {
@@ -326,47 +456,93 @@ describe('useWorkspaces', () => {
     await waitFor(() => {
       expect(result.current.flat).toEqual([anna])
     })
-    const reads = vi.mocked(window.octopus.workspaces.list).mock.calls.length
 
     emitTurnEnd(anna.id, true)
     emitTurnEnd(anna.id)
     await waitFor(() => {
-      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
+      expect(window.octopus.workspaces.read).toHaveBeenCalledTimes(1)
     })
 
     // Past the settle window a second read would have waited out.
     await after(400)
-    expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
+    expect(window.octopus.workspaces.read).toHaveBeenCalledTimes(1)
   })
 
   /*
-   * Two turns, two projects, and a settle window that holds both.
+   * Two turns, two workspaces, and a settle window that holds both.
    *
-   * The pending re-read used to be one timer for everything, cleared before the
-   * project was even consulted — so the second event cancelled the first's read
-   * and scheduled its own, and the first project's rows went on showing the
-   * count they had before the agent touched anything. Several agents working at
+   * The pending re-read used to be one timer for everything, so the second
+   * event cancelled the first's read and the first row went on showing the
+   * count it had before the agent touched anything. Several agents working at
    * once is this application's whole premise, so this is not a corner.
    */
-  it('re-reads both projects when two turns end together', async () => {
-    workspacesPerProject({ planner: [anna], website: [carol] })
+  it('re-reads both workspaces when two turns end together', async () => {
+    workspacesPerProject({ planner: [anna, bob], website: [carol] })
     const projects = [planner, website]
 
     const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
     await waitFor(() => {
-      expect(result.current.flat).toEqual([anna, carol])
+      expect(result.current.flat).toEqual([anna, bob, carol])
     })
-    vi.mocked(window.octopus.workspaces.list).mockClear()
 
     emitTurnEnd(anna.id)
+    emitTurnEnd(bob.id)
     emitTurnEnd(carol.id)
     await after(400)
 
-    const asked = vi
-      .mocked(window.octopus.workspaces.list)
-      .mock.calls.map(([projectId]) => projectId)
-    expect(asked).toContain('planner')
-    expect(asked).toContain('website')
+    const asked = vi.mocked(window.octopus.workspaces.read).mock.calls.map(([id]) => id)
+    expect(asked).toEqual(expect.arrayContaining([anna.id, bob.id, carol.id]))
+  })
+
+  /*
+   * Nobody can see the row while the window is hidden, and agents go on
+   * finishing then — that is when they are left to it. Held, and read once the
+   * window is back.
+   */
+  it('holds the re-read while the window is hidden, and reads on its return', async () => {
+    workspacesPerProject({ planner: [anna, bob] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna, bob])
+    })
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+
+    emitTurnEnd(anna.id)
+    emitTurnEnd(bob.id)
+    await after(400)
+    expect(window.octopus.workspaces.read).not.toHaveBeenCalled()
+
+    hidden.mockReturnValue(false)
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await waitFor(() => {
+      expect(window.octopus.workspaces.read).toHaveBeenCalledTimes(2)
+    })
+    hidden.mockRestore()
+  })
+
+  it('stays hidden while the window does', async () => {
+    workspacesPerProject({ planner: [anna] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+
+    emitTurnEnd(anna.id)
+    await after(400)
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await settled()
+
+    expect(window.octopus.workspaces.read).not.toHaveBeenCalled()
+    hidden.mockRestore()
   })
 
   // A window closed inside the settling delay has nothing left to update, and
@@ -381,13 +557,75 @@ describe('useWorkspaces', () => {
     await waitFor(() => {
       expect(result.current.flat).toEqual([anna])
     })
-    vi.mocked(window.octopus.workspaces.list).mockClear()
 
     emitTurnEnd(anna.id)
     unmount()
     await after(400)
 
-    expect(window.octopus.workspaces.list).not.toHaveBeenCalled()
+    expect(window.octopus.workspaces.read).not.toHaveBeenCalled()
+  })
+
+  it('drops what it held for a hidden window that closes', async () => {
+    workspacesPerProject({ planner: [anna] })
+    const projects = [planner]
+
+    const { result, unmount } = renderHook(() =>
+      useWorkspaces(projects, accepts(), vi.fn<OnError>())
+    )
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+
+    emitTurnEnd(anna.id)
+    await after(400)
+    unmount()
+    hidden.mockReturnValue(false)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await settled()
+
+    expect(window.octopus.workspaces.read).not.toHaveBeenCalled()
+    hidden.mockRestore()
+  })
+
+  // Gone is the one thing a single read cannot draw; the project's list can.
+  it('reads the project when the workspace has gone', async () => {
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna, bob] })
+      .mockResolvedValue({ ok: true, value: [bob] })
+    vi.mocked(window.octopus.workspaces.read).mockResolvedValue({ ok: true, value: null })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna, bob])
+    })
+
+    emitTurnEnd(anna.id)
+
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([bob])
+    })
+  })
+
+  it('keeps the project as it was when that list fails too', async () => {
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockResolvedValue({ ok: false, error: 'could not list worktrees' })
+    vi.mocked(window.octopus.workspaces.read).mockResolvedValue({ ok: true, value: null })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    emitTurnEnd(anna.id)
+    await waitFor(() => {
+      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(2)
+    })
+
+    expect(result.current.flat).toEqual([anna])
   })
 
   it('asks nothing for a turn in a project it does not know', async () => {
@@ -398,14 +636,13 @@ describe('useWorkspaces', () => {
     await waitFor(() => {
       expect(result.current.flat).toEqual([anna])
     })
-    const reads = vi.mocked(window.octopus.workspaces.list).mock.calls.length
 
     emitTurnEnd('website/carol')
     // Past the settling delay, or this would pass without the guard: nothing
     // has been read yet at that point either way.
     await after(400)
 
-    expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads)
+    expect(window.octopus.workspaces.read).not.toHaveBeenCalled()
   })
 
   // Streamed text arrives many times a turn; a read on each would put git to
@@ -418,7 +655,6 @@ describe('useWorkspaces', () => {
     await waitFor(() => {
       expect(result.current.flat).toEqual([anna])
     })
-    const reads = vi.mocked(window.octopus.workspaces.list).mock.calls.length
 
     act(() => {
       for (const handler of vi
@@ -433,15 +669,17 @@ describe('useWorkspaces', () => {
     })
     await after(400)
 
-    expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads)
+    expect(window.octopus.workspaces.read).not.toHaveBeenCalled()
   })
 
   // A read that fails leaves the row saying what it last knew, which is a
   // better answer than emptying the project it belongs to.
   it('keeps the workspaces it has when the re-read fails', async () => {
-    vi.mocked(window.octopus.workspaces.list)
-      .mockResolvedValueOnce({ ok: true, value: [anna] })
-      .mockResolvedValue({ ok: false, error: 'could not list worktrees' })
+    workspacesPerProject({ planner: [anna] })
+    vi.mocked(window.octopus.workspaces.read).mockResolvedValue({
+      ok: false,
+      error: 'could not list worktrees'
+    })
     const projects = [planner]
 
     const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
@@ -449,10 +687,9 @@ describe('useWorkspaces', () => {
       expect(result.current.flat).toEqual([anna])
     })
 
-    const reads = vi.mocked(window.octopus.workspaces.list).mock.calls.length
     emitTurnEnd(anna.id)
     await waitFor(() => {
-      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(reads + 1)
+      expect(window.octopus.workspaces.read).toHaveBeenCalledTimes(1)
     })
 
     expect(result.current.flat).toEqual([anna])

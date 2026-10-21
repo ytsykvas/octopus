@@ -247,6 +247,7 @@ describe('channel names', () => {
       'workspaces:serving'
     ],
     ['workspaces.list', () => method('workspaces', 'list')('p' as never), 'workspaces:list'],
+    ['workspaces.read', () => method('workspaces', 'read')('w' as never), 'workspaces:read'],
     ['workspaces.create', () => method('workspaces', 'create')('p' as never), 'workspaces:create'],
     [
       'workspaces.rename',

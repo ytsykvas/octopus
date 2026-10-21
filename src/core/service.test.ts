@@ -14392,3 +14392,89 @@ describe('the commands and subagents a store holds', () => {
     await expect(service.listLibrary(global, 'subagent')).resolves.toEqual([])
   })
 })
+
+/*
+ * What a finished turn reads. Counting every sibling ran two git processes per
+ * workspace of the project after every turn of every agent, for rows nothing
+ * had touched.
+ */
+describe('reading one workspace', () => {
+  interface Call {
+    readonly cwd: string
+    readonly args: readonly string[]
+  }
+
+  async function recorded(): Promise<{
+    service: OctopusService
+    projectId: string
+    calls: Call[]
+  }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const calls: Call[] = []
+    const watched = await createService({
+      ...paths(dir),
+      makeExec: (cwd, options) => {
+        const exec = gitIn(cwd, options)
+        return (args) => {
+          calls.push({ cwd, args })
+          return exec(args)
+        }
+      }
+    })
+    const project = await watched.addProjectFromPath(repo)
+    return { service: watched, projectId: project.id, calls }
+  }
+
+  it('asks git about that workspace and no other', async () => {
+    const { service: watched, projectId, calls } = await recorded()
+    const asked = await watched.createWorkspaceIn(projectId)
+    const sibling = await watched.createWorkspaceIn(projectId)
+    await writeFile(join(asked.path, 'draft.txt'), 'work\n', 'utf8')
+    calls.length = 0
+
+    const read = await watched.readWorkspace(asked.id)
+
+    expect(calls.some((call) => call.cwd === asked.path)).toBe(true)
+    expect(calls.some((call) => call.cwd === sibling.path)).toBe(false)
+    const listed = await watched.listWorkspaces(projectId)
+    expect(read).toEqual(listed.find((row) => row.id === asked.id))
+    expect(read).toMatchObject({ changedFiles: 1, missing: false })
+  })
+
+  // A repository moved away answers nothing; the row must not claim its
+  // directory is gone, which the window would act on by closing its terminal.
+  it('says nothing is missing when the repository cannot be read', async () => {
+    const { service: watched, projectId } = await recorded()
+    const workspace = await watched.createWorkspaceIn(projectId)
+    await rename(join(dir, 'planner'), join(dir, 'moved'))
+
+    await expect(watched.readWorkspace(workspace.id)).resolves.toMatchObject({
+      id: workspace.id,
+      missing: false
+    })
+  })
+
+  it('answers nothing for a workspace that is gone', async () => {
+    await expect(service.readWorkspace('planner/nobody')).resolves.toBeNull()
+  })
+
+  /*
+   * A turn ending fires the row, the diff and the file sides together, and each
+   * resolved the base on its own. Shared while in flight, and only then, so a
+   * later question is always answered afresh.
+   */
+  it('resolves the base once for reads that overlap, and afresh after', async () => {
+    const { service: watched, projectId, calls } = await recorded()
+    const first = await watched.createWorkspaceIn(projectId)
+    const second = await watched.createWorkspaceIn(projectId)
+    const remotes = (): number => calls.filter((call) => call.args[0] === 'remote').length
+    calls.length = 0
+
+    await Promise.all([watched.readWorkspace(first.id), watched.readWorkspace(second.id)])
+    expect(remotes()).toBe(1)
+
+    await watched.readWorkspace(first.id)
+    expect(remotes()).toBe(2)
+  })
+})

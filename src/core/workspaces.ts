@@ -589,16 +589,41 @@ export async function rollbackWorkspace(workspace: Workspace, exec: GitExec): Pr
 }
 
 /**
- * Reconciles stored workspaces with what git actually has.
+ * Where each worktree git knows of is standing, by path — or null when git
+ * could not be asked at all.
  *
- * git is the source of truth about worktrees; the store only holds what git
- * does not know. A workspace whose directory vanished is marked rather than
- * dropped: silently deleting records would hide the discrepancy instead of
- * surfacing it (§13).
+ * `null` means the repository was moved, renamed or is otherwise unreadable.
+ * That says nothing about whether the worktrees are still there, so nothing is
+ * marked missing from it: the alternative is claiming every workspace has been
+ * removed, and the UI acts on that by closing their terminals.
+ *
+ * A prunable entry is one git still lists but whose directory is gone, so it
+ * counts as missing rather than as present. The branch rides along: `--porcelain`
+ * reports it per worktree — null for a detached HEAD, which falls out of the
+ * comparison in `viewOf` with no arm of its own — so knowing where each
+ * worktree is standing costs the allocation and not one more git process.
  */
-export function reconcile(
-  workspaces: readonly Workspace[],
-  worktrees: readonly Worktree[] | null,
+export function checkedOutBranches(
+  worktrees: readonly Worktree[] | null
+): ReadonlyMap<string, string | null> | null {
+  if (worktrees === null) return null
+
+  return new Map(
+    worktrees
+      .filter((worktree) => !worktree.prunable)
+      .map((worktree) => [worktree.path, worktree.branch] as const)
+  )
+}
+
+/**
+ * One stored workspace as the list draws it.
+ *
+ * A row is worked out from its own record and the shared readings alone, so
+ * one workspace can be read again — when its turn ends — without the rest.
+ */
+export function viewOf(
+  workspace: Workspace,
+  checkedOut: ReadonlyMap<string, string | null> | null,
   counts: ReadonlyMap<string, WorkspaceCounts> = new Map(),
   /**
    * Every chat in the state, not one workspace's.
@@ -610,50 +635,31 @@ export function reconcile(
   chats: readonly Chat[] = [],
   /** When each conversation's turn under way began, which only the service knows. */
   turnStarts: ReadonlyMap<string, string> = new Map()
-): WorkspaceView[] {
-  const conversations = (workspace: Workspace): WorkspaceChat[] =>
-    chats
-      .filter((chat) => chat.workspaceId === workspace.id)
-      .map((chat) => ({
-        id: chat.id,
-        agent: chat.agent,
-        title: chat.title,
-        status: chat.status,
-        started: chat.sessionId !== null,
-        turnStartedAt: turnStarts.get(chat.id) ?? null
-      }))
+): WorkspaceView {
+  const conversations = chats
+    .filter((chat) => chat.workspaceId === workspace.id)
+    .map((chat) => ({
+      id: chat.id,
+      agent: chat.agent,
+      title: chat.title,
+      status: chat.status,
+      started: chat.sessionId !== null,
+      turnStartedAt: turnStarts.get(chat.id) ?? null
+    }))
 
-  // `null` means git could not be asked — the repository was moved, renamed or
-  // is otherwise unreadable. That says nothing about whether the worktrees are
-  // still there, so nothing is marked missing: the alternative is claiming
-  // every workspace has been removed, and the UI acts on that by closing their
-  // terminals.
-  if (worktrees === null) {
-    return workspaces.map((workspace) => ({
+  if (checkedOut === null) {
+    return {
       ...workspace,
       missing: false,
       // Nothing was read, so nothing is claimed. A warning glyph on every row
       // because the repository moved would say the wrong thing loudly.
       headOnBranch: true,
       ...(counts.get(workspace.id) ?? NOTHING),
-      chats: conversations(workspace)
-    }))
+      chats: conversations
+    }
   }
 
-  /* A prunable entry is one git still lists but whose directory is gone, so it
-     counts as missing rather than as present.
-
-     The branch rides along in the same map. `--porcelain` reports it per
-     worktree — null for a detached HEAD, which falls out of the comparison
-     below with no arm of its own — so knowing where each worktree is standing
-     costs the allocation and not one more git process. */
-  const checkedOut = new Map(
-    worktrees
-      .filter((worktree) => !worktree.prunable)
-      .map((worktree) => [worktree.path, worktree.branch] as const)
-  )
-
-  return workspaces.map((workspace) => ({
+  return {
     ...workspace,
     missing: !checkedOut.has(workspace.path),
     // A worktree git has never heard of is not standing anywhere, and the row
@@ -661,8 +667,27 @@ export function reconcile(
     headOnBranch:
       !checkedOut.has(workspace.path) || checkedOut.get(workspace.path) === workspace.branch,
     ...(counts.get(workspace.id) ?? NOTHING),
-    chats: conversations(workspace)
-  }))
+    chats: conversations
+  }
+}
+
+/**
+ * Reconciles stored workspaces with what git actually has.
+ *
+ * git is the source of truth about worktrees; the store only holds what git
+ * does not know. A workspace whose directory vanished is marked rather than
+ * dropped: silently deleting records would hide the discrepancy instead of
+ * surfacing it (§13).
+ */
+export function reconcile(
+  workspaces: readonly Workspace[],
+  worktrees: readonly Worktree[] | null,
+  counts: ReadonlyMap<string, WorkspaceCounts> = new Map(),
+  chats: readonly Chat[] = [],
+  turnStarts: ReadonlyMap<string, string> = new Map()
+): WorkspaceView[] {
+  const checkedOut = checkedOutBranches(worktrees)
+  return workspaces.map((workspace) => viewOf(workspace, checkedOut, counts, chats, turnStarts))
 }
 
 /**

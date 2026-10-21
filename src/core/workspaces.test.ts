@@ -19,6 +19,8 @@ import {
   createWorkspace,
   freshBase,
   reconcile,
+  checkedOutBranches,
+  viewOf,
   removeWorkspace,
   renameWorkspace,
   rollbackWorkspace,
@@ -949,6 +951,21 @@ describe('rollbackWorkspace', () => {
 })
 
 describe('reconcile', () => {
+  // A row read on its own — what a finished turn asks for — is the row the
+  // list draws, so the two can never disagree about a workspace.
+  it('builds each row as one workspace read alone would', async () => {
+    const first = await create()
+    const second = await create()
+    const worktrees = await listWorktrees(exec)
+    const counts = new Map([[second.id, { changedFiles: 3, ahead: 1 }]])
+
+    expect(reconcile([first, second], worktrees, counts)).toEqual([
+      viewOf(first, checkedOutBranches(worktrees), counts),
+      viewOf(second, checkedOutBranches(worktrees), counts)
+    ])
+    expect(reconcile([first], null)).toEqual([viewOf(first, checkedOutBranches(null))])
+  })
+
   it('marks a workspace whose directory is gone', async () => {
     const workspace = await create()
     const worktrees = await listWorktrees(exec)
