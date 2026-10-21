@@ -50,6 +50,8 @@ export const RUNNING_INTERVAL_MS = 15_000
 interface ProjectAnswer {
   readonly byBranch: ReadonlyMap<string, BranchRequest>
   readonly capped: boolean
+  /** The reply as it came, to tell a read that changed something from one that did not. */
+  readonly key: string
 }
 
 const NONE: ReadonlyMap<string, BranchRequest> = new Map()
@@ -126,10 +128,16 @@ export function useBranchRequests(
       const answer: ProjectAnswer = result.ok
         ? {
             byBranch: new Map(result.value.requests.map((request) => [request.branch, request])),
-            capped: result.value.capped
+            capped: result.value.capped,
+            key: JSON.stringify(result.value)
           }
-        : { byBranch: NONE, capped: false }
-      setAnswers((current) => new Map(current).set(id, answer))
+        : { byBranch: NONE, capped: false, key: 'refused' }
+      // The same answer as last time leaves the state alone. A fresh map on
+      // every read redrew the whole window each minute — every conversation
+      // open in it — for requests that had not changed.
+      setAnswers((current) =>
+        current.get(id)?.key === answer.key ? current : new Map(current).set(id, answer)
+      )
 
       const running = [...answer.byBranch.values()].some((request) => request.checks === 'running')
 

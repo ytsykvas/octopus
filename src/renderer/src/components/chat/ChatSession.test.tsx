@@ -23,6 +23,16 @@ import { octopus } from '../../test/octopus.js'
 import { task } from '../../test/tasks.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { Chat } from './Chat.js'
+import { messageBlocks } from './userMessage.js'
+import type * as UserMessageModule from './userMessage.js'
+
+// Watched rather than replaced: a user's bubble reads its message through this
+// on every render, which makes it the way to tell whether the log's rows were
+// drawn again.
+vi.mock('./userMessage.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof UserMessageModule>()
+  return { ...actual, messageBlocks: vi.fn(actual.messageBlocks) }
+})
 
 // The plan's approval is a dialog now, and jsdom implements none of `<dialog>`.
 beforeAll(stubDialogElement)
@@ -598,11 +608,30 @@ describe('events arriving from the agent', () => {
 
     emitAgentEvent({ type: 'text_delta', text: 'Look' })
     emitAgentEvent({ type: 'text_delta', text: 'ing' })
-    expect(screen.getByText('Looking')).toBeInTheDocument()
+    expect(await screen.findByText('Looking')).toBeInTheDocument()
 
     emitAgentEvent({ type: 'text', text: 'Looking at auth.rb' })
     expect(screen.getByText('Looking at auth.rb')).toBeInTheDocument()
     expect(screen.queryByText('Looking')).not.toBeInTheDocument()
+  })
+
+  /*
+   * The log is memoised and everything the pane hands it is held still, so a
+   * streamed token draws the block being written and nothing above it. It used
+   * to draw every row again, and parse every answer in the conversation again,
+   * once per token.
+   */
+  it('draws only the block being written while text arrives', async () => {
+    givenChat([{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'look at auth' }])
+    await openLoadedChat()
+    expect(await screen.findByText('look at auth')).toBeInTheDocument()
+    vi.mocked(messageBlocks).mockClear()
+
+    emitAgentEvent({ type: 'text_delta', text: 'Look' })
+    emitAgentEvent({ type: 'text_delta', text: 'ing' })
+    expect(await screen.findByText('Looking')).toBeInTheDocument()
+
+    expect(messageBlocks).not.toHaveBeenCalled()
   })
 
   it('shows reasoning as it is written', async () => {
@@ -611,7 +640,7 @@ describe('events arriving from the agent', () => {
 
     emitAgentEvent({ type: 'thinking_delta', text: 'weighing' })
 
-    expect(screen.getByText('Thinking')).toBeInTheDocument()
+    expect(await screen.findByText('Thinking')).toBeInTheDocument()
   })
 
   // Broadcast reaches every window and covers every chat; this pane draws one.

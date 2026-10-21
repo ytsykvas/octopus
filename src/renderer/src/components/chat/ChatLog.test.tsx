@@ -1,20 +1,34 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import ReactMarkdown from 'react-markdown'
+import type * as ReactMarkdownModule from 'react-markdown'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { TaskView } from '@core/backgroundTasks.js'
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
+import type { Streaming } from '../../hooks/useStreaming.js'
 import { agentsOf, task } from '../../test/tasks.js'
 import { highlight } from '../diff/highlight.js'
 import { AgentsContext } from './agentTasks.js'
-import { ChatLog } from './ChatLog.js'
+import { ChatLog, StreamingContext } from './ChatLog.js'
 import { COLLAPSED } from './expansion.js'
 
 // Stood in for, as every pane that colours code is tested: the real one loads a
 // grammar, and its answer would land after the test that drew the card.
 vi.mock('../diff/highlight.js', () => ({ highlight: vi.fn(() => Promise.resolve(null)) }))
+
+// Watched rather than replaced, to count how often an answer is parsed.
+vi.mock('react-markdown', async (importOriginal) => {
+  const actual = await importOriginal<typeof ReactMarkdownModule>()
+  return { ...actual, default: vi.fn(actual.default) }
+})
+
+/** How many times a piece of markdown has been parsed. */
+function parsesOf(text: string): number {
+  return vi.mocked(ReactMarkdown).mock.calls.filter(([props]) => props.children === text).length
+}
 
 const AT = '2026-08-11T09:00:00.000Z'
 
@@ -51,11 +65,14 @@ const WORKSPACE = '/tmp/planner/anna'
 function renderLog({
   pendingRequestId = null,
   tasks = [],
+  streaming = { text: '', thinking: '' },
   ...overrides
 }: Partial<React.ComponentProps<typeof ChatLog>> & {
   /** The one question open, for the tests about one. */
   readonly pendingRequestId?: string | null
   readonly tasks?: readonly TaskView[]
+  /** The block still being written, which the pane hands down beside the log. */
+  readonly streaming?: Streaming
 } = {}): {
   onAnswer: ReturnType<typeof vi.fn>
   onAnswerElicitation: ReturnType<typeof vi.fn>
@@ -73,23 +90,24 @@ function renderLog({
 
   render(
     <AgentsContext.Provider value={agentsOf(tasks)}>
-      <ChatLog
-        entries={[]}
-        streaming={{ text: '', thinking: '' }}
-        busy={false}
-        answerable={pendingRequestId === null ? NOTHING_ASKED : new Set([pendingRequestId])}
-        pendingElicitationId={null}
-        onAnswer={onAnswer}
-        onAnswerElicitation={onAnswerElicitation}
-        onAnswerQuestions={onAnswerQuestions}
-        onExecutePlan={onExecutePlan}
-        onRewind={onRewind}
-        waiting={NOT_WAITING}
-        expansion={COLLAPSED}
-        workspacePath={WORKSPACE}
-        onOpenFile={onOpenFile}
-        {...overrides}
-      />
+      <StreamingContext.Provider value={streaming}>
+        <ChatLog
+          entries={[]}
+          busy={false}
+          answerable={pendingRequestId === null ? NOTHING_ASKED : new Set([pendingRequestId])}
+          pendingElicitationId={null}
+          onAnswer={onAnswer}
+          onAnswerElicitation={onAnswerElicitation}
+          onAnswerQuestions={onAnswerQuestions}
+          onExecutePlan={onExecutePlan}
+          onRewind={onRewind}
+          waiting={NOT_WAITING}
+          expansion={COLLAPSED}
+          workspacePath={WORKSPACE}
+          onOpenFile={onOpenFile}
+          {...overrides}
+        />
+      </StreamingContext.Provider>
     </AgentsContext.Provider>
   )
 
@@ -494,7 +512,6 @@ describe('what the log shows', () => {
             text: '**7/10**\n\n- checked the code\n- ran `npm run check`'
           })
         ]}
-        streaming={{ text: '', thinking: '' }}
         busy={false}
         answerable={NOTHING_ASKED}
         pendingElicitationId={null}
@@ -516,6 +533,36 @@ describe('what the log shows', () => {
     expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument()
   })
 
+  /*
+   * Parsing is the expensive part of drawing the log, and a row is drawn again
+   * whenever the turn's state moves — a question answered, the turn ending. The
+   * answer above did not change, so it is not parsed again.
+   */
+  it('does not parse an answer again when only the turn around it changed', () => {
+    const entries = [fromAgent({ type: 'text', text: 'an answer **already given**' })]
+    const props = {
+      entries,
+      answerable: NOTHING_ASKED,
+      pendingElicitationId: null,
+      onAnswer: vi.fn(),
+      onAnswerElicitation: vi.fn(),
+      onAnswerQuestions: vi.fn(),
+      onExecutePlan: vi.fn(),
+      onRewind: vi.fn(),
+      waiting: NOT_WAITING,
+      expansion: COLLAPSED,
+      workspacePath: WORKSPACE,
+      onOpenFile: vi.fn()
+    }
+    const { rerender } = render(<ChatLog {...props} busy />)
+    const before = parsesOf('an answer **already given**')
+
+    rerender(<ChatLog {...props} busy={false} />)
+
+    expect(before).toBeGreaterThan(0)
+    expect(parsesOf('an answer **already given**')).toBe(before)
+  })
+
   // The whole of the previous change, arriving on ordinary answers: an answer
   // with a command in it becomes one you can take the command out of.
   it('gives a fenced block in an answer its copy button', () => {
@@ -527,26 +574,9 @@ describe('what the log shows', () => {
   // The buffer is drawn by the same component, so this would be easy to leave
   // behind — and it is what the reader looks at for most of a turn.
   it('draws it the same way while it is still arriving', () => {
-    const { container } = render(
-      <ChatLog
-        entries={[]}
-        streaming={{ text: '**still writing**', thinking: '' }}
-        busy
-        answerable={NOTHING_ASKED}
-        pendingElicitationId={null}
-        onAnswer={vi.fn()}
-        onAnswerElicitation={vi.fn()}
-        onAnswerQuestions={vi.fn()}
-        onExecutePlan={vi.fn()}
-        onRewind={vi.fn()}
-        waiting={NOT_WAITING}
-        expansion={COLLAPSED}
-        workspacePath={WORKSPACE}
-        onOpenFile={vi.fn()}
-      />
-    )
+    renderLog({ busy: true, streaming: { text: '**still writing**', thinking: '' } })
 
-    expect(container.querySelector('strong')?.textContent).toBe('still writing')
+    expect(screen.getByText('still writing').tagName).toBe('STRONG')
   })
 
   /*

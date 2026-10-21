@@ -147,6 +147,36 @@ describe('what each branch of a project has become', () => {
     expect(vi.mocked(octopus().projects.pullRequests).mock.calls.length).toBeGreaterThan(1)
   })
 
+  // A fresh map on every read redrew the whole window each minute, every
+  // conversation in it, for requests that had not moved.
+  it('keeps the same answer when a read brings nothing new', async () => {
+    vi.useFakeTimers()
+    answer(request())
+    const { result } = renderHook(() => useBranchRequests(PLANNER, ['ledger']))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    const first = result.current
+
+    await act(() => vi.advanceTimersByTimeAsync(70_000))
+
+    expect(vi.mocked(octopus().projects.pullRequests).mock.calls.length).toBeGreaterThan(2)
+    expect(result.current.byProject).toBe(first.byProject)
+    expect(result.current.byBranch).toBe(first.byBranch)
+  })
+
+  it('takes the new answer when a read brings one', async () => {
+    vi.useFakeTimers()
+    answer(request())
+    const { result } = renderHook(() => useBranchRequests(PLANNER))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    const first = result.current.byProject
+
+    answer(request({ state: 'merged' }))
+    await act(() => vi.advanceTimersByTimeAsync(70_000))
+
+    expect(result.current.byProject).not.toBe(first)
+    expect(result.current.byBranch.get('ytsykvas/anna')?.state).toBe('merged')
+  })
+
   // A row spinning for a minute after the tab said the run was over is what
   // this clock is for: while a check runs the read comes round at the tab's pace.
   it('looks again sooner while a check is still running', async () => {

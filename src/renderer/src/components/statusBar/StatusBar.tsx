@@ -8,6 +8,7 @@ import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useNow } from '../../hooks/useNow.js'
+import { useResources } from '../../hooks/useResources.js'
 import { chatName } from '../chat/chatName.js'
 import { formatDuration } from '../chat/format.js'
 import { fileSize } from '../fileSize.js'
@@ -38,7 +39,6 @@ interface StatusBarProps {
   readonly workspaces: readonly WorkspaceView[]
   /** Each project's requests by branch, as far as each has answered. */
   readonly requests: ReadonlyMap<string, ReadonlyMap<string, BranchRequest>>
-  readonly resources: ResourceReading | null
   /** The selected workspace, and the conversation in front of it. */
   readonly front: { readonly workspace: WorkspaceView; readonly chatId: string } | null
   readonly onOpen: (target: StatusTarget) => void
@@ -63,11 +63,14 @@ export function StatusBar({
   projects,
   workspaces,
   requests,
-  resources,
   front,
   onOpen
 }: StatusBarProps): React.JSX.Element {
   const { t } = useTranslation()
+  // Read here, by the only thing that shows it. Held in the app, the reading
+  // changed every ten seconds and redrew the whole window with it — every open
+  // conversation included.
+  const resources = useResources(open)
 
   if (!open) {
     return (

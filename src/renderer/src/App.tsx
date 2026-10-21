@@ -40,7 +40,6 @@ import { useSideQuestions } from './hooks/useSideQuestions.js'
 import { useDiffComments } from './hooks/useDiffComments.js'
 import { useFileRevert } from './hooks/useFileRevert.js'
 import { useBranchRequests } from './hooks/useBranchRequests.js'
-import { useResources } from './hooks/useResources.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
 import { useFileTabs } from './hooks/useFileTabs.js'
@@ -738,7 +737,6 @@ export function App(): React.JSX.Element {
     openProjectId,
     statusBarOpen ? projects.all.map((project) => project.id) : NO_PROJECTS
   )
-  const resources = useResources(statusBarOpen)
 
   // The conversation in front of the selected workspace, for the bar's count of
   // the turn under way.
@@ -1222,7 +1220,6 @@ export function App(): React.JSX.Element {
           projects={projects.all}
           workspaces={workspaces.flat}
           requests={branchRequests.byProject}
-          resources={resources}
           front={frontChat}
           onOpen={openWorkspace}
         />

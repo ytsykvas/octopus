@@ -1,4 +1,4 @@
-import { Children } from 'react'
+import { Children, memo } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
@@ -161,8 +161,12 @@ const COMPONENTS: Components = {
  * A plugin rather than two trailing spaces inserted into the text: this one
  * works on the parsed document, so a newline inside a fenced block stays a
  * newline in code rather than becoming markup.
+ *
+ * Memoised on the text. Parsing is the expensive part of drawing a log —
+ * react-markdown builds its processor and parses on every call — and most of
+ * the times a row renders, its text has not changed.
  */
-export function Markdown({ text }: { text: string }): React.JSX.Element {
+export const Markdown = memo(function Markdown({ text }: { text: string }): React.JSX.Element {
   return (
     <div className="min-w-0">
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={COMPONENTS}>
@@ -170,4 +174,4 @@ export function Markdown({ text }: { text: string }): React.JSX.Element {
       </ReactMarkdown>
     </div>
   )
-}
+})
