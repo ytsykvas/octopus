@@ -30,6 +30,7 @@ const SNAPSHOT: FileTreeSnapshot = {
     { path: 'node_modules', kind: 'directory', ignored: true }
   ],
   statuses: { 'src/b.ts': 'modified', 'src/gone.ts': 'deleted', 'README.md': 'conflicted' },
+  untrackedFolders: [],
   truncated: false
 }
 
@@ -103,7 +104,7 @@ describe('FilesPanel', () => {
   })
 
   it('says so when the workspace has no files', async () => {
-    answering({ entries: [], statuses: {}, truncated: false })
+    answering({ entries: [], statuses: {}, untrackedFolders: [], truncated: false })
 
     renderPanel()
 
@@ -242,6 +243,7 @@ describe('FilesPanel', () => {
     const withSubmodule: FileTreeSnapshot = {
       entries: [file('README.md'), { path: 'vendor', kind: 'directory', ignored: false }],
       statuses: { vendor: 'modified' },
+      untrackedFolders: [],
       truncated: false
     }
 
@@ -378,6 +380,40 @@ describe('FilesPanel', () => {
 
       expect(await screen.findByText('Nothing in this folder.')).toHaveClass('text-ink-faint')
     })
+  })
+
+  // The agent's usual scaffold: make the folders, then write into one. git
+  // names only `feature/`, and the empty `b` beside `a` came from the disk.
+  it('shows an empty folder beside a written one in a new folder', async () => {
+    answering({
+      entries: [file('feature/a/x.ts')],
+      statuses: { 'feature/a/x.ts': 'untracked' },
+      untrackedFolders: ['feature'],
+      truncated: false
+    })
+    vi.mocked(octopus().files.directory).mockImplementation((_, folder) =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          entries:
+            folder === 'feature'
+              ? [
+                  { name: 'a', kind: 'directory' as const },
+                  { name: 'b', kind: 'directory' as const }
+                ]
+              : [],
+          truncated: false
+        }
+      })
+    )
+    renderPanel()
+    await shown()
+
+    await userEvent.click(row('feature'))
+    await userEvent.click(await screen.findByRole('treeitem', { name: /^b\b/ }))
+
+    expect(await screen.findByText('Nothing in this folder.')).toBeInTheDocument()
+    expect(row('a')).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('folds every folder at once, and reads again on refresh', async () => {
@@ -538,6 +574,7 @@ describe('FilesPanel', () => {
         file(`f${String(index).padStart(4, '0')}.ts`)
       ),
       statuses: {},
+      untrackedFolders: [],
       truncated: false
     }
 
@@ -659,6 +696,7 @@ describe('FilesPanel', () => {
       answering({
         entries: [file('docs/core/notes.md'), file('core.ts'), file('src/core/a.ts')],
         statuses: {},
+        untrackedFolders: [],
         truncated: false
       })
       renderPanel()
@@ -818,6 +856,7 @@ describe('FilesPanel', () => {
       answering({
         entries: Array.from({ length: 300 }, (_, index) => file(`f${String(index)}.ts`)),
         statuses: {},
+        untrackedFolders: [],
         truncated: false
       })
       renderPanel()

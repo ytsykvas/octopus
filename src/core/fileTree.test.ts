@@ -13,10 +13,12 @@ import {
   folderStatuses,
   drawnOpen,
   foldersFromDisk,
+  withFoldersOnDisk,
   nodeAt,
   listingNodes,
+  listsFolder,
   MAX_TREE_ENTRIES,
-  parseEmptyFolders,
+  parseUntrackedFolders,
   parseIgnored,
   parseStaged,
   parseStatus,
@@ -181,15 +183,15 @@ describe('parseUntracked', () => {
   })
 })
 
-describe('parseEmptyFolders', () => {
+describe('parseUntrackedFolders', () => {
   const untracked = parseUntracked(['u/f.ts', 'nested/', ''].join('\0'))
   const ignored = parseIgnored(['logs/', 'logs/x.log', ''].join('\0'))
 
   // What `--directory` printed for a worktree holding all of these, measured.
   const listed = ['a/', 'e/', 'logs/', 'nested/', 'src/new/', 'u/', ''].join('\0')
 
-  it('keeps only the folders with no file in them', () => {
-    expect(parseEmptyFolders(listed, untracked, ignored)).toEqual([
+  it('keeps as empty only the folders with no file in them', () => {
+    expect(parseUntrackedFolders(listed, untracked, ignored).empty).toEqual([
       { path: 'a', kind: 'directory', ignored: false },
       { path: 'e', kind: 'directory', ignored: false },
       { path: 'src/new', kind: 'directory', ignored: false }
@@ -198,26 +200,40 @@ describe('parseEmptyFolders', () => {
 
   // `--directory` names a folder of untracked files `u/` too, and the files
   // are already rows of their own.
-  it('leaves out a folder whose untracked files are listed', () => {
-    expect(parseEmptyFolders('u/\0', untracked, [])).toEqual([])
+  it('leaves out of the empty a folder whose untracked files are listed', () => {
+    expect(parseUntrackedFolders('u/\0', untracked, []).empty).toEqual([])
   })
 
-  it('leaves out a nested repository and a folder git ignores', () => {
-    expect(parseEmptyFolders('nested/\0logs/\0', untracked, ignored)).toEqual([])
+  it('leaves out of the empty a nested repository and a folder git ignores', () => {
+    expect(parseUntrackedFolders('nested/\0logs/\0', untracked, ignored).empty).toEqual([])
   })
 
   // The tree drops the hidden name, so the folder is all that is left to draw.
   it('keeps a folder holding only a hidden name', () => {
-    expect(parseEmptyFolders('ds/\0', parseUntracked('ds/.DS_Store\0'), [])).toEqual([
+    expect(parseUntrackedFolders('ds/\0', parseUntracked('ds/.DS_Store\0'), []).empty).toEqual([
       { path: 'ds', kind: 'directory', ignored: false }
     ])
   })
 
   // `u2` only shares a prefix with `u`, which holds a file.
   it('compares whole folder names, not prefixes', () => {
-    expect(parseEmptyFolders('u2/\0', untracked, [])).toEqual([
+    expect(parseUntrackedFolders('u2/\0', untracked, []).empty).toEqual([
       { path: 'u2', kind: 'directory', ignored: false }
     ])
+  })
+
+  /*
+   * git names only the topmost untracked folder, so an empty folder beside a
+   * written one inside it is never printed. These are the folders it could be
+   * in, kept for the disk to complete.
+   */
+  it('names the untracked folders that hold something', () => {
+    expect(parseUntrackedFolders(listed, untracked, ignored).holding).toEqual(['u'])
+  })
+
+  // Each is a folder entry of its own, read from disk whole.
+  it('leaves a nested repository and an ignored folder out of those', () => {
+    expect(parseUntrackedFolders('nested/\0logs/\0', untracked, ignored).holding).toEqual([])
   })
 })
 
@@ -392,7 +408,7 @@ describe('foldersFromDisk', () => {
 
   it('names a folder git lists whole, and every folder inside one', () => {
     expect(
-      foldersFromDisk(entries, [
+      foldersFromDisk({ entries, untrackedFolders: [] }, [
         'node_modules',
         'node_modules/pkg/dist',
         'vendor/lib',
@@ -404,7 +420,21 @@ describe('foldersFromDisk', () => {
   // `vendor` holds a submodule and is git's own; `node_modules2` only shares a
   // prefix with an ignored folder.
   it('leaves out a folder git lists the inside of', () => {
-    expect(foldersFromDisk(entries, ['src', 'vendor', 'node_modules2'])).toEqual([])
+    expect(
+      foldersFromDisk({ entries, untrackedFolders: [] }, ['src', 'vendor', 'node_modules2'])
+    ).toEqual([])
+  })
+
+  // Completed from disk rather than read from it: an empty folder in there is
+  // one git never prints.
+  it('names an untracked folder that holds something, and every folder inside one', () => {
+    expect(
+      foldersFromDisk({ entries, untrackedFolders: ['feature'] }, [
+        'feature',
+        'feature/a',
+        'features'
+      ])
+    ).toEqual(['feature', 'feature/a'])
   })
 })
 
@@ -484,6 +514,78 @@ describe('listingNodes', () => {
         childrenFromDisk: false
       }
     ])
+  })
+})
+
+describe('listsFolder', () => {
+  const listing = {
+    entries: [
+      { name: 'cafe\u0301', kind: 'directory' },
+      { name: 'pkg.js', kind: 'file' }
+    ],
+    truncated: false
+  } as const
+
+  it('names a folder however its name is composed, and not a file', () => {
+    expect(listsFolder(listing, 'caf\u00e9')).toBe(true)
+    expect(listsFolder(listing, 'pkg.js')).toBe(false)
+    expect(listsFolder(listing, 'cafe')).toBe(false)
+  })
+})
+
+describe('withFoldersOnDisk', () => {
+  const index = buildTree([
+    { path: 'feature/a/x.ts', kind: 'file', ignored: false },
+    { path: 'feature/z.ts', kind: 'file', ignored: false }
+  ])
+
+  it('adds the folders on disk git does not name, sorted, each read from disk', () => {
+    expect(
+      withFoldersOnDisk(
+        index,
+        { path: 'feature', ignored: false },
+        {
+          entries: [
+            { name: 'a', kind: 'directory' },
+            { name: 'b', kind: 'directory' },
+            { name: 'z.ts', kind: 'file' },
+            { name: 'new.ts', kind: 'file' }
+          ],
+          truncated: false
+        }
+      ).map(({ path, childrenFromDisk }) => [path, childrenFromDisk])
+    ).toEqual([
+      ['feature/a', false],
+      ['feature/b', true],
+      ['feature/z.ts', false]
+    ])
+  })
+
+  /*
+   * git prints a name composed on macOS (`core.precomposeunicode`), while the
+   * disk gives it back as Finder stored it, often decomposed: compared as
+   * they come, `café` was drawn twice.
+   */
+  it('takes a name stored decomposed for the one git prints composed', () => {
+    const composed = buildTree([{ path: 'feature/caf\u00e9/x.ts', kind: 'file', ignored: false }])
+
+    expect(
+      withFoldersOnDisk(
+        composed,
+        { path: 'feature', ignored: false },
+        { entries: [{ name: 'cafe\u0301', kind: 'directory' }], truncated: false }
+      ).map(({ name }) => name)
+    ).toEqual(['caf\u00e9'])
+  })
+
+  it('answers with the folders on disk alone for a folder the index holds nothing of', () => {
+    expect(
+      withFoldersOnDisk(
+        index,
+        { path: 'other', ignored: false },
+        { entries: [{ name: 'b', kind: 'directory' }], truncated: false }
+      ).map(({ path }) => path)
+    ).toEqual(['other/b'])
   })
 })
 
@@ -666,6 +768,25 @@ describe('readFileTree', () => {
         'drafts/note.md': 'untracked',
         'src/kept.ts': 'added'
       })
+    })
+
+    /*
+     * git names only `feature/` and `mixed/`, which hold a file each, and
+     * never the empty folders beside it. Those two are what the disk is read
+     * for, when opened.
+     */
+    it('names the untracked folders an empty one may hide in', async () => {
+      await writeFile(join(dir, '.gitignore'), 'node_modules/\n.env\n*.log\n', 'utf8')
+      await mkdir(join(dir, 'feature', 'a'), { recursive: true })
+      await mkdir(join(dir, 'feature', 'b'))
+      await writeFile(join(dir, 'feature', 'a', 'x.ts'), 'x\n', 'utf8')
+      await mkdir(join(dir, 'mixed', 'e'), { recursive: true })
+      await writeFile(join(dir, 'mixed', 'x.log'), 'x\n', 'utf8')
+
+      const tree = await readFileTree(gitIn(dir))
+
+      expect(tree.untrackedFolders).toEqual(['feature', 'mixed'])
+      expect(tree.entries.map(({ path }) => path)).not.toContain('feature/b')
     })
 
     it('reads a move announced with `git add -N` as a rename, with no phantom path', async () => {

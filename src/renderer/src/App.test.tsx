@@ -2614,6 +2614,7 @@ describe('App', () => {
         value: {
           entries: [{ path: 'README.md', kind: 'file', ignored: false }],
           statuses: {},
+          untrackedFolders: [],
           truncated: false
         }
       })
