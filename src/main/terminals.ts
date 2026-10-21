@@ -76,23 +76,28 @@ export class TerminalManager {
       if (!target.isDestroyed()) target.send('terminal:data', { id, data })
     })
 
+    // Closing a window destroys its WebContents without unmounting React, so
+    // the cleanup in `Terminal.tsx` never runs and never asks for disposal.
+    // On macOS the application outlives its last window, so without this the
+    // shell — and anything it started, a dev server included — keeps running
+    // with nothing left to talk to.
+    const closeWithWindow = (): void => {
+      void this.dispose(id)
+    }
+    target.once('destroyed', closeWithWindow)
+
     pty.onExit(({ exitCode, signal }) => {
       this.sessions.delete(id)
+      // Taken off here rather than in `dispose`: a script that finishes on its
+      // own never goes through `dispose`, and every session ends here. Left
+      // on, one listener per run piled up on a window that lives all day.
+      target.off('destroyed', closeWithWindow)
       if (target.isDestroyed()) return
 
       // The typings say `signal?: number`, but a normal exit reports 0 rather
       // than undefined — checking for undefined reported every run as killed.
       // Signal numbers start at 1, so falsy means "no signal".
       target.send('terminal:exit', { id, exitCode: signal ? null : exitCode })
-    })
-
-    // Closing a window destroys its WebContents without unmounting React, so
-    // the cleanup in `Terminal.tsx` never runs and never asks for disposal.
-    // On macOS the application outlives its last window, so without this the
-    // shell — and anything it started, a dev server included — keeps running
-    // with nothing left to talk to.
-    target.once('destroyed', () => {
-      void this.dispose(id)
     })
 
     this.sessions.set(id, { pty, target, owner: spec.owner })

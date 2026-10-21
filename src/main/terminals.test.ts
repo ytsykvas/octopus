@@ -83,10 +83,13 @@ function target(): {
   send: (channel: string, payload: unknown) => void
   isDestroyed: () => boolean
   once: (event: string, handler: () => void) => void
+  off: (event: string, handler: () => void) => void
+  /** How many `destroyed` listeners are still registered. */
+  listening: () => number
   /** Pretends the window was closed. */
   close: () => void
 } {
-  const listeners: (() => void)[] = []
+  const listeners = new Set<() => void>()
 
   const state = {
     sent: [] as [string, unknown][],
@@ -96,11 +99,17 @@ function target(): {
     },
     isDestroyed: () => state.destroyed,
     once(event: string, handler: () => void) {
-      if (event === 'destroyed') listeners.push(handler)
+      if (event === 'destroyed') listeners.add(handler)
     },
+    off(event: string, handler: () => void) {
+      if (event === 'destroyed') listeners.delete(handler)
+    },
+    listening: () => listeners.size,
     close() {
       state.destroyed = true
-      for (const handler of listeners) handler()
+      // Only what is still registered, as a real emitter does.
+      for (const handler of [...listeners]) handler()
+      listeners.clear()
     }
   }
 
@@ -455,6 +464,22 @@ describe('disposal', () => {
 
     expect(signals.map(([pid]) => pid)).toEqual(spawned.map((pty) => -pty.pid))
     expect(manager.size).toBe(0)
+  })
+
+  /*
+   * Every script run or restart used to leave one listener on a window that
+   * lives all day; after ten of them Node warned, and the count kept climbing.
+   */
+  it('takes its listener off the window when the session ends', () => {
+    manager.create(SPEC, renderer as never)
+    manager.create(SPEC, renderer as never)
+    const stopped = manager.create(SPEC, renderer as never)
+    expect(renderer.listening()).toBe(3)
+
+    void manager.dispose(stopped)
+    for (const pty of spawned) pty.end({ exitCode: 0 })
+
+    expect(renderer.listening()).toBe(0)
   })
 
   it('leaves the sessions of other windows alone', () => {
