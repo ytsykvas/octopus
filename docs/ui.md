@@ -1913,7 +1913,7 @@ noise rather than emphasis; the second knows nothing about where HEAD is, and
 **The fact costs nothing to learn.** `git worktree list --porcelain` reports the
 branch of every worktree and the parser already keeps it, so this is a
 comparison in the pass that already decides whether a directory is missing — not
-one more `git` per workspace on a list that re-reads after every agent turn.
+one more `git` per workspace on a row that is re-read after every agent turn.
 
 **A quit waits for what the sessions were writing, for up to a second.** A
 transcript is append-only JSONL, so a write cut in half leaves a partial line the
@@ -2003,8 +2003,13 @@ on create, rename, remove and first load — and never again, so the agent could
 rewrite twenty files while the row went on saying what it said an hour ago,
 beside a diff pane that re-reads itself on the same event. The list now listens
 for the same turn endings and settles for the same 300ms, and re-reads only the
-project the workspace belongs to: a turn ending is a poor reason to run
-`git status` over every workspace of every project. That status runs with
+workspace whose turn ended (`workspaces:read`): re-reading its project ran
+`git status` and `rev-list` for every sibling after every turn of every agent —
+nineteen git processes per turn end with six workspaces, measured. A sibling
+catches up on its own turn's end or a full refresh. A turn that ends while the
+window is hidden is held and read when the window comes back, and a read that
+says what the row already says changes nothing, so the window is not redrawn
+for it. That status runs with
 `--no-optional-locks`, as the Files tab's does: a plain one holds `index.lock`
 for as long as it scans, and a `git add` or `git commit` running in the same
 worktree at that moment — another conversation, the terminal, a hook — fails

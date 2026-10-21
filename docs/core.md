@@ -231,6 +231,11 @@ cut from `origin/main` and measured against local `main` reports a fortnight of
 other people's commits as its own. It falls back to the stored name when git
 says nothing, because a repository that was moved answers no question at all and
 those reads must still report the workspace as missing rather than throw.
+A resolution still running is shared with whoever asks for the same project
+meanwhile, and dropped as it settles: a turn ending fires the row, the diff and
+the file sides at once, and each resolved the base on its own. Nothing is ever
+answered from an older resolution, so the callers that act on the answer use it
+too.
 
 ### An operation that fails cleans up after itself
 

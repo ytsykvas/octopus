@@ -758,6 +758,10 @@ export function registerIpc(
     attempt(() => service.listWorkspaces(projectId))
   )
 
+  host.handle('workspaces:read', (_event, workspaceId: string) =>
+    attempt(() => service.readWorkspace(workspaceId))
+  )
+
   host.handle('workspaces:create', (_event, projectId: string) =>
     attempt(() => service.createWorkspaceIn(projectId))
   )

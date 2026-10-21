@@ -425,6 +425,7 @@ describe('channel table', () => {
     'attachments:measure',
     'attachments:clear',
     'workspaces:list',
+    'workspaces:read',
     'workspaces:create',
     'workspaces:rename',
     'workspaces:notes',
@@ -1660,6 +1661,22 @@ describe('workspaces of a real project', () => {
     const projectId = await addProject()
 
     await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
+  })
+
+  // What a finished turn reads: the one row, as the list draws it.
+  it('reads one workspace as the list draws it, and nothing for one that is gone', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    const listed = (await invoke('workspaces:list', projectId)) as Result<unknown[]>
+    const [row] = listed.ok ? listed.value : []
+    await expect(invoke('workspaces:read', workspace.id)).resolves.toEqual({ ok: true, value: row })
+    expect(row).toMatchObject({ id: workspace.id, changedFiles: 1 })
+    await expect(invoke('workspaces:read', 'nobody/here')).resolves.toEqual({
+      ok: true,
+      value: null
+    })
   })
 
   it('renames a workspace and lists it under the new name', async () => {

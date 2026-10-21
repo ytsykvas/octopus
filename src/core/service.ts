@@ -356,6 +356,8 @@ import {
   ensureRemovable,
   fileInWorkspace,
   reconcile,
+  checkedOutBranches,
+  viewOf,
   removeWorkspace,
   renameWorkspace,
   rollbackWorkspace,
@@ -1156,6 +1158,14 @@ export interface OctopusService {
 
   /** Workspaces of a project, reconciled with what git actually has. */
   listWorkspaces(projectId: string): Promise<WorkspaceView[]>
+  /**
+   * One workspace, read the same way, or null when it or its project is gone.
+   *
+   * What a finished turn re-reads: only its own workspace can have moved, and
+   * counting every sibling ran two git processes per workspace of the project
+   * after every turn of every agent.
+   */
+  readWorkspace(workspaceId: string): Promise<WorkspaceView | null>
   createWorkspaceIn(projectId: string): Promise<Workspace>
   renameWorkspaceById(workspaceId: string, name: string): Promise<void>
   removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<void>
@@ -1959,7 +1969,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * creation path does not come through here; there a remote that cannot be
    * reached is exactly the failure worth refusing on.
    */
-  async function baseRefOf(project: Project): Promise<string> {
+  async function resolveBaseRefOf(project: Project): Promise<string> {
     // The base in effect: the repository's own when it states one git has.
     const { baseBranch } = await liveProject(project)
     try {
@@ -1967,6 +1977,32 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     } catch {
       return baseBranch
     }
+  }
+
+  /*
+   * A resolution still running, by project, for whoever asks meanwhile.
+   *
+   * A turn ending fires three readers at once — the workspace's own row, the
+   * diff and the file sides — and each resolved the base on its own, three
+   * times the same few git processes. Shared only while in flight and dropped
+   * as it settles, so no answer is ever older than the question: a later call
+   * always resolves afresh, which is what lets the callers that act on the
+   * answer — removal, revert, a pull request — use it too. Keyed on the record,
+   * which `commit` replaces on every change, so an edited project starts over.
+   */
+  const basesInFlight = new WeakMap<Project, Promise<string>>()
+
+  function baseRefOf(project: Project): Promise<string> {
+    const running = basesInFlight.get(project)
+    if (running !== undefined) return running
+
+    // Only one is ever in flight per project — a second caller takes the first —
+    // so settling can drop the entry outright.
+    const started = resolveBaseRefOf(project).finally(() => {
+      basesInFlight.delete(project)
+    })
+    basesInFlight.set(project, started)
+    return started
   }
 
   /**
@@ -5389,6 +5425,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const counts = await countChanges(stored, await baseRefOf(project), makeExec)
 
       return reconcile(stored, worktrees, counts, state.chats.filter(isOpenChat), turnStarts)
+    },
+
+    async readWorkspace(workspaceId) {
+      const workspace = state.workspaces.find((candidate) => candidate.id === workspaceId)
+      const project = workspace && findProject(state, workspace.projectId)
+      if (!workspace || !project) return null
+
+      // The same reads as the list, for one record: `worktree list` still, since
+      // whether the directory is there and on its branch are part of the row.
+      const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
+      const counts = await countChanges([workspace], await baseRefOf(project), makeExec)
+
+      // Read after the git calls, as the list does, so the conversations are no
+      // older than the status events that went out meanwhile.
+      return viewOf(
+        workspace,
+        checkedOutBranches(worktrees),
+        counts,
+        state.chats.filter(isOpenChat),
+        turnStarts
+      )
     },
 
     async createWorkspaceIn(projectId) {
