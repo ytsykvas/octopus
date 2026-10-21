@@ -6,9 +6,10 @@ before writing rather than after.
 
 ## How a change lands
 
-`main` is protected and refuses direct pushes, the maintainer's included.
-Everything arrives as a pull request from a branch, and merges once CI is
-green.
+Everything arrives as a pull request from a branch. The repository is private
+for now, which leaves `main` without branch protection, and the `check`
+workflow is switched off, so a pull request merges once the gate below passes
+locally on the branch merged with fresh `main`.
 
 ```bash
 git checkout -b fix/short-description
@@ -27,8 +28,8 @@ npm run test:race
 commit. `test:race` runs the interface's tests again with React's scheduler
 made to lose a race the suite otherwise wins only most of the time — a test that
 reads a component before its effects have run fails there every time
-(`docs/testing.md`). CI runs both on every pull request, so a red run is a
-change that cannot merge, not a note to consider.
+(`docs/testing.md`). The `check` workflow is switched off for now, so nothing on the server runs them; a red local
+run is a change that cannot merge, not a note to consider.
 
 **Coverage is 100% across `src`,** enforced by a threshold that fails the build.
 This is not aspirational: a change arrives with its tests. Never lower the

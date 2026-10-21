@@ -7,7 +7,8 @@ npm run check      # format, lint, types, tests with coverage
 npm run test:race  # the renderer suite with React's scheduler made to lose
 ```
 
-`check` must pass before every commit; CI runs both. Coverage is **100% across
+`check` must pass before every commit. The `check` workflow is switched off for now, so nothing on the server runs them: run both
+before a merge, on the branch merged with fresh `main`. Coverage is **100% across
 `src`**, enforced by a threshold that fails the build. Never lower it and never
 disable a lint rule to get past — if coverage drops, there is untested code.
 
@@ -348,7 +349,8 @@ as `RightPanel.test.tsx` and `FileViewer.test.tsx` do.
 **`npm run test:race` makes the scheduler lose the race every time.**
 `schedulerLoses.ts` holds each `setImmediate` back behind a real timer, loaded
 before `setup.ts` because the scheduler captures the function when it loads, and
-the renderer suite then runs as usual. CI runs it after the gate. With
+the renderer suite then runs as usual. CI ran it after the gate while the
+workflow was on. With
 `setup.ts`'s wait removed, 36–39 tests failed this way on 2026-10-19, depending
 on the run; with it, none. A test that reads a component before its effects
 have run fails there every time instead of once in a while. Each file waits for
