@@ -232,6 +232,9 @@ test caught the wrong answer instead of the wrong place — after creating an
 have convinced the migration it had already run and stranded that project's
 variables for good. `homedir()` reads `HOME` on macOS and Linux, so pointing it
 somewhere harmless turns that whole class of mistake into a missing file.
+The directory itself is not created, so a test that runs a process _in_ it
+makes it first (`plugins.test.ts`): `spawn` reports a missing working directory
+as the binary missing, and that was a gate failing with `ENOENT` once a day.
 
 The scratch `HOME` takes `~/.gitconfig` with it, so `testEnv` also sets
 **`EMAIL`**. A commit made without `-c user.email` otherwise asks git to guess an
@@ -261,11 +264,16 @@ vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: false, error: 'n
 asserts on styling breaks on every refactor while proving nothing. This is what
 makes a 100% threshold on UI survivable.
 
-Native things are stubbed: `node-pty` spawns a real shell. xterm.js is stubbed
-in `Terminal.test.tsx`, which is about the component, but six suites run the
-real one — it opens and draws its DOM rows in jsdom. jsdom has no
-IntersectionObserver, so a real xterm there never pauses; `xtermPause.test.ts`
-stubs one to say when the screen leaves and comes back.
+Native things are stubbed: `node-pty` spawns a real shell. xterm.js is faked by
+`test/xterm.ts` in `Terminal.test.tsx`, which is about the component, and in
+`RightPanel.test.tsx`, where nothing reads what it draws and the real one was
+half the file's time — the half that put four run tests past the 5 s timeout
+under load. Five suites still run the real one, so it keeps being opened
+somewhere: it draws its DOM rows in jsdom. jsdom has no IntersectionObserver,
+so a real xterm there never pauses; `xtermPause.test.ts` stubs one to say when
+the screen leaves and comes back. A wait on a session having been requested
+(`sessionsOpened`) polls every 5 ms rather than Testing Library's 50: the count
+moves in an effect, which no DOM mutation announces.
 
 **jsdom lays nothing out**, which bites in three places and always the same way
 — a measurement comes back as zero, or the method is missing entirely, and the

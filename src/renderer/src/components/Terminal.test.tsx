@@ -4,92 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalExit, TerminalOutput } from '@core/terminal.js'
 import type { Result } from '../../../preload/index.js'
 
+import { FakeFitAddon, FakeXTerm } from '../test/xterm.js'
 import { Terminal } from './Terminal.js'
 import { holdSelectionWhilePaused } from './xtermPause.js'
-
-/**
- * xterm.js measures glyphs against a real canvas, which jsdom does not have —
- * a genuine emulator here would either crash or size itself to nothing. The
- * stand-in keeps only what this component talks to: the options it was built
- * with, what was written to the screen, and the keystroke handler.
- */
-const { FakeXTerm, FakeFitAddon } = vi.hoisted(() => {
-  class FakeXTerm {
-    static readonly instances: FakeXTerm[] = []
-
-    // Deliberately not xterm's own 80x24: the size has to reach the session
-    // from the emulator, and a hardcoded default would pass unnoticed.
-    cols = 120
-    rows = 40
-    /** Every size the component asked for, in order. */
-    readonly resized: [number, number][] = []
-    readonly screen: string[] = []
-    typed: ((data: string) => void) | null = null
-    focused = false
-    disposed = false
-
-    constructor(public options: { theme: Record<string, string> }) {
-      FakeXTerm.instances.push(this)
-    }
-
-    loadAddon(): void {
-      // Addons are the real emulator's business; nothing here needs them.
-    }
-
-    /** Whether `open` has run, which the pause guard must come after. */
-    opened = false
-
-    open(): void {
-      // Attaching to the DOM is what a canvas renderer would do.
-      this.opened = true
-    }
-
-    write(data: string): void {
-      this.screen.push(data)
-    }
-
-    onData(handler: (data: string) => void): void {
-      this.typed = handler
-    }
-
-    focus(): void {
-      this.focused = true
-    }
-
-    dispose(): void {
-      this.disposed = true
-    }
-
-    resize(cols: number, rows: number): void {
-      this.cols = cols
-      this.rows = rows
-      this.resized.push([cols, rows])
-    }
-  }
-
-  class FakeFitAddon {
-    /**
-     * What a measurement would propose. Sizing needs measured glyphs, so by
-     * default there is none and the emulator keeps its size throughout.
-     */
-    static proposal: { cols: number; rows: number } | undefined = undefined
-
-    proposeDimensions(): { cols: number; rows: number } | undefined {
-      return FakeFitAddon.proposal
-    }
-  }
-
-  return { FakeXTerm, FakeFitAddon }
-})
 
 vi.mock('@xterm/xterm', () => ({ Terminal: FakeXTerm }))
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 // Its own suite runs it against the real xterm; here only the call is asked about.
 vi.mock('./xtermPause.js', () => ({ holdSelectionWhilePaused: vi.fn(() => false) }))
-
-// The class itself lives inside the hoisted factory, which runs before this
-// module's body; only its instance type can be named out here.
-type Emulator = InstanceType<typeof FakeXTerm>
 
 /** jsdom has no ResizeObserver, and the component resizes the session from one. */
 class FakeResizeObserver {
@@ -131,7 +53,7 @@ afterEach(() => {
 })
 
 /** The emulator the component under test just built. */
-function emulator(): Emulator {
+function emulator(): FakeXTerm {
   const term = FakeXTerm.instances.at(-1)
   if (!term) throw new Error('the component built no terminal')
   return term

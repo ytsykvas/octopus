@@ -6,12 +6,19 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { stubDialogElement } from '../test/dialog.js'
 import { octopus } from '../test/octopus.js'
 import { openedDirectories, sessionId, sessionsOpened, stubTerminalHost } from '../test/terminal.js'
+import { FakeFitAddon, FakeXTerm } from '../test/xterm.js'
 import { commentController, quoteController, revertController } from '../test/comments.js'
 import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
 import type { ScriptKind } from '@core/scripts.js'
 import { workspaceView } from '../test/workspaces.js'
 import { useServerControls } from '../hooks/useServerControls.js'
 import { RightPanel } from './RightPanel.js'
+
+// Nothing here reads what the emulator draws, and the real one drawing its
+// rows into jsdom was half of this file's time — the half that put the run
+// tests past their timeout under load. `test/xterm.ts` says what is kept.
+vi.mock('@xterm/xterm', () => ({ Terminal: FakeXTerm }))
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 
 /*
  * Everything but the run state, which `App` owns and `Tabbed` stands in for —
