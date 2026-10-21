@@ -193,7 +193,5 @@ export async function resolveBase(exec: GitExec, base: string): Promise<BaseRef>
  * not belong behind a button that says "new workspace".
  */
 export async function fetchRemote(exec: GitExec, remote: string): Promise<void> {
-  // Pruned: a ref left by a branch deleted on the remote would otherwise hold
-  // its workspace name forever.
-  await exec(['fetch', '--prune', remote])
+  await exec(['fetch', remote])
 }

@@ -19,9 +19,12 @@ import { shortBranchName } from './branches.js'
 import { GitHubError } from './github.js'
 import { countAhead, currentBranch, type GitExec, reasonFrom } from './git.js'
 import {
+  type BranchOwner,
   type BranchRequest,
   BranchListSchema,
   DetailPayloadSchema,
+  openedFor,
+  ownRequests,
   type PullRequestDetail,
   type PullRequestState,
   RemoteStateSchema,
@@ -29,9 +32,6 @@ import {
   type RerunScope,
   runsToRerun,
   ThreadsPayloadSchema,
-  type BranchOwner,
-  openedFor,
-  ownRequests,
   toBranchRequests,
   toPullRequestDetail,
   toPullRequestState,
@@ -125,7 +125,7 @@ const RemotePullRequestSchema = z.object({
  * apart from a broken setup by reading stderr.
  */
 export async function readPullRequest(
-  workspace: BranchOwner,
+  owner: BranchOwner,
   base: string,
   gh: GhExec,
   git: GitExec
@@ -135,7 +135,7 @@ export async function readPullRequest(
      the first of them left those three writing into a worktree the caller had
      already moved on from — which is the `ENOTEMPTY` that failed a full run in
      five for a month. */
-  const { branch } = workspace
+  const { branch } = owner
   const [remote, dirty, tip, ahead, head] = await allOf([
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
@@ -154,7 +154,7 @@ export async function readPullRequest(
   // `gh` lists most recent first, and the current one is what the pane is about.
   // One too old to be the workspace's means everything older is too.
   const newest = remote[0]
-  const current = newest !== undefined && openedFor(newest, workspace) ? newest : undefined
+  const current = newest !== undefined && openedFor(newest, owner) ? newest : undefined
 
   return {
     request:
@@ -853,7 +853,7 @@ export interface BranchRequestList {
  * network call per row every time the list refreshed.
  */
 export async function readBranchRequests(
-  workspaces: readonly BranchOwner[],
+  owners: readonly BranchOwner[],
   gh: GhExec,
   limit: number = BRANCH_REQUEST_LIMIT
 ): Promise<BranchRequestList> {
@@ -875,7 +875,7 @@ export async function readBranchRequests(
     )
   )
 
-  const requests = toBranchRequests(ownRequests(payload, workspaces))
+  const requests = toBranchRequests(ownRequests(payload, owners))
 
   /*
    * Whether the answer came back full, decided here rather than by counting

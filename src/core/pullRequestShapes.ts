@@ -654,7 +654,7 @@ export function openedFor(request: { readonly createdAt: string }, owner: Branch
   return Date.parse(request.createdAt) >= since - CLOCK_SKEW_MS
 }
 
-/** The requests that could be their branch's workspace's own; branches no workspace is on all pass. */
+/** Drops requests opened before their branch's workspace came onto it; branches with no workspace pass. */
 export function ownRequests(
   payload: BranchListPayload,
   owners: readonly BranchOwner[]

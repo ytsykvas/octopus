@@ -16,6 +16,7 @@
  * writes.
  */
 
+import { remoteBranchName } from './branches.js'
 import { countAhead, currentBranch, type GitExec, resolveRef } from './git.js'
 import { allOf } from './parallel.js'
 import { listRemotes } from './remotes.js'
@@ -144,10 +145,9 @@ async function remoteCopy(
  * The remote-tracking ref, but only where it could be this branch's own copy.
  *
  * Workspace names are recycled. `takenByBranches` in `workspaces.ts` skips
- * names a remote-tracking ref holds, but a ref can arrive after the name was
- * drawn — from another checkout, or one a fetch has not pruned yet — and a
- * workspace on that name then inherits a dead ref as its "copy on the
- * remote". Measured: the strip claimed three commits to push where there
+ * names a remote-tracking ref holds, but one can still arrive after the name
+ * was drawn (from another clone), and a workspace on that name would take it
+ * for its copy on the remote. Measured: the strip claimed three commits to push where there
  * was one, files from somebody else's branch carried the stale warning, and
  * pressing Push revived a merged branch behind a closed request.
  *
@@ -165,7 +165,7 @@ async function trackingCopy(
   branch: string,
   baseCommit: string
 ): Promise<string | null> {
-  const ref = await resolveRef(exec, `refs/remotes/${ORIGIN}/${branch}`)
+  const ref = await resolveRef(exec, `refs/remotes/${remoteBranchName(branch)}`)
   if (ref === null) return null
 
   return (await isAncestor(exec, baseCommit, ref)) ? ref : null

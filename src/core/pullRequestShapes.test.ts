@@ -870,8 +870,6 @@ describe('whose request it is', () => {
     expect(openedFor(opened('2026-10-21T12:32:54Z'), owner)).toBe(false)
   })
 
-  // GitHub sends whole seconds and the store keeps milliseconds, so the two
-  // are compared as instants rather than as text.
   it('compares instants, not strings', () => {
     expect(openedFor(opened('2026-10-21T12:33:54Z'), owner)).toBe(false)
     expect(openedFor(opened('2026-10-21T12:33:55Z'), owner)).toBe(true)

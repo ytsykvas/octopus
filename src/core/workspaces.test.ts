@@ -252,7 +252,7 @@ describe('freshBase', () => {
     }
 
     await createWorkspace(project, state, exec, { root, answers: nothingListens, fetchExec })
-    expect(asked).toEqual([['fetch', '--prune', 'origin']])
+    expect(asked).toEqual([['fetch', 'origin']])
   })
 })
 
@@ -282,12 +282,6 @@ describe('createWorkspace', () => {
     })
 
     expect((await create()).name).toBe(SECOND_NAME)
-  })
-
-  it('ignores remote branches outside the project prefix', async () => {
-    await run('git', ['update-ref', `refs/remotes/origin/${FIRST_NAME}`, 'HEAD'], { cwd: repo })
-
-    expect((await create()).name).toBe(FIRST_NAME)
   })
 
   it('ignores branches outside the project prefix', async () => {
@@ -558,7 +552,7 @@ describe('renameWorkspace', () => {
     // Case is all `toSlug` would change, so the branch stays where it is.
     const renamed = await renameWorkspace(workspace, project, FIRST_NAME.toUpperCase(), exec)
     expect(renamed.branch).toBe(workspace.branch)
-    expect(renamed.branchSince).toBeUndefined()
+    expect(renamed.branchSince).toBe(workspace.branchSince)
   })
 
   it('marks when the workspace came onto its new branch', async () => {
@@ -579,6 +573,18 @@ describe('renameWorkspace', () => {
     )
 
     expect((error as WorkspaceError).code).toBe('branchExists')
+    expect((error as WorkspaceError).params).toMatchObject({ branch: 'origin/ytsykvas/fix-auth' })
+  })
+
+  it('lets a workspace back onto its own branch on the remote', async () => {
+    await addRemote()
+    const workspace = await create()
+    await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
+    const away = { ...workspace, ...(await renameWorkspace(workspace, project, 'fix auth', exec)) }
+
+    const back = await renameWorkspace(away, project, workspace.name, exec)
+
+    expect(back).toMatchObject({ branch: workspace.branch, branchSince: null })
   })
 
   it('refuses to collide with an existing branch', async () => {

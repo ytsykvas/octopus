@@ -180,11 +180,7 @@ export const WorkspaceSchema = z.object({
   status: WorkspaceStatusSchema,
   port: z.number().int().min(PORT_RANGE_START).max(PORT_RANGE_END),
   createdAt: z.iso.datetime(),
-  /**
-   * When the workspace came onto its current branch, or null for "when it was
-   * created". A rename moves it to a branch name that may have a history of its
-   * own, and requests from before this moment are not the workspace's.
-   */
+  /** When a rename brought the workspace onto its current branch; null means since `createdAt`. */
   branchSince: z.iso.datetime().nullable().default(null),
   /**
    * A set of variables of this workspace's own, or null to follow the project.

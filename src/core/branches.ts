@@ -33,7 +33,7 @@ export function shortBranchName(branch: string): string {
     : branch
 }
 
-/** The remote-tracking name of a branch: the inverse of `shortBranchName`. */
+/** Prepends the `origin/` that `shortBranchName` strips. */
 export function remoteBranchName(branch: string): string {
   return `${DEFAULT_REMOTE_PREFIX}${branch}`
 }

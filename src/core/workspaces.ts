@@ -14,7 +14,15 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
 import { remoteBranchName, shortBranchName } from './branches.js'
 import { CodedError } from './codedError.js'
-import { anyBranchExists, countAhead, type GitExec, reasonFrom, toSlug } from './git.js'
+import {
+  anyBranchExists,
+  countAhead,
+  type GitExec,
+  reasonFrom,
+  refExists,
+  toSlug,
+  upstreamOf
+} from './git.js'
 import { fetchRemote, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
@@ -355,7 +363,7 @@ export async function renameWorkspace(
   name: string,
   exec: GitExec,
   siblings: readonly Workspace[] = []
-): Promise<Pick<Workspace, 'name' | 'branch'> & Partial<Pick<Workspace, 'branchSince'>>> {
+): Promise<Pick<Workspace, 'name' | 'branch' | 'branchSince'>> {
   const trimmed = name.trim()
   if (trimmed === '') {
     throw new WorkspaceError('nameEmpty', {}, 'A workspace name cannot be empty.')
@@ -378,28 +386,31 @@ export async function renameWorkspace(
   const branch = branchFor(project, trimmed)
   if (branch === workspace.branch) {
     // The slug did not change — nothing for git to do.
-    return { name: trimmed, branch }
+    return { name: trimmed, branch, branchSince: workspace.branchSince }
   }
 
   // Asked before the attempt, so a failure can be named. Mapping every
   // rejection to "already exists" blamed the new name for whatever went wrong —
   // including the branch being renamed from a terminal, where the truth is that
-  // the old one is gone.
-  // `origin`'s copy as well: a name still held there would bring that branch's
-  // history, and its requests, onto this workspace.
-  const [local, remote] = await allOf([
+  // the old one is gone. `origin`'s copy counts as in `takenByBranches`, unless
+  // it is this branch's own upstream: then the name is the workspace's own.
+  const onRemote = remoteBranchName(branch)
+  const [local, remote, upstream] = await allOf([
     anyBranchExists(exec, branch),
-    anyBranchExists(exec, remoteBranchName(branch))
+    refExists(exec, `refs/remotes/${onRemote}`),
+    upstreamOf(exec, workspace.branch)
   ])
-  if (local || remote) {
-    throw new WorkspaceError('branchExists', { branch }, `Branch ${branch} already exists.`)
+  const own = remote && upstream === onRemote
+  if (local || (remote && !own)) {
+    const taken = local ? branch : onRemote
+    throw new WorkspaceError('branchExists', { branch: taken }, `Branch ${taken} already exists.`)
   }
 
   // Anything else propagates with git's own stderr, which says more than a
   // guess would.
   await renameBranch(exec, workspace.branch, branch)
 
-  return { name: trimmed, branch, branchSince: new Date().toISOString() }
+  return { name: trimmed, branch, branchSince: own ? null : new Date().toISOString() }
 }
 
 export interface RemoveOptions {
