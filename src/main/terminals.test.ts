@@ -158,6 +158,11 @@ function groupKill(pid: number, signal: NodeJS.Signals | 0): void {
   if (signal === 'SIGKILL') pty?.killGroup()
 }
 
+/** What reached the window on one channel, in order. */
+function sentOn(channel: string): unknown[] {
+  return renderer.sent.filter(([sent]) => sent === channel).map(([, payload]) => payload)
+}
+
 beforeEach(() => {
   spawned.length = 0
   signals = []
@@ -250,10 +255,6 @@ describe('streaming', () => {
     expect(renderer.sent).toHaveLength(0)
   })
 
-  /** What reached the window on `terminal:data`, in order. */
-  const output = (): unknown[] =>
-    renderer.sent.filter(([channel]) => channel === 'terminal:data').map(([, payload]) => payload)
-
   /*
    * node-pty reads about a kilobyte at a time, and each read used to be its own
    * message: a fast build was 30 000 a second, a full core here and another in
@@ -266,11 +267,11 @@ describe('streaming', () => {
       spawned[0]?.emit('a')
       spawned[0]?.emit('b')
       spawned[0]?.emit('c')
-      expect(output()).toEqual([{ id, data: 'a' }])
+      expect(sentOn('terminal:data')).toEqual([{ id, data: 'a' }])
 
       vi.advanceTimersByTime(BATCH_MS)
 
-      expect(output()).toEqual([
+      expect(sentOn('terminal:data')).toEqual([
         { id, data: 'a' },
         { id, data: 'bc' }
       ])
@@ -289,7 +290,7 @@ describe('streaming', () => {
       vi.advanceTimersByTime(BATCH_MS)
       spawned[0]?.emit('s')
 
-      expect(output()).toEqual([
+      expect(sentOn('terminal:data')).toEqual([
         { id, data: 'l' },
         { id, data: 's' }
       ])
@@ -305,7 +306,7 @@ describe('streaming', () => {
       spawned[0]?.emit('first')
       spawned[0]?.emit('x'.repeat(BATCH_CHARS))
 
-      expect(output()).toEqual([
+      expect(sentOn('terminal:data')).toEqual([
         { id, data: 'first' },
         { id, data: 'x'.repeat(BATCH_CHARS) }
       ])
@@ -345,7 +346,7 @@ describe('streaming', () => {
 
       vi.advanceTimersByTime(BATCH_MS)
 
-      expect(output()).toHaveLength(1)
+      expect(sentOn('terminal:data')).toHaveLength(1)
     } finally {
       vi.useRealTimers()
     }
@@ -848,6 +849,125 @@ describe('disposal', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+/*
+ * A run whose shell exits by itself while a member of its group carries on — a
+ * server's child that outlived the script, something it started with `&`.
+ * The pane forgets the session on the exit, so nothing on screen could reach
+ * that member, and the next Run failed on its port.
+ */
+describe('a run that ends with a member still running', () => {
+  /** A run whose shell has just exited, leaving a member of its group behind. */
+  function endedWithLeftover(): { id: string; pty: InstanceType<typeof FakePty> } {
+    const id = manager.create(RUN, renderer as never)
+    const pty = spawned[0]
+    if (!pty) throw new Error('nothing spawned')
+    pty.lingering = true
+    pty.end({ exitCode: 0 })
+    return { id, pty }
+  }
+
+  it('ends the group with SIGTERM, then SIGKILL, and no hangup', async () => {
+    vi.useFakeTimers()
+    try {
+      const { pty } = endedWithLeftover()
+      expect(signals).toEqual([[-pty.pid, 'SIGTERM']])
+
+      await vi.advanceTimersByTimeAsync(2_500)
+      expect(signals).toEqual([
+        [-pty.pid, 'SIGTERM'],
+        [-pty.pid, 'SIGKILL']
+      ])
+      expect(pty.groupAlive()).toBe(false)
+      // The shell had already gone; the hangup is for a shell still there.
+      expect(pty.killed).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Told at once, the pane offers Run while the port is still held.
+  it('reports the exit once the group has gone, not when the shell went', async () => {
+    vi.useFakeTimers()
+    try {
+      const { id, pty } = endedWithLeftover()
+      expect(sentOn('terminal:exit')).toEqual([])
+
+      await vi.advanceTimersByTimeAsync(200)
+      pty.lingering = false
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(sentOn('terminal:exit')).toEqual([{ id, exitCode: 0 }])
+      expect(signals.map(([, signal]) => signal)).toEqual(['SIGTERM'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The Stop the pane still offers meanwhile must wait for the same thing.
+  it('answers a stop meanwhile once the group has gone', async () => {
+    vi.useFakeTimers()
+    try {
+      const { id, pty } = endedWithLeftover()
+
+      let ended = false
+      const answer = manager.dispose(id).then(() => {
+        ended = true
+      })
+      await vi.advanceTimersByTimeAsync(2_400)
+      expect(ended).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(100)
+      await answer
+      expect(pty.groupAlive()).toBe(false)
+      expect(signals.map(([, signal]) => signal)).toEqual(['SIGTERM', 'SIGKILL'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('holds a quit until the group has gone', async () => {
+    vi.useFakeTimers()
+    try {
+      const { pty } = endedWithLeftover()
+
+      let ended = false
+      const answer = manager.disposeAll().then(() => {
+        ended = true
+      })
+      await vi.advanceTimersByTimeAsync(2_400)
+      expect(ended).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(100)
+      await answer
+      expect(pty.groupAlive()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Not only a run: a build that leaves something behind on purpose is ended too.
+  it('ends what a build left behind as well', () => {
+    manager.create(
+      { ...RUN, owner: { workspaceId: null, purpose: 'setup' as const } },
+      renderer as never
+    )
+    const pty = spawned[0]
+    if (!pty) throw new Error('nothing spawned')
+    pty.lingering = true
+    pty.end({ exitCode: 0 })
+
+    expect(signals).toEqual([[-pty.pid, 'SIGTERM']])
+  })
+
+  it('signals nothing for a run that took its whole group with it', () => {
+    const id = manager.create(RUN, renderer as never)
+    spawned[0]?.end({ exitCode: 0 })
+
+    expect(signals).toEqual([])
+    expect(sentOn('terminal:exit')).toEqual([{ id, exitCode: 0 }])
   })
 })
 
