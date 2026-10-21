@@ -68,19 +68,12 @@ written down there before the import is written.
 | `/check`            | manual — quality gate with plain explanations                          |
 | `/ship`             | manual — gate plus a conventional commit                               |
 
-`.agents/skills/` is mirrored by the maintainer's local `.claude/skills/`. A
-change to a skill belongs in both, and only the names differ: `AGENTS.md` for
-`CLAUDE.md`, `.agents/` for `.claude/` in what is about the setup itself — never
-in what is about the product, whose package is `@anthropic-ai/claude-agent-sdk`.
-
 **Subagent** `octopus-reviewer` reviews against this project's standards.
 
-**Hooks** exist only in the maintainer's local Claude Code setup
-(`.claude/hooks/`). Under Claude Code they block importing `electron` inside
-`src/core/` and format and lint every edited file. Under any other agent nothing
-enforces either, so do both by hand: never import `electron` in `src/core/`, run
-`npx prettier --write` on what you edited, and run `npm run check` before a
-commit.
+**No hooks are installed.** Nothing mechanical stops an `electron` import in
+`src/core/` or an unformatted file, so do both by hand: never import `electron`
+in `src/core/`, run `npx prettier --write` on what you edited, and run
+`npm run check` before a commit.
 
 ## Findings that are not the current task
 
