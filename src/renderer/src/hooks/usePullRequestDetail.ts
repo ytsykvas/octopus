@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { PullRequestDetail } from '@core/pullRequestShapes.js'
 
-import { onChatEvent } from './chatEvents.js'
 import { useErrorMessage } from './useErrorMessage.js'
+import { useTurnSettled } from './useTurnSettled.js'
+import { setVisibleTimeout } from './visibleTimeout.js'
 
 export interface PullRequestDetailController {
   readonly detail: PullRequestDetail | null
@@ -23,15 +24,6 @@ export interface PullRequestDetailController {
  * a check finishing is noticed in the time it takes to look away and back.
  */
 const INTERVAL_MS = 15_000
-
-/**
- * How long after a turn ends before the checks are read again.
- *
- * The diff pane's own settle, for the same reason: the `result` arrives as the
- * agent's last write is still landing, and a read that beats it reports the
- * state before the push.
- */
-const SETTLE_MS = 300
 
 /**
  * Whether there is anything left to wait for.
@@ -106,7 +98,7 @@ export function usePullRequestDetail(
     if (workspaceId === null || number === null || !enabled) return
 
     let stopped = false
-    let timer: ReturnType<typeof setTimeout> | undefined
+    let cancel: (() => void) | undefined
     const attempt = ++generation.current
 
     const read = async (): Promise<void> => {
@@ -125,15 +117,16 @@ export function usePullRequestDetail(
       // Rescheduled from the answer rather than run on an interval: an interval
       // would stack a second read on top of one still in flight over a slow
       // connection, and there is nothing to wait for once everything has
-      // settled.
-      if (settling(result.value)) timer = setTimeout(() => void read(), INTERVAL_MS)
+      // settled. Held while the window is hidden: a check finishing behind it
+      // is read once, when somebody can see the answer.
+      if (settling(result.value)) cancel = setVisibleTimeout(() => void read(), INTERVAL_MS)
     }
 
     void read()
 
     return () => {
       stopped = true
-      clearTimeout(timer)
+      cancel?.()
     }
     // `nonce` is not read in here; it is what makes a refresh re-run the effect.
   }, [workspaceId, number, enabled, nonce, describeFailure])
@@ -147,36 +140,15 @@ export function usePullRequestDetail(
    * raised nothing this hook listened to. The pane whose job is saying whether
    * the fix worked was the one that had stopped looking.
    *
-   * The diff pane's subscription, in shape and in reasons: filtered on the
-   * workspace rather than the chat, since any chat here writes to the same
-   * worktree; on `error` as well as `result`, since a turn that failed may
-   * well have pushed before it did; skipped while hidden, since the effect
-   * above reads again when the tab comes back; and settled, so a read does not
-   * beat the agent's last write.
+   * The diff pane's subscription, shared through `useTurnSettled`: skipped
+   * while the tab is hidden, since the effect above reads again when it comes
+   * back, and held while the window is.
    *
    * Not a poll while a check is failed, which was the other candidate: that
    * asks GitHub about an abandoned request for ever, which is what `settling`
    * exists to prevent.
    */
-  const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    if (workspaceId === null || number === null) return
-
-    const unsubscribe = onChatEvent((announced) => {
-      if (announced.workspaceId !== workspaceId) return
-      if (announced.event.type !== 'result' && announced.event.type !== 'error') return
-      if (!enabled) return
-
-      if (pending.current !== null) clearTimeout(pending.current)
-      pending.current = setTimeout(refresh, SETTLE_MS)
-    })
-
-    return () => {
-      unsubscribe()
-      if (pending.current !== null) clearTimeout(pending.current)
-    }
-  }, [workspaceId, number, enabled, refresh])
+  useTurnSettled(workspaceId, enabled && number !== null, refresh)
 
   return {
     detail,

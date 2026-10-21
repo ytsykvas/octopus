@@ -5,7 +5,8 @@ import type { AgentEvent } from '@core/events.js'
 
 import { emitAgentEvent } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
-import { SETTLE_MS, useWorkspaceSettled } from './useWorkspaceSettled.js'
+import { SETTLE_MS } from './useTurnSettled.js'
+import { useWorkspaceSettled } from './useWorkspaceSettled.js'
 
 const WORKSPACE = 'planner/anna'
 
@@ -23,39 +24,22 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+// The turn half is `useTurnSettled`'s, and tested there; this is the focus half
+// and the two together.
 describe('useWorkspaceSettled', () => {
-  it('calls back once a turn in the workspace has settled, once for a burst', () => {
+  it('calls back once a turn in the workspace has settled', () => {
     vi.useFakeTimers()
     const settled = vi.fn()
     renderHook(() => {
       useWorkspaceSettled(WORKSPACE, true, settled)
     })
 
-    emitAgentEvent({ type: 'error', message: 'failed' })
     emitAgentEvent(DONE)
-    expect(settled).not.toHaveBeenCalled()
-
     act(() => {
       vi.advanceTimersByTime(SETTLE_MS)
     })
+
     expect(settled).toHaveBeenCalledTimes(1)
-  })
-
-  it('ignores what is not the end of a turn, and other workspaces', () => {
-    vi.useFakeTimers()
-    const settled = vi.fn()
-    renderHook(() => {
-      useWorkspaceSettled(WORKSPACE, true, settled)
-    })
-
-    emitAgentEvent({ type: 'text', text: 'hello' })
-    const [subscriber] = vi.mocked(octopus().chats.onEvent).mock.calls.at(-1) ?? []
-    act(() => {
-      subscriber?.({ chatId: 'chat-1', workspaceId: 'planner/bob', event: DONE })
-      vi.advanceTimersByTime(SETTLE_MS)
-    })
-
-    expect(settled).not.toHaveBeenCalled()
   })
 
   it('calls back when the window comes back', () => {
@@ -88,9 +72,7 @@ describe('useWorkspaceSettled', () => {
     expect(octopus().chats.onEvent).not.toHaveBeenCalled()
   })
 
-  // A read waiting when the tab is hidden would land on a pane nobody sees.
-  it('drops a pending read when it stops listening', () => {
-    vi.useFakeTimers()
+  it('stops listening for focus once disabled', () => {
     const settled = vi.fn()
     const { rerender } = renderHook(
       ({ enabled }) => {
@@ -99,10 +81,9 @@ describe('useWorkspaceSettled', () => {
       { initialProps: { enabled: true } }
     )
 
-    emitAgentEvent(DONE)
     rerender({ enabled: false })
     act(() => {
-      vi.advanceTimersByTime(SETTLE_MS)
+      window.dispatchEvent(new Event('focus'))
     })
 
     expect(settled).not.toHaveBeenCalled()

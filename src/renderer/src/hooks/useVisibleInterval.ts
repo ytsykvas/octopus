@@ -9,9 +9,11 @@ import { useEffect, useEffectEvent } from 'react'
  * hidden or minimised, and a return asks at once rather than waiting out the
  * rest of an interval with a stale figure on screen.
  *
- * Both halves of "looked at" are listened to. `visibilitychange` covers the
- * window being hidden and shown; `focus` covers moving between this window and
- * another while both stay visible, which fires no visibility change at all.
+ * Only `visibilitychange` is listened to, not `focus`. While the window is
+ * visible the clock is running, so a reading is never older than `ms` when
+ * somebody switches back to it; asking again on every focus bought nothing but
+ * a launch of `ps` — or of the CLI — per switch between apps, and two per
+ * return, since coming back from a minimised window fires both events.
  *
  * `active` false stops it outright — for a reading whose display is folded away.
  */
@@ -39,12 +41,10 @@ export function useVisibleInterval(tick: () => void, ms: number, active = true):
     }
 
     watch()
-    window.addEventListener('focus', watch)
     document.addEventListener('visibilitychange', watch)
 
     return () => {
       stop()
-      window.removeEventListener('focus', watch)
       document.removeEventListener('visibilitychange', watch)
     }
   }, [ms, active])

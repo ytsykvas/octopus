@@ -95,8 +95,25 @@ describe('what the machine is paying', () => {
     unmount()
 
     act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    expect(octopus().resources.read).toHaveBeenCalledOnce()
+  })
+
+  /*
+   * While the window is visible the clock runs, so the figure is never older
+   * than one interval; a switch between apps used to launch `ps` every time.
+   */
+  it('reads nothing more when the window only takes focus', async () => {
+    vi.useFakeTimers()
+    renderHook(() => useResources(true))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    act(() => {
       window.dispatchEvent(new Event('focus'))
     })
+    await act(() => vi.advanceTimersByTimeAsync(0))
 
     expect(octopus().resources.read).toHaveBeenCalledOnce()
   })

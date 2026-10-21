@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 
+import { setVisibleTimeout } from './visibleTimeout.js'
+
 export interface BranchRequestController {
   /** What each branch's request is, by branch name; absent means there is none. */
   readonly byBranch: ReadonlyMap<string, BranchRequest>
@@ -116,7 +118,7 @@ export function useBranchRequests(
     if (watched === '') return
 
     let stopped = false
-    const timers = new Map<string, ReturnType<typeof setTimeout>>()
+    const timers = new Map<string, () => void>()
 
     const read = async (id: string): Promise<void> => {
       const result = await window.octopus.projects.pullRequests(id)
@@ -143,10 +145,12 @@ export function useBranchRequests(
 
       // Rescheduled from the answer rather than run on an interval, so a slow
       // reply never has a second read stacked on top of it — and a refusal is
-      // retried on the same clock rather than giving up for the session.
+      // retried on the same clock rather than giving up for the session. Held
+      // while the window is hidden: a mark nobody can see is not worth a
+      // GraphQL query a minute, and the one due is read on the way back.
       timers.set(
         id,
-        setTimeout(() => void read(id), running ? RUNNING_INTERVAL_MS : INTERVAL_MS)
+        setVisibleTimeout(() => void read(id), running ? RUNNING_INTERVAL_MS : INTERVAL_MS)
       )
     }
 
@@ -154,7 +158,7 @@ export function useBranchRequests(
 
     return () => {
       stopped = true
-      for (const timer of timers.values()) clearTimeout(timer)
+      for (const cancel of timers.values()) cancel()
     }
     // `nonce` is not read in here; it is what makes a refresh re-run the effect.
   }, [watched, nonce])

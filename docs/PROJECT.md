@@ -656,7 +656,7 @@ the app never sees a token (§10.9).
 - **The checks.** Read from `statusCheckRollup`, which is a union of GitHub
   Actions runs and the older Commit Status API — external services still report
   through the second, so a repository commonly has both. Re-read every 15 s
-  while a check is running **or** while GitHub has not worked out whether the
+  (held while the window is hidden) while a check is running **or** while GitHub has not worked out whether the
   branch is mergeable, since it computes that asynchronously and a repository
   with no CI has no pending check to wait on. While one is red, two buttons
   beside the heading restart its Actions runs — only the failed jobs, or all of

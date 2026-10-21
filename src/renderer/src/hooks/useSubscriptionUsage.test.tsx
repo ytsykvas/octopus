@@ -157,23 +157,27 @@ describe('what the sidebar knows about the account', () => {
   })
 
   /*
-   * Whatever happened while the window was in the background announced itself
-   * to nobody here, and the figure informs a decision taken the moment somebody
-   * looks: whether to start something at all.
+   * With no session running, a read starts the CLI. While the window stays
+   * visible the slow timer bounds the figure's age, so a switch between apps
+   * is not a reason to ask — it used to be one launch per switch.
    */
-  it('asks again when the window is looked at', async () => {
-    renderHook(() => useSubscriptionUsage())
-    await waitFor(() => {
+  it('asks nothing when the window only takes focus', async () => {
+    vi.useFakeTimers()
+    try {
+      renderHook(() => useSubscriptionUsage())
       expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(1)
-    })
 
-    act(() => {
-      window.dispatchEvent(new Event('focus'))
-    })
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
 
-    await waitFor(() => {
-      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(2)
-    })
+      expect(octopus().chats.refreshSubscription).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // Nothing behind a hidden window is worth spawning a process for.
