@@ -120,7 +120,12 @@ export function DropdownMenu({
   maxHeight
 }: DropdownMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+  const [position, setPosition] = useState<{
+    top: number
+    left: number
+    /** Where the panel is drawn, found from the trigger as it is opened. */
+    host: Element
+  } | null>(null)
   const container = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
 
@@ -195,7 +200,8 @@ export function DropdownMenu({
       left: Math.min(
         Math.max(GAP, align === 'right' ? rect.right - width : rect.left),
         window.innerWidth - width - GAP
-      )
+      ),
+      host: element.closest('dialog') ?? document.body
     })
 
     setOpen(true)
@@ -231,6 +237,13 @@ export function DropdownMenu({
          * The coordinates are already the window's, so nothing about the
          * placement changes; what changes is which box the painting is
          * confined to.
+         *
+         * Into the `<dialog>` instead, when the trigger sits in one.
+         * `showModal()` lifts it into the top layer above the whole body and
+         * makes the body inert, so the sound picker in Settings opened behind
+         * the dialog where nothing could reach it. `fixed` still means the
+         * window there only while the dialog carries no transform, filter or
+         * `contain` — give it an open animation and this panel moves with it.
          */
         createPortal(
           <div
@@ -256,7 +269,7 @@ export function DropdownMenu({
               </Fragment>
             ))}
           </div>,
-          document.body
+          position.host
         )}
     </div>
   )

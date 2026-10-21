@@ -184,6 +184,39 @@ describe('DropdownMenu', () => {
   })
 
   /*
+   * Reported from the running app: the sound picker in Settings did not open.
+   *
+   * It did open — into the body, behind the dialog. `showModal()` lifts a
+   * `<dialog>` into the top layer, above everything in the body, and makes the
+   * rest of the page inert, so a panel drawn there is both covered and dead.
+   * Inside a dialog the panel belongs to the dialog, still clear of whatever
+   * wraps the trigger within it.
+   */
+  it('draws its panel into the dialog its trigger sits in', async () => {
+    const user = userEvent.setup()
+    render(
+      <dialog open>
+        <div data-testid="wrapper">
+          <DropdownMenu
+            actions={[{ id: 'chime', label: 'Chime', onSelect: vi.fn() }]}
+            trigger={({ onClick }) => (
+              <button type="button" onClick={onClick}>
+                Which sound
+              </button>
+            )}
+          />
+        </div>
+      </dialog>
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Which sound' }))
+
+    const menu = screen.getByRole('menu')
+    expect(menu.parentElement).toBe(screen.getByRole('dialog'))
+    expect(screen.getByTestId('wrapper')).not.toContainElement(menu)
+  })
+
+  /*
    * The companion to the portal above, and the thing it would break silently.
    *
    * `useDismiss` asks whether a click landed inside the trigger's container,
