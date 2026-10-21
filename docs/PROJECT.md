@@ -456,7 +456,7 @@ The codebase follows **the best practices of its stack**. This is a condition, n
 
 #### Testing
 
-The coverage target is **100% on every layer** — statements, branches, functions and lines — held by one threshold (`vitest.shared.ts`) that both `vitest.config.ts` (core, main, preload) and `vitest.renderer.config.ts` (the window) apply, and `npm run check` and CI fail when either drops. Only `bootstrapOnly` in `vitest.shared.ts` is exempt: the bootstrap that mounts a framework or starts the app, type-only modules, and the tests and their helpers.
+The coverage target is **100% on every layer** — statements, branches, functions and lines — held by one threshold (`vitest.shared.ts`) that both `vitest.config.ts` (core, main, preload) and `vitest.renderer.config.ts` (the window) apply, and `npm run check` fails when either drops (CI too, while the `check` workflow is on). Only `bootstrapOnly` in `vitest.shared.ts` is exempt: the bootstrap that mounts a framework or starts the app, type-only modules, and the tests and their helpers.
 
 | Layer               | What the tests pin                                                                           |
 | ------------------- | -------------------------------------------------------------------------------------------- |
@@ -485,7 +485,7 @@ Further rules:
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — a readable history and a basis for changelog automation later.
 - Atomic commits: one logical change each.
-- Every substantial change reaches `main` through a branch and a pull request, which CI gates. `main` is protected and refuses direct pushes, administrators included: a protection the only person who commits here can step over is decoration.
+- Every substantial change reaches `main` through a branch and a pull request. The repository is private for now, so `main` has no branch protection, and the `check` workflow is switched off: the gate is `npm run check` and `npm run test:race`, run locally on the branch merged with fresh `main` before it merges.
 
 ---
 

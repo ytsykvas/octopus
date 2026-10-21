@@ -144,7 +144,7 @@ that branch with it, ticked by default.
 
 ```bash
 npm run check      # full gate: format, lint, types, tests with coverage
-npm run test:race  # interface tests with React's scheduler made to lose (CI runs it)
+npm run test:race  # interface tests with React's scheduler made to lose
 npm test           # tests
 npm run build      # typecheck and build
 ```

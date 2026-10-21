@@ -90,6 +90,42 @@ export type Result<T> = { ok: true; value: T } | Failure
  * There is deliberately no logic here — it is a thin proxy (§11.1). The work
  * lives in `src/core`; main only exposes it over IPC.
  */
+/**
+ * One listener on a channel, however many handlers ask for it.
+ *
+ * Every terminal subscribes to the same two channels, and each used to add a
+ * listener of its own: the eleventh — a few workspaces visited, each with a
+ * shell and its scripts — crossed Node's limit of ten and printed
+ * `MaxListenersExceededWarning`. The listener is added with the first handler
+ * and taken off with the last, so a window with no terminal holds none.
+ */
+interface FannedOut {
+  'terminal:data': TerminalOutput
+  'terminal:exit': TerminalExit
+}
+
+function fanOut<C extends keyof FannedOut>(
+  channel: C
+): (handler: (payload: FannedOut[C]) => void) => () => void {
+  type Payload = FannedOut[C]
+  const handlers = new Set<(payload: Payload) => void>()
+  const listener = (_event: unknown, payload: Payload): void => {
+    // A terminal that stops listening during the delivery — its exit is what
+    // unmounts it — is safe here: a Set's walk survives deleting the entry it
+    // is on.
+    for (const handler of handlers) handler(payload)
+  }
+
+  return (handler) => {
+    if (handlers.size === 0) ipcRenderer.on(channel, listener)
+    handlers.add(handler)
+    return () => {
+      handlers.delete(handler)
+      if (handlers.size === 0) ipcRenderer.off(channel, listener)
+    }
+  }
+}
+
 const api = {
   theme: {
     get: (): Promise<ThemeName> => ipcRenderer.invoke('theme:get') as Promise<ThemeName>,
@@ -181,25 +217,9 @@ const api = {
     list: (): Promise<Result<TerminalSession[]>> =>
       ipcRenderer.invoke('terminal:list') as Promise<Result<TerminalSession[]>>,
 
-    onData: (handler: (output: TerminalOutput) => void): (() => void) => {
-      const listener = (_event: unknown, output: TerminalOutput): void => {
-        handler(output)
-      }
-      ipcRenderer.on('terminal:data', listener)
-      return () => {
-        ipcRenderer.off('terminal:data', listener)
-      }
-    },
+    onData: fanOut('terminal:data'),
 
-    onExit: (handler: (exit: TerminalExit) => void): (() => void) => {
-      const listener = (_event: unknown, exit: TerminalExit): void => {
-        handler(exit)
-      }
-      ipcRenderer.on('terminal:exit', listener)
-      return () => {
-        ipcRenderer.off('terminal:exit', listener)
-      }
-    }
+    onExit: fanOut('terminal:exit')
   },
 
   /** What the conversations have running beside them: subagents, commands, workflows. */

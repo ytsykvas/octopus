@@ -768,6 +768,66 @@ describe('subscriptions', () => {
   })
 
   /*
+   * Every terminal listens on the same two channels. A listener each crossed
+   * Node's limit of ten at the eleventh — a few workspaces, each with a shell
+   * and its scripts — and printed `MaxListenersExceededWarning`.
+   */
+  describe('the terminal channels, however many terminals listen', () => {
+    const listenerOn = (channel: string): ((event: unknown, payload: unknown) => void) => {
+      const calls = on.mock.calls.filter(([name]) => name === channel)
+      expect(calls).toHaveLength(1)
+      return calls[0]?.[1] as (event: unknown, payload: unknown) => void
+    }
+
+    it('takes one listener per channel and gives every terminal the output', () => {
+      const handlers = Array.from({ length: 12 }, () => vi.fn())
+      for (const handler of handlers) {
+        method('terminal', 'onData')(handler as never)
+        method('terminal', 'onExit')(handler as never)
+      }
+
+      listenerOn('terminal:data')({}, { id: 'term-1', data: 'hello' })
+      listenerOn('terminal:exit')({}, { id: 'term-1', exitCode: 0 })
+
+      for (const handler of handlers) {
+        expect(handler).toHaveBeenCalledWith({ id: 'term-1', data: 'hello' })
+        expect(handler).toHaveBeenCalledWith({ id: 'term-1', exitCode: 0 })
+      }
+    })
+
+    it('gives the listener back with the last terminal, and takes it again', () => {
+      const first = method('terminal', 'onData')(vi.fn() as never) as () => void
+      const second = method('terminal', 'onData')(vi.fn() as never) as () => void
+
+      first()
+      expect(off).not.toHaveBeenCalled()
+      second()
+      expect(off).toHaveBeenCalledWith('terminal:data', expect.any(Function))
+
+      method('terminal', 'onData')(vi.fn() as never)
+      expect(on.mock.calls.filter(([name]) => name === 'terminal:data')).toHaveLength(2)
+    })
+
+    // A terminal unmounting is exactly a handler going away, and it can happen
+    // inside a delivery: a run's exit is what unmounts it.
+    it('still reaches every terminal when one stops listening mid-delivery', () => {
+      const later = vi.fn()
+      let stop: () => void = () => undefined
+      stop = method(
+        'terminal',
+        'onExit'
+      )((() => {
+        stop()
+      }) as never) as () => void
+      method('terminal', 'onExit')(later as never)
+
+      listenerOn('terminal:exit')({}, { id: 'term-1', exitCode: 0 })
+
+      expect(later).toHaveBeenCalledOnce()
+    })
+  })
+
+  /*
    * The block at the foot of the sidebar. Pushed rather than asked for, which
    * is what stopped it drawing the previous turn's figure — so the delivery and
    * the unsubscribe are both worth a test.

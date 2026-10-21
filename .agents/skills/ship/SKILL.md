@@ -17,8 +17,8 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    slipped in: temporary files, debug `console.log`, commented-out code,
    secrets.
 
-3. **Branch.** `main` is protected: it refuses a direct push, so the work
-   needs a branch before it can be committed anywhere useful.
+3. **Branch.** Every change reaches `main` through a branch and a pull request,
+   so the work needs a branch before it can be committed anywhere useful.
 
    Inside an Octopus workspace (its worktree sits under `~/.octopus/workspaces/`)
    the branch already exists — the workspace's own, such as `octopus/gwen`.
@@ -64,11 +64,12 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
 
 ## Do not
 
-- Push or open a pull request unless the user asked. `origin` is public, so a
-  push is published: mirrored and indexed within minutes, and not retractable
-  by a later commit.
-- Merge your own pull request unless the user asked. Green CI means it is
-  ready, not that it was wanted.
+- Push or open a pull request unless the user asked. Treat a push as published:
+  `origin` is private now but has been public, and a public commit is mirrored
+  and indexed within minutes and not retractable by a later commit.
+- Merge your own pull request unless the user asked. A green gate means it is
+  ready, not that it was wanted — and with CI off, the gate is the local one on
+  the branch merged with fresh `main`.
 - Pass `--no-verify`.
 - Commit `.env`, keys or tokens. If you spot one in the diff, stop and warn.
 

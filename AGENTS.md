@@ -26,7 +26,7 @@ npm run build        # typecheck + build
 npm run check        # full gate: format + lint + types + tests with coverage
 npm test             # tests
 npm run test:watch   # tests in watch mode
-npm run test:race    # renderer suite with React's scheduler made to lose (CI runs it)
+npm run test:race    # renderer suite with React's scheduler made to lose
 ```
 
 `npm run check` must pass before every commit.
@@ -166,18 +166,21 @@ Never lower the coverage threshold or disable a lint rule to make the gate pass.
 
 ## Git
 
-`origin` is `ytsykvas/octopus`, MIT-licensed and **public**. `CLAUDE.md`,
+`origin` is `ytsykvas/octopus`, MIT-licensed and, since 2026-10-21,
+**private**. `CLAUDE.md`,
 `.claude/` and `docs/tasks/` are gitignored: they are this maintainer's local
 Claude Code setup and never reach the remote, so nothing a contributor reads may
 depend on them. `AGENTS.md`, `.agents/` and `.codex/` are the tracked,
 shared equivalent for other agents.
 
-**`main` is protected and refuses direct pushes, administrators included.** It
-was private with no protection at first and the very next push went through
-carrying `Bypassed rule violations` — a protection the only person who commits
-here can step over is decoration. Every change, a one-line fix included, goes
-through a branch and a pull request, and merges once CI is green — when the
-maintainer asks for each step (the hard rule below):
+**Nothing on the server guards `main` now.** Branch protection is not
+available to a private repository on this plan, and the `check` workflow is
+switched off by hand, so a pull request merges without a single check. The
+gate is therefore local, and it is run on what will land: before merging, merge
+fresh `origin/main` into the branch and pass `npm run check` and
+`npm run test:race` there. Every change, a one-line fix included, still goes
+through a branch and a pull request — when the maintainer asks for each step
+(the hard rule below):
 
 **Inside an Octopus workspace, do not `git checkout -b`.** One workspace is one
 branch and one pull request: the app finds both by the workspace's branch
@@ -210,8 +213,8 @@ everything else here:
   last two as the person using the app sees it. The five-sentence limit is not
   this section's.
 - Nothing that lives only in the maintainer's setup — `docs/tasks/`,
-  `CLAUDE.md`, `.claude/`: the repository is public and the reader cannot follow
-  it.
+  `CLAUDE.md`, `.claude/`: the reader cannot follow it, and the repository may
+  be public again.
 
 **Hard rule: never `git push`, open a pull request or merge one unless the
 maintainer asked for that, in words, in the current conversation.** Finishing a
@@ -221,12 +224,9 @@ push. The one exception is the maintainer having asked for it. Beyond that,
 anything destructive other than deleting a landed task note needs asking too,
 and `git push --force` is refused by the local `deny`.
 
-If `main` is ever broken so badly that it cannot be fixed through a pipeline
-that is also broken, turn the protection off deliberately in Settings and back
-on afterwards. That is visible; a silent bypass on every push is not.
-
-Everything pushed is published: a commit is mirrored and indexed within minutes,
-so a secret removed in the next commit has still been seen. Before writing a
+Treat everything pushed as published. The repository has been public and can
+be again, and then a commit is mirrored and indexed within minutes, so a secret
+removed in the next commit has still been seen. Before writing a
 path, a token, a hostname or a real name into a file, assume it stays readable
 forever.
 
