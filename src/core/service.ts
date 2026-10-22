@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { z } from 'zod'
 
@@ -102,7 +102,14 @@ import { type CliPermission, readCliPermissions } from './cliPermissions.js'
 import { allowedStanding, type StandingPermission, withStanding } from './standingPermissions.js'
 import type { CarryReport, PreparedWorkspace } from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
-import { checkEnvBody, type EnvProblem, parseEnvBody, substituteEnv } from './envBlock.js'
+import {
+  checkEnvBody,
+  envSecrets,
+  type EnvProblem,
+  type EnvSecret,
+  parseEnvBody,
+  substituteEnv
+} from './envBlock.js'
 import { helpRun, type LastRun, type RecordedRun } from './runLog.js'
 import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
@@ -4069,6 +4076,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
+  /**
+   * Every secret a run in this workspace could have printed, for masking out
+   * of its output.
+   *
+   * The set as it stands, and the env files the worktree holds: the one the
+   * block is written into keeps the values the last run was given, whatever the
+   * set says since, and a carried `.env` holds credentials the set never had.
+   * Another carried file, a `master.key`, is not dotenv and is not read.
+   */
+  async function secretsIn(
+    workspace: Workspace,
+    set: string,
+    envFile: string,
+    carry: readonly string[]
+  ): Promise<EnvSecret[]> {
+    const files = [
+      envFile,
+      ...carry.filter((path) => path !== envFile && basename(path).startsWith('.env'))
+    ]
+    const written = await Promise.all(files.map((file) => readWorkspaceEnv(workspace.path, file)))
+
+    return [set, ...written].flatMap((text) => (text === null ? [] : envSecrets(text)))
+  }
+
   /** Which script would run for each kind in this workspace, and whether it may. */
   async function scriptsIn(workspace: Workspace, project: Project): Promise<ScriptsInWorkspace> {
     const scripts = await resolveScripts(workspace.path, project.id, dataRoot, project.preferLocal)
@@ -5205,18 +5236,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
       const { values, stored, variables } = await scriptSetFor(project, workspace)
+      const envFile = await envFileFor(project, workspace)
+      const carry = (await carriedIn(project, workspace.path)).map((file) => file.path)
+      const secrets = await secretsIn(workspace, substituteEnv(stored, values), envFile, carry)
 
       return {
         rootPath: values.rootPath,
-        envFile: await envFileFor(project, workspace),
+        envFile,
         profile: values.profile,
         variableNames: Object.keys(variables),
         envProblems: checkEnvBody(stored).map((problem) =>
           NAMED_PROBLEMS.has(problem.reason) ? problem : { ...problem, subject: '' }
         ),
-        carry: (await carriedIn(project, workspace.path)).map((file) => file.path),
+        carry,
         scripts: await scriptsIn(workspace, project),
-        lastRuns: runs.map((run) => helpRun(run, variables))
+        lastRuns: runs.map((run) => helpRun(run, secrets))
       }
     },
 

@@ -52,6 +52,7 @@ import {
 } from './service.js'
 import type { CliOutput, PluginCli } from './plugins.js'
 import { POOL_START } from './ports.js'
+import type { RecordedRun } from './runLog.js'
 import type { ChatEntry } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
@@ -3006,6 +3007,68 @@ describe('what Help is told about a workspace', () => {
     expect(context.carry).toEqual(['.env', 'config/master.key'])
     expect(context.scripts).toEqual(await service.workspaceScripts(workspaceId))
     expect(context.scripts.scripts.run?.source).toBe('project')
+  })
+
+  it('does not take a line of a key pasted without quotes for a name', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(
+      projectId,
+      'default',
+      'KEY=-----BEGIN KEY-----\nMIIEvQIBADANBgkq\ndGhpc2lzYXNlY3JldA==\n'
+    )
+
+    const context = await service.helpContext(workspaceId, [])
+
+    expect(context.variableNames).toEqual(['KEY'])
+    expect(JSON.stringify(context)).not.toContain('dGhpc2')
+  })
+
+  const server = (raw: string): RecordedRun => ({
+    purpose: 'run',
+    outcome: { kind: 'running' },
+    raw
+  })
+
+  it('masks the values of the set the workspace was put on, $ and all', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.saveEnvProfile(projectId, 'prod', 'DB_PASSWORD=Pa$$w0rd123\n')
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+
+    const { lastRuns } = await service.helpContext(workspaceId, [
+      server('+ DB_PASSWORD=Pa$$w0rd123')
+    ])
+
+    expect(lastRuns).toEqual([
+      { purpose: 'run', outcome: { kind: 'running' }, output: '+ DB_PASSWORD=[DB_PASSWORD]' }
+    ])
+  })
+
+  // The file keeps what the run was given until the next run rewrites it.
+  it('masks what the last run was given after the set has changed', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'API_KEY=rotated-away-value\n')
+    await service.prepareWorkspace(workspaceId)
+    await service.saveEnvProfile(projectId, 'default', 'API_KEY=the-new-value\n')
+
+    const { lastRuns } = await service.helpContext(workspaceId, [
+      server('sent rotated-away-value, then the-new-value')
+    ])
+
+    expect(lastRuns[0]?.output).toBe('sent [API_KEY], then [API_KEY]')
+  })
+
+  it('masks a carried env file the set never had', async () => {
+    const { projectId, workspaceId, repoPath } = await withWorkspace()
+    await writeFile(join(repoPath, '.env.development'), 'SMTP_PASSWORD=carried-secret\n', 'utf8')
+    await service.saveProjectCarryList(projectId, '.env.development\n')
+    await service.prepareWorkspace(workspaceId)
+
+    const { lastRuns } = await service.helpContext(workspaceId, [
+      server('auth failed for carried-secret')
+    ])
+
+    expect(lastRuns[0]?.output).toBe('auth failed for [SMTP_PASSWORD]')
   })
 
   it('refuses a workspace it does not know', async () => {

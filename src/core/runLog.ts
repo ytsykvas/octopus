@@ -9,6 +9,7 @@
  * values are masked out of them before Help quotes them.
  */
 
+import type { EnvSecret } from './envBlock.js'
 import type { TerminalPurpose } from './terminal.js'
 
 /**
@@ -103,18 +104,24 @@ export function lastLines(text: string, lines: number, chars: number): string {
 export const MASK_MIN_LENGTH = 6
 
 /**
- * `text` with every value of `variables` replaced by `[NAME]`.
+ * `text` with every secret in it replaced by `[NAME]`, or `[masked]` where no
+ * name owns it.
  *
  * A script that runs `set -x`, `cat`s its env file or prints its connection
  * string on a failed boot puts a credential in its own output, and Help puts
  * that output in a message. Longest first, so a value that contains another is
  * masked whole rather than around the shorter one.
  */
-export function maskValues(text: string, variables: Readonly<Record<string, string>>): string {
-  return Object.entries(variables)
-    .filter(([, value]) => value.length >= MASK_MIN_LENGTH)
-    .sort(([, left], [, right]) => right.length - left.length)
-    .reduce((masked, [name, value]) => masked.replaceAll(value, `[${name}]`), text)
+export function maskValues(text: string, secrets: readonly EnvSecret[]): string {
+  const labels = new Map<string, string>()
+  for (const { name, value } of secrets) {
+    if (value.length >= MASK_MIN_LENGTH && !labels.has(value))
+      labels.set(value, `[${name ?? 'masked'}]`)
+  }
+
+  return [...labels]
+    .sort(([left], [right]) => right.length - left.length)
+    .reduce((masked, [value, label]) => masked.replaceAll(value, label), text)
 }
 
 /** The two purposes worth asking about afterwards, in the order a Run starts them. */
@@ -148,6 +155,21 @@ export interface LastRun {
 }
 
 /**
+ * `raw` from its first whole line, where `appendTail` has cut it.
+ *
+ * A cut lands anywhere, and the line it lands in keeps only its end: the rest
+ * of a secret, which no longer matches what masking looks for, or half an
+ * escape. A tail at the limit has been cut — or is exactly that long, and
+ * loses a line it did not have to.
+ */
+function fromWholeLine(raw: string): string {
+  if (raw.length < TAIL_CHARS) return raw
+
+  const start = raw.indexOf('\n')
+  return start === -1 ? '' : raw.slice(start + 1)
+}
+
+/**
  * A recorded run as Help may quote it: cleaned, masked, then cut.
  *
  * Masked before it is cut, so a cut cannot land inside a value and leave the
@@ -155,8 +177,8 @@ export interface LastRun {
  */
 export function helpRun(
   { purpose, outcome, raw }: RecordedRun,
-  variables: Readonly<Record<string, string>>
+  secrets: readonly EnvSecret[]
 ): LastRun {
-  const masked = maskValues(cleanTerminalOutput(raw), variables)
+  const masked = maskValues(cleanTerminalOutput(fromWholeLine(raw)), secrets)
   return { purpose, outcome, output: lastLines(masked, TAIL_LINES, TAIL_OUTPUT_CHARS) }
 }

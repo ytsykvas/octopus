@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { TAIL_CHARS } from '../core/runLog.js'
+
 /**
  * `node-pty` is a native module that spawns a real shell. Loading it here would
  * test the operating system rather than this class, so a stand-in records what
@@ -1104,6 +1106,17 @@ describe('the last runs of a workspace', () => {
         raw: '\u001b[32minstalling\u001b[0m\r\nerror: no database\r\n'
       }
     ])
+  })
+
+  it('keeps no more than TAIL_CHARS of what a run printed, the last of it', () => {
+    const pty = started('run')
+    pty.emit('lost'.padEnd(TAIL_CHARS, '.'))
+    pty.emit('kept')
+
+    const [run] = manager.lastRuns(ANNA)
+    expect(run?.raw).toHaveLength(TAIL_CHARS)
+    expect(run?.raw.endsWith('kept')).toBe(true)
+    expect(run?.raw).not.toContain('lost')
   })
 
   it('answers with a run still going, with no end and no code', () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   checkEnvBody,
+  envSecrets,
   parseEnvBody,
   substituteEnv,
   withoutMarkers,
@@ -174,6 +175,25 @@ describe('parseEnvBody', () => {
     expect(parseEnvBody('just words\n1BAD=x\nGOOD=y')).toEqual({ GOOD: 'y' })
   })
 
+  /*
+   * The last line of a key pasted without its quotes, ending in base64's
+   * padding, reads as a name with `=` or nothing after it — and would be listed
+   * as a variable while being a piece of the key.
+   */
+  it('leaves out a line of base64 that ends in padding', () => {
+    const pasted = 'KEY=-----BEGIN KEY-----\nMIIEvQIBADANBgkqhkiG9w0\nq3ZxYpabcDEFgh==\nr4Zx='
+    expect(parseEnvBody(pasted)).toEqual({ KEY: '-----BEGIN KEY-----' })
+  })
+
+  it('still reads an empty value after an assignment, a comment or the first line', () => {
+    expect(parseEnvBody('SENTRY_DSN=\nA=1\nB=\n# note\nC=')).toEqual({
+      SENTRY_DSN: '',
+      A: '1',
+      B: '',
+      C: ''
+    })
+  })
+
   it('reads lines that end in a carriage return', () => {
     expect(parseEnvBody('A=1\r\nB=2\r')).toEqual({ A: '1', B: '2' })
   })
@@ -271,6 +291,80 @@ describe('checkEnvBody', () => {
       { line: 1, reason: 'badName', subject: 'MY KEY' },
       { line: 2, reason: 'badName', subject: 'MY KEY' }
     ])
+  })
+})
+
+describe('base64 padding in a block', () => {
+  it('is not an assignment, so its text is never taken for a name', () => {
+    expect(
+      checkEnvBody('KEY=-----BEGIN KEY-----\nMIIEvQIBADANBgkqhkiG9w0\nq3ZxYpabcDEFgh==\nr4Zx=')
+    ).toEqual([
+      { line: 2, reason: 'noAssignment', subject: 'MIIEvQIBADANBgkqhkiG9w0' },
+      { line: 3, reason: 'noAssignment', subject: 'q3ZxYpabcDEFgh==' },
+      { line: 4, reason: 'noAssignment', subject: 'r4Zx=' }
+    ])
+  })
+
+  // One `=` is a value of nothing anywhere but straight after a line that was no assignment.
+  it('leaves an empty value after a bad name to be read as padding too', () => {
+    expect(checkEnvBody('ab+cd/ef=\nr4Zx=')).toEqual([
+      { line: 1, reason: 'badName', subject: 'ab+cd/ef' },
+      { line: 2, reason: 'noAssignment', subject: 'r4Zx=' }
+    ])
+  })
+})
+
+describe('envSecrets', () => {
+  const secretValues = (body: string): string[] => [
+    ...new Set(envSecrets(body).map(({ value }) => value))
+  ]
+
+  it('names every value, as written and as dotenv reads it', () => {
+    expect(envSecrets('DB_PASSWORD=Pa$$w0rd123 # rotated\nexport TOKEN=abc')).toEqual([
+      { name: 'DB_PASSWORD', value: 'Pa$$w0rd123 # rotated' },
+      { name: 'DB_PASSWORD', value: 'Pa$$w0rd123' },
+      { name: 'TOKEN', value: 'abc' },
+      { name: 'TOKEN', value: 'abc' }
+    ])
+  })
+
+  // Each of these is one `parseEnvBody` leaves to the file — and the file is what a script prints.
+  it('keeps the values the parse leaves out', () => {
+    expect(secretValues('A="sk-live\\nabc123456"')).toEqual([
+      'sk-live\\nabc123456',
+      'sk-live',
+      'abc123456'
+    ])
+    expect(secretValues('B=`backtick-secret`')).toEqual(['backtick-secret'])
+    expect(secretValues("C='single-quoted' # note")).toEqual(['single-quoted'])
+  })
+
+  it('keeps every line of a value spanning several, under the name that opened it', () => {
+    expect(
+      envSecrets('KEY="-----BEGIN KEY-----\nMIIEvQIBADAN\n-----END KEY-----"\nAFTER=1')
+    ).toEqual([
+      { name: 'KEY', value: '-----BEGIN KEY-----' },
+      { name: 'KEY', value: 'MIIEvQIBADAN' },
+      { name: 'KEY', value: '-----END KEY-----' },
+      { name: 'AFTER', value: '1' },
+      { name: 'AFTER', value: '1' }
+    ])
+  })
+
+  it('keeps a line that is no assignment whole, under no name', () => {
+    expect(
+      envSecrets('MIIEvQIBADAN\nq3ZxYpabcDEFgh==\nDATABASE_URL: postgres://u:pw@db?ssl=on')
+    ).toEqual([
+      { name: null, value: 'MIIEvQIBADAN' },
+      { name: null, value: 'q3ZxYpabcDEFgh==' },
+      { name: null, value: 'DATABASE_URL: postgres://u:pw@db?ssl=on' },
+      { name: null, value: 'on' },
+      { name: null, value: 'on' }
+    ])
+  })
+
+  it('skips blank lines, comments and our markers', () => {
+    expect(envSecrets('\n# a comment\n# >>> octopus: project overrides\n# <<< octopus')).toEqual([])
   })
 })
 

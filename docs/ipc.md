@@ -183,11 +183,21 @@ each `{ purpose, outcome, output }` (`LastRun`, `runLog.ts`). `outcome` is
 `running`, or `exited` with when and the exit code — null when a signal ended
 it, as `terminal:exit` says. `output` is what the script printed with the
 terminal's escapes stripped and each `\r`-redrawn line kept at its final state,
-then every value of the workspace's env set masked as `[NAME]` (values of six
-characters or more), then cut to the last 200 lines and at most 30,000
-characters of them (`TAIL_OUTPUT_CHARS`) — both runs and an instruction have to
-fit in one message under `ChatMessageSchema`'s ceiling. Masked before it is
-cut, so a cut cannot leave the end of a value behind. There is no channel of
+then every secret a script could have printed masked as `[NAME]` — or
+`[masked]` where no name owns it — from six characters up, then cut to the last
+200 lines and at most 30,000 characters of them (`TAIL_OUTPUT_CHARS`): both runs
+and an instruction have to fit in one message under `ChatMessageSchema`'s
+ceiling. Masked before it is cut, and the line the kept tail was cut through is
+dropped, so no cut leaves the end of a value behind.
+
+The secrets are read leniently (`envSecrets`), not as a script's variables are:
+the set in effect, the env file in the worktree — which keeps what the last run
+was given, whatever the set says since — and every carried file named `.env…`.
+Each value as written and as dotenv reads it, a `$`, `\` or backtick in it
+included, each line of a value spanning several, and every line that is no
+assignment, such as a key pasted without quotes. A carried file that is not
+dotenv, a `master.key`, is not read: a script that prints one is quoted as
+printed. There is no channel of
 its own: `main` keeps the runs (`RecordedRun`, raw) and only the core knows the
 values, so the one way out is through `helpRun` in the core.
 

@@ -7,6 +7,7 @@ import {
   cleanTerminalOutput,
   helpRun,
   lastLines,
+  MASK_MIN_LENGTH,
   maskValues,
   TAIL_CHARS,
   TAIL_LINES,
@@ -107,27 +108,39 @@ describe('lastLines', () => {
 })
 
 describe('maskValues', () => {
-  it('replaces every value of the set by its name, wherever it appears', () => {
+  it('replaces every secret by its name, wherever it appears', () => {
+    const url = 'postgres://app:hunter2@db/app'
+
     expect(
-      maskValues(
-        'connecting to postgres://app:hunter2@db/app\nretry postgres://app:hunter2@db/app',
-        {
-          DATABASE_URL: 'postgres://app:hunter2@db/app'
-        }
-      )
+      maskValues(`connecting to ${url}\nretry ${url}`, [{ name: 'DATABASE_URL', value: url }])
     ).toBe('connecting to [DATABASE_URL]\nretry [DATABASE_URL]')
   })
 
-  it('masks a value that contains another one whole', () => {
-    expect(maskValues('key=abcdef123456', { SHORT: 'abcdef', LONG: 'abcdef123456' })).toBe(
-      'key=[LONG]'
+  it('masks a secret no name owns as masked', () => {
+    expect(maskValues('key MIIEvQIBADAN', [{ name: null, value: 'MIIEvQIBADAN' }])).toBe(
+      'key [masked]'
     )
   })
 
-  it('leaves values too short to be anybody’s secret alone', () => {
-    expect(maskValues('debug true on 5432', { DEBUG: 'true', PORT: '5432' })).toBe(
-      'debug true on 5432'
-    )
+  it('masks a value that contains another one whole', () => {
+    expect(
+      maskValues('key=abcdef123456', [
+        { name: 'SHORT', value: 'abcdef' },
+        { name: 'LONG', value: 'abcdef123456' }
+      ])
+    ).toBe('key=[LONG]')
+  })
+
+  it('masks from MASK_MIN_LENGTH up, and leaves shorter values alone', () => {
+    const shortest = 'x'.repeat(MASK_MIN_LENGTH)
+
+    expect(
+      maskValues(`debug true on 5432, ${shortest}`, [
+        { name: 'DEBUG', value: 'true' },
+        { name: 'PORT', value: '5432' },
+        { name: 'TOKEN', value: shortest }
+      ])
+    ).toBe('debug true on 5432, [TOKEN]')
   })
 })
 
@@ -138,11 +151,11 @@ describe('helpRun', () => {
     raw
   })
 
-  it('cleans what the terminal was sent and masks the values in it', () => {
+  it('cleans what the terminal was sent and masks the secrets in it', () => {
     expect(
-      helpRun(run('\u001b[31mcannot reach postgres://u:hunter2@db\u001b[0m\r\n'), {
-        DATABASE_URL: 'postgres://u:hunter2@db'
-      })
+      helpRun(run('\u001b[31mcannot reach postgres://u:hunter2@db\u001b[0m\r\n'), [
+        { name: 'DATABASE_URL', value: 'postgres://u:hunter2@db' }
+      ])
     ).toEqual({
       purpose: 'run',
       outcome: { kind: 'running' },
@@ -153,7 +166,7 @@ describe('helpRun', () => {
   it('holds a server logging long lines to the budget', () => {
     const json = Array.from({ length: TAIL_LINES }, () => 'x'.repeat(400)).join('\n')
 
-    expect(helpRun(run(json), {}).output.length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
+    expect(helpRun(run(json), []).output.length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
   })
 
   // Cut first, the budget would start inside the value and leave its end unmatched.
@@ -161,9 +174,27 @@ describe('helpRun', () => {
     const secret = 'sk-live-0123456789abcdef'
     const line = `${'x'.repeat(100)}${secret}${'y'.repeat(TAIL_OUTPUT_CHARS - 10)}`
 
-    const { output } = helpRun(run(line), { API_TOKEN: secret })
+    const { output } = helpRun(run(line), [{ name: 'API_TOKEN', value: secret }])
 
     expect(output).not.toContain('abcdef')
     expect(output.length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
+  })
+
+  /*
+   * The tail kept is the last TAIL_CHARS of what was sent, cut wherever that
+   * falls — here ten characters into a token, behind one long colour code the
+   * cleaning removes, so the line holding the token's end is among the last.
+   */
+  it('drops the line the kept tail was cut through', () => {
+    const secret = 'sk-live-0123456789abcdef'
+    const colour = `\u001b[${'0'.repeat(TAIL_CHARS - 23)}m`
+    const raw = appendTail('', `${'x'.repeat(100)}${secret}\r\n${colour}ok\r\n`)
+    expect(raw.startsWith(secret.slice(10))).toBe(true)
+
+    expect(helpRun(run(raw), [{ name: 'API_TOKEN', value: secret }]).output).toBe('ok')
+  })
+
+  it('keeps nothing of a single line longer than the whole tail', () => {
+    expect(helpRun(run(appendTail('', 'z'.repeat(TAIL_CHARS + 1))), []).output).toBe('')
   })
 })
