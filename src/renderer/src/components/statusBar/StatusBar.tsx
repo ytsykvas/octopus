@@ -333,7 +333,7 @@ function reasonText(t: TFunction, reason: StandingReason): string {
   }
 }
 
-/** Percent of one core, as `ps` counts it — so a busy tree reads past 100. */
+/** Percent of the whole processor: core divides by the core count, so 100% is every core busy. */
 function percent(cpu: number): string {
   return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 }).format(
     cpu / 100
