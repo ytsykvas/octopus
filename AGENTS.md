@@ -149,7 +149,9 @@ added here is paid for in all of them:
   anything would notice if it went. Six audits in a row found tests that were
   green with the fix removed: an assertion made before React flushed, a count of
   calls that held either way, a bench array required by a type and read by
-  nothing. Put the bug back; the suite must go red.
+  nothing. Put the bug back; the suite must go red — and check with `git diff`
+  that it went back: a `sed` revert written against code Prettier had since
+  re-indented matched nothing, and a hollow test passed as verified.
 - Comments explain **why**, not **what**.
 - Conventional Commits.
 - No non-null assertions (`!`) outside tests: `strictTypeChecked` forbids them,
