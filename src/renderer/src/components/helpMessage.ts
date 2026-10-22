@@ -1,32 +1,23 @@
 import type { TFunction } from 'i18next'
 
-import type { EnvProblem } from '@core/envBlock.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { LastRun, RunPurpose } from '@core/runLog.js'
 import { SCRIPT_KINDS } from '@core/scriptEnv.js'
-import type { HelpContext } from '@core/service.js'
+import type { HelpContext, HelpEnvProblem } from '@core/service.js'
 
 import { formatClock } from './chat/format.js'
 
 /** The two things Help can be asked, each an instruction kind of its own. */
 export type HelpKind = Extract<InstructionKind, 'setupScripts' | 'diagnoseRun'>
 
-function problemLine(problem: EnvProblem, t: TFunction): string {
-  const { line, subject } = problem
-  switch (problem.reason) {
-    // Never the subject for these: it is text from the line, which may be a value.
-    case 'noAssignment':
-      return t('help.context.problemNoAssignment', { line })
-    case 'badName':
-      return t('help.context.problemBadName', { line })
-    case 'duplicate':
-      return t('help.context.problemDuplicate', { line, subject })
-    case 'unknownVariable':
-      return t('help.context.problemUnknownVariable', { line, subject })
-    case 'marker':
-      return t('help.context.problemMarker', { line })
-  }
-}
+// No `{{subject}}` in the three whose subject is line text, and none sent.
+const PROBLEMS = {
+  noAssignment: 'help.context.problemNoAssignment',
+  badName: 'help.context.problemBadName',
+  duplicate: 'help.context.problemDuplicate',
+  unknownVariable: 'help.context.problemUnknownVariable',
+  marker: 'help.context.problemMarker'
+} as const satisfies Record<HelpEnvProblem['reason'], string>
 
 const STAGES = { setup: 'scripts.build', run: 'scripts.server' } as const satisfies Record<
   RunPurpose,
@@ -92,7 +83,7 @@ function factsPart(context: HelpContext, t: TFunction): string {
     lines.push(
       '',
       t('help.context.problems'),
-      ...context.envProblems.map((problem) => problemLine(problem, t))
+      ...context.envProblems.map((problem) => t(PROBLEMS[problem.reason], { ...problem }))
     )
   }
 

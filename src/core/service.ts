@@ -797,13 +797,25 @@ function standingFrom(request: PendingPermission): StandingPermission {
   return { toolName: request.toolName, ruleContent: null }
 }
 
+/** The reasons whose subject is a name: a key that passed the check, or a `$OCTOPUS_…` reference. */
+type NamedReason = 'duplicate' | 'unknownVariable'
+
 /**
- * The problems whose subject is a name — a key that passed the check, or a
- * `$OCTOPUS_…` reference. Every other subject is text from the line itself: the
- * whole of it, or everything before its `=`, which for a pasted `KEY: value` or
- * a line inside a multi-line key is the secret. Those go by line number alone.
+ * A problem in the env set as Help may tell it: the subject only where it is a
+ * name. Every other subject is text from the line itself — the whole of it, or
+ * everything before its `=` — which for a pasted `KEY: value` or a line of a
+ * key pasted without quotes is the secret. Those go by line number alone, with
+ * no subject to print by mistake.
  */
-const NAMED_PROBLEMS: ReadonlySet<EnvProblem['reason']> = new Set(['duplicate', 'unknownVariable'])
+export type HelpEnvProblem =
+  | { readonly line: number; readonly reason: NamedReason; readonly subject: string }
+  | { readonly line: number; readonly reason: Exclude<EnvProblem['reason'], NamedReason> }
+
+function withoutLineText({ line, reason, subject }: EnvProblem): HelpEnvProblem {
+  return reason === 'duplicate' || reason === 'unknownVariable'
+    ? { line, reason, subject }
+    : { line, reason }
+}
 
 /**
  * What octopus knows about a workspace that its agent cannot find for itself —
@@ -811,7 +823,7 @@ const NAMED_PROBLEMS: ReadonlySet<EnvProblem['reason']> = new Set(['duplicate', 
  *
  * Built from what a run already reads, so Help and Run cannot disagree. **No
  * value of a variable is in here**: names only, and a problem in the env set
- * names its subject only where that is a name (`NAMED_PROBLEMS`).
+ * names its subject only where that is a name (`HelpEnvProblem`).
  */
 export interface HelpContext {
   /** The checkout, as `$OCTOPUS_ROOT_PATH` gives it to a script. */
@@ -822,7 +834,7 @@ export interface HelpContext {
   readonly profile: string
   /** What it defines, by name. */
   readonly variableNames: readonly string[]
-  readonly envProblems: readonly EnvProblem[]
+  readonly envProblems: readonly HelpEnvProblem[]
   /** The paths carried into the workspace before a run, the repository's included. */
   readonly carry: readonly string[]
   readonly scripts: ScriptsInWorkspace
@@ -4101,7 +4113,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /** Which script would run for each kind in this workspace, and whether it may. */
-  async function scriptsIn(workspace: Workspace, project: Project): Promise<ScriptsInWorkspace> {
+  async function scriptsIn(project: Project, workspace: Workspace): Promise<ScriptsInWorkspace> {
     const scripts = await resolveScripts(workspace.path, project.id, dataRoot, project.preferLocal)
     const digest = scriptsDigest(scripts)
 
@@ -5229,7 +5241,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async workspaceScripts(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      return scriptsIn(workspace, requireProject(workspace.projectId))
+      return scriptsIn(requireProject(workspace.projectId), workspace)
     },
 
     async helpContext(workspaceId, runs) {
@@ -5239,7 +5251,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const envFile = await envFileFor(project, workspace)
       const carry = (await carriedIn(project, workspace.path)).map((file) => file.path)
       const secrets = await secretsIn(workspace, substituteEnv(stored, values), envFile, carry)
-      const scripts = await scriptsIn(workspace, project)
+      const scripts = await scriptsIn(project, workspace)
       // Without a build script a Run starts the server alone, so a build on
       // record is from before the script went and would read as this Run's.
       const current = runs.filter(
@@ -5251,9 +5263,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         envFile,
         profile: values.profile,
         variableNames: Object.keys(variables),
-        envProblems: checkEnvBody(stored).map((problem) =>
-          NAMED_PROBLEMS.has(problem.reason) ? problem : { ...problem, subject: '' }
-        ),
+        envProblems: checkEnvBody(stored).map(withoutLineText),
         carry,
         scripts,
         lastRuns: current.map((run) => helpRun(run, secrets))

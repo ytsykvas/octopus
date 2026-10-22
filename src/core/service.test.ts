@@ -2944,7 +2944,7 @@ describe('what Help is told about a workspace', () => {
     const { envProblems } = await service.helpContext(workspaceId, [])
 
     expect(envProblems).toEqual([
-      { line: 2, reason: 'noAssignment', subject: '' },
+      { line: 2, reason: 'noAssignment' },
       { line: 3, reason: 'duplicate', subject: 'A' }
     ])
   })

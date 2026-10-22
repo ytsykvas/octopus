@@ -1024,6 +1024,16 @@ describe('App', () => {
   })
 
   describe('Run and Stop in the title bar', () => {
+    const TURN_ENDED = {
+      type: 'result',
+      ok: true,
+      costUsd: null,
+      durationMs: 1,
+      inputTokens: null,
+      outputTokens: null,
+      terminalReason: null
+    } as const
+
     /** Opens the planner project on anna, with the given scripts for its workspaces. */
     async function onAnna(
       scripts: Partial<Record<ScriptKind, string>>
@@ -1070,15 +1080,7 @@ describe('App', () => {
       expect(within(bar).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
 
       givenScriptsOf({ planner: SERVER_ONLY })
-      emitAgentEvent({
-        type: 'result',
-        ok: true,
-        costUsd: null,
-        durationMs: 1,
-        inputTokens: null,
-        outputTokens: null,
-        terminalReason: null
-      })
+      emitAgentEvent(TURN_ENDED)
 
       expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
     })
@@ -1089,15 +1091,7 @@ describe('App', () => {
       const user = await onAnna({})
       await user.click(screen.getByText('bob'))
       givenScriptsOf({ planner: SERVER_ONLY })
-      emitAgentEvent({
-        type: 'result',
-        ok: true,
-        costUsd: null,
-        durationMs: 1,
-        inputTokens: null,
-        outputTokens: null,
-        terminalReason: null
-      })
+      emitAgentEvent(TURN_ENDED)
 
       await user.click(screen.getByText('anna'))
 
