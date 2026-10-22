@@ -73,9 +73,9 @@ export function AgentsChip(): React.JSX.Element | null {
         }}
         // The attic's own hover surface, cancelled by negative margins as the
         // readings beside it are, so the strip does not grow taller.
-        className={`agents-chip focus-ring hover:bg-muted relative -my-0.5 inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-1.5 py-0.5 tabular-nums transition-colors ${
+        className={`agents-chip focus-ring relative -my-0.5 inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-1.5 py-0.5 tabular-nums transition-colors ${
           working > 0 ? 'text-ink-soft' : 'text-ink-faint'
-        } ${open ? 'bg-muted' : ''}`}
+        }`}
       >
         {working > 0 && <span aria-hidden className="agents-chip-line" />}
         <span aria-hidden className={`${dot} size-1.5 shrink-0 rounded-full`} />

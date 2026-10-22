@@ -696,13 +696,16 @@ outside it. It is the one deliberate exception to panes taking borders rather
 than shadows (§10.2 of PROJECT.md).
 
 Three layers. The line is a span of its own, `.composer-ring-line`, the
-frame's first child: a conic gradient masked down to its 1.5px edge. Under the
-contents, the frame's `::before` is a fill of its own surface, and its `::after`
-is the glow, the gradient blurred, beneath that. The fill is what keeps the
-glow outside — a mask cut the blur off in a hard rectangle, since a mask clips
-at the edge of its own box. The frame takes `z-index: 20` to hold those layers:
-`isolation` would have done it at level zero, and the menus that open upwards
-out of the frame then slid under the log's floating day chip.
+frame's first child: a square of the gradient, big enough to cover the frame
+at any angle, clipped to the frame's rounded box. Over its middle, one level
+up, the frame's `::before` is a fill of its own surface, so only the square's
+outer pixel shows; beneath both, the frame's `::after` is the glow, the
+gradient blurred. The fill is what keeps the glow outside — a mask cut the blur
+off in a hard rectangle, since a mask clips at the edge of its own box. The
+frame takes `z-index: 20` to hold those layers: `isolation` would have done it
+at level zero, and the menus that open upwards out of the frame then slid under
+the log's floating day chip. The same three layers draw the ring everywhere
+else it is worn, from one block of rules in `styles.css`.
 
 A gradient cannot be transitioned into a flat colour, so the plain border is
 the frame's own and the fade is by opacity: the border to transparent, the line
@@ -715,18 +718,20 @@ sparkle icon and the width of its words. There the line is faint at rest and
 turns only under the pointer or keyboard focus, never the glow; once the title
 has text, the button is the plain accent "Open pull request" again.
 
-**The line turns while focus is inside the composer, and nothing else moves.**
-It turns its gradient's own angle (`--ring-angle`, registered with `@property`
-so it interpolates) once every six seconds; the glow stays still and only
-brightens. The split is the whole reason it is affordable. The first turning
-versions kept the line and the fill in one layer and turned the gradient
-under the glow as well, so every frame re-blurred it: measured in an isolated
-page on the same Electron, that held ~17% of a core while it ran (an earlier
-in-app reading put it at 29%), and a compositor rotation 6–8% for as long as
-the window was on screen. Turning only the line measured ~0.5% while focused —
-no different from the still ring — and no change in memory; unfocused it costs
-nothing at all, and now nothing is lit either. So there is no pause for an inactive window either: there is
-nothing measurable to save. Reduced motion stops it with every other animation.
+**Nothing in the composer's ring moves.** It did: the line turned its
+gradient's own angle (`--ring-angle`, registered with `@property` so it
+interpolates) once every six seconds, measured at ~0.5% of a core on an empty
+page and shipped on that figure. Measured again in the window with a log of
+some thousands of nodes on screen, the same animation held 25–30% of a core
+for as long as the composer had focus — which is most of the time — because a
+registered property animating on the main thread recomputes style every
+frame, and a frame costs what the page does. Turning the square by `transform`
+instead, which the compositor does on its own, measured 14%, of which 9% is
+what any animation at all costs this window: a 10px square turning alone
+measures the same. The composer's line is therefore still, and so is the
+agents chip's, which would otherwise turn for as long as an agent works. The
+two buttons' lines still turn under the pointer, on the compositor, which is
+brief. Reduced motion stops those with every other animation.
 
 **The field is set in Menlo**, at 13px — `--font-prompt`, falling back to the
 mono stack. A prompt is closer to code than to prose, and the maintainer chose
