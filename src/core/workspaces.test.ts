@@ -7,7 +7,7 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { Chat } from './chats.js'
-import { GitError, type GitExec, gitIn } from './git.js'
+import { GitError, type GitExec, gitIn, keptIndexCopies } from './git.js'
 import { NAME_POOL_SIZE, type Random, WORKSPACE_NAMES } from './names.js'
 import { addProject, EMPTY_STATE, type Project, type State, type Workspace } from './store.js'
 import { POOL_START, type PortProbe } from './ports.js'
@@ -1253,7 +1253,7 @@ describe('countChanges', () => {
     await writeFile(join(first.path, 'a.txt'), 'x\n', 'utf8')
     await writeFile(join(first.path, 'b.txt'), 'x\n', 'utf8')
 
-    const counts = await countChanges([first, second], 'main', gitIn)
+    const counts = await countChanges([first, second], 'main', gitIn, keptIndexCopies())
 
     expect(counts.get(first.id)).toMatchObject({ changedFiles: 2 })
     expect(counts.get(second.id)).toMatchObject({ changedFiles: 0 })
@@ -1270,7 +1270,7 @@ describe('countChanges', () => {
     await run('git', ['add', '.'], { cwd: workspace.path })
     await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
 
-    const counts = await countChanges([workspace], 'main', gitIn)
+    const counts = await countChanges([workspace], 'main', gitIn, keptIndexCopies())
 
     expect(counts.get(workspace.id)).toEqual({ changedFiles: 0, ahead: 1 })
   })
@@ -1280,7 +1280,7 @@ describe('countChanges', () => {
     const workspace = await create()
     await rm(workspace.path, { recursive: true, force: true })
 
-    const counts = await countChanges([workspace], 'main', gitIn)
+    const counts = await countChanges([workspace], 'main', gitIn, keptIndexCopies())
 
     expect(counts.get(workspace.id)).toEqual({ changedFiles: 0, ahead: 0 })
   })
