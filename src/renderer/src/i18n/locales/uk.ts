@@ -90,6 +90,7 @@ export const uk: Translation = {
     lineWaiting: 'Чекає на відповідь',
     lineError: 'Помилка',
     lineDone: 'Завершено',
+    lineInterrupted: 'Перервано',
     lineIdle: 'Не розпочато',
     missingHint: 'Прибрано повз застосунок. Запис можна безпечно видалити.',
     headElsewhere:
@@ -724,6 +725,7 @@ export const uk: Translation = {
     tabStatus: '{{name}}: {{state}}',
     tabStatusIdle: 'ще нічого не написано',
     tabStatusDone: 'завершено',
+    tabStatusInterrupted: 'перервано',
     newTab: 'Нова розмова',
     renameTab: 'Перейменувати…',
     forkTab: 'Продовжити в новій розмові',

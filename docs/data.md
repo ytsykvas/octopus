@@ -292,7 +292,7 @@ never heard of by name alone. Written only
 when an answer says something new, since the panel asks on every open.
 
 A **chat** is a conversation with one agent inside one workspace: `id`,
-`workspaceId`, `agent`, `sessionId`, `model`, `planModel`, `effort`,
+`workspaceId`, `agent`, `status`, `interrupted`, `sessionId`, `model`, `planModel`, `effort`,
 `workingMode`, `planMode`, `autoCompactWindow`, `knownCommands`, `knownAgents`,
 `skillOverrides`, `createdAt`, `closedAt`.
 
@@ -462,6 +462,15 @@ its conversations by `workspaceStatusFrom`: `waiting_permission` outranks
 `running`, which outranks `error`, which outranks `idle`. Before this, whichever
 conversation last had an event wrote the workspace's status, so the one that
 finished reported the two still working as idle.
+
+`interrupted` says the last turn was cut off by the application exiting rather
+than brought to an end — `settleStatuses` sets it on a conversation it finds
+`running` or `waiting_permission` at load. A flag beside `status` rather than a
+fifth value in it, because the packaged app reads the same `state.json`: an
+older reader throws on a status it does not know and drops a key it does not.
+The cost is two fields for one state, held by an invariant: **true only while
+`status` is `idle`**, set by `settleStatuses` alone and cleared by
+`setChatStatus` on every move. Defaulted to false; a fork starts without it.
 
 `title` is the name a user gave a conversation, and null for the one it is
 given — `Claude 1`, from the chat's `agent` and its place in the strip. Null

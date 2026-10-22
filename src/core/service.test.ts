@@ -11260,9 +11260,75 @@ describe('the agent chat', () => {
       await service.sendToChat(first, 'go')
 
       expect(statuses).toEqual([
-        { chatId: first, workspaceId, status: 'running', turnStartedAt: expect.any(String) }
+        {
+          chatId: first,
+          workspaceId,
+          status: 'running',
+          interrupted: false,
+          turnStartedAt: expect.any(String)
+        }
       ])
       expect(workspaces).toEqual([{ workspaceId, status: 'running' }])
+    })
+
+    /*
+     * A turn the application's exit cut off comes back `idle`, which the list
+     * draws as finished — so it comes back marked as cut off instead, and that
+     * lasts until a session speaks for the conversation again. The window
+     * copies the flag from the status event rather than working the rule out
+     * for itself, so the event has to carry it.
+     */
+    describe('a turn the application quit in the middle of', () => {
+      async function quitMidTurn(): Promise<{
+        reopened: OctopusService
+        workspaceId: string
+        chatId: string
+      }> {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'go')
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+
+        const reopened = await createService({ ...paths(dir), query: fakeQuery() })
+        return { reopened, workspaceId, chatId: chat.id }
+      }
+
+      it('comes back interrupted rather than finished', async () => {
+        const { reopened, workspaceId } = await quitMidTurn()
+
+        expect(reopened.listChats(workspaceId)[0]).toMatchObject({
+          status: 'idle',
+          interrupted: true
+        })
+      })
+
+      it('stops being interrupted once a turn starts, and says so', async () => {
+        const { reopened, workspaceId, chatId } = await quitMidTurn()
+        const statuses: ChatStatusEvent[] = []
+        reopened.onChatStatus((event) => statuses.push(event))
+
+        await reopened.sendToChat(chatId, 'carry on')
+
+        expect(reopened.listChats(workspaceId)[0]?.interrupted).toBe(false)
+        expect(statuses).toEqual([
+          expect.objectContaining({ status: 'running', interrupted: false })
+        ])
+      })
+
+      // The end of the next turn is a move like any other; what it must not do
+      // is bring back a flag that belonged to the one before.
+      it('stays clear when that turn ends', async () => {
+        const { reopened, workspaceId, chatId } = await quitMidTurn()
+
+        await reopened.sendToChat(chatId, 'carry on')
+        // The reopened service's session, not the one the quit left behind.
+        agents.at(-1)?.emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(reopened.listChats(workspaceId)[0]?.status).toBe('idle')
+        })
+
+        expect(reopened.listChats(workspaceId)[0]?.interrupted).toBe(false)
+      })
     })
 
     /*
@@ -11391,6 +11457,7 @@ describe('the agent chat', () => {
           title: null,
           status: 'running',
           started: false,
+          interrupted: false,
           turnStartedAt: expect.any(String)
         },
         {
@@ -11399,6 +11466,7 @@ describe('the agent chat', () => {
           title: 'auth refactor',
           status: 'idle',
           started: false,
+          interrupted: false,
           turnStartedAt: null
         }
       ])

@@ -329,6 +329,7 @@ function chatFixture(): Chat {
     workspaceId: 'planner/kyiv',
     agent: 'claude',
     status: 'idle',
+    interrupted: false,
     title: null,
     sessionId: null,
     resumeAt: null,

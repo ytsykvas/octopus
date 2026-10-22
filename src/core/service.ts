@@ -624,6 +624,8 @@ export interface ChatStatusEvent {
   readonly chatId: string
   readonly workspaceId: string
   readonly status: ChatStatus
+  /** Whether the last turn was cut off by the application exiting — `Chat['interrupted']`. */
+  readonly interrupted: boolean
   /** When the turn under way began, or null between turns. */
   readonly turnStartedAt: string | null
 }
@@ -2747,7 +2749,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // equal to that, never announced the end of the first.
         if (chat.id !== chatId || !isOpenChat(chat) || chat.status === status) return chat
         changed = true
-        return { ...chat, status }
+        // Any move at all means a session is speaking for it again, so a turn
+        // the last run cut off is no longer the news — see `interrupted`.
+        return { ...chat, status, interrupted: false }
       })
       // The state as it was, so `commit` writes nothing for a status that is
       // already recorded — which is most of them: `running` is set again when
@@ -2756,8 +2760,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }).then(() => {
       if (!changed) return
       const turnStartedAt = turnStarts.get(chatId) ?? null
+      // Said rather than left for the window to work out: it copies the flag
+      // from here, so the rule that a move clears it lives in core alone.
       for (const listener of chatStatusListeners) {
-        listener({ chatId, workspaceId, status, turnStartedAt })
+        listener({ chatId, workspaceId, status, interrupted: false, turnStartedAt })
       }
     })
   }

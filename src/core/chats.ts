@@ -762,6 +762,23 @@ export const ChatSchema = z.object({
    */
   status: ChatStatusSchema.default('idle'),
   /**
+   * Whether the last turn was cut off by the application exiting rather than
+   * brought to an end.
+   *
+   * `settleStatuses` puts a turn the last run was carrying down to `idle`, and
+   * `idle` alone reads as "finished" — a worktree left half-edited by a session
+   * that died mid-command was announced as done, and nobody went back to it.
+   *
+   * A flag beside `status` rather than a fifth value in it: the packaged app
+   * reads the same `state.json`, and an older reader throws on a status it does
+   * not know, where an unknown key is simply dropped. The price is that two
+   * fields describe one state, so it is held by an invariant: true only while
+   * `status` is `idle`. `settleStatuses` is the only thing that sets it and
+   * `setChatStatus` clears it on every move. Defaulted: a record written before
+   * the field existed was not interrupted.
+   */
+  interrupted: z.boolean().default(false),
+  /**
    * A name the user gave this conversation, or null for the one it is given.
    *
    * Null rather than a copy of "Claude 1", and defaulted rather than migrated,
@@ -987,6 +1004,7 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     workspaceId,
     agent: options.agent,
     status: 'idle',
+    interrupted: false,
     title: null,
     sessionId: null,
     resumeAt: null,
@@ -1051,6 +1069,9 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     workspaceId: source.workspaceId,
     agent: source.agent,
     status: 'idle',
+    // A fork is a new conversation: what cut the source's last turn off is the
+    // source's to report, and this one has not had a turn yet.
+    interrupted: false,
     // Not the source's name either, and for the same reason as `planMode`: the
     // fork is a divergence, and two tabs called "auth refactor" is a strip that
     // cannot be read. It takes the automatic name until it is given one.

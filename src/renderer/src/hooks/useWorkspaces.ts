@@ -276,21 +276,29 @@ export function useWorkspaces(
    */
   useEffect(
     () =>
-      window.octopus.chats.onStatus(({ chatId, workspaceId, status, turnStartedAt }) => {
-        patchWorkspace(workspaceId, (workspace) => {
-          const held = workspace.chats.find((chat) => chat.id === chatId)
-          // Unchanged, or a conversation this window has not read: nothing to draw.
-          if (held === undefined) return workspace
-          if (held.status === status && held.turnStartedAt === turnStartedAt) return workspace
+      window.octopus.chats.onStatus(
+        ({ chatId, workspaceId, status, interrupted, turnStartedAt }) => {
+          patchWorkspace(workspaceId, (workspace) => {
+            const held = workspace.chats.find((chat) => chat.id === chatId)
+            // Unchanged, or a conversation this window has not read: nothing to draw.
+            if (held === undefined) return workspace
+            if (
+              held.status === status &&
+              held.interrupted === interrupted &&
+              held.turnStartedAt === turnStartedAt
+            ) {
+              return workspace
+            }
 
-          return {
-            ...workspace,
-            chats: workspace.chats.map((chat) =>
-              chat === held ? { ...chat, status, turnStartedAt } : chat
-            )
-          }
-        })
-      }),
+            return {
+              ...workspace,
+              chats: workspace.chats.map((chat) =>
+                chat === held ? { ...chat, status, interrupted, turnStartedAt } : chat
+              )
+            }
+          })
+        }
+      ),
     [patchWorkspace]
   )
 

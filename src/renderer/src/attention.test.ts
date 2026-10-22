@@ -38,6 +38,7 @@ function waitingIn(workspace: WorkspaceView, chatId: string): WorkspaceView {
         title: null,
         status: 'waiting_permission',
         started: true,
+        interrupted: false,
         turnStartedAt: null
       }
     ]
@@ -174,6 +175,7 @@ describe('the list of notices', () => {
           title: null,
           status: 'running',
           started: true,
+          interrupted: false,
           turnStartedAt: null
         },
         {
@@ -182,6 +184,7 @@ describe('the list of notices', () => {
           title: null,
           status: 'running',
           started: true,
+          interrupted: false,
           turnStartedAt: null
         }
       ]

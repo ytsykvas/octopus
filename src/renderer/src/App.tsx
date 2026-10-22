@@ -237,7 +237,8 @@ export function App(): React.JSX.Element {
                   agent: tab.agent,
                   title: tab.title,
                   status: tab.status,
-                  started: tab.started
+                  started: tab.started,
+                  interrupted: tab.interrupted
                 }
               ]
         )

@@ -243,12 +243,17 @@ strip that cannot be read.
 
 **The dot is the same vocabulary as the workspace list's**, shared from
 `agentStatus.ts`: accent and pulsing for working, amber for waiting on an
-answer, danger for a turn that failed. Quiet is two states rather than one —
-green where a session has run and finished, and a hollow dot where nobody has
-written yet. Both are `idle` and the status alone cannot tell them apart, so
-`started` comes along beside it: a conversation that did its work read as
-untouched, which is the thing a glance down the list is most often trying to
-settle. The hollow dot is drawn rather than left out, or the strip would shift
+answer, danger for a turn that failed. Quiet is three states rather than one —
+green where a session has run and finished, a hollow dot where nobody has
+written yet, and an amber ring where the application quit or restarted in the
+middle of a turn. All three are `idle` and the status alone cannot tell them
+apart, so `started` and `interrupted` come along beside it: a conversation that
+did its work read as untouched, and one cut off mid-command read as finished —
+which is how nobody went back to it. The ring rather than amber's solid dot,
+because neither the strip nor the multi-conversation tile has an icon to tell it
+from a question waiting; the colour is the same because the meaning is — the
+work goes nowhere until you act. It lasts until the conversation's status next
+moves, which is a message sent to it. The hollow dot is drawn rather than left out, or the strip would shift
 sideways the moment an agent started. The colour says nothing aloud at all, so
 the whole meaning is in the button's label: "Claude 2: Waiting for your
 answer", or the conversation's own name where it has been given one.
@@ -2442,12 +2447,14 @@ no GitHub remote is an ordinary thing rather than a fault.
 icon tile, the name, and a line beneath it that says the state in a word. One
 mark carries it in the tile — the agent's state takes it while there is something
 to report: a turning spinner in the accent while it works, `warning` while it is
-stopped on a question, `danger` after a failed turn, `success` once a session has
-run and stopped — and falls back to a code glyph for a workspace nobody has
-written in. The word beneath is the same state in the same colour, which is what
-a reader who cannot tell the colours apart relies on; `idle` is two words
-(_Finished_, _Not started_), told apart by whether any conversation has
-`started`. Two marks side by side would make the list busier than the thing it
+stopped on a question, `danger` after a failed turn, `warning` and a pause glyph
+where the application's exit cut a turn off, `success` once a session has run and
+stopped — and falls back to a code glyph for a workspace nobody has written in.
+The word beneath is the same state in the same colour, which is what a reader
+who cannot tell the colours apart relies on; `idle` is three words
+(_Interrupted_, _Finished_, _Not started_), told apart by whether any
+conversation is `interrupted`, then whether any has `started`. Interrupted wins
+over finished: one conversation left mid-command is the reason to go back. Two marks side by side would make the list busier than the thing it
 describes, and `warning` is the one worth crossing the window for, because that
 turn has stopped and is waiting on you. A workspace holding several
 conversations draws one dot each inside the tile instead.

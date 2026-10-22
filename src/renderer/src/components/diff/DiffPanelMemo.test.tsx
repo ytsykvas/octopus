@@ -54,6 +54,7 @@ const attributed = workspaceView('anna', {
       title: null,
       status: 'idle',
       started: true,
+      interrupted: false,
       turnStartedAt: null
     },
     {
@@ -62,6 +63,7 @@ const attributed = workspaceView('anna', {
       title: null,
       status: 'idle',
       started: true,
+      interrupted: false,
       turnStartedAt: null
     }
   ],

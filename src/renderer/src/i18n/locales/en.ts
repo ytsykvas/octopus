@@ -103,6 +103,8 @@ export const en = {
     lineWaiting: 'Needs your answer',
     lineError: 'Error',
     lineDone: 'Finished',
+    // The app quit or restarted mid-turn: the work stopped rather than finished.
+    lineInterrupted: 'Interrupted',
     lineIdle: 'Not started',
     missingHint: 'Removed outside the app. Removing the entry is safe.',
     /* The Changes tab and the pull request pane both say this at length; here
@@ -940,6 +942,7 @@ export const en = {
        has written in. Neither says "idle", which describes both. */
     tabStatusIdle: 'nothing written yet',
     tabStatusDone: 'finished',
+    tabStatusInterrupted: 'interrupted',
     newTab: 'New conversation',
     renameTab: 'Rename…',
     forkTab: 'Continue in a new conversation',

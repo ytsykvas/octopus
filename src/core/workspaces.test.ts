@@ -1141,6 +1141,7 @@ describe('reconcile', () => {
         workspaceId: 'planner/anna',
         agent: 'claude',
         status: 'idle',
+        interrupted: false,
         title: null,
         sessionId: null,
         resumeAt: null,
@@ -1175,6 +1176,7 @@ describe('reconcile', () => {
           title: null,
           status: 'running',
           started: true,
+          interrupted: false,
           turnStartedAt: '09:00'
         },
         {
@@ -1183,6 +1185,7 @@ describe('reconcile', () => {
           title: 'auth refactor',
           status: 'waiting_permission',
           started: false,
+          interrupted: false,
           turnStartedAt: null
         }
       ])
@@ -1204,6 +1207,19 @@ describe('reconcile', () => {
         true,
         false
       ])
+    })
+
+    // Both are `idle`, and drawing them alike is the bug this field exists for:
+    // a turn the quit cut off read as finished work.
+    it('says which conversations a quit cut off', () => {
+      const chats = [
+        conversation({ id: 'chat-1', sessionId: 'sess-1', interrupted: true }),
+        conversation({ id: 'chat-2', sessionId: 'sess-2' })
+      ]
+
+      expect(
+        reconcile([workspace], [], new Map(), chats)[0]?.chats.map((c) => c.interrupted)
+      ).toEqual([true, false])
     })
 
     it('gives each workspace only its own', () => {
@@ -1239,6 +1255,7 @@ describe('reconcile', () => {
           title: 'auth refactor',
           status: 'idle',
           started: false,
+          interrupted: false,
           turnStartedAt: null
         }
       ])

@@ -1766,6 +1766,7 @@ const chat = (id: string, title: string | null = null): WorkspaceChat => ({
   title,
   status: 'idle',
   started: true,
+  interrupted: false,
   turnStartedAt: null
 })
 

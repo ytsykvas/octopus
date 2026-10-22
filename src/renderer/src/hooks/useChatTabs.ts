@@ -42,6 +42,8 @@ export interface ChatTab {
   readonly status: ChatStatus
   /** Whether there is a session to continue — what makes forking possible. */
   readonly started: boolean
+  /** Whether its last turn was cut off by the application exiting — `Chat['interrupted']`. */
+  readonly interrupted: boolean
 }
 
 export interface ChatTabsController {
@@ -107,7 +109,8 @@ function tabOf(chat: Chat): ChatTab {
     agent: chat.agent,
     title: chat.title,
     status: chat.status,
-    started: chat.sessionId !== null
+    started: chat.sessionId !== null,
+    interrupted: chat.interrupted
   }
 }
 
@@ -123,7 +126,8 @@ const VIRGIN: readonly ChatTab[] = [
     agent: DEFAULT_AGENT,
     title: null,
     status: 'idle',
-    started: false
+    started: false,
+    interrupted: false
   }
 ]
 
@@ -319,11 +323,14 @@ export function useChatTabs(
 
         // The list as it was when nothing in it moved: a status is announced
         // several times a turn, and every tab in the strip is memoised on it.
+        // The flag is copied rather than cleared here: when a move ends it is
+        // the core's rule, and it says so on the event.
+        const { chatId, status, interrupted } = announced
         setTabs((current) =>
-          current.some((tab) => tab.id === announced.chatId && tab.status !== announced.status)
-            ? current.map((tab) =>
-                tab.id === announced.chatId ? { ...tab, status: announced.status } : tab
-              )
+          current.some(
+            (tab) => tab.id === chatId && (tab.status !== status || tab.interrupted !== interrupted)
+          )
+            ? current.map((tab) => (tab.id === chatId ? { ...tab, status, interrupted } : tab))
             : current
         )
       }),

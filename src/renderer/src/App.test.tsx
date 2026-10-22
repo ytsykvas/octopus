@@ -3344,6 +3344,46 @@ describe('news from agents out of sight', () => {
   })
 })
 
+/*
+ * The strip hands its tabs down to the list once a workspace is opened, and
+ * the list draws its row from them from then on — so a flag the hand-over
+ * dropped would turn an interrupted workspace back into a finished one the
+ * moment it was looked at.
+ */
+describe('a workspace whose turn the quit cut off', () => {
+  it('still says so once its conversations are open', async () => {
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
+      ok: true,
+      value: [
+        workspaceView('anna', {
+          status: 'idle',
+          chats: [
+            {
+              id: 'c-1',
+              agent: 'claude',
+              title: null,
+              status: 'idle',
+              started: true,
+              interrupted: true,
+              turnStartedAt: null
+            }
+          ]
+        })
+      ]
+    })
+    givenChats([chat({ id: 'c-1', sessionId: 's-1', interrupted: true })])
+    const user = await openApp()
+
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+    await screen.findByRole('button', { name: 'Claude 1: interrupted' })
+
+    expect(screen.getByText('Interrupted')).toBeInTheDocument()
+    expect(screen.queryByText('Finished')).not.toBeInTheDocument()
+  })
+})
+
 describe('the status bar along the foot', () => {
   // The tab strip hands its list down without the turn's start, which only the
   // core knows; the bar must still have it for the conversation in front.
@@ -3362,6 +3402,7 @@ describe('the status bar along the foot', () => {
               title: null,
               status: 'running',
               started: true,
+              interrupted: false,
               turnStartedAt: started
             }
           ]

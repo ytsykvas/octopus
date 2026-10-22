@@ -205,7 +205,7 @@ function TabButton({
   // separates a name from its state is a matter for the language.
   const described = t('chat.tabStatus', {
     name: named,
-    state: t(chatStatusLabel(tab.status, tab.started))
+    state: t(chatStatusLabel(tab))
   })
 
   // Read into a constant so the closures below carry a string rather than a
@@ -314,10 +314,7 @@ function TabButton({
         {/* Always drawn, quiet state included: a dot that appeared only once a
             turn started would shift the whole strip sideways the moment the
             agent began working. */}
-        <span
-          aria-hidden
-          className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(tab.status, tab.started)}`}
-        />
+        <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(tab)}`} />
         <span aria-hidden>{named}</span>
         {/* Notes written in the viewer and aimed at this conversation. The
             viewer stays in front when one is added, so this is where it shows

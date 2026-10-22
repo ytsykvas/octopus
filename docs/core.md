@@ -944,7 +944,12 @@ routed through the funnel to reach it.
 
 `settleStatuses` follows the same shape on load: the conversations are put down
 first, and the workspaces derived from the settled list rather than settled
-alongside it by a rule that would drift the first time one of them changed.
+alongside it by a rule that would drift the first time one of them changed. A
+conversation it puts down from `running` or `waiting_permission` is marked
+`interrupted` as well: no session survives the process, so the turn was cut off,
+and `idle` alone is drawn as finished. `setChatStatus` clears the flag on every
+move and `chats:status` says so, so the window copies it rather than keeping
+the rule a second time.
 
 `reconcile` puts one more fact on each conversation than its status: `started`,
 which is `sessionId !== null`. The list draws a conversation that ran and
