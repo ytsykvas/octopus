@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  formatAside,
   parseBtw,
   SideHistorySchema,
   SIDE_HISTORY_LIMIT,
@@ -51,5 +52,18 @@ describe('what crosses the bridge', () => {
     expect(SideHistorySchema.safeParse(Array(SIDE_HISTORY_LIMIT + 1).fill(exchange)).success).toBe(
       false
     )
+  })
+})
+
+describe('formatAside', () => {
+  const text = formatAside({ question: 'why?', response: 'Because.' }, 'go on')
+
+  it('puts the exchange before the message', () => {
+    expect(text.indexOf('why?')).toBeLessThan(text.indexOf('Because.'))
+    expect(text.indexOf('Because.')).toBeLessThan(text.indexOf('go on'))
+  })
+
+  it('ends with the message itself', () => {
+    expect(text.endsWith('go on')).toBe(true)
   })
 })

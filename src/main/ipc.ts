@@ -72,7 +72,7 @@ import type {
   OctopusService,
   WorkspaceStatusEvent
 } from '../core/service.js'
-import { SideHistorySchema, SideQuestionSchema } from '../core/sideQuestions.js'
+import { SideExchangeSchema, SideHistorySchema, SideQuestionSchema } from '../core/sideQuestions.js'
 import { ProjectEditSchema, ProjectPatchSchema } from '../core/store.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
@@ -951,7 +951,12 @@ export function registerIpc(
     attempt(() => service.createChat(workspaceId))
   )
 
-  host.handle('chats:fork', (_event, chatId: string) => attempt(() => service.forkChat(chatId)))
+  // The exchange of a fork off a side answer; absent for a plain fork, and
+  // null is read as absent so a clone that turned one into the other changes
+  // nothing.
+  host.handle('chats:fork', (_event, chatId: string, aside: unknown) =>
+    attempt(() => service.forkChat(chatId, SideExchangeSchema.nullish().parse(aside) ?? undefined))
+  )
 
   host.handle('chats:close', (_event, chatId: string) => attempt(() => service.closeChat(chatId)))
 

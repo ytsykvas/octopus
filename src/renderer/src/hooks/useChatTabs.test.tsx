@@ -418,7 +418,7 @@ describe('an answer that arrives after the workspace has been left', () => {
 
     await act(async () => {
       forking.settle({ ok: true, value: chat({ id: 'chat-2' }) })
-      await forked
+      await expect(forked).resolves.toBe(false)
     })
 
     expect(result.current.tabs.map((tab) => tab.id)).not.toContain('chat-2')
@@ -935,12 +935,29 @@ describe('continuing a conversation in a new tab', () => {
       value: chat({ id: 'chat-2', sessionId: 'sess-2' })
     })
     givenChats([chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2', sessionId: 'sess-2' })])
+    let opened = false
     await act(async () => {
-      await result.current.fork('chat-1')
+      opened = await result.current.fork('chat-1')
     })
 
-    expect(octopus().chats.fork).toHaveBeenCalledWith('chat-1')
+    expect(octopus().chats.fork).toHaveBeenCalledWith('chat-1', undefined)
     expect(result.current.activeKey).toBe('chat-2')
+    expect(opened).toBe(true)
+  })
+
+  it('carries the side answer a fork starts from', async () => {
+    givenChats([chat({ sessionId: 'sess-1' })])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    const aside = { question: 'why?', response: 'Because.' }
+    await act(async () => {
+      await result.current.fork('chat-1', aside)
+    })
+
+    expect(octopus().chats.fork).toHaveBeenCalledWith('chat-1', aside)
   })
 
   it('says so when the agent cannot fork', async () => {
@@ -952,12 +969,14 @@ describe('continuing a conversation in a new tab', () => {
       expect(result.current.tabs[0]?.id).toBe('chat-1')
     })
 
+    let opened = true
     await act(async () => {
-      await result.current.fork('chat-1')
+      opened = await result.current.fork('chat-1')
     })
 
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('no such session'))
     expect(result.current.tabs).toHaveLength(1)
+    expect(opened).toBe(false)
   })
 })
 

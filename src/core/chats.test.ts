@@ -20,7 +20,9 @@ import {
   ChatMessageSchema,
   ChatSchema,
   isClearCommand,
+  isKnownCommand,
   isUsageCommand,
+  MAX_CHAT_TITLE,
   MAX_CHATS_PER_WORKSPACE,
   modeAfterPlan,
   newChat,
@@ -69,6 +71,7 @@ describe('a new chat', () => {
       knownAgents: [],
       skillOverrides: {},
       closedAt: null,
+      aside: null,
       createdAt: '2026-08-11T09:00:00.000Z'
     })
   })
@@ -762,6 +765,7 @@ describe('a conversation continuing another', () => {
     knownAgents: [{ name: 'reviewer', description: 'Reviews a change' }],
     skillOverrides: {},
     closedAt: null,
+    aside: null,
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 
@@ -837,6 +841,59 @@ describe('a conversation continuing another', () => {
         }
       ).title
     ).toBeNull()
+  })
+
+  it('carries nothing to tell the agent when forked plainly', () => {
+    expect(forked.aside).toBeNull()
+  })
+
+  describe('off a side answer', () => {
+    const fromAside = (question: string): Chat =>
+      forkChat(source, {
+        id: 'chat-3',
+        sessionId: 'session-new',
+        createdAt: '2026-08-11T10:00:00.000Z',
+        aside: { question, response: 'Because.' }
+      })
+
+    it('keeps the exchange for the agent', () => {
+      expect(fromAside('why?').aside).toEqual({ question: 'why?', response: 'Because.' })
+    })
+
+    // The CLI names its own fork this way, and the question is what it is about.
+    it('is named after the question, on one line', () => {
+      expect(fromAside('  why\n  this way? ').title).toBe('btw: why this way?')
+    })
+
+    it('cuts a long question to what a tab name holds', () => {
+      const title = fromAside('x'.repeat(200)).title
+
+      expect(title).toHaveLength(MAX_CHAT_TITLE)
+      expect(title?.endsWith('…')).toBe(true)
+      expect(fromAside('x'.repeat(MAX_CHAT_TITLE - 'btw: '.length)).title).not.toContain('…')
+    })
+  })
+})
+
+describe('a message that is a command the agent listed', () => {
+  const deploy: AgentCommand = {
+    name: 'deploy',
+    description: '',
+    argumentHint: '',
+    aliases: ['ship'],
+    skill: false
+  }
+
+  it('is known by name or alias, with arguments', () => {
+    expect(isKnownCommand('/deploy', [deploy])).toBe(true)
+    expect(isKnownCommand('  /ship prod', [deploy])).toBe(true)
+  })
+
+  // A path at the start of a sentence is not a command.
+  it('is not anything else that starts with a slash', () => {
+    expect(isKnownCommand('/Users/anna is wrong', [deploy])).toBe(false)
+    expect(isKnownCommand('deploy it', [deploy])).toBe(false)
+    expect(isKnownCommand('/deploy', [])).toBe(false)
   })
 })
 

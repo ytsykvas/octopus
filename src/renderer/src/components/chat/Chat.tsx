@@ -254,6 +254,7 @@ export function Chat({
           codeNotes={codeNotes}
           attachedFiles={attachedFiles}
           sideQuestions={sideQuestions}
+          onForkSide={tabs.fork}
           defaultWorkingMode={defaultWorkingMode}
           planExecutionMode={planExecutionMode}
           defaultEffort={defaultEffort}

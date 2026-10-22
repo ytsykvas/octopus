@@ -17,7 +17,14 @@ import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import { useSideQuestions } from '../../hooks/useSideQuestions.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
-import { CHAT_ID, emitAgentEvent, emitChatStatus, givenChat } from '../../test/chat.js'
+import {
+  chat,
+  CHAT_ID,
+  emitAgentEvent,
+  emitChatStatus,
+  givenChat,
+  givenChats
+} from '../../test/chat.js'
 import { commentController, quoteController } from '../../test/comments.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
@@ -400,6 +407,52 @@ describe('a /btw typed into the main field', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close side questions', expanded: true }))
     expect(drawer()).toBeNull()
+  })
+
+  describe('continued from an answer', () => {
+    const forkButton = (): Promise<HTMLElement> =>
+      screen.findByRole('button', { name: 'Continue from this answer in a new conversation' })
+
+    async function answered(): Promise<ReturnType<typeof userEvent.setup>> {
+      const user = userEvent.setup()
+      answering('It uses Kyiv.')
+      givenChats([chat({ title: 'main', sessionId: 'sess-1' })])
+      await openChat()
+      await user.type(field(), '/btw which city?{Enter}')
+      await screen.findByText('It uses Kyiv.')
+      return user
+    }
+
+    // The CLI's panel goes once the fork is open; the answer has moved on.
+    it('opens the fork in a new tab and puts the drawer away', async () => {
+      const user = await answered()
+      const forked = chat({ id: 'chat-2', title: 'btw: which city?', sessionId: 'sess-2' })
+      vi.mocked(octopus().chats.fork).mockResolvedValue({ ok: true, value: forked })
+      givenChats([chat({ title: 'main', sessionId: 'sess-1' }), forked])
+
+      await user.click(await forkButton())
+
+      expect(octopus().chats.fork).toHaveBeenCalledWith('chat-1', {
+        question: 'which city?',
+        response: 'It uses Kyiv.'
+      })
+      await user.click(await screen.findByRole('button', { name: /^main: / }))
+      expect(drawer()).toBeNull()
+    })
+
+    it('leaves the drawer out when the fork is refused', async () => {
+      const user = await answered()
+      vi.mocked(octopus().chats.fork).mockResolvedValue({ ok: false, error: 'no such session' })
+
+      await user.click(await forkButton())
+
+      // Offered again once the refusal is in, which is when a close would have come.
+      await waitFor(async () => {
+        expect(await forkButton()).toBeEnabled()
+      })
+      expect(octopus().chats.fork).toHaveBeenCalled()
+      expect(drawer()).toBeInTheDocument()
+    })
   })
 
   it('asks nothing when the conversation could not be opened', async () => {

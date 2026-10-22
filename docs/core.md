@@ -975,6 +975,17 @@ draws — without it the new tab opens empty above an agent that remembers all o
 it. A fork the SDK refuses writes no record at all: a tab that says it continues
 a conversation and does not is worse than a refusal.
 
+A fork can also start from a side answer (`forkChat(chatId, aside)`), which is
+the CLI's `f to fork` on a `/btw`. The CLI writes the question and its answer
+into the forked session file as a turn of its own. That file's format is the
+CLI's and undocumented, and nothing here writes it. The exchange goes to the end
+of our transcript (the question without a `uuid`, since the agent has no point
+to rewind to), the new record carries it as `aside`, and the tab is named
+`btw: <question>`. The first message that reaches the agent as a prompt has the
+exchange put in front of it (`formatAside`), and `aside` is cleared. A command
+is sent as typed, because text in front would stop it being one: `/clear` drops
+the exchange, and any other listed command leaves it for the next message.
+
 ### What the renderer holds is what the core last said
 
 A patch arriving over IPC is external data like any other. `applyConfig` merged

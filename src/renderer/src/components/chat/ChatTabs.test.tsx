@@ -29,7 +29,7 @@ function controller(overrides: Partial<ChatTabsController> = {}): ChatTabsContro
     selectIn: vi.fn(),
     canCreate: true,
     create: vi.fn(() => Promise.resolve()),
-    fork: vi.fn(() => Promise.resolve()),
+    fork: vi.fn(() => Promise.resolve(true)),
     copyTranscript: vi.fn(() => Promise.resolve(true)),
     close: vi.fn(() => Promise.resolve()),
     history: [],
