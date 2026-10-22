@@ -138,6 +138,9 @@ describe('what gets stored', () => {
       // The only record that work was started and taken back, so it outlives
       // the session that produced it like the refusal above.
       { type: 'retracted', uuids: ['u-1'] },
+      // A shell's `cd` splits the agent from the panes for the rest of the
+      // conversation, so the line saying so has to be there after a restart.
+      { type: 'cwd_changed', from: '/w/anna', to: '/w/anna/.claude/worktrees/spike' },
       { type: 'usage', report: null },
       {
         type: 'result',

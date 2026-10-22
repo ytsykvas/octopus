@@ -1027,6 +1027,10 @@ export const en = {
       'The agent is moving into a new worktree. Changes, Files, the terminal and the scripts here stay on this workspace.',
     worktreeLeft: 'The agent is leaving the other worktree and keeping it.',
     worktreeRemoved: 'The agent is leaving the other worktree and removing it, with its branch.',
+    /* Said from the CLI's own hook, after the shell command that moved it: a `cd` the call never named. */
+    cwdMoved:
+      'The agent’s shell moved to {{path}}. Changes, Files, the terminal and the scripts here stay on this workspace.',
+    cwdBack: 'The agent’s shell is back in this workspace’s worktree.',
     /* An exit code past 128 is a signal: something outside ended the process. */
     processStopped:
       'Claude Code was stopped from outside — by the system or another program. Send a message to carry on; the conversation is kept.',

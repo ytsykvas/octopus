@@ -20,6 +20,8 @@ import {
   type PermissionOutcome,
   READ_ONLY_TOOLS,
   GUARD_FAILED,
+  CWD_WATCH_SETTINGS,
+  cwdWatch,
   publishLocked,
   toolGuards,
   type SessionOptions,
@@ -1799,7 +1801,8 @@ describe('a session', () => {
     expect(agent.options().settings).toEqual({
       ultracode: false,
       enableWorkflows: false,
-      skillOverrides: { 'octopus:review': 'off' }
+      skillOverrides: { 'octopus:review': 'off' },
+      hooks: CWD_WATCH_SETTINGS
     })
   })
 
@@ -2051,7 +2054,8 @@ describe('a session', () => {
     expect(agent.options().settings).toEqual({
       ultracode: true,
       enableWorkflows: true,
-      skillOverrides: {}
+      skillOverrides: {},
+      hooks: CWD_WATCH_SETTINGS
     })
   })
 
@@ -2064,7 +2068,8 @@ describe('a session', () => {
     expect(agent.options().settings).toEqual({
       ultracode: false,
       enableWorkflows: false,
-      skillOverrides: {}
+      skillOverrides: {},
+      hooks: CWD_WATCH_SETTINGS
     })
   })
 
@@ -2138,6 +2143,67 @@ describe('a session that will not close', () => {
     )
 
     await expect(session.close()).rejects.toThrow('the process would not die')
+  })
+})
+
+describe('cwdWatch', () => {
+  /** Fires the hook the way the SDK does, on what a `cd` reports. */
+  function moved(onMove: (event: AgentEvent) => void, input: unknown): Promise<unknown> {
+    const [hook] = cwdWatch(onMove).CwdChanged?.[0]?.hooks ?? []
+    if (!hook) throw new Error('no CwdChanged hook')
+    return hook(input as never, undefined, { signal: new AbortController().signal })
+  }
+
+  const report = {
+    hook_event_name: 'CwdChanged',
+    session_id: 's-1',
+    transcript_path: '/t',
+    cwd: '/w/anna/.claude/worktrees/spike',
+    old_cwd: '/w/anna',
+    new_cwd: '/w/anna/.claude/worktrees/spike'
+  }
+
+  it('says where a shell command moved the session, and answers the hook with nothing', async () => {
+    const events: AgentEvent[] = []
+
+    await expect(moved((event) => events.push(event), report)).resolves.toEqual({})
+
+    expect(events).toEqual([
+      { type: 'cwd_changed', from: '/w/anna', to: '/w/anna/.claude/worktrees/spike' }
+    ])
+  })
+
+  // A subagent's `cd` moves the subagent, which ends with its task.
+  it('leaves a subagent’s move unsaid', async () => {
+    const events: AgentEvent[] = []
+
+    await moved((event) => events.push(event), { ...report, agent_id: 'sub-1' })
+
+    expect(events).toEqual([])
+  })
+
+  it('says nothing of a report it cannot read', async () => {
+    const events: AgentEvent[] = []
+
+    await expect(moved((event) => events.push(event), { old_cwd: 1 })).resolves.toEqual({})
+
+    expect(events).toEqual([])
+  })
+
+  // The watch rides beside the guards, which own `PreToolUse` whatever else is handed in.
+  it('is carried by the locked session beside the guards, under them', () => {
+    const locked = publishLocked(
+      undefined,
+      [],
+      {},
+      {
+        ...cwdWatch(() => undefined),
+        PreToolUse: []
+      }
+    )
+
+    expect(locked.hooks?.CwdChanged).toHaveLength(1)
+    expect(locked.hooks?.PreToolUse?.length).toBeGreaterThan(0)
   })
 })
 

@@ -206,6 +206,17 @@ break the UI.
 When a new kind of event is needed, **add the variant to `AgentEvent` first**,
 then the mapping, then the rendering.
 
+## After an upgrade: the `cd` line
+
+The `CwdChanged` hook callback runs **only beside a command hook for the same
+event in the session's settings** — measured on 0.3.307, written down nowhere.
+`agent.ts` carries that command hook (`CWD_WATCH_SETTINGS`, a `true`) for the
+yellow "the agent's shell moved to …" line alone. No test starts a session, so
+a release that changes this leaves every check green and the line gone.
+After every upgrade of the package, run `npm run probe:cwd` once: it starts a
+session in a throwaway repository against the real login, asks for two `cd`s
+and fails when either goes unsaid.
+
 ## Testing
 
 The event mapping is a pure function from `SDKMessage` to `AgentEvent[]`. Test it

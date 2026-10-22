@@ -642,12 +642,22 @@ outside its own worktrees and refuses a removal with uncommitted work on
 purpose, and either answer is the line below it. A move with neither name nor
 path says "a new worktree", since only the result knows the name the CLI made
 up. A subagent's move stays a step inside its row: it moves the subagent only.
-A move made any other way is not seen — most likely a `cd` in the shell, which
-the CLI keeps as the session's directory, with nothing in the call to say where
-to. The CLI's `CwdChanged` hook would be the place, and measured against SDK
-0.3.307 (CLI 2.1.307) a `hooks.CwdChanged` callback fired neither on
-`EnterWorktree` nor on a `cd` that did move the session, so nothing is built on
-it. What does notice the next tool whose call is a move is a test:
+**A `cd` in the shell is the other way the session moves, and it is a line of
+its own.** The CLI keeps the directory a Bash command ends in as the session's
+working directory, and nothing in the call says where that was. Its
+`CwdChanged` hook does: handed to the SDK as a callback (`cwdWatch` in
+`agent.ts`), it fires after each shell command that moved the session —
+measured on SDK 0.3.307 (CLI 2.1.307) on a `cd` into a worktree, back out of
+it and away from the repository, and **not** on `EnterWorktree` or
+`ExitWorktree`, which stay drawn from the call. The callback runs only
+beside a command hook for the same event in the session's settings, which the
+session carries for that reason alone (`CWD_WATCH_SETTINGS`, `docs/core.md`).
+The hook becomes a
+`cwd_changed` event, kept in the transcript, drawn in the same warning register
+as the worktree line: the path from the workspace's root when inside it, whole
+when outside, and "back in this workspace's worktree" for a return to the root.
+A subagent's `cd` is left unsaid — it moves the subagent, which ends with its
+task. What notices the next tool whose call is a move is a test:
 `toolSummary.test.ts` classifies every name in the SDK's `BUILTIN_TOOL_NAMES`,
 so a tool the SDK adds to that list fails the typecheck until somebody says
 which it is.

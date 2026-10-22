@@ -30,7 +30,7 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
-import { ABANDONED, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
+import { ABANDONED, CWD_WATCH_SETTINGS, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
 import { MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
@@ -10188,7 +10188,8 @@ describe('the agent chat', () => {
       expect(agent().options().settings).toEqual({
         ultracode: true,
         enableWorkflows: true,
-        skillOverrides: {}
+        skillOverrides: {},
+        hooks: CWD_WATCH_SETTINGS
       })
     })
 

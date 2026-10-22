@@ -18,6 +18,7 @@ import type {
   AgentInfo,
   ModelInfo,
   Options,
+  Settings,
   PermissionUpdate,
   Query,
   SDKAssistantMessage,
@@ -721,6 +722,58 @@ export function toolGuards(
   }
 }
 
+const CwdChangedSchema = z.object({
+  old_cwd: z.string(),
+  new_cwd: z.string(),
+  // Present only inside a subagent, the SDK says; the main thread has none.
+  agent_id: z.string().optional()
+})
+
+/**
+ * The SDK hook that says where a shell command left the session.
+ *
+ * The CLI keeps the directory a Bash command ends in as the session's working
+ * directory, so a `cd` into another worktree moves every call after it while
+ * nothing in the call says so. Its `CwdChanged` hook fires after each shell
+ * command that moved it — measured on SDK 0.3.307: on `cd` into, back out of
+ * and away from the worktree, and not on `EnterWorktree` or `ExitWorktree`,
+ * which the log draws from the call. A subagent's move is left out: it moves
+ * the subagent, which ends with its task, and the conversation not at all.
+ *
+ * On its own the callback never runs; `CWD_WATCH_SETTINGS` is its other half.
+ */
+export function cwdWatch(onMove: (event: AgentEvent) => void): NonNullable<Options['hooks']> {
+  return {
+    CwdChanged: [
+      {
+        hooks: [
+          (input) => {
+            const moved = CwdChangedSchema.safeParse(input)
+            if (moved.success && moved.data.agent_id === undefined) {
+              onMove({ type: 'cwd_changed', from: moved.data.old_cwd, to: moved.data.new_cwd })
+            }
+            return Promise.resolve({})
+          }
+        ]
+      }
+    ]
+  }
+}
+
+/**
+ * The settings side of `cwdWatch`, without which it never fires.
+ *
+ * Measured on SDK 0.3.307: the `CwdChanged` callback runs only when a command
+ * hook for the same event is also configured — here, in the flag-settings
+ * layer. The callback alone, with `includeHookEvents`, in every permission
+ * mode, ran not once across a dozen moves; with this beside it, on every one.
+ * The command is `true`, so the shell's part is nothing. The CLI merges hooks
+ * across its sources, so a user's own hook for the event keeps running too.
+ */
+export const CWD_WATCH_SETTINGS: NonNullable<Settings['hooks']> = {
+  CwdChanged: [{ hooks: [{ type: 'command', command: 'true' }] }]
+}
+
 /**
  * What every session the app starts carries so its agent cannot publish: the
  * hooks, the CLI's own deny rules, and an environment where a push to any of
@@ -729,14 +782,18 @@ export function toolGuards(
  *
  * `base` is the app's own environment: the SDK replaces the environment
  * outright when given one, and without it the agent would lose PATH and HOME.
+ *
+ * `watching` is what else the session listens to through hooks — `cwdWatch`
+ * — merged under the guards, which own `PreToolUse` and cannot be displaced.
  */
 export function publishLocked(
   refuseCommand: ((command: string) => string | null) | undefined,
   pushTargets: readonly string[],
-  base: Readonly<Record<string, string | undefined>> = process.env
+  base: Readonly<Record<string, string | undefined>> = process.env,
+  watching: NonNullable<Options['hooks']> = {}
 ): Pick<Options, 'hooks' | 'disallowedTools' | 'env'> {
   return {
-    hooks: toolGuards(refuseCommand),
+    hooks: { ...watching, ...toolGuards(refuseCommand) },
     disallowedTools: [...PUBLISH_DENY_RULES],
     env: agentEnv(base, pushTargets)
   }
@@ -848,6 +905,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
         ultracode,
         enableWorkflows: ultracode,
         skillOverrides: options.skillOverrides,
+        // What lets the `CwdChanged` callback below fire at all.
+        hooks: CWD_WATCH_SETTINGS,
         // Left out rather than sent as null for "the agent's own": the flag
         // layer outranks the user's files, so a null here would still be a
         // claim, and `/autocompact` saved there is what null should defer to.
@@ -865,7 +924,12 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       allowedTools: [...options.allowedTools],
       // These own `hooks`, `disallowedTools` and `env`: a key of the same name
       // later in this object would take the guard away.
-      ...publishLocked(hooks.refuseCommand, options.pushTargets),
+      ...publishLocked(
+        hooks.refuseCommand,
+        options.pushTargets,
+        process.env,
+        cwdWatch(hooks.onEvent)
+      ),
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.
       includePartialMessages: true,

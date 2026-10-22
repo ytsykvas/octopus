@@ -294,6 +294,21 @@ worked. So it goes through zod like any other external data, accepting both
 spellings, and a shape neither fits degrades the event to nulls instead of
 dropping it: the log's line is worth drawing on the boundary alone.
 
+**A shell command that moved the session is announced too.** `cwd_changed` is
+the CLI's `CwdChanged` hook as an event — handed to the SDK as a callback by
+`cwdWatch` and merged under the publish guards in `publishLocked`, which own
+`PreToolUse`. It carries where the session was and where a `cd` left it, for
+the main thread only; a subagent's move ends with its task. Measured on SDK
+0.3.307: the hook fires on every `cd` that changed the directory and not on
+`EnterWorktree` or `ExitWorktree`, which the log draws from the call — and
+only beside a command hook for the same event in the session's settings. The
+callback alone, with `includeHookEvents`, in every permission mode, ran not
+once; with `CWD_WATCH_SETTINGS` (a `true` command, which the shell runs to no
+effect) in the flag layer, on every move. No document says so, and no test
+can: the suite never starts a session. `npm run probe:cwd` does, in a
+throwaway repository against the CLI's own login, and is the check to run
+after an SDK upgrade.
+
 **A model that refuses is announced, and the announcement is drawn.**
 `model_refusal_fallback` is the one change of model that is neither the user's
 decision nor the agent's: the primary model ends the stream with

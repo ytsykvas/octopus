@@ -557,6 +557,21 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
    */
   z.object({ type: z.literal('retracted'), uuids: z.array(z.string()) }),
 
+  /**
+   * The agent's shell moved the session to another directory.
+   *
+   * A `cd` in a Bash call is kept by the CLI as the session's working
+   * directory, so the agent's next calls run there — in another worktree,
+   * most likely — while Changes, Files, the terminal and the scripts stay on
+   * the workspace's own. Nothing in the call says where it ended; the CLI's
+   * `CwdChanged` hook does, and this is that hook as an event. Kept in the
+   * transcript: the split it names outlives the turn.
+   *
+   * Only the main thread's moves: a subagent's `cd` moves the subagent, which
+   * ends with its task, and the conversation's directory not at all.
+   */
+  z.object({ type: z.literal('cwd_changed'), from: z.string(), to: z.string() }),
+
   z.object({
     type: z.literal('model_refusal_no_fallback'),
     originalModel: z.string(),
