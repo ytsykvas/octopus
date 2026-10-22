@@ -50,10 +50,13 @@ export function ServerControls({
         >
           <Globe aria-hidden size={15} />
           {/* Says the server is up without a word: the one sign on the
-              window that something of this workspace is listening. */}
+              window that something of this workspace is listening. Still: it
+              pulsed, and any animation at all costs this window a measured
+              9% of a core for as long as it runs — which, for a dev server,
+              is all day. */}
           <span
             aria-hidden
-            className="bg-success absolute top-1 right-1 h-1.5 w-1.5 rounded-full motion-safe:animate-pulse"
+            className="bg-success absolute top-1 right-1 h-1.5 w-1.5 rounded-full"
           />
         </a>
         <StopButton onStop={stopRun} />

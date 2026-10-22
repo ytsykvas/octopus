@@ -98,6 +98,8 @@ const VOLUME = 0.05
 const FILE_VOLUME = 0.3
 const NOTE_SECONDS = 0.25
 const STEP_SECONDS = 0.12
+/** How long after the last note the context is put to rest. */
+export const REST_AFTER_MS = 200
 
 /**
  * The shortest time between two chimes. Several agents finishing together, or
@@ -154,12 +156,20 @@ function playFile(url: string): void {
   player.play().catch(() => undefined)
 }
 
+/**
+ * The suspension waiting for the chime to end, so a chime that comes before
+ * it does not have its context taken away under it.
+ */
+let rest: ReturnType<typeof setTimeout> | null = null
+
 function playTones(kind: NoticeKind): void {
   if (typeof AudioContext === 'undefined') return
 
   context ??= new AudioContext()
-  // A context made before the window was touched can start suspended.
+  // A context made before the window was touched can start suspended — and
+  // one that has played is suspended on purpose, below.
   if (context.state === 'suspended') void context.resume()
+  if (rest !== null) clearTimeout(rest)
 
   const audio = context
   const start = audio.currentTime
@@ -180,4 +190,13 @@ function playTones(kind: NoticeKind): void {
     tone.start(at)
     tone.stop(at + NOTE_SECONDS)
   })
+
+  // Suspended once the chime is over: a running context keeps the audio
+  // thread and the device awake for as long as the window lives, after a
+  // sound that lasted half a second. The next chime wakes it, above.
+  const over = ((NOTES[kind].length - 1) * STEP_SECONDS + NOTE_SECONDS) * 1000
+  rest = setTimeout(() => {
+    rest = null
+    void audio.suspend()
+  }, over + REST_AFTER_MS)
 }

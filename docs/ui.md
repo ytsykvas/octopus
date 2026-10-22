@@ -103,7 +103,9 @@ dialog switches off the window's own keys.
 A quiet sound goes with it (`sound.ts`), no more than once in 1.5s, so several
 agents finishing together ring once. The default is a chime synthesised with Web
 Audio: rising for finished, one note for a wait, falling for an error, at a
-twentieth of full volume. Settings → General can pick one of the files in
+twentieth of full volume. The context is suspended once the chime is over and
+woken by the next: left running, it kept the audio thread and the device awake
+for as long as the window lived, after a sound that lasted half a second. Settings → General can pick one of the files in
 `assets/sounds/` instead (`notificationSoundId`); a file sounds the same for
 every kind of news. Files work because each is over 4KB: Vite inlines anything
 smaller as a `data:` URL, which the window's CSP refuses for media, and serves
@@ -3143,10 +3145,17 @@ measured from a sample of the real monospace face — the cell differs by platfo
 font and zoom. Below that width the toggle stays visible and disabled, saying
 why, and the view falls back to one column without touching what was asked for.
 
-**Syntax colours arrive after the diff does.** A side of a file is tokenised
-whole rather than line by line, or a block comment is coloured wrongly from its
-second line on. Nothing waits for a grammar: an unhighlighted line is drawn in
-`--ink`, and a highlighter that never starts costs the reader only the colours.
+**Syntax colours arrive after the diff does, and only for the files that are
+open.** A side of a file is tokenised whole rather than line by line, or a
+block comment is coloured wrongly from its second line on. Nothing waits for a
+grammar: an unhighlighted line is drawn in `--ink`, and a highlighter that
+never starts costs the reader only the colours. Every file starts folded, and
+colouring both whole sides of each — a one-line edit in a 3 000-line file is
+6 000 lines tokenised, on the main thread — spent the window on lines nobody
+could see, on every read of the diff, which is every turn's end. So
+`useHighlighting` takes the set of open paths beside the diff: a file is
+coloured when it is opened, keeps its colours while the diff stands, and
+"expand all" colours them all as it did before.
 
 **And the whole side means the whole file, not the hunks joined up.** Joining
 them left a construct opened in the gap between two hunks invisible, so the hunk

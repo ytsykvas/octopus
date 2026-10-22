@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { DiffLine, FileSides, WorkspaceDiff } from '@core/diff.js'
 
@@ -40,7 +40,7 @@ function drawableAsCode(
 }
 
 /**
- * Syntax colours for every line of a diff, as they arrive.
+ * Syntax colours for every open file of a diff, as they arrive.
  *
  * Asynchronous and additive on purpose: the diff is drawn plain the moment it
  * is read, and the colours land a little after. Nothing waits for a grammar to
@@ -50,6 +50,12 @@ function drawableAsCode(
  * Files are done one at a time with an await between them, so a forty-file
  * change never holds a frame. The core has already bounded how much can arrive
  * here, so there is no second budget to keep.
+ *
+ * Only the files that are open: every file starts folded, and colouring both
+ * whole sides of each — a one-line edit in a 3 000-line file is 6 000 lines
+ * tokenised — spent the main thread on lines nobody could see, on every read
+ * of the diff, which is every turn's end. A file is coloured when it is
+ * opened, and keeps its colours while the diff stands.
  */
 export function useHighlighting(
   diff: WorkspaceDiff | null,
@@ -67,21 +73,35 @@ export function useHighlighting(
    * passing a fresh object each render would re-colour every file on every
    * render, which is the redraw the map above exists to avoid.
    */
-  sides: Readonly<Record<string, FileSides>>
+  sides: Readonly<Record<string, FileSides>>,
+  /** The paths whose rows are open, which are the ones worth colouring. */
+  open: ReadonlySet<string>
 ): HighlightingByFile {
   const [tokens, setTokens] = useState<HighlightingByFile>(NOTHING)
+  // What has been coloured for the diff on screen, kept across the runs below
+  // — a file opened later is added, the ones already coloured are left alone —
+  // and started afresh for another diff.
+  const collectedFor = useRef<{ diff: WorkspaceDiff | null; files: Map<string, Highlighting> }>({
+    diff: null,
+    files: new Map()
+  })
 
   useEffect(() => {
     if (!diff) return
+
+    if (collectedFor.current.diff !== diff) {
+      collectedFor.current = { diff, files: new Map() }
+    }
+    const collected = collectedFor.current.files
 
     // An `AbortController` rather than a boolean, the way `useWorkspaces` and
     // `useSessionUsage` already guard their reads: a flag assigned only in the
     // cleanup reads as a constant to the type checker inside the loop.
     const controller = new AbortController()
-    const collected = new Map<string, Highlighting>()
 
     void (async () => {
       for (const file of diff.files) {
+        if (!open.has(file.path) || collected.has(file.path)) continue
         const language = languageFor(file.path)
         if (language === null || file.hunks.length === 0) continue
         if (!drawableAsCode(file.hunks)) continue
@@ -118,7 +138,7 @@ export function useHighlighting(
     return () => {
       controller.abort()
     }
-  }, [diff, sides])
+  }, [diff, sides, open])
 
   return tokens
 }

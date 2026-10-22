@@ -41,9 +41,14 @@ const removed = (text: string): DiffLine => ({
    changes, which is right for a new answer and wrong for a new literal. */
 const NO_SIDES = {}
 
+/** Every file open — the set a reader who pressed "expand all" has. */
+const EVERY: ReadonlySet<string> = { has: () => true } as unknown as ReadonlySet<string>
+
 describe('the colours a diff is drawn in', () => {
   it('starts with none, so the diff is readable before they arrive', () => {
-    const { result } = renderHook(() => useHighlighting(workspaceDiff([fileDiff('a.ts')]), {}))
+    const { result } = renderHook(() =>
+      useHighlighting(workspaceDiff([fileDiff('a.ts')]), {}, EVERY)
+    )
 
     expect(result.current.size).toBe(0)
   })
@@ -52,7 +57,7 @@ describe('the colours a diff is drawn in', () => {
     const line = added('const x = 1')
     const diff = workspaceDiff([fileDiff('a.ts', { hunks: [hunk({ lines: [line] })] })])
 
-    const { result } = renderHook(() => useHighlighting(diff, NO_SIDES))
+    const { result } = renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(result.current.get('a.ts')?.get(line)?.[0]?.text).toBe('const x = 1')
@@ -73,7 +78,7 @@ describe('the colours a diff is drawn in', () => {
       fileDiff('b.ts', { hunks: [hunk({ lines: [second] })] })
     ])
 
-    const { result } = renderHook(() => useHighlighting(diff, NO_SIDES))
+    const { result } = renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(result.current.get('a.ts')).toBeDefined()
@@ -87,7 +92,7 @@ describe('the colours a diff is drawn in', () => {
   })
 
   it('has nothing to colour before a diff has been read', () => {
-    const { result } = renderHook(() => useHighlighting(null, {}))
+    const { result } = renderHook(() => useHighlighting(null, {}, EVERY))
 
     expect(result.current.size).toBe(0)
     expect(highlight).not.toHaveBeenCalled()
@@ -98,7 +103,7 @@ describe('the colours a diff is drawn in', () => {
   it('leaves a file whose language it cannot name alone', async () => {
     const diff = workspaceDiff([fileDiff('notes.wat')])
 
-    renderHook(() => useHighlighting(diff, NO_SIDES))
+    renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(highlight).not.toHaveBeenCalled()
@@ -108,7 +113,7 @@ describe('the colours a diff is drawn in', () => {
   it('leaves a file with no lines alone', async () => {
     const diff = workspaceDiff([fileDiff('a.ts', { hunks: [] })])
 
-    renderHook(() => useHighlighting(diff, NO_SIDES))
+    renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(highlight).not.toHaveBeenCalled()
@@ -122,7 +127,7 @@ describe('the colours a diff is drawn in', () => {
       fileDiff('a.ts', { hunks: [hunk({ lines: [added('brand new')] })] })
     ])
 
-    renderHook(() => useHighlighting(diff, NO_SIDES))
+    renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(highlight).toHaveBeenCalledTimes(1)
@@ -137,7 +142,7 @@ describe('the colours a diff is drawn in', () => {
       fileDiff('a.ts', { hunks: [hunk({ lines: [removed('was here')] })] })
     ])
 
-    renderHook(() => useHighlighting(diff, NO_SIDES))
+    renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(highlight).toHaveBeenCalledTimes(1)
@@ -157,7 +162,7 @@ describe('the colours a diff is drawn in', () => {
       fileDiff('bundle.js', { hunks: [hunk({ lines: [added('x'.repeat(5_000))] })] })
     ])
 
-    renderHook(() => useHighlighting(diff, NO_SIDES))
+    renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(highlight).not.toHaveBeenCalled()
@@ -169,7 +174,7 @@ describe('the colours a diff is drawn in', () => {
       fileDiff('a.ts', { hunks: [hunk({ lines: [removed('was'), added('is')] })] })
     ])
 
-    renderHook(() => useHighlighting(diff, NO_SIDES))
+    renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(highlight).toHaveBeenCalledTimes(2)
@@ -184,7 +189,7 @@ describe('the colours a diff is drawn in', () => {
 
     vi.mocked(highlight).mockReturnValue(new Promise(() => undefined))
 
-    const { result, rerender } = renderHook(({ diff }) => useHighlighting(diff, NO_SIDES), {
+    const { result, rerender } = renderHook(({ diff }) => useHighlighting(diff, NO_SIDES, EVERY), {
       initialProps: { diff: first }
     })
 
@@ -207,7 +212,7 @@ describe('the colours a diff is drawn in', () => {
     const diff = workspaceDiff([fileDiff('a.ts', { hunks: [hunk({ lines: [line] })] })])
 
     renderHook(() =>
-      useHighlighting(diff, { 'a.ts': { old: 'WHOLE OLD FILE', current: 'WHOLE NEW FILE' } })
+      useHighlighting(diff, { 'a.ts': { old: 'WHOLE OLD FILE', current: 'WHOLE NEW FILE' } }, EVERY)
     )
 
     await waitFor(() => {
@@ -223,10 +228,60 @@ describe('the colours a diff is drawn in', () => {
     const line = added('const x = 1')
     const diff = workspaceDiff([fileDiff('a.ts', { hunks: [hunk({ lines: [line] })] })])
 
-    renderHook(() => useHighlighting(diff, NO_SIDES))
+    renderHook(() => useHighlighting(diff, NO_SIDES, EVERY))
 
     await waitFor(() => {
       expect(highlight).toHaveBeenCalledWith('typescript', 'const x = 1')
     })
+  })
+})
+
+/*
+ * Every file starts folded, and colouring both whole sides of each spent the
+ * main thread on lines nobody could see, on every read of the diff.
+ */
+describe('which files are coloured', () => {
+  const line = added('const x = 1')
+  const diff = workspaceDiff([
+    fileDiff('a.ts', { hunks: [hunk({ lines: [line] })] }),
+    fileDiff('b.ts', { hunks: [hunk({ lines: [added('const y = 2')] })] })
+  ])
+
+  it('only the open ones', async () => {
+    const { result } = renderHook(() => useHighlighting(diff, NO_SIDES, new Set(['a.ts'])))
+
+    await waitFor(() => {
+      expect(result.current.has('a.ts')).toBe(true)
+    })
+    expect(result.current.has('b.ts')).toBe(false)
+    expect(highlight).toHaveBeenCalledTimes(1)
+  })
+
+  it('a file once it is opened, leaving the ones already coloured as they were', async () => {
+    const { result, rerender } = renderHook(
+      ({ open }: { open: ReadonlySet<string> }) => useHighlighting(diff, NO_SIDES, open),
+      { initialProps: { open: new Set(['a.ts']) } }
+    )
+    await waitFor(() => {
+      expect(result.current.has('a.ts')).toBe(true)
+    })
+    const coloured = result.current.get('a.ts')
+
+    rerender({ open: new Set(['a.ts', 'b.ts']) })
+
+    await waitFor(() => {
+      expect(result.current.has('b.ts')).toBe(true)
+    })
+    expect(result.current.get('a.ts')).toBe(coloured)
+    expect(highlight).toHaveBeenCalledTimes(2)
+  })
+
+  it('nothing at all while every file is folded', async () => {
+    const { result } = renderHook(() => useHighlighting(diff, NO_SIDES, new Set()))
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(result.current.size).toBe(0)
+    expect(highlight).not.toHaveBeenCalled()
   })
 })
