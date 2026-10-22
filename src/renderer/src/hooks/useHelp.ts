@@ -37,33 +37,46 @@ export function useHelp(
     shown.current = workspaceId
   }, [workspaceId])
 
+  // A press while the last one is still reading would open a second conversation.
+  const busy = useRef(false)
+
   return useCallback(
     (kind: HelpKind) => {
       const id = workspaceId
       // The menu is drawn only inside a workspace; the guard is for the type.
       /* v8 ignore next */
       if (id === null) return
+      if (busy.current) return
+      busy.current = true
 
       void (async () => {
-        const [instruction, context] = await Promise.all([
-          window.octopus.workspaces.instruction(id, kind),
-          window.octopus.workspaces.helpContext(id)
-        ])
-        if (shown.current !== id) return
+        try {
+          const [instruction, context] = await Promise.all([
+            window.octopus.workspaces.instruction(id, kind),
+            window.octopus.workspaces.helpContext(id)
+          ])
+          if (shown.current !== id) return
 
-        if (!instruction.ok) {
-          report(describeFailure(instruction))
-          return
-        }
-        if (!context.ok) {
-          report(describeFailure(context))
-          return
-        }
+          if (!instruction.ok) {
+            report(describeFailure(instruction))
+            return
+          }
+          if (!context.ok) {
+            report(describeFailure(context))
+            return
+          }
 
-        const text = helpMessage(kind, instruction.value, context.value, t)
-        await create((chatId) => {
-          keepDraft(id, chatId, text)
-        })
+          const text = helpMessage(kind, instruction.value, context.value, t)
+          await create((chatId) => {
+            keepDraft(id, chatId, text)
+          })
+        } catch (cause) {
+          // A rejected read — main gone, a channel an older build has not got —
+          // would otherwise close the menu and do nothing, as `Terminal` knows.
+          report(t('help.failed', { reason: String(cause) }))
+        } finally {
+          busy.current = false
+        }
       })()
     },
     [workspaceId, create, keepDraft, report, describeFailure, t]

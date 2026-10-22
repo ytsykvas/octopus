@@ -2475,6 +2475,20 @@ describe('App', () => {
     expect(window.octopus.chats.send).not.toHaveBeenCalled()
   })
 
+  it('offers Help’s items disabled while the workspace has three conversations', async () => {
+    givenTwoProjects()
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' }), chat({ id: 'chat-3' })])
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+
+    expect(screen.getByRole('menuitem', { name: /Set this project up to run/ })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: /Why does Run not work/ })).toBeDisabled()
+  })
+
   // The browser's key for "bring back what I just closed". Closing a tab keeps
   // the conversation, so a slipped click is one keystroke from undone.
   it('brings back the conversation closed last with ⌘⇧T', async () => {

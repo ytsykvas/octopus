@@ -507,6 +507,7 @@ export const de: Translation = {
     diagnose: 'Warum funktioniert Run nicht?',
     diagnoseHint:
       'Der Agent liest die Ausgabe des letzten Laufs, die Skripte und die Variablennamen',
+    failed: 'Die Hilfe konnte diesen Workspace nicht lesen: {{reason}}',
     /* Die Fakten, die octopus unter die Anweisung schreibt. Der Agent liest sie,
        also schlicht und wörtlich. */
     context: {

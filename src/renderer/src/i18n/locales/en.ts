@@ -608,6 +608,7 @@ export const en = {
     setupHint: 'The agent reads the repository and writes the build, server and cleanup scripts',
     diagnose: 'Why does Run not work?',
     diagnoseHint: 'The agent reads the last run\u2019s output, the scripts and the variable names',
+    failed: 'Help could not read this workspace: {{reason}}',
     /* The facts octopus writes under the instruction, in the composer of a new
        conversation. Read by the agent, so plain and literal. */
     context: {

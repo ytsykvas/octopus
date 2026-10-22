@@ -60,8 +60,10 @@ export interface ChatTabsController {
    *
    * `beforeShown` is told the new conversation's id once its record exists and
    * before its tab is drawn — the one moment a draft can be put down for it,
-   * since the composer reads its draft once, as it mounts. A tab's key is its
-   * chat id, so the id is the key the draft is filed under.
+   * since the composer reads its draft once, as it mounts — and is told even
+   * when the workspace changed meanwhile. A conversation made here is keyed by
+   * its chat id (an unwritten first tab is made real before it, and keeps
+   * `first`), so the id is the key the draft is filed under.
    */
   readonly create: (beforeShown?: (id: string) => void) => Promise<void>
   /**
@@ -410,6 +412,10 @@ export function useChatTabs(
 
       report.current(null)
       const created = await window.octopus.chats.create(id)
+      // Whatever is on screen by now: the conversation exists and holds a
+      // place, and a draft is filed under its own workspace, so the text is
+      // there when that workspace is opened again.
+      if (created.ok) beforeShown?.(created.value.id)
       if (shown.current !== id) return
 
       if (!created.ok) {
@@ -417,7 +423,6 @@ export function useChatTabs(
         return
       }
 
-      beforeShown?.(created.value.id)
       await load(id, () => shown.current !== id)
       select(created.value.id)
     },

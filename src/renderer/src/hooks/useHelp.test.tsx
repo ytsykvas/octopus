@@ -119,4 +119,73 @@ describe('useHelp', () => {
     expect(create).not.toHaveBeenCalled()
     expect(report).not.toHaveBeenCalled()
   })
+
+  it('drops a failed read once the workspace has changed under it', async () => {
+    let answer: (value: { ok: false; error: string }) => void = () => undefined
+    vi.mocked(octopus().workspaces.instruction).mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve
+      })
+    )
+    const { ask, report, rerender } = open()
+
+    act(() => {
+      ask()('setupScripts')
+    })
+    rerender({ id: 'planner/bob' })
+    await act(async () => {
+      answer({ ok: false, error: 'could not read it' })
+      await Promise.resolve()
+    })
+
+    expect(report).not.toHaveBeenCalled()
+  })
+
+  // Main gone, or a channel an older build has not got: the invoke rejects.
+  it('says why when a read is rejected, and opens nothing', async () => {
+    vi.mocked(octopus().workspaces.helpContext).mockRejectedValue(
+      new Error("No handler registered for 'workspaces:helpContext'")
+    )
+    const { ask, create, report } = open()
+
+    act(() => {
+      ask()('diagnoseRun')
+    })
+
+    await waitFor(() => {
+      expect(report).toHaveBeenCalledWith(
+        "Help could not read this workspace: Error: No handler registered for 'workspaces:helpContext'"
+      )
+    })
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('opens one conversation for a second press while the first is reading, and more after', async () => {
+    let answer: (value: { ok: true; value: string }) => void = () => undefined
+    vi.mocked(octopus().workspaces.instruction).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve
+      })
+    )
+    const { ask, create } = open()
+
+    act(() => {
+      ask()('setupScripts')
+      ask()('setupScripts')
+    })
+    await act(async () => {
+      answer({ ok: true, value: 'Set up.' })
+      await Promise.resolve()
+    })
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledOnce()
+    })
+
+    act(() => {
+      ask()('setupScripts')
+    })
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(2)
+    })
+  })
 })

@@ -475,6 +475,30 @@ describe('an answer that arrives after the workspace has been left', () => {
     expect(onChats).not.toHaveBeenCalledWith(WORKSPACE, expect.anything())
   })
 
+  // The conversation exists and takes a place: Help's text has to be on it
+  // when its workspace is opened again.
+  it('still names a conversation created for a workspace no longer shown', async () => {
+    givenChats([chat()])
+    const creating = held<{ ok: true; value: Chat }>()
+    vi.mocked(octopus().chats.create).mockReturnValue(creating.promise)
+
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    const beforeShown = vi.fn()
+    const adding = result.current.create(beforeShown)
+    rerender({ id: 'planner/bob' })
+
+    await act(async () => {
+      creating.settle({ ok: true, value: chat({ id: 'chat-2' }) })
+      await adding
+    })
+
+    expect(beforeShown).toHaveBeenCalledExactlyOnceWith('chat-2')
+  })
+
   it('drops a fork answered for a workspace no longer shown', async () => {
     givenChats([chat({ sessionId: 'sess-1' })])
     const forking = held<{ ok: true; value: Chat }>()

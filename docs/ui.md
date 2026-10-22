@@ -157,14 +157,17 @@ the same answer, each with how it ended and its last lines — the env set's
 values masked out of them — or, for a start the Scripts tab refused, the reason
 it showed; or it asks for a run where there has been none.
 `helpMessage.ts` assembles it; `useHelp` reads all of it before creating
-anything, so a failed read opens nothing.
+anything, so a failed read opens nothing — a rejected one, from a main that has
+gone or lacks the channel, says so too — and a second press while the first is
+reading is ignored rather than opening a second conversation.
 
 A new tab, where the pull request pane refuses to start one, because here the
 person pressed Help and a conversation is what they asked for — and because a
 draft cannot be put into a composer already drawn: it reads its draft once, as
 it mounts. So `useChatTabs.create` takes a `beforeShown` callback, told the new
-id once the record exists and before its tab is drawn, and the text is filed as
-that tab's draft then. Put down rather than sent (§4): the reader sees every
+id once the record exists and before its tab is drawn — even when the workspace
+changed meanwhile, since the conversation exists and takes a place — and the
+text is filed as that tab's draft then. Put down rather than sent (§4): the reader sees every
 word the agent will get, edits it, and presses Send. The chat starts in
 whatever mode a new conversation starts in. At the cap of three conversations
 both items are shown and disabled, saying a tab has to be closed first
