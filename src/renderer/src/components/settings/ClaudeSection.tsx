@@ -43,6 +43,7 @@ export function ClaudeSection({
       <AccountCard
         title={label}
         hint={t('settings.claudeAccountHint')}
+        setup={t('settings.claudeAccountSetup')}
         connected={accounts.status?.claude.connected ?? false}
         primary={accounts.status?.claude.email ?? null}
         details={[

@@ -596,6 +596,7 @@ describe('Settings', () => {
 
     expect(screen.getByText('GitHub')).toBeInTheDocument()
     expect(screen.getByText('Not connected')).toBeInTheDocument()
+    expect(screen.getByText(/Needs the GitHub CLI installed/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
@@ -609,6 +610,7 @@ describe('Settings', () => {
     await openSection(user, 'Git')
 
     expect(await screen.findByText('ytsykvas')).toBeInTheDocument()
+    expect(screen.queryByText(/Needs the GitHub CLI installed/)).not.toBeInTheDocument()
     expect(screen.getByText('Yurii Tsykvas')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument()

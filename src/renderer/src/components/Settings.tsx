@@ -325,6 +325,7 @@ function GitSection({
         <AccountCard
           title={label}
           hint={t('settings.githubAccountHint')}
+          setup={t('settings.githubAccountSetup')}
           connected={accounts.status?.github.connected ?? false}
           primary={accounts.status?.github.login ?? null}
           details={[{ label: '', value: accounts.status?.github.name ?? null }]}

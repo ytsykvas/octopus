@@ -61,6 +61,17 @@ describe('ClaudeSection', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
+  // On a Mac without the CLI, Sign in opens a terminal that fails; this line
+  // is the only thing that says what is missing.
+  it('says what has to be installed only while the account is not connected', () => {
+    const setup = /Signing in needs Claude Code installed/
+    const { rerender } = render(<ClaudeSection accounts={controller()} />)
+    expect(screen.getByText(setup)).toBeInTheDocument()
+
+    rerender(<ClaudeSection accounts={controller({ status: signedIn() })} />)
+    expect(screen.queryByText(setup)).not.toBeInTheDocument()
+  })
+
   it('shows who is signed in, on what plan and for which organisation', () => {
     render(<ClaudeSection accounts={controller({ status: signedIn() })} />)
 

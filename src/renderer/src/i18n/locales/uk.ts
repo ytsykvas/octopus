@@ -1274,8 +1274,12 @@ export const uk: Translation = {
       'Підключіть GitHub, щоб додавати проєкти клонуванням ваших репозиторіїв, а також відкривати pull request і читати перевірки. Облікові дані лишаються в gh CLI, у системному сховищі ключів.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'На цьому акаунті працює агент.',
+    claudeAccountSetup:
+      'Для входу потрібен встановлений Claude Code. Без акаунта octopus відкриється, але агент не відповідатиме.',
     githubAccount: 'GitHub',
     githubAccountHint: 'Додавання проєктів з GitHub, pull request і перевірки.',
+    githubAccountSetup:
+      'Потрібен встановлений GitHub CLI (brew install gh). Без нього решта працює, а pull request і клонування — ні.',
     connected: 'Підключено',
     notConnected: 'Не підключено',
     signIn: 'Увійти',
