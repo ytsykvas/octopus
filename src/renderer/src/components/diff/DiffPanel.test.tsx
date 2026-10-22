@@ -42,7 +42,10 @@ function withClipboard(): ReturnType<typeof userEvent.setup> {
 
 /** Makes the next read answer with this diff. */
 function answer(diff: ReturnType<typeof workspaceDiff>): void {
-  vi.mocked(octopus().workspaces.diff).mockResolvedValue({ ok: true, value: diff })
+  vi.mocked(octopus().workspaces.changes).mockResolvedValue({
+    ok: true,
+    value: { diff, sides: {} }
+  })
 }
 
 /** The same file after a reload that dropped a line above the annotated one. */
@@ -130,7 +133,7 @@ describe('DiffPanel', () => {
     expect(
       screen.getByText('Select a workspace on the left to see what it has changed.')
     ).toBeInTheDocument()
-    expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+    expect(octopus().workspaces.changes).not.toHaveBeenCalled()
   })
 
   it('says so when the workspace has changed nothing', async () => {
@@ -235,7 +238,7 @@ describe('DiffPanel', () => {
 
     rerender(panel(bob))
     await waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledWith(bob.id)
+      expect(octopus().workspaces.changes).toHaveBeenCalledWith(bob.id)
     })
     expect(await screen.findByRole('button', { name: 'src/a.ts' })).toHaveAttribute(
       'aria-expanded',
@@ -477,11 +480,11 @@ describe('DiffPanel', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Re-read the changes' }))
 
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
   })
 
   it('explains a failure in the reader’s language rather than git’s', async () => {
-    vi.mocked(octopus().workspaces.diff).mockResolvedValue({
+    vi.mocked(octopus().workspaces.changes).mockResolvedValue({
       ok: false,
       error: 'merge-base failed',
       code: 'baseUnknown',
@@ -1511,7 +1514,7 @@ describe('DiffPanel', () => {
   it('reads nothing while another tab is showing', () => {
     renderPanel(anna, false)
 
-    expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+    expect(octopus().workspaces.changes).not.toHaveBeenCalled()
   })
 
   it('reads when its tab comes back', async () => {
@@ -1543,7 +1546,7 @@ describe('DiffPanel', () => {
     )
 
     await waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledWith(anna.id)
+      expect(octopus().workspaces.changes).toHaveBeenCalledWith(anna.id)
     })
   })
 
@@ -1580,7 +1583,7 @@ describe('DiffPanel', () => {
     )
 
     await waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledWith(bob.id)
+      expect(octopus().workspaces.changes).toHaveBeenCalledWith(bob.id)
     })
   })
 
@@ -1716,7 +1719,7 @@ describe('reverting one file', () => {
 
     expect(revert.revert).toHaveBeenCalledWith('src/a.ts', null)
     await waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -1728,7 +1731,7 @@ describe('reverting one file', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Revert src\/a\.ts/ }))
 
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
   })
 
   // One row, two paths: the far end has to travel with it or the file stays
@@ -2242,7 +2245,7 @@ describe('what has reached GitHub', () => {
 
     expect(octopus().workspaces.push).toHaveBeenCalledWith(anna.id)
     await waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -2330,14 +2333,14 @@ describe('what has reached GitHub', () => {
     // The second workspace is not the one being pushed, so its own button works.
     expect(await screen.findByRole('button', { name: 'Push' })).toBeEnabled()
 
-    const readsBefore = vi.mocked(octopus().workspaces.diff).mock.calls.length
+    const readsBefore = vi.mocked(octopus().workspaces.changes).mock.calls.length
     await act(async () => {
       release()
       await Promise.resolve()
     })
 
     // And the first workspace's re-read never lands in the pane showing the second.
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(readsBefore)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(readsBefore)
   })
 
   it('says what went wrong rather than leaving a press that did nothing', async () => {

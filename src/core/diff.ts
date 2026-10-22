@@ -789,11 +789,55 @@ export async function readWorkspaceDiff(
   exec: GitExec,
   options: ReadDiffOptions
 ): Promise<WorkspaceDiff> {
+  return readDiffFrom(exec, await mergeBase(exec, options.baseBranch), options)
+}
+
+/** The diff the pane draws and the sides it colours from, read as one. */
+export interface WorkspaceChanges {
+  readonly diff: WorkspaceDiff
+  /**
+   * Each changed file's two sides, whole — what the colours need and the
+   * drawn diff does not have. Empty where the answer would be too large, which
+   * is the highlighter's cue to colour from the hunks alone.
+   *
+   * A record rather than the `Map` it is built as: this crosses IPC, where
+   * structured cloning keeps a `Map` and the preload's own types would then be
+   * the only place saying so.
+   */
+  readonly sides: Readonly<Record<string, FileSides>>
+}
+
+/**
+ * The diff and the sides together, from one left-hand side.
+ *
+ * They were two reads, asked at once: each resolved the merge base, and the
+ * service copied the index for each — two copies and two `merge-base` a turn's
+ * end, for one picture of one tree. One read is also the only arrangement in
+ * which the two cannot describe different trees: a file written between two
+ * copies of the index had the pane colouring lines by numbers that had moved.
+ */
+export async function readWorkspaceChanges(
+  exec: GitExec,
+  options: ReadDiffOptions
+): Promise<WorkspaceChanges> {
+  const baseCommit = await mergeBase(exec, options.baseBranch)
+
+  const [diff, sides] = await allOf([
+    readDiffFrom(exec, baseCommit, options),
+    readWholeFileSides(exec, { baseCommit })
+  ])
+
+  return { diff, sides: Object.fromEntries(sides) }
+}
+
+async function readDiffFrom(
+  exec: GitExec,
+  baseCommit: string,
+  options: ReadDiffOptions
+): Promise<WorkspaceDiff> {
   const limits = options.limits ?? DIFF_LIMITS
   const readBytes = options.readBytes ?? ((path) => readFile(path))
   const statBytes = options.statBytes ?? (async (path) => (await stat(path)).size)
-
-  const baseCommit = await mergeBase(exec, options.baseBranch)
 
   // `allOf`: four `git` reads of one worktree, and a failure in any of them
   // must not leave the other three running against a directory the caller is
@@ -1155,10 +1199,9 @@ export interface FileSides {
  */
 export async function readWholeFileSides(
   exec: GitExec,
-  options: { readonly baseBranch: string }
+  /** The left-hand side `readWorkspaceChanges` resolved once for both reads. */
+  { baseCommit }: { readonly baseCommit: string }
 ): Promise<Map<string, FileSides>> {
-  const baseCommit = await mergeBase(exec, options.baseBranch)
-
   let output: string
   try {
     output = await exec([

@@ -36,7 +36,7 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
 import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { CliPermission } from '@core/cliPermissions.js'
-import type { FileSides, WorkspaceDiff } from '@core/diff.js'
+import type { WorkspaceChanges } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDetail, RerunScope } from '@core/pullRequestShapes.js'
@@ -546,20 +546,16 @@ const api = {
     hasChanges: (workspaceId: string): Promise<Result<boolean>> =>
       ipcRenderer.invoke('workspaces:hasChanges', workspaceId) as Promise<Result<boolean>>,
 
-    /** Everything the workspace changed since it left the project's base branch. */
-    diff: (workspaceId: string): Promise<Result<WorkspaceDiff>> =>
-      ipcRenderer.invoke('workspaces:diff', workspaceId) as Promise<Result<WorkspaceDiff>>,
-
     /**
-     * The same files' two sides, whole, for colouring them.
+     * Everything the workspace changed since it left the project's base
+     * branch, with each changed file's two sides whole for colouring it.
      *
-     * Empty where the answer would be too large — the caller then colours from
-     * the hunks alone, which is what it did before this existed.
+     * The sides are empty where the answer would be too large — the caller
+     * then colours from the hunks alone, which is what it did before they
+     * existed.
      */
-    fileSides: (workspaceId: string): Promise<Result<Record<string, FileSides>>> =>
-      ipcRenderer.invoke('workspaces:fileSides', workspaceId) as Promise<
-        Result<Record<string, FileSides>>
-      >,
+    changes: (workspaceId: string): Promise<Result<WorkspaceChanges>> =>
+      ipcRenderer.invoke('workspaces:changes', workspaceId) as Promise<Result<WorkspaceChanges>>,
 
     /**
      * Puts one file back to the state the workspace branched from.

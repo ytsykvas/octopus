@@ -786,12 +786,8 @@ export function registerIpc(
     attempt(() => service.workspaceHasChanges(workspaceId))
   )
 
-  host.handle('workspaces:diff', (_event, workspaceId: string) =>
+  host.handle('workspaces:changes', (_event, workspaceId: string) =>
     attempt(() => service.readWorkspaceChanges(workspaceId))
-  )
-
-  host.handle('workspaces:fileSides', (_event, workspaceId: string) =>
-    attempt(() => service.readWorkspaceFileSides(workspaceId))
   )
 
   // Both paths are parsed rather than trusted: one becomes a git argument and,

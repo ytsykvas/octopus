@@ -66,9 +66,9 @@ import { type AutoCompactView, findWindowOverride, type WindowOverride } from '.
 import { cliConfigDir, readCachedUsageAt } from './cliUsageCache.js'
 import { type EditTarget, readChangeContext, readEditTarget, writtenPath } from './changeContext.js'
 import {
-  type FileSides,
-  readWholeFileSides,
+  readWorkspaceChanges,
   readWorkspaceDiff,
+  type WorkspaceChanges,
   type WorkspaceDiff
 } from './diff.js'
 import { revertFile } from './revert.js'
@@ -1197,19 +1197,12 @@ export interface OctopusService {
   removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<void>
   /** Whether a workspace holds work that removal would discard. */
   workspaceHasChanges(workspaceId: string): Promise<boolean>
-  /** Everything the workspace changed since it left the project's base branch. */
-  readWorkspaceChanges(workspaceId: string): Promise<WorkspaceDiff>
   /**
-   * Every changed file's two sides, complete, for colouring them.
-   *
-   * Apart from the diff rather than folded into it: the pane draws the moment
-   * the diff arrives and the colours land after, so a payload only the
-   * highlighter reads should not be on the path that draws.
-   *
-   * Empty where the answer would be too large, which is the highlighter's cue
-   * to go back to reading the hunks alone.
+   * Everything the workspace changed since it left the project's base branch,
+   * and each changed file's two sides whole for colouring it — one read, so
+   * the two cannot describe different trees.
    */
-  readWorkspaceFileSides(workspaceId: string): Promise<Record<string, FileSides>>
+  readWorkspaceChanges(workspaceId: string): Promise<WorkspaceChanges>
   /**
    * Puts one file back to the state the workspace branched from.
    *
@@ -2089,8 +2082,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * What a workspace changed against its base, read as the pane and the
-   * pull-request draft both read it.
+   * What a workspace changed against its base, as the pull-request draft reads
+   * it; the pane reads the same through `readWorkspaceChanges`, with the sides.
    *
    * Against a copy of the worktree's index (`withIndexCopy`), so a re-read as a
    * turn ends never writes the index under a `git add` running beside it. Run
@@ -5785,27 +5778,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return (await changeCount(workspace, makeExec)) > 0
     },
 
-    async readWorkspaceFileSides(workspaceId) {
-      const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-
-      // Against a copy of the index, for the reason `readDiffOf` gives.
-      const baseBranch = await baseRefOf(project)
-      const sides = await withIndexCopy(workspace.path, makeExec, (exec) =>
-        readWholeFileSides(exec, { baseBranch })
-      )
-
-      // A record rather than the Map it is built as: this crosses IPC, where
-      // structured cloning keeps a Map and the preload's own types would then
-      // be the only place saying so.
-      return Object.fromEntries(sides)
-    },
-
     async readWorkspaceChanges(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      return readDiffOf(workspace, project)
+      // Against one copy of the index, for the reason `readDiffOf` gives — and
+      // one rather than one per read, since copying it is the price of a read.
+      const baseBranch = await baseRefOf(project)
+      return withIndexCopy(workspace.path, makeExec, (exec) =>
+        readWorkspaceChanges(exec, { baseBranch, root: workspace.path, branch: workspace.branch })
+      )
     },
 
     async revertWorkspaceFile(workspaceId, path, oldPath = null) {

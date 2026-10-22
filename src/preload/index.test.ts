@@ -260,11 +260,10 @@ describe('channel names', () => {
       () => method('workspaces', 'hasChanges')('w' as never),
       'workspaces:hasChanges'
     ],
-    ['workspaces.diff', () => method('workspaces', 'diff')('w' as never), 'workspaces:diff'],
     [
-      'workspaces.fileSides',
-      () => method('workspaces', 'fileSides')('w' as never),
-      'workspaces:fileSides'
+      'workspaces.changes',
+      () => method('workspaces', 'changes')('w' as never),
+      'workspaces:changes'
     ],
     [
       'workspaces.revertFile',

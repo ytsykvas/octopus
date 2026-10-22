@@ -26,7 +26,9 @@ import {
   parseRawModes,
   parseUnifiedDiff,
   MAX_CONTEXT_BYTES,
+  mergeBase,
   readWholeFileSides,
+  readWorkspaceChanges,
   readWorkspaceDiff,
   unquotePath,
   untrackedHunk
@@ -601,8 +603,8 @@ describe('untrackedHunk', () => {
 })
 
 describe('readWholeFileSides', () => {
-  const sides = (): ReturnType<typeof readWholeFileSides> =>
-    readWholeFileSides(exec, { baseBranch: 'main' })
+  const sides = async (through: GitExec = exec): ReturnType<typeof readWholeFileSides> =>
+    readWholeFileSides(through, { baseCommit: await mergeBase(exec, 'main') })
 
   /*
    * The whole point. A construct opened in the lines *between* two hunks is
@@ -693,7 +695,7 @@ describe('readWholeFileSides', () => {
         ? Promise.reject(new GitError(args, 'too much', OUTPUT_TOO_LARGE))
         : exec(args)
 
-    await expect(readWholeFileSides(refusing, { baseBranch: 'main' })).resolves.toEqual(new Map())
+    await expect(sides(refusing)).resolves.toEqual(new Map())
   })
 
   // Any other failure is a failure. A diff nobody can colour is a courtesy
@@ -702,7 +704,44 @@ describe('readWholeFileSides', () => {
     const broken: GitExec = async (args) =>
       args.includes('-U100000') ? Promise.reject(new Error('git is gone')) : exec(args)
 
-    await expect(readWholeFileSides(broken, { baseBranch: 'main' })).rejects.toThrow('git is gone')
+    await expect(sides(broken)).rejects.toThrow('git is gone')
+  })
+})
+
+describe('readWorkspaceChanges', () => {
+  const changes = (through: GitExec = exec): ReturnType<typeof readWorkspaceChanges> =>
+    readWorkspaceChanges(through, { baseBranch: 'main', root: dir, branch: 'work' })
+
+  /* Two reads asked at once each resolved the merge base — and the service
+     copied the index for each. One left-hand side for both, resolved once. */
+  it('answers the diff and the sides from one merge base', async () => {
+    await writeFile(join(dir, 'a.txt'), 'one\nTWO\nthree\n', 'utf8')
+    const calls: string[][] = []
+    const counting: GitExec = (args) => {
+      calls.push([...args])
+      return exec(args)
+    }
+
+    const { diff, sides } = await changes(counting)
+
+    expect(calls.filter((args) => args[0] === 'merge-base')).toHaveLength(1)
+    expect(diff.files.map((file) => file.path)).toEqual(['a.txt'])
+    expect(sides).toEqual({ 'a.txt': { old: 'one\ntwo\nthree', current: 'one\nTWO\nthree' } })
+  })
+
+  /* Colouring is a courtesy: the pane still gets its diff when the sides are
+     more than git will print. */
+  it('still answers the diff when the sides are too much to carry', async () => {
+    await writeFile(join(dir, 'a.txt'), 'one\nTWO\nthree\n', 'utf8')
+    const refusing: GitExec = async (args) =>
+      args.includes('-U100000')
+        ? Promise.reject(new GitError(args, 'too much', OUTPUT_TOO_LARGE))
+        : exec(args)
+
+    const { diff, sides } = await changes(refusing)
+
+    expect(diff.files).toHaveLength(1)
+    expect(sides).toEqual({})
   })
 })
 

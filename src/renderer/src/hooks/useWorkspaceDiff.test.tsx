@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { WorkspaceDiff } from '@core/diff.js'
+import type { WorkspaceChanges, WorkspaceDiff } from '@core/diff.js'
 import type { AgentEvent } from '@core/events.js'
 
 import { refuseSilence } from '../test/chat.js'
@@ -33,7 +33,10 @@ const DONE: AgentEvent = {
 }
 
 const answering = (diff: WorkspaceDiff): void => {
-  vi.mocked(octopus().workspaces.diff).mockResolvedValue({ ok: true, value: diff })
+  vi.mocked(octopus().workspaces.changes).mockResolvedValue({
+    ok: true,
+    value: { diff, sides: {} }
+  })
 }
 
 afterEach(() => {
@@ -55,7 +58,7 @@ describe('what a workspace has changed', () => {
   it('reads nothing before a workspace is chosen', () => {
     renderHook(() => useWorkspaceDiff(null, true))
 
-    expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+    expect(octopus().workspaces.changes).not.toHaveBeenCalled()
   })
 
   // Nothing to read means nothing is pending either, or the pane would sit on
@@ -71,7 +74,7 @@ describe('what a workspace has changed', () => {
     answering(workspaceDiff([]))
     renderHook(() => useWorkspaceDiff(WORKSPACE, true))
     await vi.waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
     })
 
     emit(DONE)
@@ -79,7 +82,7 @@ describe('what a workspace has changed', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
   })
 
   // A turn that failed may well have written files before it did.
@@ -88,7 +91,7 @@ describe('what a workspace has changed', () => {
     answering(workspaceDiff([]))
     renderHook(() => useWorkspaceDiff(WORKSPACE, true))
     await vi.waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
     })
 
     emit({ type: 'error', message: 'stopped' })
@@ -96,7 +99,7 @@ describe('what a workspace has changed', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
   })
 
   /*
@@ -109,7 +112,7 @@ describe('what a workspace has changed', () => {
     answering(workspaceDiff([]))
     renderHook(() => useWorkspaceDiff(WORKSPACE, true))
     await vi.waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
     })
 
     emit({ type: 'error', message: 'stopped' })
@@ -118,7 +121,7 @@ describe('what a workspace has changed', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
   })
 
   it('ignores a turn finishing in another workspace', async () => {
@@ -126,7 +129,7 @@ describe('what a workspace has changed', () => {
     answering(workspaceDiff([]))
     renderHook(() => useWorkspaceDiff(WORKSPACE, true))
     await vi.waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
     })
 
     emit(DONE, 'planner/bob')
@@ -134,7 +137,7 @@ describe('what a workspace has changed', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
   })
 
   // Every streamed fragment would otherwise be a git read.
@@ -143,7 +146,7 @@ describe('what a workspace has changed', () => {
     answering(workspaceDiff([]))
     renderHook(() => useWorkspaceDiff(WORKSPACE, true))
     await vi.waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
     })
 
     emit({ type: 'text_delta', text: 'still going' })
@@ -151,13 +154,13 @@ describe('what a workspace has changed', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
   })
 
   it('reads nothing while another tab is showing', () => {
     renderHook(() => useWorkspaceDiff(WORKSPACE, false))
 
-    expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+    expect(octopus().workspaces.changes).not.toHaveBeenCalled()
   })
 
   // Behind a hidden tab there is nobody to show it to; the read happens when
@@ -172,7 +175,7 @@ describe('what a workspace has changed', () => {
     })
 
     expect(octopus().chats.onEvent).not.toHaveBeenCalled()
-    expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+    expect(octopus().workspaces.changes).not.toHaveBeenCalled()
   })
 
   it('holds a turn that ends while the window is hidden, and reads when it is shown', async () => {
@@ -182,21 +185,21 @@ describe('what a workspace has changed', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)
     })
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
 
     const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
     emit(DONE)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000)
     })
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
 
     hidden.mockReturnValue(false)
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
       await vi.advanceTimersByTimeAsync(0)
     })
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
   })
 
   it('reads when the tab comes back', async () => {
@@ -208,7 +211,7 @@ describe('what a workspace has changed', () => {
     rerender({ visible: true })
 
     await waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledWith(WORKSPACE)
+      expect(octopus().workspaces.changes).toHaveBeenCalledWith(WORKSPACE)
     })
   })
 
@@ -216,14 +219,14 @@ describe('what a workspace has changed', () => {
     answering(workspaceDiff([]))
     const { result } = renderHook(() => useWorkspaceDiff(WORKSPACE, true))
     await waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledTimes(1)
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
     })
 
     await act(async () => {
       await result.current.refresh()
     })
 
-    expect(octopus().workspaces.diff).toHaveBeenCalledTimes(2)
+    expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
   })
 
   it('has nothing to read again before a workspace is chosen', async () => {
@@ -233,11 +236,11 @@ describe('what a workspace has changed', () => {
       await result.current.refresh()
     })
 
-    expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+    expect(octopus().workspaces.changes).not.toHaveBeenCalled()
   })
 
   it('explains a failure rather than showing a stale diff', async () => {
-    vi.mocked(octopus().workspaces.diff).mockResolvedValue({
+    vi.mocked(octopus().workspaces.changes).mockResolvedValue({
       ok: false,
       error: 'merge-base failed',
       code: 'baseUnknown',
@@ -278,7 +281,7 @@ describe('what a workspace has changed', () => {
    */
   it('drops the read a workspace switch has already made irrelevant', async () => {
     const slow = deferred()
-    vi.mocked(octopus().workspaces.diff).mockReturnValueOnce(slow.promise)
+    vi.mocked(octopus().workspaces.changes).mockReturnValueOnce(slow.promise)
     const { result, rerender } = renderHook(({ id }) => useWorkspaceDiff(id, true), {
       initialProps: { id: WORKSPACE }
     })
@@ -307,7 +310,7 @@ describe('what a workspace has changed', () => {
     })
 
     const slow = deferred()
-    vi.mocked(octopus().workspaces.diff).mockReturnValueOnce(slow.promise)
+    vi.mocked(octopus().workspaces.changes).mockReturnValueOnce(slow.promise)
     const reading = result.current.refresh()
 
     answering(workspaceDiff([fileDiff('bob.ts')]))
@@ -323,14 +326,16 @@ describe('what a workspace has changed', () => {
 
     expect(result.current.diff?.files[0]?.path).toBe('bob.ts')
   })
-  /* Read beside the diff and from the same answer, so the two cannot describe
-     different trees — a pane holding one from each moment would colour lines by
-     numbers that had moved. */
+  /* From the same answer as the diff, so the two cannot describe different
+     trees — a pane holding one from each moment would colour lines by numbers
+     that had moved. */
   it('carries the sides a file is coloured from beside the diff', async () => {
-    answering(workspaceDiff([fileDiff('a.ts')]))
-    vi.mocked(octopus().workspaces.fileSides).mockResolvedValue({
+    vi.mocked(octopus().workspaces.changes).mockResolvedValue({
       ok: true,
-      value: { 'a.ts': { old: 'was', current: 'is' } }
+      value: {
+        diff: workspaceDiff([fileDiff('a.ts')]),
+        sides: { 'a.ts': { old: 'was', current: 'is' } }
+      }
     })
 
     const { result } = renderHook(() => useWorkspaceDiff(WORKSPACE, true))
@@ -338,42 +343,24 @@ describe('what a workspace has changed', () => {
     await waitFor(() => {
       expect(result.current.sides).toEqual({ 'a.ts': { old: 'was', current: 'is' } })
     })
-  })
-
-  /* A failure here is not one: colouring is a courtesy, and the diff is what
-     the pane is for. The highlighter falls back to the hunks. */
-  it('draws the diff anyway when the sides could not be read', async () => {
-    answering(workspaceDiff([fileDiff('a.ts')]))
-    vi.mocked(octopus().workspaces.fileSides).mockResolvedValue({
-      ok: false,
-      error: 'git failed',
-      code: 'gitFailed'
-    })
-
-    const { result } = renderHook(() => useWorkspaceDiff(WORKSPACE, true))
-
-    await waitFor(() => {
-      expect(result.current.diff?.files).toHaveLength(1)
-    })
-    expect(result.current.sides).toEqual({})
-    expect(result.current.error).toBeNull()
+    expect(result.current.diff?.files).toHaveLength(1)
   })
 })
 
 /** A read that has not answered yet, so a test can decide when it does. */
 function deferred(): {
-  readonly promise: Promise<{ ok: true; value: WorkspaceDiff }>
+  readonly promise: Promise<{ ok: true; value: WorkspaceChanges }>
   readonly settle: (diff: WorkspaceDiff) => void
 } {
-  let settle: (value: { ok: true; value: WorkspaceDiff }) => void = () => undefined
-  const promise = new Promise<{ ok: true; value: WorkspaceDiff }>((resolve) => {
+  let settle: (value: { ok: true; value: WorkspaceChanges }) => void = () => undefined
+  const promise = new Promise<{ ok: true; value: WorkspaceChanges }>((resolve) => {
     settle = resolve
   })
 
   return {
     promise,
     settle: (diff) => {
-      settle({ ok: true, value: diff })
+      settle({ ok: true, value: { diff, sides: {} } })
     }
   }
 }

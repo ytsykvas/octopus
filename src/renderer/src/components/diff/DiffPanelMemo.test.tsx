@@ -78,9 +78,9 @@ const onView = vi.fn()
 beforeEach(() => {
   octopus()
   fileRenders = 0
-  vi.mocked(octopus().workspaces.diff).mockResolvedValue({
+  vi.mocked(octopus().workspaces.changes).mockResolvedValue({
     ok: true,
-    value: workspaceDiff([fileDiff(FILE, { hunks: [hunk()] })])
+    value: { diff: workspaceDiff([fileDiff(FILE, { hunks: [hunk()] })]), sides: {} }
   })
 })
 
