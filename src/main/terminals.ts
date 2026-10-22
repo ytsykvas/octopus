@@ -150,7 +150,11 @@ export class TerminalManager {
    * Bound, because it reads `process` through `this` and a bare reference to
    * the method loses it.
    */
-  constructor(private readonly kill: Kill = process.kill.bind(process)) {}
+  constructor(
+    private readonly kill: Kill = process.kill.bind(process),
+    /** When a run ended is read from this, so a test can say when that was. */
+    private readonly now: () => Date = () => new Date()
+  ) {}
 
   /** Starts a session and streams its output to the given renderer. */
   create(spec: TerminalSpec, target: WebContents): TerminalId {
@@ -224,7 +228,7 @@ export class TerminalManager {
       // Before anything that depends on the window: the record is for asking
       // later, and a window closed mid-run is one of the times it is asked.
       if (record) {
-        record.endedAt = new Date().toISOString()
+        record.endedAt = this.now().toISOString()
         record.exitCode = code
       }
 
@@ -277,7 +281,8 @@ export class TerminalManager {
    *
    * Replaced at the start rather than the end: the question is about the run
    * somebody just pressed, and a server restarted after a failed one should
-   * not answer with the failure.
+   * not answer with the failure. A build clears the server too, for the same
+   * reason one Run later.
    */
   private startRecord(owner: TerminalOwner): RunRecord | null {
     const { workspaceId, purpose } = owner
@@ -285,6 +290,9 @@ export class TerminalManager {
 
     const record: RunRecord = { purpose, endedAt: null, exitCode: null, tail: '' }
     this.runs.set(recordKey(workspaceId, purpose), record)
+    // A build starts a new Run, and the server from the one before would read
+    // as this one's: a fresh failed build beside an older server that came up.
+    if (purpose === 'setup') this.runs.delete(recordKey(workspaceId, 'run'))
     return record
   }
 

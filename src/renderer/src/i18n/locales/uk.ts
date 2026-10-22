@@ -498,7 +498,7 @@ export const uk: Translation = {
     setup: 'Налаштувати запуск проєкту',
     setupHint: 'Агент читає репозиторій і пише скрипти збірки, сервера й прибирання',
     diagnose: 'Чому не працює запуск?',
-    diagnoseHint: 'Агент читає вивід останнього запуску, скрипти та змінні',
+    diagnoseHint: 'Агент читає вивід останнього запуску, скрипти та назви змінних',
     /* Факти, які octopus пише під інструкцією. Їх читає агент, тож вони
        прості й буквальні. */
     context: {
@@ -506,7 +506,8 @@ export const uk: Translation = {
       checkout: 'Робоча копія ($OCTOPUS_ROOT_PATH): {{path}}',
       envFile: 'Env-файл, у який пишеться набір змінних: {{name}}',
       profile: 'Чинний набір змінних: {{name}}',
-      variables: 'Змінні, які він задає (лише назви; значення лишаються в octopus): {{names}}',
+      variables:
+        'Змінні, які він передає скриптам (лише назви; значення лишаються в octopus): {{names}}',
       noVariables: 'Чинний набір не задає жодної змінної.',
       scripts: 'Чинні скрипти:',
       script: '- {{kind}}: {{from}}',
@@ -516,9 +517,9 @@ export const uk: Translation = {
       noCarry: 'У воркспейс не переноситься жодного файлу.',
       problems: 'Проблеми в наборі змінних:',
       problemNoAssignment: '- рядок {{line}} не є присвоєнням',
-      problemBadName: '- рядок {{line}}: {{subject}} не є назвою, яку прийме парсер',
+      problemBadName: '- рядок {{line}}: те, що стоїть перед «=», не є назвою, яку прийме парсер',
       problemDuplicate: '- рядок {{line}}: {{subject}} задано двічі, і діє лише останнє',
-      problemUnknownVariable: '- рядок {{line}}: {{subject}} не є змінною, яку задає octopus',
+      problemUnknownVariable: '- рядок {{line}}: ${{subject}} не є змінною, яку задає octopus',
       problemMarker: '- рядок {{line}}: сюди вставлено маркер octopus',
       lastRun: '{{stage}}: завершено о {{at}} з кодом виходу {{code}}. Останні рядки:',
       lastRunStopped: '{{stage}}: зупинено сигналом о {{at}}. Останні рядки:',

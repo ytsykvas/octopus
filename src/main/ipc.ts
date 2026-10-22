@@ -302,13 +302,15 @@ export function registerIpc(
   host.handle('terminal:list', () => attempt(() => Promise.resolve(terminals.list())))
 
   /*
-   * A workspace's last build and server, kept past the sessions that ran them.
+   * A workspace's last build and server, kept past the sessions that ran them,
+   * with the values of its env set masked: the output is kept here, the values
+   * are known to the core.
    *
-   * The id is typed rather than parsed: it is only a key into a map here, and
-   * reaches no process, path or script.
+   * The id is typed rather than parsed: it is a key into a map and the store,
+   * and reaches no process, path or script.
    */
   host.handle('terminal:lastRuns', (_event, workspaceId: string) =>
-    attempt(() => Promise.resolve(terminals.lastRuns(workspaceId)))
+    attempt(() => service.maskRunOutput(workspaceId, terminals.lastRuns(workspaceId)))
   )
 
   // The patch is validated rather than trusted: it arrives from the renderer
@@ -778,8 +780,18 @@ export function registerIpc(
     attempt(() => service.readWorkspace(workspaceId))
   )
 
+  /*
+   * A workspace just made has never run, whatever its id was used for before:
+   * names are drawn from 256 and a removed project comes back under the same
+   * id, so a record left by an earlier holder of the id would answer "why does
+   * Run not work?" about a run that never happened here.
+   */
   host.handle('workspaces:create', (_event, projectId: string) =>
-    attempt(() => service.createWorkspaceIn(projectId))
+    attempt(async () => {
+      const created = await service.createWorkspaceIn(projectId)
+      terminals.forgetRuns(created.id)
+      return created
+    })
   )
 
   /* The body is parsed rather than trusted: it arrives from the renderer and is

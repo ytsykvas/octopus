@@ -146,7 +146,7 @@ export function projectInstructionsDir(projectId: ProjectId, root: string = root
  *
  * The filename comes from `instructions.ts` rather than living here as a
  * function per kind. There are nine of them and each has two scopes, and
- * fourteen near-identical one-line functions is a list to keep in step rather
+ * eighteen near-identical one-line functions is a list to keep in step rather
  * than a boundary — while the map over there is a `Record<InstructionKind,
  * string>`, so a kind without a home is a compile error.
  */

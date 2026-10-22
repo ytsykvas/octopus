@@ -21,6 +21,15 @@ export const TAIL_CHARS = 64 * 1024
 /** How many cleaned lines a reader is handed. */
 export const TAIL_LINES = 200
 
+/**
+ * And at most this many characters of them.
+ *
+ * Both runs go into one message beside an instruction, and a message has a
+ * ceiling (`ChatMessageSchema`): 200 lines of a server logging JSON came to more
+ * than it, and Send refused the very text Help had written.
+ */
+export const TAIL_OUTPUT_CHARS = 30_000
+
 /** `kept` with `chunk` appended, cut to the last `TAIL_CHARS`. */
 export function appendTail(kept: string, chunk: string): string {
   return (kept + chunk).slice(-TAIL_CHARS)
@@ -61,11 +70,49 @@ export function cleanTerminalOutput(raw: string): string {
     .join('\n')
 }
 
-/** The last `lines` lines of `text`, blank lines at its end dropped. */
-export function lastLines(text: string, lines: number): string {
+/**
+ * The last `lines` lines of `text`, blank lines at its end dropped, and no more
+ * than `chars` of them — whole lines where it can, the end of one where a
+ * single line is longer than that.
+ */
+export function lastLines(text: string, lines: number, chars: number = TAIL_OUTPUT_CHARS): string {
   const all = text.split('\n')
   while (all.length > 0 && all.at(-1)?.trim() === '') all.pop()
-  return all.slice(-lines).join('\n')
+
+  // Walked from the end, so the lines kept are the last ones and the newline
+  // between two is counted once.
+  const kept: string[] = []
+  let length = -1
+  for (const line of all.slice(-lines).reverse()) {
+    if (kept.length > 0 && length + 1 + line.length > chars) break
+    kept.unshift(line)
+    length += 1 + line.length
+  }
+
+  return kept.join('\n').slice(-chars)
+}
+
+/**
+ * How long a value has to be before it is masked.
+ *
+ * Shorter ones are `true`, `dev`, a port — words a log prints on its own, which
+ * masked would turn every `true` in the output into a variable's name.
+ */
+export const MASK_MIN_LENGTH = 6
+
+/**
+ * `text` with every value of `variables` replaced by `[NAME]`.
+ *
+ * A script that runs `set -x`, `cat`s its env file or prints its connection
+ * string on a failed boot puts a credential in its own output, and Help puts
+ * that output in a message. Longest first, so a value that contains another is
+ * masked whole rather than around the shorter one.
+ */
+export function maskValues(text: string, variables: Readonly<Record<string, string>>): string {
+  return Object.entries(variables)
+    .filter(([, value]) => value.length >= MASK_MIN_LENGTH)
+    .sort(([, left], [, right]) => right.length - left.length)
+    .reduce((masked, [name, value]) => masked.replaceAll(value, `[${name}]`), text)
 }
 
 /** One script's most recent run in a workspace, as somebody asking about it reads it. */

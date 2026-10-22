@@ -153,8 +153,8 @@ block of what octopus knows that the agent cannot find for itself —
 variables **by name only**, the scripts in effect and where they come from,
 whether the repository's still wait for _Allow these_, the carried paths and the
 set's problems. _Why does Run not work?_ adds the last build and server from
-`terminal:lastRuns`, each with its exit code and last lines, or asks for a run
-where there has been none. `helpMessage.ts` assembles it; `useHelp` reads all of
+`terminal:lastRuns`, each with its exit code and last lines — the env set's
+values masked out of them — or asks for a run where there has been none. `helpMessage.ts` assembles it; `useHelp` reads all of
 it before creating anything, so a failed read opens nothing.
 
 A new tab, where the pull request pane refuses to start one, because here the
@@ -1644,15 +1644,17 @@ A workspace whose directory has gone loses all of them, `Run` included.
 disposes the session — so the server is already dead while the stage still says
 it is serving, and a control left up would point at a refused port.
 
-**Which scripts a workspace has is read again in four moments**
+**Which scripts a workspace has is read again in five moments**
 (`useWorkspaceScripts`): when the list of workspaces changes, when Project
 settings close — that is where a script is first written by hand — after an
-approval, and once a turn of any chat in the selected workspace has ended and
-settled (`useTurnSettled`, the same 300ms the diff pane waits). The last is the
-third way a script appears: an agent asked to set the project up writes
-`.octopus/scripts/`, which changes neither the list nor a settings dialog, and
-the tab went on saying there was no build script until one of the other three
-happened to come along.
+approval, once a turn of any chat in the selected workspace has ended and
+settled (`useTurnSettled`, the same 300ms the diff pane waits), and when another
+workspace is opened. The turn is the third way a script appears: an agent asked
+to set the project up writes `.octopus/scripts/`, which changes neither the list
+nor a settings dialog, and the tab went on saying there was no build script
+until something else happened to re-read it. A turn is heard only for the
+workspace on screen, so one that ended in another is read when that one is
+opened.
 It re-reads every workspace rather than the one: a few dozen small file reads,
 not git processes.
 

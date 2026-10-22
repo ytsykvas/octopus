@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 
 import type { EnvProblem } from '@core/envBlock.js'
+import type { InstructionKind } from '@core/instructions.js'
 import type { LastRun } from '@core/runLog.js'
 import { SCRIPT_KINDS } from '@core/scriptEnv.js'
 import type { HelpContext } from '@core/service.js'
@@ -8,16 +9,16 @@ import type { HelpContext } from '@core/service.js'
 import { formatClock } from './chat/format.js'
 
 /** The two things Help can be asked, each an instruction kind of its own. */
-export type HelpKind = 'setupScripts' | 'diagnoseRun'
+export type HelpKind = Extract<InstructionKind, 'setupScripts' | 'diagnoseRun'>
 
 function problemLine(problem: EnvProblem, t: TFunction): string {
   const { line, subject } = problem
   switch (problem.reason) {
-    // Never the subject: for this reason it is the whole line, which may be a value.
+    // Never the subject for these: it is text from the line, which may be a value.
     case 'noAssignment':
       return t('help.context.problemNoAssignment', { line })
     case 'badName':
-      return t('help.context.problemBadName', { line, subject })
+      return t('help.context.problemBadName', { line })
     case 'duplicate':
       return t('help.context.problemDuplicate', { line, subject })
     case 'unknownVariable':
@@ -64,10 +65,8 @@ function factsPart(context: HelpContext, t: TFunction): string {
     })
   ]
 
-  // Only where it is the reason: a project's own scripts are never gated.
-  if (!context.scripts.approved && context.scripts.digest !== '') {
-    lines.push(t('help.context.unapproved'))
-  }
+  // Only a repository's scripts wait to be allowed: nothing supplied is approved.
+  if (!context.scripts.approved) lines.push(t('help.context.unapproved'))
 
   lines.push('')
   if (context.carry.length === 0) lines.push(t('help.context.noCarry'))

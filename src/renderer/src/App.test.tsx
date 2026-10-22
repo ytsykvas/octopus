@@ -1083,6 +1083,27 @@ describe('App', () => {
       expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
     })
 
+    // The turn is only heard for the workspace on screen; one that ended while
+    // another was open is read when its own is opened again.
+    it('offers the script an agent wrote while another workspace was open', async () => {
+      const user = await onAnna({})
+      await user.click(screen.getByText('bob'))
+      givenScriptsOf({ planner: SERVER_ONLY })
+      emitAgentEvent({
+        type: 'result',
+        ok: true,
+        costUsd: null,
+        durationMs: 1,
+        inputTokens: null,
+        outputTokens: null,
+        terminalReason: null
+      })
+
+      await user.click(screen.getByText('anna'))
+
+      expect(await within(titleBar()).findByRole('button', { name: 'Run' })).toBeEnabled()
+    })
+
     // One state behind both buttons: a press in the title bar moves the
     // Scripts tab with it, and the other way round.
     it('serves from the title bar and keeps the Scripts tab in step', async () => {

@@ -2935,7 +2935,7 @@ describe('what Help is told about a workspace', () => {
     expect(JSON.stringify(context)).not.toContain('app_')
   })
 
-  // The one problem whose subject is the whole line — which may be a pasted secret.
+  // A problem whose subject is the whole line — which may be a pasted secret.
   it('reports a line that is not an assignment by its number alone', async () => {
     const { projectId, workspaceId } = await withWorkspace()
     await service.saveEnvProfile(projectId, 'default', 'A=1\nsk-live-pasted-token\nA=2\n')
@@ -2946,6 +2946,40 @@ describe('what Help is told about a workspace', () => {
       { line: 2, reason: 'noAssignment', subject: '' },
       { line: 3, reason: 'duplicate', subject: 'A' }
     ])
+  })
+
+  /*
+   * A badly named line's subject is everything before its `=`, and checked line
+   * by line: a pasted `KEY: value` and the last line of a multi-line key both
+   * put a secret there.
+   */
+  it('reports a badly named line by its number alone too', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(
+      projectId,
+      'default',
+      [
+        'DATABASE_URL: postgres://app:hunter2@db.internal/app?sslmode=require',
+        'PRIVATE_KEY="-----BEGIN KEY-----',
+        'q3Zx/9Yp+abcDEF==',
+        '-----END KEY-----"',
+        'A=1',
+        'A=$OCTOPUS_PROT',
+        ''
+      ].join('\n')
+    )
+
+    const context = await service.helpContext(workspaceId)
+
+    expect(JSON.stringify(context)).not.toContain('hunter2')
+    expect(JSON.stringify(context)).not.toContain('q3Zx')
+    // A key and a reference are names, and say which line is wrong.
+    expect(context.envProblems).toContainEqual({ line: 6, reason: 'duplicate', subject: 'A' })
+    expect(context.envProblems).toContainEqual({
+      line: 6,
+      reason: 'unknownVariable',
+      subject: 'OCTOPUS_PROT'
+    })
   })
 
   it('answers for the set a workspace was put on, and does not fall back to the default', async () => {
@@ -2975,7 +3009,12 @@ describe('what Help is told about a workspace', () => {
   })
 
   it('refuses a workspace it does not know', async () => {
-    await expect(service.helpContext('planner/nobody')).rejects.toThrow()
+    await expect(service.helpContext('planner/nobody')).rejects.toMatchObject({
+      code: 'worktreeMissing'
+    })
+    await expect(service.maskRunOutput('planner/nobody', [])).rejects.toMatchObject({
+      code: 'worktreeMissing'
+    })
   })
 })
 

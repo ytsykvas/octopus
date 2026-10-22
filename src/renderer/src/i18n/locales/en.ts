@@ -607,7 +607,7 @@ export const en = {
     setup: 'Set this project up to run',
     setupHint: 'The agent reads the repository and writes the build, server and cleanup scripts',
     diagnose: 'Why does Run not work?',
-    diagnoseHint: 'The agent reads the last run\u2019s output, the scripts and the variables',
+    diagnoseHint: 'The agent reads the last run\u2019s output, the scripts and the variable names',
     /* The facts octopus writes under the instruction, in the composer of a new
        conversation. Read by the agent, so plain and literal. */
     context: {
@@ -615,7 +615,8 @@ export const en = {
       checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',
       envFile: 'Env file the env set is written into: {{name}}',
       profile: 'Env set in effect: {{name}}',
-      variables: 'Variables it defines (names only; the values stay in octopus): {{names}}',
+      variables:
+        'Variables it gives the scripts (names only; the values stay in octopus): {{names}}',
       noVariables: 'The env set in effect defines no variables.',
       scripts: 'Scripts in effect:',
       script: '- {{kind}}: {{from}}',
@@ -626,9 +627,9 @@ export const en = {
       noCarry: 'No files are carried into the workspace.',
       problems: 'Problems in the env set:',
       problemNoAssignment: '- line {{line}} is not an assignment',
-      problemBadName: '- line {{line}}: {{subject}} is not a name a parser accepts',
+      problemBadName: '- line {{line}}: what comes before "=" is not a name a parser accepts',
       problemDuplicate: '- line {{line}}: {{subject}} is set twice, and only the last one counts',
-      problemUnknownVariable: '- line {{line}}: {{subject}} is not a variable octopus sets',
+      problemUnknownVariable: '- line {{line}}: ${{subject}} is not a variable octopus sets',
       problemMarker: '- line {{line}}: an octopus marker was pasted in',
       lastRun: '{{stage}} ended at {{at}} with exit code {{code}}. Its last lines:',
       lastRunStopped: '{{stage}} was ended by a signal at {{at}}. Its last lines:',

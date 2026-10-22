@@ -505,7 +505,8 @@ export const de: Translation = {
     setupHint:
       'Der Agent liest das Repository und schreibt die Skripte für Build, Server und Aufräumen',
     diagnose: 'Warum funktioniert Run nicht?',
-    diagnoseHint: 'Der Agent liest die Ausgabe des letzten Laufs, die Skripte und die Variablen',
+    diagnoseHint:
+      'Der Agent liest die Ausgabe des letzten Laufs, die Skripte und die Variablennamen',
     /* Die Fakten, die octopus unter die Anweisung schreibt. Der Agent liest sie,
        also schlicht und wörtlich. */
     context: {
@@ -513,7 +514,8 @@ export const de: Translation = {
       checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',
       envFile: 'Env-Datei, in die das Variablen-Set geschrieben wird: {{name}}',
       profile: 'Geltendes Variablen-Set: {{name}}',
-      variables: 'Variablen, die es setzt (nur Namen; die Werte bleiben in octopus): {{names}}',
+      variables:
+        'Variablen, die es den Skripten gibt (nur Namen; die Werte bleiben in octopus): {{names}}',
       noVariables: 'Das geltende Set setzt keine Variablen.',
       scripts: 'Geltende Skripte:',
       script: '- {{kind}}: {{from}}',
@@ -524,10 +526,12 @@ export const de: Translation = {
       noCarry: 'Es werden keine Dateien in den Workspace mitgenommen.',
       problems: 'Probleme im Variablen-Set:',
       problemNoAssignment: '- Zeile {{line}} ist keine Zuweisung',
-      problemBadName: '- Zeile {{line}}: {{subject}} ist kein Name, den ein Parser akzeptiert',
+      problemBadName:
+        '- Zeile {{line}}: was vor „=“ steht, ist kein Name, den ein Parser akzeptiert',
       problemDuplicate:
         '- Zeile {{line}}: {{subject}} ist doppelt gesetzt, und nur der letzte zählt',
-      problemUnknownVariable: '- Zeile {{line}}: {{subject}} ist keine Variable, die octopus setzt',
+      problemUnknownVariable:
+        '- Zeile {{line}}: ${{subject}} ist keine Variable, die octopus setzt',
       problemMarker: '- Zeile {{line}}: hier wurde eine octopus-Markierung eingefügt',
       lastRun: '{{stage}}: um {{at}} mit Exit-Code {{code}} beendet. Die letzten Zeilen:',
       lastRunStopped: '{{stage}}: um {{at}} durch ein Signal beendet. Die letzten Zeilen:',

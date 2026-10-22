@@ -32,7 +32,9 @@ describe('useWorkspaceScripts', () => {
   it('asks about every workspace, not only the one on screen', async () => {
     // A runner outlives the switch away from its project, and it keeps running
     // its own script rather than the open project's.
-    const { result } = renderHook(() => useWorkspaceScripts(['planner/anna', 'ledger/carol'], null))
+    const { result } = renderHook(() =>
+      useWorkspaceScripts(['planner/anna', 'ledger/carol'], null, null)
+    )
 
     await waitFor(() => {
       expect(result.current.scripts.size).toBe(2)
@@ -43,7 +45,7 @@ describe('useWorkspaceScripts', () => {
   })
 
   it('asks nothing when there are no workspaces', async () => {
-    const { result } = renderHook(() => useWorkspaceScripts([], null))
+    const { result } = renderHook(() => useWorkspaceScripts([], null, null))
 
     await waitFor(() => {
       expect(result.current.scripts.size).toBe(0)
@@ -54,7 +56,7 @@ describe('useWorkspaceScripts', () => {
   it('leaves out a workspace it could not be told about', async () => {
     vi.mocked(octopus().workspaces.scripts).mockResolvedValue({ ok: false, error: 'gone' })
 
-    const { result } = renderHook(() => useWorkspaceScripts(['planner/anna'], null))
+    const { result } = renderHook(() => useWorkspaceScripts(['planner/anna'], null, null))
 
     await waitFor(() => {
       expect(result.current.failures.has('planner/anna')).toBe(true)
@@ -66,7 +68,7 @@ describe('useWorkspaceScripts', () => {
     // Where a script is written for the first time, which changes the answer
     // without changing the list.
     const { result, rerender } = renderHook(
-      ({ key }: { key: string | null }) => useWorkspaceScripts(['planner/anna'], key),
+      ({ key }: { key: string | null }) => useWorkspaceScripts(['planner/anna'], key, null),
       { initialProps: { key: null as string | null } }
     )
 
@@ -86,8 +88,31 @@ describe('useWorkspaceScripts', () => {
     })
   })
 
+  // A turn is heard only for the workspace on screen, so a script an agent wrote
+  // in another one is read when that one is opened.
+  it('reads again when another workspace is opened', async () => {
+    const { result, rerender } = renderHook(
+      ({ shown }: { shown: string | null }) =>
+        useWorkspaceScripts(['planner/anna', 'planner/bob'], null, shown),
+      { initialProps: { shown: 'planner/anna' } }
+    )
+    await waitFor(() => {
+      expect(result.current.scripts.size).toBe(2)
+    })
+    expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(2)
+
+    rerender({ shown: 'planner/bob' })
+
+    await waitFor(() => {
+      expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(4)
+    })
+    await waitFor(() => {
+      expect(result.current.scripts.size).toBe(2)
+    })
+  })
+
   it('reads again on demand, which is what an approval needs', async () => {
-    const { result } = renderHook(() => useWorkspaceScripts(['planner/anna'], null))
+    const { result } = renderHook(() => useWorkspaceScripts(['planner/anna'], null, null))
 
     await waitFor(() => {
       expect(result.current.scripts.size).toBe(1)
@@ -131,7 +156,7 @@ describe('useWorkspaceScripts', () => {
     )
 
     const { result, rerender } = renderHook(
-      ({ ids }: { ids: string[] }) => useWorkspaceScripts(ids, null),
+      ({ ids }: { ids: string[] }) => useWorkspaceScripts(ids, null, null),
       { initialProps: { ids: ['planner/anna'] } }
     )
 
@@ -153,7 +178,7 @@ describe('useWorkspaceScripts', () => {
 
   it('does not keep an answer that arrived after the list changed', async () => {
     const { result, rerender } = renderHook(
-      ({ ids }: { ids: string[] }) => useWorkspaceScripts(ids, null),
+      ({ ids }: { ids: string[] }) => useWorkspaceScripts(ids, null, null),
       {
         initialProps: { ids: ['planner/anna'] }
       }

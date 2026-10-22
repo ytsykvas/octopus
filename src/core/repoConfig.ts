@@ -2,7 +2,7 @@
  * A project's settings as its repository can carry them: `.octopus/`.
  *
  * Everything a project knows about itself — the three scripts, the carry list,
- * the seven instructions, its base branch and env file — lives under
+ * the nine instructions, its base branch and env file — lives under
  * `~/.octopus/projects/<id>/`. That directory is a single point of failure:
  * wipe it, or move to another machine, and it is all gone with no trace in the
  * repository the settings describe. A repository may therefore carry a copy,

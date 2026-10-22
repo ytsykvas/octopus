@@ -103,6 +103,7 @@ import { allowedStanding, type StandingPermission, withStanding } from './standi
 import type { CarryReport, PreparedWorkspace } from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
 import { checkEnvBody, type EnvProblem, parseEnvBody, substituteEnv } from './envBlock.js'
+import { type LastRun, maskValues } from './runLog.js'
 import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
   createProfile,
@@ -790,13 +791,20 @@ function standingFrom(request: PendingPermission): StandingPermission {
 }
 
 /**
+ * The problems whose subject is a name — a key that passed the check, or a
+ * `$OCTOPUS_…` reference. Every other subject is text from the line itself: the
+ * whole of it, or everything before its `=`, which for a pasted `KEY: value` or
+ * a line inside a multi-line key is the secret. Those go by line number alone.
+ */
+const NAMED_PROBLEMS: ReadonlySet<EnvProblem['reason']> = new Set(['duplicate', 'unknownVariable'])
+
+/**
  * What octopus knows about a workspace that its agent cannot find for itself —
  * the facts Help writes under its two instructions.
  *
  * Built from what a run already reads, so Help and Run cannot disagree. **No
- * value of a variable is in here**: names only, and a line of the env set that
- * is not an assignment is reported by its number alone, since the line may
- * well be a pasted secret.
+ * value of a variable is in here**: names only, and a problem in the env set
+ * names its subject only where that is a name (`NAMED_PROBLEMS`).
  */
 export interface HelpContext {
   /** The checkout, as `$OCTOPUS_ROOT_PATH` gives it to a script. */
@@ -863,6 +871,12 @@ export interface OctopusService {
    * scripts and env set are in effect, what is carried and the variable names.
    */
   helpContext(workspaceId: string): Promise<HelpContext>
+  /**
+   * Last runs with the values of the workspace's env set masked out of their
+   * output (`maskValues`), so asking Help about a run cannot quote a credential
+   * the script printed.
+   */
+  maskRunOutput(workspaceId: string, runs: readonly LastRun[]): Promise<LastRun[]>
   /**
    * Records that these scripts were read, so they may run.
    *
@@ -5191,6 +5205,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return scriptsIn(workspace, requireProject(workspace.projectId))
     },
 
+    async maskRunOutput(workspaceId, runs) {
+      const workspace = requireWorkspace(workspaceId)
+      const { variables } = await scriptSetFor(requireProject(workspace.projectId), workspace)
+      return runs.map((run) => ({ ...run, output: maskValues(run.output, variables) }))
+    },
+
     async helpContext(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
@@ -5201,9 +5221,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         envFile: await envFileFor(project, workspace),
         profile: values.profile,
         variableNames: Object.keys(variables),
-        // The one reason whose subject is the whole line, which may be a value.
         envProblems: checkEnvBody(stored).map((problem) =>
-          problem.reason === 'noAssignment' ? { ...problem, subject: '' } : problem
+          NAMED_PROBLEMS.has(problem.reason) ? problem : { ...problem, subject: '' }
         ),
         carry: (await carriedIn(project, workspace.path)).map((file) => file.path),
         scripts: await scriptsIn(workspace, project)

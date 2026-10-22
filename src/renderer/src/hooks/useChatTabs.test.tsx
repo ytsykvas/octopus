@@ -221,15 +221,42 @@ describe('opening another conversation', () => {
       ok: true,
       value: [chat(), chat({ id: 'chat-2' })]
     })
-    const seen: { id: string; drawn: readonly string[] }[] = []
+    const beforeShown = vi.fn()
     await act(async () => {
-      await result.current.create((id) => {
-        seen.push({ id, drawn: result.current.tabs.map((tab) => tab.key) })
-      })
+      await result.current.create(beforeShown)
     })
 
-    // The first tab keeps the key it was drawn with; the new one is not there yet.
-    expect(seen).toEqual([{ id: 'chat-2', drawn: ['first'] }])
+    // Compared with the read that draws the tab: the tabs a callback could look
+    // at from inside `act` are the snapshot before it, whatever the order.
+    expect(beforeShown).toHaveBeenCalledExactlyOnceWith('chat-2')
+    const created = vi.mocked(octopus().chats.create).mock.invocationCallOrder[0] ?? 0
+    const drawn = vi
+      .mocked(octopus().chats.list)
+      .mock.invocationCallOrder.find((order) => order > created)
+    expect(beforeShown.mock.invocationCallOrder[0]).toBeLessThan(drawn ?? 0)
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
+  // Help in a workspace nobody has spoken to: the first tab is made real, and
+  // the text goes to the second.
+  it('names the second conversation when the first had not been written yet', async () => {
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: chat() })
+    vi.mocked(octopus().chats.create).mockImplementation(() => {
+      givenChats([chat(), chat({ id: 'chat-2' })])
+      return Promise.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
+    })
+    const { result } = open()
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalled()
+    })
+
+    const beforeShown = vi.fn()
+    await act(async () => {
+      await result.current.create(beforeShown)
+    })
+
+    expect(beforeShown).toHaveBeenCalledExactlyOnceWith('chat-2')
+    expect(result.current.tabs.map((tab) => tab.key)).toEqual(['first', 'chat-2'])
     expect(result.current.activeKey).toBe('chat-2')
   })
 

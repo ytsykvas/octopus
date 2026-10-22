@@ -166,9 +166,7 @@ function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } 
     write: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
-    lastRuns: vi.fn(() => [
-      { purpose: 'setup' as const, endedAt: '2026-10-22T09:00:00.000Z', exitCode: 1, output: 'x' }
-    ]),
+    lastRuns: vi.fn((): LastRun[] => []),
     forgetRuns: vi.fn()
   }
 
@@ -776,6 +774,15 @@ describe('validation at the boundary', () => {
 describe('failures come back as results', () => {
   // A throw would cross IPC as an opaque Electron error with the message
   // mangled, so the renderer could say nothing useful about it.
+  // An earlier holder of the id — a removed project added back, a name drawn
+  // again — must not leave its last run behind for the new one.
+  it('starts a new workspace with no last runs', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(sessions.forgetRuns).toHaveBeenCalledWith(workspace.id)
+  })
+
   it('answers with ok:false rather than throwing', async () => {
     await expect(invoke('workspaces:create', 'no-such-project')).resolves.toMatchObject({
       ok: false
@@ -1718,6 +1725,8 @@ describe('workspaces of a real project', () => {
   it('refuses to remove uncommitted work until it is forced', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
+    // Creating it forgets its runs too; what is asked here is removal.
+    sessions.forgetRuns.mockClear()
 
     await expect(invoke('workspaces:hasChanges', workspace.id)).resolves.toEqual({
       ok: true,
@@ -3424,12 +3433,27 @@ describe('the list of what is still running', () => {
     })
   })
 
-  it('answers with a workspace’s last runs, asked of the manager by its id', async () => {
-    await expect(invoke('terminal:lastRuns', 'planner/anna')).resolves.toEqual({
+  // A script that prints its connection string must not hand Help the password.
+  it('answers with a workspace’s last runs, its env set’s values masked', async () => {
+    const projectId = await addProject('masked')
+    const workspace = await createWorkspace(projectId)
+    await invoke('env:save', projectId, 'default', 'DATABASE_URL=postgres://u:hunter2@db/app\n')
+    sessions.lastRuns.mockReturnValueOnce([
+      {
+        purpose: 'run',
+        endedAt: null,
+        exitCode: null,
+        output: 'cannot reach postgres://u:hunter2@db/app'
+      }
+    ])
+
+    await expect(invoke('terminal:lastRuns', workspace.id)).resolves.toEqual({
       ok: true,
-      value: [{ purpose: 'setup', endedAt: '2026-10-22T09:00:00.000Z', exitCode: 1, output: 'x' }]
+      value: [
+        { purpose: 'run', endedAt: null, exitCode: null, output: 'cannot reach [DATABASE_URL]' }
+      ]
     })
-    expect(sessions.lastRuns).toHaveBeenCalledWith('planner/anna')
+    expect(sessions.lastRuns).toHaveBeenCalledWith(workspace.id)
   })
 
   it('refuses a purpose that is none of the five', async () => {

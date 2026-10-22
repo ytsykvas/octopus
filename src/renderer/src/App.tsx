@@ -728,7 +728,8 @@ export function App(): React.JSX.Element {
     workspaces.flat.map((workspace) => workspace.id),
     // A settings dialog closing is where a script is first written, so the
     // answer can change without the list changing.
-    editingProjectId
+    editingProjectId,
+    selectedWorkspaceId
   )
 
   // An agent writing `.octopus/scripts/` is the third way a script appears, and

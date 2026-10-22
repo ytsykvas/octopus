@@ -52,7 +52,7 @@ describe('helpMessage', () => {
           'Checkout ($OCTOPUS_ROOT_PATH): /Users/someone/planner',
           'Env file the env set is written into: .env',
           'Env set in effect: default',
-          'Variables it defines (names only; the values stay in octopus): API_KEY, DB_NAME',
+          'Variables it gives the scripts (names only; the values stay in octopus): API_KEY, DB_NAME',
           '',
           'Scripts in effect:',
           '- setup: none',
@@ -89,24 +89,23 @@ describe('helpMessage', () => {
     expect(message).toContain('No files are carried into the workspace.')
   })
 
-  it('says why Run is disabled only where the repository’s scripts wait to be allowed', () => {
+  it('says why Run is disabled where the repository’s scripts wait to be allowed', () => {
     const waiting = context({ scripts: { ...context().scripts, approved: false, digest: 'abc' } })
-    const unsupplied = context({ scripts: { ...context().scripts, approved: false, digest: '' } })
 
     expect(helpMessage('setupScripts', 'x', waiting, [], t)).toContain('not been allowed yet')
-    expect(helpMessage('setupScripts', 'x', unsupplied, [], t)).not.toContain('allowed')
+    expect(helpMessage('setupScripts', 'x', context(), [], t)).not.toContain('allowed')
   })
 
-  it('names each problem in the env set, and a line that is not an assignment by number alone', () => {
+  it('names each problem in the env set, and the ones about text from the line by number alone', () => {
     const message = helpMessage(
       'setupScripts',
       'x',
       context({
         envProblems: [
           { line: 2, reason: 'noAssignment', subject: 'sk-live-pasted-token' },
-          { line: 3, reason: 'badName', subject: '9LIVES' },
+          { line: 3, reason: 'badName', subject: 'DATABASE_URL: postgres://app:hunter2@db' },
           { line: 4, reason: 'duplicate', subject: 'A' },
-          { line: 5, reason: 'unknownVariable', subject: '$OCTOPUS_PROT' },
+          { line: 5, reason: 'unknownVariable', subject: 'OCTOPUS_PROT' },
           { line: 6, reason: 'marker', subject: '# >>> octopus' }
         ]
       }),
@@ -118,13 +117,14 @@ describe('helpMessage', () => {
       [
         'Problems in the env set:',
         '- line 2 is not an assignment',
-        '- line 3: 9LIVES is not a name a parser accepts',
+        '- line 3: what comes before "=" is not a name a parser accepts',
         '- line 4: A is set twice, and only the last one counts',
         '- line 5: $OCTOPUS_PROT is not a variable octopus sets',
         '- line 6: an octopus marker was pasted in'
       ].join('\n')
     )
     expect(message).not.toContain('sk-live-pasted-token')
+    expect(message).not.toContain('hunter2')
   })
 
   it('adds the build and then the server, each with its last lines fenced', () => {

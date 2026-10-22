@@ -1090,19 +1090,21 @@ describe('the last runs of a workspace', () => {
     return pty
   }
 
-  it('keeps a build’s output, cleaned, with its exit code', () => {
+  it('keeps a build’s output, cleaned, with its exit code and when it ended', () => {
+    manager = new TerminalManager(groupKill, () => new Date('2026-10-22T09:41:00.000Z'))
     const pty = started('setup')
     pty.emit('\u001b[32minstalling\u001b[0m\r\n')
     pty.emit('10%\r100%\r\nerror: no database\r\n')
     pty.end({ exitCode: 2 })
 
-    const [run] = manager.lastRuns(ANNA)
-    expect(run).toMatchObject({
-      purpose: 'setup',
-      exitCode: 2,
-      output: 'installing\n100%\nerror: no database'
-    })
-    expect(run?.endedAt).toEqual(expect.any(String))
+    expect(manager.lastRuns(ANNA)).toEqual([
+      {
+        purpose: 'setup',
+        endedAt: '2026-10-22T09:41:00.000Z',
+        exitCode: 2,
+        output: 'installing\n100%\nerror: no database'
+      }
+    ])
   })
 
   it('answers with a run still going, with no end and no code', () => {
@@ -1121,11 +1123,21 @@ describe('the last runs of a workspace', () => {
     expect(run?.endedAt).not.toBeNull()
   })
 
-  it('gives the build before the server, whichever started first', () => {
-    started('run')
+  it('gives the build before the server', () => {
     started('setup')
+    started('run')
 
     expect(manager.lastRuns(ANNA).map((run) => run.purpose)).toEqual(['setup', 'run'])
+  })
+
+  // A build is the start of a new Run: the server beside it would be an older one.
+  it('drops the last server when a new build starts', () => {
+    started('run').end({ exitCode: 0 })
+    started('setup').emit('building')
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'setup', endedAt: null, exitCode: null, output: 'building' }
+    ])
   })
 
   it('keeps nothing of a terminal tab, of a sign-in, or of another workspace', () => {
