@@ -211,7 +211,8 @@ describe('the account block', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /read the limits/i }))
 
-    expect(refresh).toHaveBeenCalled()
+    // As a press, which asks the account whatever the timer last read.
+    expect(refresh).toHaveBeenCalledWith(true)
   })
 
   // Arrows that stop turning for "Reduce motion" and only dim read as a control

@@ -1113,7 +1113,9 @@ export function registerIpc(
 
   // A press of the block in the sidebar, which is somebody asking — nothing
   // fills it on its own. A control request: no turn, no tokens.
-  host.handle('chats:refreshSubscription', () => attempt(() => service.refreshSubscriptionUsage()))
+  host.handle('chats:refreshSubscription', (_event, pressed: unknown) =>
+    attempt(() => service.refreshSubscriptionUsage(pressed === true))
+  )
 
   /*
    * A skill arrives as either shape, so the picker offers both.

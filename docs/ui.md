@@ -2501,6 +2501,11 @@ four askers can land at once, and each starting its own read would spawn its own
 CLI to ask one question, so the one in flight is shared. And a probe is shut in
 a `finally`, which it was not at first — one press left an agent running for the
 rest of the session, and that would now be one more every three minutes.
+**The timer says it is not a press** (`refreshSubscription(pressed)`): with every
+session let go for resting, it would start that probe every three minutes to
+read figures nobody has been moving — the very process the release saved — so
+with no session running it is answered from the reading kept, as long as that
+is younger than the release itself; a press is a question, and always asks.
 
 **The account's endpoint refuses most requests, and the CLI does not say so.**
 Measured against a live account: `GET /api/oauth/usage` admits about one request

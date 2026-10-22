@@ -432,7 +432,7 @@ describe('channel names', () => {
     ['chats.subscription', () => method('chats', 'subscription')(), 'chats:subscription'],
     [
       'chats.refreshSubscription',
-      () => method('chats', 'refreshSubscription')(),
+      () => method('chats', 'refreshSubscription')(true as never),
       'chats:refreshSubscription'
     ],
     ['accounts.status', () => method('accounts', 'status')(), 'accounts:status'],
@@ -695,6 +695,16 @@ describe('arguments reach main unchanged', () => {
   it('passes the pull request prompt a pane button sent through with the message', () => {
     method('chats', 'send')('c' as never, 'hi' as never, { instruction: 'fixChecks' } as never)
     expect(invoke).toHaveBeenCalledWith('chats:send', 'c', 'hi', { instruction: 'fixChecks' })
+  })
+
+  // Whether a person pressed, which is what decides whether the account is
+  // asked or a recent reading answers.
+  it('chats.refreshSubscription says whether it was pressed, and defaults to not', () => {
+    method('chats', 'refreshSubscription')(true as never)
+    expect(invoke).toHaveBeenCalledWith('chats:refreshSubscription', true)
+
+    method('chats', 'refreshSubscription')()
+    expect(invoke).toHaveBeenLastCalledWith('chats:refreshSubscription', false)
   })
 
   it('passes removal options through', () => {

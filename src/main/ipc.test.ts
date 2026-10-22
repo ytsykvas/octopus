@@ -2904,6 +2904,15 @@ describe('the agent chat', () => {
       ok: true,
       value: { kind: 'nowhereToAsk' }
     })
+    // Pressed or not, and anything that is not a press reads as not pressed.
+    await expect(invoke('chats:refreshSubscription', true)).resolves.toEqual({
+      ok: true,
+      value: { kind: 'nowhereToAsk' }
+    })
+    await expect(invoke('chats:refreshSubscription', 'yes')).resolves.toEqual({
+      ok: true,
+      value: { kind: 'nowhereToAsk' }
+    })
   })
 
   /*
