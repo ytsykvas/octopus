@@ -186,6 +186,24 @@ describe('the two Help asks for', () => {
     )
   })
 
+  // Read in a composer narrower than eighty columns, where a hard break inside
+  // a paragraph wrapped a second time and left every line ragged.
+  it('keep each paragraph and list item on one line', () => {
+    const block = /^\s*(?:[-*]|\d+\.|\||#|```)/
+    for (const kind of ['setupScripts', 'diagnoseRun'] as const) {
+      const lines = instructionTemplate(kind).split('\n')
+      const continued = lines.filter(
+        (line, index) =>
+          index > 0 &&
+          line.trim() !== '' &&
+          !block.test(line) &&
+          (lines[index - 1] ?? '').trim() !== '' &&
+          !/^\s*(?:\||#|```)/.test(lines[index - 1] ?? '')
+      )
+      expect(continued).toEqual([])
+    }
+  })
+
   it('never ask for a value to be written', () => {
     for (const kind of ['setupScripts', 'diagnoseRun'] as const) {
       expect(instructionTemplate(kind)).toMatch(/never write a (?:value|variable's value)/i)
