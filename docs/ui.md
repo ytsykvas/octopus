@@ -2760,6 +2760,15 @@ means a fold resizes no terminal, so a running server is not sent a resize on
 every fold and unfold. While folded no tab counts as visible,
 so nothing in it reads git, and the tab row is measured again on unfolding.
 
+A change of size that does reach a terminal is gathered for a tenth of a second
+before it is fitted (`REFIT_MS` in `Terminal.tsx`): a pane being dragged
+changes size on every frame, and every terminal in it — the offstage ones
+included, since they keep their layout — fitted itself, reflowed its
+scrollback and had its pty signalled sixty times a second each. Gathered, a
+drag costs ten fits a second per terminal and ends on the size it ended on, and
+a fit that moved nothing — a box that changed by less than a cell — signals
+the pty nothing, so whatever runs in it is not made to redraw for nothing.
+
 The fold is kept across launches (`rightPanelOpen`), and every way of unfolding
 — the header's button, ⌘⇧D, ⌘⇧E, opening a pull request — writes it, the tab
 riding in the same write. Dragging the edge well past the floor folds it too, as
