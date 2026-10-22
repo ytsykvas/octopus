@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import type { BUILTIN_TOOL_NAMES } from '@anthropic-ai/claude-agent-sdk'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { describeToolInput, planTitle, readPlan, readWorktreeMove } from './toolSummary.js'
 
@@ -94,6 +95,67 @@ describe('what a plan calls itself', () => {
   })
 })
 
+/** Every built-in tool the SDK names, by whether a call to it is itself a move into another worktree. */
+const A_CALL_THAT_MOVES: Record<(typeof BUILTIN_TOOL_NAMES)[number], boolean> = {
+  Agent: false,
+  Artifact: false,
+  AskUserQuestion: false,
+  // A `cd` in a shell moves the session too, and the CLI keeps it — but
+  // nothing in the call says where to, so it is not one to read here.
+  Bash: false,
+  ClaudeDesign: false,
+  CronCreate: false,
+  CronDelete: false,
+  CronList: false,
+  Edit: false,
+  EndConversation: false,
+  EnterPlanMode: false,
+  EnterWorktree: true,
+  ExitPlanMode: false,
+  ExitWorktree: true,
+  Glob: false,
+  Grep: false,
+  ListAgents: false,
+  ListMcpResourcesTool: false,
+  LSP: false,
+  Monitor: false,
+  NotebookEdit: false,
+  OfferChromeSetup: false,
+  // As `Bash`.
+  PowerShell: false,
+  Projects: false,
+  propose_skills: false,
+  ProposeGoal: false,
+  PushNotification: false,
+  Read: false,
+  ReadMcpResourceDirTool: false,
+  ReadMcpResourceTool: false,
+  ReadNotifications: false,
+  RemoteTrigger: false,
+  ReportFindings: false,
+  ScheduleWakeup: false,
+  SendFeedback: false,
+  SendMessage: false,
+  SendUserFile: false,
+  SendUserMessage: false,
+  ShareOnboardingGuide: false,
+  ShowOnboardingRolePicker: false,
+  Skill: false,
+  SubagentHandback: false,
+  TaskCreate: false,
+  TaskGet: false,
+  TaskList: false,
+  TaskStop: false,
+  TaskUpdate: false,
+  TodoWrite: false,
+  ToolSearch: false,
+  WaitForMcpServers: false,
+  WebFetch: false,
+  WebSearch: false,
+  Workflow: false,
+  Write: false
+}
+
 /*
  * The agent can move its working directory into another worktree. The window's
  * diff, files, terminal and scripts stay on the workspace's own, so the move is
@@ -129,6 +191,21 @@ describe('the agent moving into another worktree, or back', () => {
       kind: 'exit',
       removed: true
     })
+  })
+
+  /*
+   * Over the SDK's own list, so a tool the SDK adds to it fails the typecheck
+   * here until somebody says whether a call to it is a move. One that is and
+   * is not read here leaves the diff, the terminal and the scripts on the
+   * workspace's worktree without a word.
+   */
+  it('is read from every built-in call that is a move, and from no other', () => {
+    // A list that widened to `string` would still compile and decide nothing.
+    expectTypeOf<(typeof BUILTIN_TOOL_NAMES)[number]>().not.toEqualTypeOf<string>()
+    for (const [name, moves] of Object.entries(A_CALL_THAT_MOVES)) {
+      // Both schemas read this, so a null means "not looked for", not "unreadable".
+      expect(readWorktreeMove(name, { action: 'keep' }) !== null, name).toBe(moves)
+    }
   })
 
   it('is not looked for in any other tool, nor in an input it cannot read', () => {
