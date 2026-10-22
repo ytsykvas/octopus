@@ -9,6 +9,20 @@ import { octopus } from './octopus.js'
 
 export const CHAT_ID = 'chat-1'
 
+/**
+ * A turn that ended well and says nothing else: what a test sends when all it
+ * needs is for a turn to end.
+ */
+export const TURN_DONE = {
+  type: 'result',
+  ok: true,
+  costUsd: null,
+  durationMs: 1,
+  inputTokens: null,
+  outputTokens: null,
+  terminalReason: null
+} satisfies AgentEvent
+
 /** A chat record as the bridge would answer with one. */
 export function chat(overrides: Partial<Chat> = {}): Chat {
   return {

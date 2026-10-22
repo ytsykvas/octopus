@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { Result } from '../../../preload/index.js'
+import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useHelp } from './useHelp.js'
 
@@ -97,14 +99,13 @@ describe('useHelp', () => {
   })
 
   // The answer is about a workspace no longer on screen, and a tab opened for
-  // it would land in the one that is.
-  it('opens nothing once the workspace has changed under it', async () => {
-    let answer: (value: { ok: true; value: string }) => void = () => undefined
-    vi.mocked(octopus().workspaces.instruction).mockReturnValue(
-      new Promise((resolve) => {
-        answer = resolve
-      })
-    )
+  // it — or a failure said — would land in the one that is.
+  it.each<[string, Result<string>]>([
+    ['an answer', { ok: true, value: 'Set up.' }],
+    ['a failed read', { ok: false, error: 'could not read it' }]
+  ])('drops %s once the workspace has changed under it', async (_, answer) => {
+    const reading = held<Result<string>>()
+    vi.mocked(octopus().workspaces.instruction).mockReturnValue(reading.promise)
     const { ask, create, report, rerender } = open()
 
     act(() => {
@@ -112,32 +113,11 @@ describe('useHelp', () => {
     })
     rerender({ id: 'planner/bob' })
     await act(async () => {
-      answer({ ok: true, value: 'Set up.' })
+      reading.resolve(answer)
       await Promise.resolve()
     })
 
     expect(create).not.toHaveBeenCalled()
-    expect(report).not.toHaveBeenCalled()
-  })
-
-  it('drops a failed read once the workspace has changed under it', async () => {
-    let answer: (value: { ok: false; error: string }) => void = () => undefined
-    vi.mocked(octopus().workspaces.instruction).mockReturnValue(
-      new Promise((resolve) => {
-        answer = resolve
-      })
-    )
-    const { ask, report, rerender } = open()
-
-    act(() => {
-      ask()('setupScripts')
-    })
-    rerender({ id: 'planner/bob' })
-    await act(async () => {
-      answer({ ok: false, error: 'could not read it' })
-      await Promise.resolve()
-    })
-
     expect(report).not.toHaveBeenCalled()
   })
 
@@ -161,12 +141,8 @@ describe('useHelp', () => {
   })
 
   it('opens one conversation for a second press while the first is reading, and more after', async () => {
-    let answer: (value: { ok: true; value: string }) => void = () => undefined
-    vi.mocked(octopus().workspaces.instruction).mockReturnValueOnce(
-      new Promise((resolve) => {
-        answer = resolve
-      })
-    )
+    const reading = held<Result<string>>()
+    vi.mocked(octopus().workspaces.instruction).mockReturnValueOnce(reading.promise)
     const { ask, create } = open()
 
     act(() => {
@@ -174,7 +150,7 @@ describe('useHelp', () => {
       ask()('setupScripts')
     })
     await act(async () => {
-      answer({ ok: true, value: 'Set up.' })
+      reading.resolve({ ok: true, value: 'Set up.' })
       await Promise.resolve()
     })
     await waitFor(() => {

@@ -6,7 +6,7 @@ import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
-import { chat, emitAgentEvent, givenChat } from '../test/chat.js'
+import { chat, emitAgentEvent, givenChat, TURN_DONE } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { task } from '../test/tasks.js'
@@ -1117,16 +1117,6 @@ describe('questions from the agents a turn sent off', () => {
     ...(taskId !== undefined && { taskId })
   })
 
-  const RESULT: AgentEvent = {
-    type: 'result',
-    ok: true,
-    costUsd: null,
-    durationMs: 1,
-    inputTokens: null,
-    outputTokens: null,
-    terminalReason: null
-  }
-
   async function opened(): Promise<{ readonly current: ReturnType<typeof useChat> }> {
     givenChat()
     const { result } = renderHook(() => useChat(...open()))
@@ -1145,7 +1135,7 @@ describe('questions from the agents a turn sent off', () => {
     expect([...result.current.answerable]).toEqual(['turn', 'first', 'second'])
     expect(result.current.pending?.requestId).toBe('turn')
 
-    emitAgentEvent(RESULT)
+    emitAgentEvent(TURN_DONE)
 
     expect([...result.current.answerable]).toEqual(['first', 'second'])
     expect(result.current.pending).toBeNull()

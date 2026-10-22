@@ -172,6 +172,8 @@ describe('the installation-wide instruction', () => {
   })
 })
 
+const HELP_KINDS = ['setupScripts', 'diagnoseRun'] as const
+
 describe('the two Help asks for', () => {
   it('push nothing after the turn', () => {
     expect(PUBLISHES_AFTER.setupScripts).toBe(false)
@@ -187,25 +189,21 @@ describe('the two Help asks for', () => {
 
   // A line continues a paragraph when it follows a non-blank line and starts no
   // block — list item, table row, heading, fence.
-  it('keep each paragraph and list item on one line', () => {
+  it.each(HELP_KINDS)('keep each paragraph and list item on one line: %s', (kind) => {
     const block = /^\s*(?:[-*]|\d+\.|\||#|```)/
-    for (const kind of ['setupScripts', 'diagnoseRun'] as const) {
-      const lines = instructionTemplate(kind).split('\n')
-      const continued = lines.filter(
-        (line, index) =>
-          index > 0 &&
-          line.trim() !== '' &&
-          !block.test(line) &&
-          (lines[index - 1] ?? '').trim() !== '' &&
-          !/^\s*(?:\||#|```)/.test(lines[index - 1] ?? '')
-      )
-      expect(continued).toEqual([])
-    }
+    const lines = instructionTemplate(kind).split('\n')
+    const continued = lines.filter(
+      (line, index) =>
+        index > 0 &&
+        line.trim() !== '' &&
+        !block.test(line) &&
+        (lines[index - 1] ?? '').trim() !== '' &&
+        !/^\s*(?:\||#|```)/.test(lines[index - 1] ?? '')
+    )
+    expect(continued).toEqual([])
   })
 
-  it('never ask for a value to be written', () => {
-    for (const kind of ['setupScripts', 'diagnoseRun'] as const) {
-      expect(instructionTemplate(kind)).toMatch(/never write a (?:value|variable's value)/i)
-    }
+  it.each(HELP_KINDS)('never ask for a value to be written: %s', (kind) => {
+    expect(instructionTemplate(kind)).toMatch(/never write a (?:value|variable's value)/i)
   })
 })

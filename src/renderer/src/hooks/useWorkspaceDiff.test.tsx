@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceChanges, WorkspaceDiff } from '@core/diff.js'
 import type { AgentEvent } from '@core/events.js'
 
-import { refuseSilence } from '../test/chat.js'
+import { refuseSilence, TURN_DONE } from '../test/chat.js'
 import { fileDiff, workspaceDiff } from '../test/diff.js'
 import { octopus } from '../test/octopus.js'
 import { useWorkspaceDiff } from './useWorkspaceDiff.js'
@@ -20,16 +20,6 @@ function emit(event: AgentEvent, workspaceId = WORKSPACE): void {
   act(() => {
     subscriber?.({ chatId: 'chat-1', workspaceId, event })
   })
-}
-
-const DONE: AgentEvent = {
-  type: 'result',
-  ok: true,
-  costUsd: null,
-  durationMs: 1,
-  inputTokens: null,
-  outputTokens: null,
-  terminalReason: null
 }
 
 const answering = (diff: WorkspaceDiff): void => {
@@ -77,7 +67,7 @@ describe('what a workspace has changed', () => {
       expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
     })
 
-    emit(DONE)
+    emit(TURN_DONE)
     await act(async () => {
       await vi.runAllTimersAsync()
     })
@@ -116,7 +106,7 @@ describe('what a workspace has changed', () => {
     })
 
     emit({ type: 'error', message: 'stopped' })
-    emit(DONE)
+    emit(TURN_DONE)
     await act(async () => {
       await vi.runAllTimersAsync()
     })
@@ -132,7 +122,7 @@ describe('what a workspace has changed', () => {
       expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
     })
 
-    emit(DONE, 'planner/bob')
+    emit(TURN_DONE, 'planner/bob')
     await act(async () => {
       await vi.runAllTimersAsync()
     })
@@ -188,7 +178,7 @@ describe('what a workspace has changed', () => {
     expect(octopus().workspaces.changes).toHaveBeenCalledTimes(1)
 
     const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
-    emit(DONE)
+    emit(TURN_DONE)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000)
     })

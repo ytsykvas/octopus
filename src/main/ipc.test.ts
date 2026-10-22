@@ -748,21 +748,7 @@ describe('validation at the boundary', () => {
     })
   })
 
-  it('carries what Help is told about a workspace across, names and no values', async () => {
-    const projectId = await addProject('helped')
-    const workspace = await createWorkspace(projectId)
-    await invoke('env:save', projectId, 'default', 'API_KEY=sentinel\n')
-
-    const answer = await invoke('workspaces:helpContext', workspace.id)
-
-    expect(answer).toMatchObject({ ok: true, value: { variableNames: ['API_KEY'] } })
-    expect(JSON.stringify(answer)).not.toContain('sentinel')
-    await expect(invoke('workspaces:helpContext', 'helped/nobody')).resolves.toMatchObject({
-      ok: false
-    })
-  })
-
-  it('hands Help a workspace’s last runs with its env set’s values masked', async () => {
+  it('hands Help a workspace’s facts and last runs, names and no values', async () => {
     const projectId = await addProject('masked')
     const workspace = await createWorkspace(projectId)
     await invoke('env:save', projectId, 'default', 'DATABASE_URL=postgres://u:hunter2@db/app\n')
@@ -774,15 +760,22 @@ describe('validation at the boundary', () => {
       }
     ])
 
-    await expect(invoke('workspaces:helpContext', workspace.id)).resolves.toMatchObject({
+    const answer = await invoke('workspaces:helpContext', workspace.id)
+
+    expect(answer).toMatchObject({
       ok: true,
       value: {
+        variableNames: ['DATABASE_URL'],
         lastRuns: [
           { purpose: 'run', outcome: { kind: 'running' }, output: 'cannot reach [DATABASE_URL]' }
         ]
       }
     })
+    expect(JSON.stringify(answer)).not.toContain('hunter2')
     expect(sessions.lastRuns).toHaveBeenCalledWith(workspace.id)
+    await expect(invoke('workspaces:helpContext', 'masked/nobody')).resolves.toMatchObject({
+      ok: false
+    })
   })
 
   it('rejects an instruction body that is not a string', async () => {

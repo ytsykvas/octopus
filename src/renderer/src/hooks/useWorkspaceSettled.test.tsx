@@ -1,24 +1,12 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { AgentEvent } from '@core/events.js'
-
-import { emitAgentEvent } from '../test/chat.js'
+import { emitAgentEvent, TURN_DONE } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { SETTLE_MS } from './useTurnSettled.js'
 import { useWorkspaceSettled } from './useWorkspaceSettled.js'
 
 const WORKSPACE = 'planner/anna'
-
-const DONE: AgentEvent = {
-  type: 'result',
-  ok: true,
-  costUsd: null,
-  durationMs: 1,
-  inputTokens: null,
-  outputTokens: null,
-  terminalReason: null
-}
 
 afterEach(() => {
   vi.useRealTimers()
@@ -34,7 +22,7 @@ describe('useWorkspaceSettled', () => {
       useWorkspaceSettled(WORKSPACE, true, settled)
     })
 
-    emitAgentEvent(DONE)
+    emitAgentEvent(TURN_DONE)
     act(() => {
       vi.advanceTimersByTime(SETTLE_MS)
     })

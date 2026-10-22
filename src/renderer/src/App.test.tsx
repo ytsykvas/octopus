@@ -14,7 +14,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import type { Result } from '../../preload/index.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
-import { chat, emitAgentEvent, givenChats } from './test/chat.js'
+import { chat, emitAgentEvent, givenChats, TURN_DONE } from './test/chat.js'
 import { disconnectedAccounts } from './test/octopus.js'
 import type { ResolvedScript } from '@core/repoSource.js'
 import { workspaceView } from './test/workspaces.js'
@@ -1024,16 +1024,6 @@ describe('App', () => {
   })
 
   describe('Run and Stop in the title bar', () => {
-    const TURN_ENDED = {
-      type: 'result',
-      ok: true,
-      costUsd: null,
-      durationMs: 1,
-      inputTokens: null,
-      outputTokens: null,
-      terminalReason: null
-    } as const
-
     /** Opens the planner project on anna, with the given scripts for its workspaces. */
     async function onAnna(
       scripts: Partial<Record<ScriptKind, string>>
@@ -1078,7 +1068,7 @@ describe('App', () => {
       expect(within(bar).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
 
       givenScriptsOf({ planner: SERVER_ONLY })
-      emitAgentEvent(TURN_ENDED)
+      emitAgentEvent(TURN_DONE)
 
       expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
     })
@@ -1087,7 +1077,7 @@ describe('App', () => {
       const user = await onAnna({})
       await user.click(screen.getByText('bob'))
       givenScriptsOf({ planner: SERVER_ONLY })
-      emitAgentEvent(TURN_ENDED)
+      emitAgentEvent(TURN_DONE)
 
       await user.click(screen.getByText('anna'))
 

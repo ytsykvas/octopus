@@ -5,7 +5,7 @@ import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
 
 import type { Result } from '../../../preload/index.js'
 
-import { emitAgentEvent } from '../test/chat.js'
+import { emitAgentEvent, TURN_DONE } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useWorkspaceScripts } from './useWorkspaceScripts.js'
@@ -20,16 +20,6 @@ function scriptOf(id: string): ResolvedScript {
     contents: '#!/bin/sh\n'
   }
 }
-
-const TURN_DONE = {
-  type: 'result',
-  ok: true,
-  costUsd: null,
-  durationMs: 1,
-  inputTokens: null,
-  outputTokens: null,
-  terminalReason: null
-} as const
 
 beforeEach(() => {
   // The stub is installed for every renderer test by `test/setup.ts`; this only
