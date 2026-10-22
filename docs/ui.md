@@ -154,7 +154,8 @@ variables **by name only**, the scripts in effect and where they come from,
 whether the repository's still wait for _Allow these_, the carried paths and the
 set's problems. _Why does Run not work?_ adds the last build and server from
 the same answer, each with how it ended and its last lines — the env set's
-values masked out of them — or, for a start the Scripts tab refused, the reason
+values masked out of them, in a fence longer than any backticks they hold, so a
+fence of their own cannot end it — or, for a start the Scripts tab refused, the reason
 it showed, masked the same way; or it asks for a run where there has been none.
 `helpMessage.ts` assembles it; `useHelp` reads all of it before creating
 anything, so a failed read opens nothing — a rejected one, from a main that has

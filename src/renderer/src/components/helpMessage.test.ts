@@ -142,6 +142,19 @@ describe('helpMessage', () => {
     )
   })
 
+  // A fence inside the output would otherwise end ours, and the rest render as markdown.
+  it('fences output with a fence longer than any it holds', () => {
+    const quoting: LastRun = {
+      purpose: 'run',
+      outcome: { kind: 'running' },
+      output: 'lint:\n```js\nfoo()\n```\nand ````five````'
+    }
+
+    expect(helpMessage('diagnoseRun', 'Why?', context({ lastRuns: [quoting] }), t)).toContain(
+      `\n\n\`\`\`\`\`\n${quoting.output}\n\`\`\`\`\``
+    )
+  })
+
   it('says why a run never started, with no output to fence', () => {
     const refused: LastRun = {
       purpose: 'run',

@@ -45,7 +45,21 @@ function runPart(run: LastRun, t: TFunction): string {
   if (!('output' in run)) return runHeader(run, t)
 
   const output = run.output === '' ? t('help.context.noOutput') : run.output
-  return `${runHeader(run, t)}\n\n\`\`\`\n${output}\n\`\`\``
+  return `${runHeader(run, t)}\n\n${fenced(output)}`
+}
+
+/**
+ * `text` in a code block it cannot close.
+ *
+ * A script's output can hold a fence of its own — a linter's report, a test
+ * runner quoting a snippet — and the first one would end ours, turning the rest
+ * of the log into markdown. A fence is closed only by one at least as long, so
+ * this one is longer than any run of backticks inside.
+ */
+function fenced(text: string): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  return `${fence}\n${text}\n${fence}`
 }
 
 /** What a workspace has in place: one block, the same for both kinds. */
