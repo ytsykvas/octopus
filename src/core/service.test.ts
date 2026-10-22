@@ -473,7 +473,7 @@ describe('workspaces', () => {
     const [listed] = await service.listWorkspaces(project.id)
     expect(listed?.ahead).toBe(1)
 
-    const diff = await service.readWorkspaceChanges(workspace.id)
+    const { diff } = await service.readWorkspaceChanges(workspace.id)
     expect(diff.files.map((file) => file.path)).toEqual(['mine.txt'])
   })
 
@@ -559,7 +559,7 @@ describe('workspaces', () => {
     await service.revertWorkspaceFile(workspace.id, 'draft.txt')
 
     // Only the one asked for: the other change is still there to be reviewed.
-    const diff = await service.readWorkspaceChanges(workspace.id)
+    const { diff } = await service.readWorkspaceChanges(workspace.id)
     expect(diff.files.map((file) => file.path)).toEqual(['README.md'])
     await expect(access(join(workspace.path, 'draft.txt'))).rejects.toThrow()
   })
@@ -619,8 +619,7 @@ describe('workspaces', () => {
     }
     const before = await stamp()
 
-    const diff = await service.readWorkspaceChanges(workspace.id)
-    const sides = await service.readWorkspaceFileSides(workspace.id)
+    const { diff, sides } = await service.readWorkspaceChanges(workspace.id)
 
     expect(await stamp()).toBe(before)
     expect(diff.files.map((file) => file.path)).toEqual(['README.md'])
@@ -632,7 +631,7 @@ describe('workspaces', () => {
     const workspace = await service.createWorkspaceIn(projectId)
     await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
 
-    const diff = await service.readWorkspaceChanges(workspace.id)
+    const { diff } = await service.readWorkspaceChanges(workspace.id)
 
     expect(diff.baseBranch).toBe('main')
     expect(diff.files.map((file) => file.path)).toEqual(['draft.txt'])
@@ -1034,7 +1033,9 @@ describe('workspaces', () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)
 
-    await expect(service.readWorkspaceChanges(workspace.id)).resolves.toMatchObject({ files: [] })
+    await expect(service.readWorkspaceChanges(workspace.id)).resolves.toMatchObject({
+      diff: { files: [] }
+    })
   })
 
   it('resolves a file inside a workspace to an absolute path', async () => {
@@ -3064,9 +3065,9 @@ describe('a pasted image', () => {
 
 describe('the sides a diff is coloured from', () => {
   /*
-   * Read beside the diff rather than after it: the two describe one tree, and a
-   * pane holding a diff from one moment and sides from another would colour
-   * lines by numbers that had moved.
+   * From the same read as the diff: the two describe one tree, and a pane
+   * holding a diff from one moment and sides from another would colour lines
+   * by numbers that had moved.
    */
   async function withChange(): Promise<{ service: OctopusService; workspaceId: string }> {
     const repo = join(dir, 'planner')
@@ -3082,15 +3083,15 @@ describe('the sides a diff is coloured from', () => {
   it('answers with both whole sides of a changed file', async () => {
     const { service, workspaceId } = await withChange()
 
-    await expect(service.readWorkspaceFileSides(workspaceId)).resolves.toMatchObject({
-      'README.md': { current: '# changed' }
+    await expect(service.readWorkspaceChanges(workspaceId)).resolves.toMatchObject({
+      sides: { 'README.md': { current: '# changed' } }
     })
   })
 
   it('refuses a workspace it does not have', async () => {
     const { service } = await withChange()
 
-    await expect(service.readWorkspaceFileSides('missing')).rejects.toThrow()
+    await expect(service.readWorkspaceChanges('missing')).rejects.toThrow()
   })
 })
 

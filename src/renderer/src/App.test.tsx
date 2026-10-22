@@ -1370,9 +1370,9 @@ describe('App', () => {
 
     try {
       givenTwoProjects()
-      vi.mocked(window.octopus.workspaces.diff).mockResolvedValue({
+      vi.mocked(window.octopus.workspaces.changes).mockResolvedValue({
         ok: true,
-        value: workspaceDiff([fileDiff('src/a.ts')])
+        value: { diff: workspaceDiff([fileDiff('src/a.ts')]), sides: {} }
       })
       // The sample the pane measures its monospace cell from reports zero in
       // jsdom, so no width would ever be wide enough for two columns.
@@ -2582,9 +2582,9 @@ describe('App', () => {
   // The Changes tab's menu opens the viewer the tree opens, not the system's app.
   it('opens a changed file in the centre from the Changes tab', async () => {
     givenTwoProjects()
-    vi.mocked(window.octopus.workspaces.diff).mockResolvedValue({
+    vi.mocked(window.octopus.workspaces.changes).mockResolvedValue({
       ok: true,
-      value: workspaceDiff([fileDiff('README.md')])
+      value: { diff: workspaceDiff([fileDiff('README.md')]), sides: {} }
     })
     vi.mocked(window.octopus.files.read).mockResolvedValue({
       ok: true,
@@ -2737,9 +2737,9 @@ describe('App', () => {
 
     // A note added behind an open file would land in a composer nobody can see.
     it('steps back behind a review note added from the changes', async () => {
-      vi.mocked(window.octopus.workspaces.diff).mockResolvedValue({
+      vi.mocked(window.octopus.workspaces.changes).mockResolvedValue({
         ok: true,
-        value: workspaceDiff([fileDiff('src/a.ts')])
+        value: { diff: workspaceDiff([fileDiff('src/a.ts')]), sides: {} }
       })
       const user = await openReadme()
       await screen.findByText('# Planner')

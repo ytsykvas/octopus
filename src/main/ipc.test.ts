@@ -431,8 +431,7 @@ describe('channel table', () => {
     'workspaces:notes',
     'workspaces:remove',
     'workspaces:hasChanges',
-    'workspaces:diff',
-    'workspaces:fileSides',
+    'workspaces:changes',
     'workspaces:revertFile',
     'workspaces:pullRequest',
     'workspaces:createPullRequest',
@@ -1724,9 +1723,9 @@ describe('workspaces of a real project', () => {
     const workspace = await createWorkspace(projectId)
     await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
 
-    await expect(invoke('workspaces:diff', workspace.id)).resolves.toMatchObject({
+    await expect(invoke('workspaces:changes', workspace.id)).resolves.toMatchObject({
       ok: true,
-      value: { added: 1, files: [{ path: 'draft.txt', status: 'untracked' }] }
+      value: { diff: { added: 1, files: [{ path: 'draft.txt', status: 'untracked' }] } }
     })
   })
 
@@ -1810,17 +1809,16 @@ describe('workspaces of a real project', () => {
     })
   })
 
-  /* Beside the diff and not folded into it: the pane draws the moment the diff
-     arrives and the colours land after, so a payload only the highlighter reads
-     should not be on the path that draws. */
-  it('carries the sides a file is coloured from across', async () => {
+  /* In the same answer as the diff, so the two cannot describe different
+     trees. */
+  it('carries the sides a file is coloured from beside the diff', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
     await writeFile(join(workspace.path, 'README.md'), '# changed\n', 'utf8')
 
-    await expect(invoke('workspaces:fileSides', workspace.id)).resolves.toMatchObject({
+    await expect(invoke('workspaces:changes', workspace.id)).resolves.toMatchObject({
       ok: true,
-      value: { 'README.md': { current: '# changed' } }
+      value: { sides: { 'README.md': { current: '# changed' } } }
     })
   })
 
@@ -2240,7 +2238,7 @@ describe('workspaces of a real project', () => {
     await service.updateProjectById(projectId, { baseBranch: 'main' })
     await run('git', ['branch', '-m', 'main', 'trunk'], { cwd: join(dir, 'planner') })
 
-    await expect(invoke('workspaces:diff', workspace.id)).resolves.toMatchObject({
+    await expect(invoke('workspaces:changes', workspace.id)).resolves.toMatchObject({
       ok: false,
       code: 'baseUnknown'
     })

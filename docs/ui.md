@@ -3170,7 +3170,8 @@ function, three lines of context either side, and everything that gave those
 lines their meaning left out.
 
 The sides come from one `git diff` with the context turned up past any file's
-length, read beside the diff itself. Measured: that costs the same 42ms as the
+length, in the same read as the diff itself — one merge base, one copy of the
+index, and no moment between the two for a file to change in. Measured: that costs the same 42ms as the
 `-U3` the pane draws from — the cost of a diff is walking the trees, not
 printing context — where a `git show` per file cost twelve times as much,
 because each is a process. Past a megabyte the answer is empty and the colours

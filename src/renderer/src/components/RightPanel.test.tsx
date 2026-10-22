@@ -1814,12 +1814,12 @@ describe('RightPanel', () => {
     })
 
     expect(screen.queryByRole('separator')).not.toBeInTheDocument()
-    expect(octopus().workspaces.diff).not.toHaveBeenCalled()
+    expect(octopus().workspaces.changes).not.toHaveBeenCalled()
 
     rerender({ open: true })
 
     await waitFor(() => {
-      expect(octopus().workspaces.diff).toHaveBeenCalledWith(anna.id)
+      expect(octopus().workspaces.changes).toHaveBeenCalledWith(anna.id)
     })
   })
 

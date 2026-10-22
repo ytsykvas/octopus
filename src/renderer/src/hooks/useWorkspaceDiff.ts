@@ -10,11 +10,11 @@ export interface WorkspaceDiffController {
   /**
    * Each changed file's two sides, whole, for colouring them.
    *
-   * Read beside the diff rather than after it: the two describe one tree and a
-   * pane holding a diff from one moment and sides from another would colour
-   * lines by numbers that had moved. Empty is an ordinary answer — a workspace
-   * with nothing in it, or a change too large to carry — and means the colours
-   * come from the hunks alone.
+   * From the same read as the diff: the two describe one tree, and a pane
+   * holding a diff from one moment and sides from another would colour lines
+   * by numbers that had moved. Empty is an ordinary answer — a workspace with
+   * nothing in it, or a change too large to carry — and means the colours come
+   * from the hunks alone.
    */
   readonly sides: Readonly<Record<string, FileSides>>
   /** Nothing has been read yet, so there is nothing to draw and no failure. */
@@ -64,20 +64,14 @@ export function useWorkspaceDiff(
   const generation = useRef(0)
 
   const apply = useCallback(
-    (
-      result: Awaited<ReturnType<typeof window.octopus.workspaces.diff>>,
-      whole: Awaited<ReturnType<typeof window.octopus.workspaces.fileSides>>,
-      attempt: number
-    ) => {
+    (result: Awaited<ReturnType<typeof window.octopus.workspaces.changes>>, attempt: number) => {
       // Another workspace was opened while git was reading. Its own read has
       // started already, and writing this reply now would overwrite it.
       if (attempt !== generation.current) return
 
       if (result.ok) {
-        setDiff(result.value)
-        // A failure here is not one: the colours fall back to the hunks, and
-        // the diff is what the pane is for.
-        setSides(whole.ok ? whole.value : NO_SIDES)
+        setDiff(result.value.diff)
+        setSides(result.value.sides)
         setError(null)
         return
       }
@@ -89,23 +83,10 @@ export function useWorkspaceDiff(
     [describeFailure]
   )
 
-  /* Both at once. The sides are a fifth git call beside the diff's four, all
-     parallel, so asking for them costs no wall clock — and it is the only
-     arrangement where the two cannot describe different trees. */
-  const read = (
-    id: string
-  ): Promise<
-    [
-      Awaited<ReturnType<typeof window.octopus.workspaces.diff>>,
-      Awaited<ReturnType<typeof window.octopus.workspaces.fileSides>>
-    ]
-  > => Promise.all([window.octopus.workspaces.diff(id), window.octopus.workspaces.fileSides(id)])
-
   const load = useCallback(
     async (id: string) => {
       const attempt = ++generation.current
-      const [result, whole] = await read(id)
-      apply(result, whole, attempt)
+      apply(await window.octopus.workspaces.changes(id), attempt)
     },
     [apply]
   )
@@ -125,8 +106,8 @@ export function useWorkspaceDiff(
     const attempt = ++generation.current
 
     void (async () => {
-      const [result, whole] = await read(workspaceId)
-      if (!controller.signal.aborted) apply(result, whole, attempt)
+      const result = await window.octopus.workspaces.changes(workspaceId)
+      if (!controller.signal.aborted) apply(result, attempt)
     })()
 
     return () => {
