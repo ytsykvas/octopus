@@ -567,11 +567,22 @@ rebuilt, 70 ms with the blocks stable and the messages still new, 10 ms with
 both held: the library converts and re-walks every message it has not seen.
 Token streaming never goes through the runtime, which also sidesteps an open
 upstream issue where the cost of each update grows with the thread's length.
-Nor does it go through the log's props: `useStreaming` gathers the fragments and
-draws them every 50 ms, and hands them to `StreamingContext`, which only the
-tail below the thread reads — so a token renders that tail and nothing above
-it. Dependency pinned to an exact version: it is 0.x and its minors have broken
-things.
+Nor does it go through the log's props, nor through anybody's state:
+`useStreaming` gathers the fragments and publishes them every 50 ms into a
+store of the conversation's own, which `StreamingContext` carries and only the
+tail below the thread reads, through `useSyncExternalStore` — so a flush
+renders that tail and nothing else, where as state of the hook it rendered the
+whole pane, composer and pickers included, twenty times a second. The hook's
+own state says only whether something is being written, which is what the
+empty placeholder asks. A pane nobody can see — behind another tab, behind a
+file — gathers and draws nothing, and draws what gathered the moment it comes
+forward. And past 1 500 characters the tail itself is drawn in two parts
+(`streamedText.ts`): everything up to the last blank line that precedes a
+paragraph or heading, outside any fence, parsed once and kept by `Markdown`'s
+memo, and the moving remainder — so a long reply no longer costs its whole
+length at every flush. The final text arrives whole in its own event and is
+parsed whole. Dependency pinned to an exact version: it is 0.x and its minors
+have broken things.
 
 The rows' own props travel in a context, built once per change of anything in
 it: what the rows share — the answers by request, the calls that were plans,

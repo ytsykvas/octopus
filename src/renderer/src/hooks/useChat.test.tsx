@@ -146,7 +146,8 @@ describe('the answer being written, once its block has finished', () => {
     // Longer than a flush, so one still waiting would have landed by now.
     await act(() => new Promise((resolve) => setTimeout(resolve, 100)))
 
-    expect(result.current.streaming.text).toBe('')
+    expect(result.current.stream.read().text).toBe('')
+    expect(result.current.streaming).toBe(false)
     expect(result.current.entries).toHaveLength(1)
   })
 })
@@ -180,7 +181,7 @@ describe('a reading that belongs to the account rather than the conversation', (
     emitAgentEvent(READING)
 
     await waitFor(() => {
-      expect(result.current.streaming.text).toBe('Look')
+      expect(result.current.stream.read().text).toBe('Look')
     })
     expect(result.current.entries).toEqual([])
   })
@@ -211,7 +212,7 @@ describe('a background agent starting or ending', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.streaming.text).toBe('Look')
+      expect(result.current.stream.read().text).toBe('Look')
     })
     expect(result.current.entries).toHaveLength(2)
   })

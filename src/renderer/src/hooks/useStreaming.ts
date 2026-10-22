@@ -19,8 +19,58 @@ export const NOTHING_STREAMING: Streaming = { text: '', thinking: '' }
  */
 export const STREAM_FLUSH_MS = 50
 
+/**
+ * What is being written, held where only the tail that draws it need read it.
+ *
+ * State in the hook made every flush a render of the whole pane: the composer,
+ * its attic and pickers, the side questions, twenty times a second for as long
+ * as the agent wrote. A store read through `useSyncExternalStore` by the one
+ * component below the thread renders that component and nothing else.
+ */
+export interface StreamStore {
+  readonly subscribe: (listener: () => void) => () => void
+  readonly read: () => Streaming
+}
+
+interface Publishing extends StreamStore {
+  readonly publish: (streaming: Streaming) => void
+}
+
+function createStreamStore(initial: Streaming = NOTHING_STREAMING): Publishing {
+  let streaming = initial
+  const listeners = new Set<() => void>()
+
+  return {
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    read: () => streaming,
+    publish: (next) => {
+      streaming = next
+      // Copied, for the reason `chatEvents.ts` gives: a reader may leave mid-call.
+      for (const listener of [...listeners]) listener()
+    }
+  }
+}
+
+/** A store that only ever says one thing — the default, and what a test hands a log. */
+export function streamOf(streaming: Streaming): StreamStore {
+  return createStreamStore(streaming)
+}
+
 export interface StreamingBuffer {
-  readonly streaming: Streaming
+  readonly stream: StreamStore
+  /**
+   * Whether something is being written.
+   *
+   * Moves twice per block, when the first fragment is drawn and when the block
+   * ends — never per flush — so the pane can count a reply being written as
+   * content without being redrawn for every fragment of it.
+   */
+  readonly streaming: boolean
   /** Adds a fragment; it is drawn with the others at the next flush. */
   readonly append: (kind: keyof Streaming, chunk: string) => void
   /** Ends the block being written: nothing waiting, nothing drawn. */
@@ -30,7 +80,8 @@ export interface StreamingBuffer {
    *
    * For the reset made during render on a conversation switch, where refs and
    * timers are off limits. The flush still waiting is cancelled by the switch
-   * itself, through `key`.
+   * itself, through `key`, and so is what was drawn: the store is the
+   * conversation's own, and the next one starts with an empty one.
    */
   readonly reset: () => void
 }
@@ -41,9 +92,22 @@ export interface StreamingBuffer {
  * `key` is the conversation the fragments belong to: when it changes, or the
  * pane goes, a flush still waiting is dropped rather than drawn into whatever
  * comes next.
+ *
+ * `drawn` is whether anybody can see the pane. Behind another tab or a file,
+ * the fragments are gathered and not drawn — parsing a reply nobody is
+ * reading, twenty times a second, was the whole cost of a hidden conversation
+ * — and drawn once, together, the moment the pane comes forward.
  */
-export function useStreaming(key: string | null): StreamingBuffer {
-  const [streaming, setStreaming] = useState<Streaming>(NOTHING_STREAMING)
+export function useStreaming(key: string | null, drawn = true): StreamingBuffer {
+  // A store per conversation rather than one cleared on a switch: the switch
+  // happens during render, where a store cannot tell its readers anything, and
+  // a fresh empty one needs no telling. Adjusted during render, as React has
+  // state derived from props done.
+  const [held, setHeld] = useState(() => ({ key, store: createStreamStore() }))
+  const store = held.key === key ? held.store : createStreamStore()
+  if (held.key !== key) setHeld({ key, store })
+
+  const [streaming, setStreaming] = useState(false)
   const pending = useRef<{ text: string; thinking: string }>({ text: '', thinking: '' })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -53,8 +117,7 @@ export function useStreaming(key: string | null): StreamingBuffer {
     pending.current = { text: '', thinking: '' }
   }, [])
 
-  const append = useCallback((kind: keyof Streaming, chunk: string) => {
-    pending.current[kind] += chunk
+  const schedule = useCallback(() => {
     if (timer.current !== null) return
 
     timer.current = setTimeout(() => {
@@ -63,23 +126,37 @@ export function useStreaming(key: string | null): StreamingBuffer {
       const { text, thinking } = pending.current
       pending.current = { text: '', thinking: '' }
       timer.current = null
-      setStreaming((current) => ({
-        text: current.text + text,
-        thinking: current.thinking + thinking
-      }))
+      const current = store.read()
+      store.publish({ text: current.text + text, thinking: current.thinking + thinking })
+      setStreaming(true)
     }, STREAM_FLUSH_MS)
-  }, [])
+  }, [store])
+
+  const append = useCallback(
+    (kind: keyof Streaming, chunk: string) => {
+      pending.current[kind] += chunk
+      if (drawn) schedule()
+    },
+    [drawn, schedule]
+  )
+
+  // What gathered while the pane was hidden is drawn as it comes forward.
+  useEffect(() => {
+    if (!drawn) return
+    if (pending.current.text !== '' || pending.current.thinking !== '') schedule()
+  }, [drawn, schedule])
 
   const discard = useCallback(() => {
     cancel()
-    setStreaming(NOTHING_STREAMING)
-  }, [cancel])
+    store.publish(NOTHING_STREAMING)
+    setStreaming(false)
+  }, [cancel, store])
 
   const reset = useCallback(() => {
-    setStreaming(NOTHING_STREAMING)
+    setStreaming(false)
   }, [])
 
   useEffect(() => cancel, [key, cancel])
 
-  return { streaming, append, discard, reset }
+  return { stream: store, streaming, append, discard, reset }
 }

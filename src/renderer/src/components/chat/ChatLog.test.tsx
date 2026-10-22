@@ -8,7 +8,7 @@ import type { TaskView } from '@core/backgroundTasks.js'
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
-import type { Streaming } from '../../hooks/useStreaming.js'
+import { type Streaming, streamOf } from '../../hooks/useStreaming.js'
 import { agentsOf, task } from '../../test/tasks.js'
 import { highlight } from '../diff/highlight.js'
 import { AgentsContext } from './agentTasks.js'
@@ -106,7 +106,7 @@ function renderLog({
 
   render(
     <AgentsContext.Provider value={agentsOf(tasks)}>
-      <StreamingContext.Provider value={streaming}>
+      <StreamingContext.Provider value={streamOf(streaming)}>
         <ChatLog
           entries={[]}
           busy={false}

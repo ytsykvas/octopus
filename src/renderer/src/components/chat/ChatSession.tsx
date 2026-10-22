@@ -260,7 +260,8 @@ export function ChatSession({
     tab.status,
     describeFailure,
     onOpened,
-    planExecutionMode
+    planExecutionMode,
+    visible
   )
 
   // Held against the entries, like the log's own walks: this reads the whole
@@ -563,19 +564,18 @@ export function ChatSession({
   // this would quietly scroll a background conversation to the top on every
   // event it received — which is exactly when a background conversation is
   // worth coming back to.
+  //
+  // On the entries and not on what streams in: a flush renders the tail of the
+  // log and not this pane, and the tail growing is what the observer below
+  // follows.
   useEffect(() => {
     const element = scroller.current
     if (!visible || !element || !pinnedToBottom.current) return
 
     element.scrollTop = element.scrollHeight
-  }, [visible, chat.entries, chat.streaming])
+  }, [visible, chat.entries])
 
-  const isEmpty =
-    chat.entries.length === 0 &&
-    !chat.loading &&
-    !chat.busy &&
-    chat.streaming.text === '' &&
-    chat.streaming.thinking === ''
+  const isEmpty = chat.entries.length === 0 && !chat.loading && !chat.busy && !chat.streaming
 
   // Rows grow after they are first laid out — markdown, highlighted code — so
   // the scroll above can land short of the end. Followed here for as long as the
@@ -717,7 +717,7 @@ export function ChatSession({
               </Placeholder>
             ) : (
               <div ref={logContent}>
-                <StreamingContext.Provider value={chat.streaming}>
+                <StreamingContext.Provider value={chat.stream}>
                   <ChatLog
                     entries={chat.entries}
                     busy={chat.busy}

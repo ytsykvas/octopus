@@ -23,7 +23,7 @@ import {
   useExternalStoreRuntime
 } from '@assistant-ui/react'
 import type { TFunction } from 'i18next'
-import { createContext, memo, useContext, useMemo } from 'react'
+import { createContext, memo, useContext, useMemo, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FormValues } from '@core/elicitation.js'
@@ -38,7 +38,7 @@ import { Button } from '../Button.js'
 import { DisclosureButton } from '../Disclosure.js'
 import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { shown } from '../diff/shown.js'
-import { NOTHING_STREAMING, type Streaming } from '../../hooks/useStreaming.js'
+import { NOTHING_STREAMING, type StreamStore, streamOf } from '../../hooks/useStreaming.js'
 import { sameMap, sameSet, useSameValue } from '../../hooks/useSameValue.js'
 import { DaySeparator } from './DayChip.js'
 import { exitCodeOf, formatClock, formatFullTime, formatTokens } from './format.js'
@@ -47,6 +47,7 @@ import { BLOCK_PART, DAY_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
 import { type MessageBlock, messageBlocks } from './userMessage.js'
+import { splitStreamed } from './streamedText.js'
 import { type Expansion, ExpandContext, FileLinkContext, useExpanded } from './expansion.js'
 import {
   answersByRequest,
@@ -128,7 +129,7 @@ interface ChatLogProps {
  * with it — every row, every markdown block re-parsed — for a change that is
  * only ever at the bottom.
  */
-export const StreamingContext = createContext<Streaming>(NOTHING_STREAMING)
+export const StreamingContext = createContext<StreamStore>(streamOf(NOTHING_STREAMING))
 
 /**
  * The conversation itself.
@@ -301,15 +302,22 @@ function AgentsAtWork({
  * The block still being written, below the rows that are done.
  *
  * The only reader of `StreamingContext`, so a streamed token renders this and
- * nothing above it.
+ * nothing above it — nor the pane around the log, since what streams in is
+ * read from a store rather than carried in anybody's state.
+ *
+ * A long reply is drawn in two parts, the settled one parsed once and kept:
+ * see `splitStreamed`.
  */
 function StreamingTail(): React.JSX.Element {
-  const streaming = useContext(StreamingContext)
+  const stream = useContext(StreamingContext)
+  const streaming = useSyncExternalStore(stream.subscribe, stream.read)
+  const { settled, tail } = splitStreamed(streaming.text)
 
   return (
     <>
       {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
-      {streaming.text !== '' && <Prose text={streaming.text} />}
+      {settled !== '' && <Prose text={settled} />}
+      {tail !== '' && <Prose text={tail} />}
     </>
   )
 }

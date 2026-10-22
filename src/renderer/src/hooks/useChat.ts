@@ -19,7 +19,7 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { Failure, Result } from '../../../preload/index.js'
 import { useMainWorking } from './backgroundTasks.js'
 import { onChatEvent } from './chatEvents.js'
-import { type Streaming, useStreaming } from './useStreaming.js'
+import { type StreamStore, useStreaming } from './useStreaming.js'
 
 /** A tool call the agent is blocked on, waiting to be told whether it may run. */
 /**
@@ -109,7 +109,10 @@ function withWaiting(
 export interface ChatController {
   readonly chat: Chat | null
   readonly entries: readonly ChatEntry[]
-  readonly streaming: Streaming
+  /** What the agent is writing, for the tail of the log alone — see `useStreaming`. */
+  readonly stream: StreamStore
+  /** Whether the agent is writing something: true from the first fragment drawn to the block's end. */
+  readonly streaming: boolean
   /** A turn is in flight: the agent is working, or waiting on an answer. */
   readonly busy: boolean
   /**
@@ -237,18 +240,21 @@ export function useChat(
    * the setting's own default, which is what a config that has not been read
    * yet stands for.
    */
-  planExecutionMode: PlanExecutionMode = 'auto'
+  planExecutionMode: PlanExecutionMode = 'auto',
+  /** Whether anybody can see the pane; what streams in while nobody can is drawn when they can. */
+  drawn = true
 ): ChatController {
   const chatId = initial?.id ?? null
 
   const [chat, setChat] = useState<Chat | null>(initial)
   const [entries, setEntries] = useState<readonly ChatEntry[]>([])
   const {
+    stream,
     streaming,
     append: appendStreaming,
     discard: discardStreaming,
     reset: resetStreaming
-  } = useStreaming(chat?.id ?? null)
+  } = useStreaming(chat?.id ?? null, drawn)
   const [busy, setBusy] = useState(false)
   const [waiting, setWaiting] = useState<ReadonlySet<string>>(NOTHING_WAITING)
   /** Messages queued too recently to mark yet, each with the timer that will. */
@@ -816,6 +822,7 @@ export function useChat(
   return {
     chat,
     entries,
+    stream,
     streaming,
     busy: working,
     waiting,
