@@ -5,6 +5,12 @@ import { Button } from '../Button.js'
 export interface AccountCardProps {
   readonly title: string
   readonly hint: string
+  /**
+   * What the account needs installed. Shown only while it is not connected:
+   * on a Mac without the CLI, "Sign in" opens a terminal that fails, and
+   * nothing else on the screen says why.
+   */
+  readonly setup: string
   readonly connected: boolean
   /** The account's own identifier — an email or a login. */
   readonly primary: string | null
@@ -23,6 +29,7 @@ export interface AccountCardProps {
 export function AccountCard({
   title,
   hint,
+  setup,
   connected,
   primary,
   details,
@@ -53,6 +60,7 @@ export function AccountCard({
           )}
 
           <p className="text-ink-faint mt-1.5 leading-relaxed">{hint}</p>
+          {!connected && <p className="text-ink-faint mt-1 leading-relaxed">{setup}</p>}
         </div>
 
         <Button

@@ -1638,8 +1638,12 @@ export const en = {
       'Connect GitHub to add a project by cloning one of your repositories, and to open pull requests and read checks. Credentials stay with the gh CLI, in the system keychain.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'The agent runs on this account.',
+    claudeAccountSetup:
+      'Signing in needs Claude Code installed on this Mac. Without an account octopus still opens, but the agent cannot answer.',
     githubAccount: 'GitHub',
     githubAccountHint: 'Adding projects from GitHub, pull requests and checks.',
+    githubAccountSetup:
+      'Needs the GitHub CLI installed (brew install gh). Without it everything else works; pull requests and cloning do not.',
     connected: 'Connected',
     notConnected: 'Not connected',
     signIn: 'Sign in',
