@@ -1540,7 +1540,7 @@ describe('projects', () => {
     const workspace = await service.createWorkspaceIn(project.id)
     await rm(workspace.path, { recursive: true, force: true })
 
-    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    await expect(service.removeProjectById(project.id)).resolves.toEqual([workspace.id])
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -1555,7 +1555,7 @@ describe('projects', () => {
 
     await rm(repo, { recursive: true, force: true })
 
-    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    await expect(service.removeProjectById(project.id)).resolves.toHaveLength(1)
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -1632,7 +1632,7 @@ describe('projects', () => {
   })
 
   it('removing a missing project does not corrupt state', async () => {
-    await expect(service.removeProjectById('missing')).resolves.toBeUndefined()
+    await expect(service.removeProjectById('missing')).resolves.toEqual([])
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -3144,7 +3144,7 @@ describe('removing a project', () => {
     await mkdir(join(dir, 'elsewhere'), { recursive: true })
     await symlink(join(dir, 'elsewhere'), join(workspace.path, '.octopus'))
 
-    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    await expect(service.removeProjectById(project.id)).resolves.toEqual([workspace.id])
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -3194,14 +3194,14 @@ describe('removing a project', () => {
     await service.createWorkspaceIn(project.id)
     await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
 
-    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    await expect(service.removeProjectById(project.id)).resolves.toHaveLength(1)
     expect(service.listProjects()).toHaveLength(0)
   })
 
   it('cleans up after a project whose record has already gone', async () => {
     // A directory nothing points at is exactly the case worth removing, so the
     // delete runs whether or not the project is still in state.
-    await expect(service.removeProjectById('never-existed')).resolves.toBeUndefined()
+    await expect(service.removeProjectById('never-existed')).resolves.toEqual([])
   })
 
   it('does not raise when the stored settings cannot be deleted', async () => {
@@ -3211,7 +3211,7 @@ describe('removing a project', () => {
      * rather than a reason to fail. An id that could never name one is the
      * cheapest way to make it fail on purpose.
      */
-    await expect(service.removeProjectById('../elsewhere')).resolves.toBeUndefined()
+    await expect(service.removeProjectById('../elsewhere')).resolves.toEqual([])
   })
 })
 

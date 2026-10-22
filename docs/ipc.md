@@ -45,7 +45,7 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 | `projects:update`        | `id`, `patch` | patch validated with `ProjectPatchSchema`. Not for the lists below, which have `projects:edit`                                                                                                                                                                                                                                              |
 | `projects:edit`          | `id`, `edit`  | one list changed by an operation (`ProjectEditSchema`): a skill off or on by default, and `preferLocal` — "Use mine instead" for one setting                                                                                                                                                                                                |
 | `projects:reorder`       | `ids`         | every project id in the order the tab strip shows them, validated as a list of strings. Applied to the state at commit time, so a list a step behind keeps a project it lacks (last) and drops an id that is gone                                                                                                                           |
-| `projects:remove`        | `id`          | runs each workspace's cleanup script, then deletes the workspaces, their branches, and the project's directory under the data root                                                                                                                                                                                                          |
+| `projects:remove`        | `id`          | runs each workspace's cleanup script, then deletes the workspaces, their branches, and the project's directory under the data root, and forgets the workspaces' last runs                                                                                                                                                                   |
 | `projects:branches`      | `id`          | remote branches, ordered with main/master/develop first                                                                                                                                                                                                                                                                                     |
 | `projects:pullRequests`  | `id`          | every branch of the repository that has a request, in one call — the workspace list marks each row, and a read per row would be a network call per row                                                                                                                                                                                      |
 | `projects:listRemote`    | —             | what the account can push to, personal and organisation alike, through `gh api graphql`, whether the walk stopped at its limit, and which organisations the account belongs to — the last a sibling field on the same `viewer`, so it costs no second request and is what lets the picker name an organisation that put nothing in the list |
@@ -218,8 +218,11 @@ failed build is not shown beside a server from the Run before. It lives in `main
 the window throws a pane's buffer away when it unmounts, and "why does Run not
 work?" is asked after the run; it lives in memory, so it survives a reload of
 the window and not a restart. A workspace's records go when `workspaces:remove`
-succeeds, and `workspaces:create` starts a workspace with none — a project
-added back comes back under its old id and draws from the same names.
+succeeds, and every workspace's of a project when `projects:remove` does —
+`removeProjectById` answers with their ids. `workspaces:create` starts a
+workspace with none as well: a project added back comes back under its old id
+and draws from the same names, and a removal that threw part-way could not say
+which it removed.
 
 `chats:elicitation` answers an MCP server's question: the request id, one of
 `accept`, `decline` and `cancel`, and the form as the window holds it — text for

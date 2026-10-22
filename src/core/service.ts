@@ -865,7 +865,11 @@ export interface OctopusService {
   updateProjectById(projectId: string, patch: ProjectPatch): Promise<void>
   /** Changes one list of a project, applied to it as the write finds it (`ProjectEdit`). */
   editProjectById(projectId: string, edit: ProjectEdit): Promise<void>
-  removeProjectById(projectId: string): Promise<void>
+  /**
+   * Removes a project and every workspace of it, answering with those
+   * workspaces' ids — what `main` drops their last runs by.
+   */
+  removeProjectById(projectId: string): Promise<string[]>
   /** Saves the order the tab strip shows the projects in. */
   reorderProjects(orderedIds: readonly string[]): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
@@ -5697,6 +5701,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async removeProjectById(projectId) {
       const project = findProject(state, projectId)
       const closing: Chat[] = []
+      // Read now: the commit below drops them all, whether or not the project's own record is there.
+      const removed = workspacesOfProject(state, projectId).map((workspace) => workspace.id)
 
       // The records go either way, so the directories and branches have to go
       // with them: left behind they are invisible to the app but still occupy
@@ -5754,6 +5760,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * survives is exactly the case worth cleaning.
        */
       await removeProjectData(projectId, dataRoot).catch(() => undefined)
+      return removed
     },
 
     async listWorkspaces(projectId) {

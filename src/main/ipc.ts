@@ -785,8 +785,13 @@ export function registerIpc(
     attempt(() => service.reorderProjects(z.array(z.string()).parse(orderedIds)))
   )
 
+  // Its workspaces' last runs go with it, once it has gone.
   host.handle('projects:remove', (_event, projectId: string) =>
-    attempt(() => service.removeProjectById(projectId))
+    attempt(async () => {
+      for (const workspaceId of await service.removeProjectById(projectId)) {
+        terminals.forgetRuns(workspaceId)
+      }
+    })
   )
 
   host.handle('projects:listRemote', () => attempt(() => service.listRemoteRepositories()))
@@ -800,10 +805,10 @@ export function registerIpc(
   )
 
   /*
-   * A workspace just made has never run here. Removing a project does not
-   * forget its workspaces' runs, and a project added back has the same id and
-   * draws from the same names — so the earlier holder's record would answer
-   * "why does Run not work?" about a run that never happened here.
+   * A workspace just made has never run here. A project added back has the
+   * same id and draws from the same names, so a record a removal failed to
+   * drop — one that threw part-way, before it could say which it removed —
+   * would answer "why does Run not work?" about a run that never happened here.
    */
   host.handle('workspaces:create', (_event, projectId: string) =>
     attempt(async () => {

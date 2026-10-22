@@ -1773,6 +1773,18 @@ describe('workspaces of a real project', () => {
     expect(sessions.refuse).not.toHaveBeenCalled()
   })
 
+  it('forgets the last runs of every workspace of a project it removes', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    sessions.forgetRuns.mockClear()
+
+    await expect(invoke('projects:remove', projectId)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
+  })
+
   it('starts a new workspace with no last runs', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
