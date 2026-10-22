@@ -89,18 +89,41 @@ describe('Sidebar', () => {
     expect(screen.getByTitle('/Users/someone/code/planner')).toBeInTheDocument()
   })
 
-  it('invites the first workspace when the project has none', () => {
-    renderSidebar({ workspaces: [] })
+  // The header's "+" alone was easy to miss on an empty list, so the first
+  // row's place holds a button of its own, naming where the branch comes from.
+  it('offers the first workspace in the place of the first row', () => {
+    renderSidebar({ workspaces: [], project: project({ baseBranch: 'origin/main' }) })
 
-    expect(screen.getByText('No workspaces yet. Add one with the + above.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Create the first workspace/ })).toHaveTextContent(
+      'Its own branch from main'
+    )
   })
 
-  it('drops the invitation once a workspace exists', () => {
+  it('creates the first workspace from that button', async () => {
+    const user = userEvent.setup()
+    const props = renderSidebar({ workspaces: [] })
+
+    await user.click(screen.getByRole('button', { name: /Create the first workspace/ }))
+
+    expect(props.onCreateWorkspace).toHaveBeenCalledTimes(1)
+  })
+
+  // The same refusal as the header's: one press is one workspace.
+  it('refuses a second first workspace while one is being made', async () => {
+    const user = userEvent.setup()
+    const props = renderSidebar({ workspaces: [], creating: true })
+    const button = screen.getByRole('button', { name: /Create the first workspace/ })
+
+    await user.click(button)
+
+    expect(props.onCreateWorkspace).not.toHaveBeenCalled()
+    expect(button).toBeDisabled()
+  })
+
+  it('drops the first-workspace button once a workspace exists', () => {
     renderSidebar({ workspaces: [workspaceView('anna')] })
 
-    expect(
-      screen.queryByText('No workspaces yet. Add one with the + above.')
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Create the first workspace/ })).toBeNull()
     expect(screen.getByText('anna')).toBeInTheDocument()
   })
 

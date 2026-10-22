@@ -2443,6 +2443,15 @@ describes, and `warning` is the one worth crossing the window for, because that
 turn has stopped and is waiting on you. A workspace holding several
 conversations draws one dot each inside the tile instead.
 
+**A workspace is added the way a repository is.** The header's "+" is
+`AddTile`, the same dashed 40px tile that ends the project strip — an empty
+slot, one level down — and turns into a spinner while creation fetches. A
+project with no workspaces does not explain where the button is: the first
+row's place holds a dashed card of a row's exact size (`.workspace-card`, its
+border dashed) that creates the first one and names the branch it will start
+from. It is shown while the list is still loading too, as the sentence it
+replaced was.
+
 ### What is left of the account, at the foot of the left column
 
 The account's plan windows sit at the foot of the left column — under the tab
