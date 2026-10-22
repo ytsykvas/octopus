@@ -1496,7 +1496,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'PL' }))
 
     expect(
-      await screen.findByText('No workspaces yet. Add one with the + above.')
+      await screen.findByRole('button', { name: /Create the first workspace/ })
     ).toBeInTheDocument()
   })
 
