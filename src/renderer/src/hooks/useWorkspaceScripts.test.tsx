@@ -1,8 +1,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { ResolvedScript } from '@core/repoSource.js'
+import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
 
+import type { Result } from '../../../preload/index.js'
+
+import { emitAgentEvent } from '../test/chat.js'
+import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { useWorkspaceScripts } from './useWorkspaceScripts.js'
 
@@ -16,6 +20,16 @@ function scriptOf(id: string): ResolvedScript {
     contents: '#!/bin/sh\n'
   }
 }
+
+const TURN_DONE = {
+  type: 'result',
+  ok: true,
+  costUsd: null,
+  durationMs: 1,
+  inputTokens: null,
+  outputTokens: null,
+  terminalReason: null
+} as const
 
 beforeEach(() => {
   // The stub is installed for every renderer test by `test/setup.ts`; this only
@@ -88,22 +102,72 @@ describe('useWorkspaceScripts', () => {
     })
   })
 
-  it('reads again when another workspace is opened', async () => {
+  // A turn that ended there while it was hidden was never heard; nothing else moved.
+  it('reads the workspace opened alone, and keeps the others', async () => {
+    const initialProps: { shown: string | null } = { shown: 'planner/anna' }
     const { result, rerender } = renderHook(
-      ({ shown }: { shown: string | null }) =>
-        useWorkspaceScripts(['planner/anna', 'planner/bob'], null, shown),
-      { initialProps: { shown: 'planner/anna' } }
+      ({ shown }) => useWorkspaceScripts(['planner/anna', 'planner/bob'], null, shown),
+      { initialProps }
     )
     await waitFor(() => {
       expect(result.current.scripts.size).toBe(2)
     })
-    expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(2)
+    vi.mocked(octopus().workspaces.scripts).mockClear()
 
     rerender({ shown: 'planner/bob' })
 
     await waitFor(() => {
-      expect(octopus().workspaces.scripts).toHaveBeenCalledTimes(4)
+      expect(octopus().workspaces.scripts).toHaveBeenCalledExactlyOnceWith('planner/bob')
     })
+    await waitFor(() => {
+      expect(result.current.scripts.size).toBe(2)
+    })
+
+    // Closed, nothing is on screen to read.
+    rerender({ shown: null })
+    expect(octopus().workspaces.scripts).toHaveBeenCalledOnce()
+  })
+
+  it('reads the workspace on screen alone once a turn ends there', async () => {
+    const { result } = renderHook(() =>
+      useWorkspaceScripts(['planner/anna', 'planner/bob'], null, 'planner/anna')
+    )
+    await waitFor(() => {
+      expect(result.current.scripts.size).toBe(2)
+    })
+    vi.mocked(octopus().workspaces.scripts).mockClear()
+    vi.mocked(octopus().workspaces.scripts).mockResolvedValueOnce({ ok: false, error: 'gone' })
+
+    emitAgentEvent(TURN_DONE, 'chat-1', 'planner/anna')
+
+    await waitFor(() => {
+      expect(result.current.failures.has('planner/anna')).toBe(true)
+    })
+    expect(octopus().workspaces.scripts).toHaveBeenCalledExactlyOnceWith('planner/anna')
+    expect([...result.current.scripts.keys()]).toEqual(['planner/bob'])
+
+    // And an answer clears the failure it replaces.
+    emitAgentEvent(TURN_DONE, 'chat-1', 'planner/anna')
+    await waitFor(() => {
+      expect(result.current.failures.has('planner/anna')).toBe(false)
+    })
+    expect(result.current.scripts.has('planner/anna')).toBe(true)
+  })
+
+  it('reads whole again when a switch cut a whole read short', async () => {
+    const reading = held<Result<ScriptsInWorkspace>>()
+    vi.mocked(octopus().workspaces.scripts).mockReturnValueOnce(reading.promise)
+
+    const { result, rerender } = renderHook(
+      ({ shown }: { shown: string }) =>
+        useWorkspaceScripts(['planner/anna', 'planner/bob'], null, shown),
+      { initialProps: { shown: 'planner/anna' } }
+    )
+    rerender({ shown: 'planner/bob' })
+    act(() => {
+      reading.resolve({ ok: true, value: { approved: true, digest: 'd', scripts: {} } })
+    })
+
     await waitFor(() => {
       expect(result.current.scripts.size).toBe(2)
     })

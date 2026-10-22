@@ -1661,8 +1661,9 @@ nor a settings dialog, and the tab went on saying there was no build script
 until something else happened to re-read it. A turn is heard only for the
 workspace on screen, so one that ended in another is read when that one is
 opened.
-It re-reads every workspace rather than the one: a few dozen small file reads,
-not git processes.
+The first three read every workspace; a turn and a switch read the one on screen
+alone and keep the other answers, since nothing else can have moved — unless the
+whole read they follow had not finished, which is then made again whole.
 
 **`Stop` reaches only what is still going.** Both halves watch one token, since
 stopping means stopping this workspace rather than guessing which half is busy —
