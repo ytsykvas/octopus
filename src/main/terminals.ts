@@ -10,6 +10,7 @@ import {
   withRun,
   type RecordedRun,
   type RunOutcome,
+  type RunPurpose,
   type WorkspaceRuns
 } from '../core/runLog.js'
 import {
@@ -273,7 +274,7 @@ export class TerminalManager {
    * shell that would not spawn. None of those leaves a session behind, so Help
    * would have said nothing had run — or quoted the Run before as this one.
    */
-  refuse(workspaceId: string, purpose: TerminalPurpose, reason: string): void {
+  refuse(workspaceId: string, purpose: RunPurpose, reason: string): void {
     this.record(workspaceId, purpose, { kind: 'refused', reason })
   }
 

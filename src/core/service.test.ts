@@ -15078,6 +15078,17 @@ describe('reading one workspace', () => {
     await expect(service.readWorkspace('planner/nobody')).resolves.toBeNull()
   })
 
+  // Asked by every refusal the Scripts tab reports, so it reads no git at all.
+  it('says whether a workspace is on record, asking git nothing', async () => {
+    const { service: watched, projectId, calls } = await recorded()
+    const workspace = await watched.createWorkspaceIn(projectId)
+    calls.length = 0
+
+    expect(watched.hasWorkspace(workspace.id)).toBe(true)
+    expect(watched.hasWorkspace('planner/nobody')).toBe(false)
+    expect(calls).toEqual([])
+  })
+
   /*
    * A turn ending fires the row, the diff and the file sides together, and each
    * resolved the base on its own. Shared while in flight, and only then, so a

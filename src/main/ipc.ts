@@ -54,6 +54,7 @@ import { QuestionAnswerSchema } from '../core/questions.js'
 import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { terminalOwners } from '../core/resources.js'
 import { RevertPathSchema } from '../core/revert.js'
+import { RunPurposeSchema, TAIL_CHARS } from '../core/runLog.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { StrayPidsSchema } from '../core/strayServers.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
@@ -74,7 +75,7 @@ import type {
 } from '../core/service.js'
 import { SideExchangeSchema, SideHistorySchema, SideQuestionSchema } from '../core/sideQuestions.js'
 import { ProjectEditSchema, ProjectPatchSchema } from '../core/store.js'
-import { TerminalPurposeSchema, TerminalSpecSchema } from '../core/terminal.js'
+import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
 import type { RemoveOptions } from '../core/workspaces.js'
@@ -184,8 +185,15 @@ export interface IpcHost {
  */
 const FilePathSchema = z.string().min(1).max(4096)
 
-/** Why a Run did not start, as the Scripts tab worded it. */
-const RefusalSchema = z.string().max(2000)
+/**
+ * Why a Run did not start, as the Scripts tab worded it.
+ *
+ * Cut rather than refused: a refusal dropped here would leave the run before
+ * to answer as this one. Only a guard on what `main` holds — Help masks the
+ * reason and cuts it far shorter, in that order, so this cut can never leave
+ * half a secret in what it shows.
+ */
+const RefusalSchema = z.string().transform((reason) => reason.slice(0, TAIL_CHARS))
 
 /** A message of a conversation, by the id it was sent under. */
 const MessageIdSchema = z.uuid()
@@ -306,18 +314,17 @@ export function registerIpc(
 
   /*
    * A Run the Scripts tab refused before its script started, in the words it
-   * showed, kept beside the runs Help quotes. The reason is parsed rather than
-   * trusted: it is held for the life of the app and written into a message.
+   * showed, kept beside the runs Help quotes. Parsed rather than trusted, and
+   * kept only for a workspace on record: all three are held for the life of
+   * the app, and the reason is written into a message.
    */
   host.handle(
     'terminal:refused',
     (_event, workspaceId: string, purpose: unknown, reason: unknown) =>
       attempt(() => {
-        terminals.refuse(
-          workspaceId,
-          TerminalPurposeSchema.parse(purpose),
-          RefusalSchema.parse(reason)
-        )
+        const run = RunPurposeSchema.parse(purpose)
+        const why = RefusalSchema.parse(reason)
+        if (service.hasWorkspace(workspaceId)) terminals.refuse(workspaceId, run, why)
       })
   )
 

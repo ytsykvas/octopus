@@ -186,7 +186,8 @@ showed, for a start that stopped before its script ran (`terminal:refused`): a
 port it could not settle, an env file it would not write, a stray server that
 would not stop, a shell that would not spawn. None of those leaves a session
 behind, so without it Help said nothing had run, or quoted the Run before as
-this one. A build on record is left out once the workspace has no build script:
+this one. A refused run has no `output`; its reason is masked like the output
+and then cut to 2,000 characters (`REFUSAL_CHARS`). A build on record is left out once the workspace has no build script:
 Run then starts the server alone, and the build is from before. `output` is what the script printed with the
 terminal's escapes stripped and each `\r`-redrawn line kept at its final state,
 then every secret a script could have printed masked as `[NAME]` — or
@@ -383,13 +384,13 @@ without creating one — the first message is what brings it into being.
 
 ### Terminals
 
-| Channel            | Arguments                          | Notes                                                                       |
-| ------------------ | ---------------------------------- | --------------------------------------------------------------------------- |
-| `terminal:create`  | `spec`                             | answers with a session id                                                   |
-| `terminal:write`   | `id`, `data`                       |                                                                             |
-| `terminal:resize`  | `id`, `cols`, `rows`               | a resize after the session ended is ignored, not an error                   |
-| `terminal:dispose` | `id`                               | resolves when the session has gone, not when it was asked                   |
-| `terminal:refused` | `workspaceId`, `purpose`, `reason` | keeps a build or server the Scripts tab refused before it started, for Help |
+| Channel            | Arguments                          | Notes                                                                                                                                                                                                                    |
+| ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `terminal:create`  | `spec`                             | answers with a session id                                                                                                                                                                                                |
+| `terminal:write`   | `id`, `data`                       |                                                                                                                                                                                                                          |
+| `terminal:resize`  | `id`, `cols`, `rows`               | a resize after the session ended is ignored, not an error                                                                                                                                                                |
+| `terminal:dispose` | `id`                               | resolves when the session has gone, not when it was asked                                                                                                                                                                |
+| `terminal:refused` | `workspaceId`, `purpose`, `reason` | keeps a build or server the Scripts tab refused before it started, for Help. `purpose` is `setup` or `run` (`RunPurposeSchema`); `reason` is cut to 64K rather than refused, and a workspace not on record keeps nothing |
 
 Output flows the other way, on `terminal:data` and `terminal:exit`. It is sent
 in batches: the first chunk at once, so typing does not lag, and what follows

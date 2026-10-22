@@ -9,6 +9,7 @@ import {
   lastLines,
   MASK_MIN_LENGTH,
   maskValues,
+  REFUSAL_CHARS,
   TAIL_CHARS,
   TAIL_LINES,
   TAIL_OUTPUT_CHARS,
@@ -217,6 +218,33 @@ describe('helpRun', () => {
       purpose: 'setup',
       outcome: { kind: 'refused', reason: 'cannot write PASSWORD=[PASSWORD]' }
     })
+  })
+})
+
+describe('a refusal’s reason', () => {
+  const refused = (reason: string): Parameters<typeof helpRun>[0] => ({
+    purpose: 'run',
+    outcome: { kind: 'refused', reason },
+    raw: ''
+  })
+  const reasonOf = (reason: string, secrets: Parameters<typeof helpRun>[1]): string => {
+    const { outcome } = helpRun(refused(reason), secrets)
+    return outcome.kind === 'refused' ? outcome.reason : ''
+  }
+
+  it('is cut to REFUSAL_CHARS', () => {
+    expect(reasonOf('x'.repeat(REFUSAL_CHARS + 50), [])).toHaveLength(REFUSAL_CHARS)
+  })
+
+  // Cut first, the cut would land inside the value and leave its start unmatched.
+  it('is masked before it is cut, so a value across the cut leaves nothing', () => {
+    const secret = 'sk-live-0123456789abcdef'
+    const reason = `${'x'.repeat(REFUSAL_CHARS - 10)}${secret}`
+
+    const kept = reasonOf(reason, [{ name: 'API_TOKEN', value: secret }])
+
+    expect(kept).not.toContain('sk-live')
+    expect(kept).toHaveLength(REFUSAL_CHARS)
   })
 })
 

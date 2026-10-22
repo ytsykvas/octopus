@@ -35,6 +35,13 @@ export const TAIL_LINES = 200
  */
 export const TAIL_OUTPUT_CHARS = 30_000
 
+/**
+ * How much of a refusal's reason a reader is handed: what the Scripts tab
+ * showed in its banner, which a long one — a malformed config's every issue —
+ * would otherwise take a message's whole ceiling with.
+ */
+export const REFUSAL_CHARS = 2000
+
 export function appendTail(kept: string, chunk: string): string {
   return (kept + chunk).slice(-TAIL_CHARS)
 }
@@ -216,7 +223,9 @@ export function helpRun(
 ): LastRun {
   // A refusal can quote what it refused: a port's holder, a file's contents.
   if (outcome.kind === 'refused') {
-    return { purpose, outcome: { kind: 'refused', reason: maskValues(outcome.reason, secrets) } }
+    // Masked before it is cut, for the same reason the output is.
+    const reason = maskValues(outcome.reason, secrets).slice(0, REFUSAL_CHARS)
+    return { purpose, outcome: { kind: 'refused', reason } }
   }
 
   const masked = maskValues(cleanTerminalOutput(fromWholeLine(raw)), secrets)

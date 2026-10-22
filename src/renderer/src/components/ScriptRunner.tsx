@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ResolvedScript } from '@core/repoSource.js'
+import { isRunPurpose } from '@core/runLog.js'
 import { scriptEnv } from '@core/scriptEnv.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -297,11 +298,12 @@ function Runner({
    *
    * The pane's banner is gone with the pane, and `main` keeps a run's record
    * only once a session starts — so without this "why does Run not work?"
-   * answered that nothing had run, or quoted the run before as this one.
+   * answered that nothing had run, or quoted the run before as this one. An
+   * archive is not a Run, and Help never asks about one.
    */
   const refuse = (reason: string): void => {
     setError(reason)
-    void window.octopus.terminal.refused(workspace.id, kind, reason)
+    if (isRunPurpose(kind)) void window.octopus.terminal.refused(workspace.id, kind, reason)
   }
 
   /**

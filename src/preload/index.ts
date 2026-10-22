@@ -34,13 +34,8 @@ import type { QuestionAnswer } from '@core/questions.js'
 import type { ResourceReading } from '@core/resources.js'
 import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
 import type { ChatEntry } from '@core/transcript.js'
-import type {
-  TerminalExit,
-  TerminalOutput,
-  TerminalPurpose,
-  TerminalSession,
-  TerminalSpec
-} from '@core/terminal.js'
+import type { RunPurpose } from '@core/runLog.js'
+import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
 import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { CliPermission } from '@core/cliPermissions.js'
 import type { WorkspaceChanges } from '@core/diff.js'
@@ -225,11 +220,7 @@ const api = {
       ipcRenderer.invoke('terminal:list') as Promise<Result<TerminalSession[]>>,
 
     /** Keeps why a build or server did not start, for Help to quote. */
-    refused: (
-      workspaceId: string,
-      purpose: TerminalPurpose,
-      reason: string
-    ): Promise<Result<void>> =>
+    refused: (workspaceId: string, purpose: RunPurpose, reason: string): Promise<Result<void>> =>
       ipcRenderer.invoke('terminal:refused', workspaceId, purpose, reason) as Promise<Result<void>>,
 
     onData: fanOut('terminal:data'),

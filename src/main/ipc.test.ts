@@ -34,7 +34,7 @@ import type {
   WorkspaceStatusEvent
 } from '../core/service.js'
 import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
-import type { RecordedRun } from '../core/runLog.js'
+import { TAIL_CHARS, type RecordedRun } from '../core/runLog.js'
 import type { Workspace } from '../core/store.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
@@ -1734,6 +1734,43 @@ describe('workspaces of a real project', () => {
       ok: true,
       value: [{ name: 'fix auth' }]
     })
+  })
+
+  it('keeps a Run the Scripts tab refused, its purpose and reason parsed', async () => {
+    const workspace = await createWorkspace(await addProject())
+
+    await expect(invoke('terminal:refused', workspace.id, 'run', 'Port taken.')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    expect(sessions.refuse).toHaveBeenCalledExactlyOnceWith(workspace.id, 'run', 'Port taken.')
+  })
+
+  // Dropped, the run before would answer as this one; Help masks before it cuts shorter.
+  it('cuts a long reason rather than dropping it', async () => {
+    const workspace = await createWorkspace(await addProject())
+
+    await invoke('terminal:refused', workspace.id, 'setup', 'x'.repeat(TAIL_CHARS + 10))
+
+    expect(sessions.refuse).toHaveBeenCalledExactlyOnceWith(
+      workspace.id,
+      'setup',
+      'x'.repeat(TAIL_CHARS)
+    )
+  })
+
+  it('keeps nothing for a script Help never asks about, or a workspace not on record', async () => {
+    const workspace = await createWorkspace(await addProject())
+
+    for (const purpose of ['archive', 'mining']) {
+      await expect(invoke('terminal:refused', workspace.id, purpose, 'x')).resolves.toMatchObject({
+        ok: false
+      })
+    }
+    await expect(invoke('terminal:refused', 'nobody/here', 'run', 'x')).resolves.toMatchObject({
+      ok: true
+    })
+    expect(sessions.refuse).not.toHaveBeenCalled()
   })
 
   it('starts a new workspace with no last runs', async () => {
@@ -3453,24 +3490,6 @@ describe('the list of what is still running', () => {
       ok: true,
       value: [{ owner: { workspaceId: null, purpose: 'shell' } }]
     })
-  })
-
-  it('keeps a Run the Scripts tab refused, its purpose and reason parsed', async () => {
-    await expect(invoke('terminal:refused', 'planner/anna', 'run', 'Port taken.')).resolves.toEqual(
-      {
-        ok: true,
-        value: undefined
-      }
-    )
-    expect(sessions.refuse).toHaveBeenCalledWith('planner/anna', 'run', 'Port taken.')
-
-    await expect(invoke('terminal:refused', 'planner/anna', 'mining', 'x')).resolves.toMatchObject({
-      ok: false
-    })
-    await expect(
-      invoke('terminal:refused', 'planner/anna', 'run', 'x'.repeat(2001))
-    ).resolves.toMatchObject({ ok: false })
-    expect(sessions.refuse).toHaveBeenCalledOnce()
   })
 
   it('refuses a purpose that is none of the five', async () => {

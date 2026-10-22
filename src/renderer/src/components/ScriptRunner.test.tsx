@@ -1073,6 +1073,27 @@ describe('ScriptRunner', () => {
       'spawn /bin/zsh ENOENT'
     )
   })
+  // An archive is not a Run, and Help never asks about one.
+  it('keeps no refusal of the archive script for Help', async () => {
+    vi.mocked(octopus().terminal.create).mockResolvedValue({ ok: false, error: 'spawn failed' })
+    const onOutcome = vi.fn()
+
+    mountAndStart({
+      workspace: anna,
+      kind: 'archive',
+      script: ownScript('archive', '/tmp/scripts/planner/archive.sh'),
+      port: 3111,
+      rootPath: '/Users/test/planner',
+      onOpenSettings: vi.fn(),
+      onOutcome
+    })
+
+    await waitFor(() => {
+      expect(onOutcome).toHaveBeenCalledWith(false)
+    })
+    expect(octopus().terminal.refused).not.toHaveBeenCalled()
+  })
+
   /*
    * A server octopus did not start, still serving from the worktree — the
    * agent's, most often. Rails refuses a second boot while its pidfile names a

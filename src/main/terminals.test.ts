@@ -1167,12 +1167,6 @@ describe('the last runs of a workspace', () => {
     ])
   })
 
-  it('keeps no refusal of anything but a build or a server', () => {
-    manager.refuse(ANNA, 'archive', 'no cleanup')
-
-    expect(manager.lastRuns(ANNA)).toEqual([])
-  })
-
   it('keeps nothing of a terminal tab, of a sign-in, or of another workspace', () => {
     started('shell').emit('ls')
     started('run', null).emit('signing in')

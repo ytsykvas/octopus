@@ -1261,6 +1261,8 @@ export interface OctopusService {
    * after every turn of every agent.
    */
   readWorkspace(workspaceId: string): Promise<WorkspaceView | null>
+  /** Whether a workspace is on record — nothing read from disk, so cheap to ask. */
+  hasWorkspace(workspaceId: string): boolean
   createWorkspaceIn(projectId: string): Promise<Workspace>
   renameWorkspaceById(workspaceId: string, name: string): Promise<void>
   removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<void>
@@ -5770,6 +5772,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const counts = await countChanges(stored, await baseRefOf(project), makeExec, withIndexCopy)
 
       return reconcile(stored, worktrees, counts, state.chats.filter(isOpenChat), turnStarts)
+    },
+
+    hasWorkspace(workspaceId) {
+      return state.workspaces.some((workspace) => workspace.id === workspaceId)
     },
 
     async readWorkspace(workspaceId) {
