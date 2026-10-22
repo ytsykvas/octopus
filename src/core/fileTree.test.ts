@@ -22,7 +22,6 @@ import {
   parseIgnored,
   parseStaged,
   parseStatus,
-  parseUntracked,
   readFileTree,
   type TreeEntry,
   type TreeEntryKind
@@ -121,7 +120,19 @@ describe('parseStatus', () => {
   })
 
   it('reads nothing from a clean tree', () => {
-    expect(parseStatus('').statuses).toEqual({})
+    expect(parseStatus('')).toEqual({ statuses: {}, movedAway: [], untracked: [] })
+  })
+
+  // What `ls-files --others --exclude-standard` listed, read from the status
+  // instead: under `-uall` it names every untracked file, and a nested
+  // repository as `nested/`, which is a folder read from disk like a submodule.
+  it('lists the untracked files, and a nested repository as a folder', () => {
+    const output = '?? new.ts\0?? deep/nested/\0 M edited.ts\0A  staged.ts\0'
+
+    expect(parseStatus(output).untracked).toEqual([
+      file('new.ts'),
+      { path: 'deep/nested', kind: 'directory', ignored: false }
+    ])
   })
 })
 
@@ -174,17 +185,8 @@ describe('parseStaged', () => {
   })
 })
 
-describe('parseUntracked', () => {
-  it('reads a nested repository as a folder, beside the untracked files', () => {
-    expect(parseUntracked(['new.ts', 'deep/nested/', ''].join('\0'))).toEqual([
-      file('new.ts'),
-      { path: 'deep/nested', kind: 'directory', ignored: false }
-    ])
-  })
-})
-
 describe('parseUntrackedFolders', () => {
-  const untracked = parseUntracked(['u/f.ts', 'nested/', ''].join('\0'))
+  const untracked = parseStatus('?? u/f.ts\0?? nested/\0').untracked
   const ignored = parseIgnored(['logs/', 'logs/x.log', ''].join('\0'))
 
   // What `--directory` printed for a worktree holding all of these, measured.
@@ -210,9 +212,9 @@ describe('parseUntrackedFolders', () => {
 
   // The tree drops the hidden name, so the folder is all that is left to draw.
   it('keeps a folder holding only a hidden name', () => {
-    expect(parseUntrackedFolders('ds/\0', parseUntracked('ds/.DS_Store\0'), []).empty).toEqual([
-      { path: 'ds', kind: 'directory', ignored: false }
-    ])
+    expect(
+      parseUntrackedFolders('ds/\0', parseStatus('?? ds/.DS_Store\0').untracked, []).empty
+    ).toEqual([{ path: 'ds', kind: 'directory', ignored: false }])
   })
 
   // `u2` only shares a prefix with `u`, which holds a file.
@@ -616,7 +618,7 @@ describe('folderStatuses', () => {
 })
 
 describe('readFileTree', () => {
-  it('asks git for the status without its optional lock, and for both listings', async () => {
+  it('asks git for the status without its optional lock, and for three listings', async () => {
     const calls: string[][] = []
 
     await readFileTree((args) => {
@@ -627,7 +629,6 @@ describe('readFileTree', () => {
     expect(calls).toEqual([
       ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-uall'],
       ['ls-files', '-z', '--stage'],
-      ['ls-files', '-z', '--others', '--exclude-standard'],
       ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'],
       ['ls-files', '-z', '--others', '--exclude-standard', '--directory']
     ])
