@@ -169,13 +169,13 @@ Versions below are **actually installed and verified** (`npm run check` and `ele
 
 | Package                        | Version      | Role                    |
 | ------------------------------ | ------------ | ----------------------- |
-| electron                       | 43.3.0       | shell                   |
+| electron                       | 43.5.0       | shell                   |
 | typescript                     | 5.9.3        | language                |
 | electron-vite                  | 6.0.0-beta.1 | build                   |
-| vite                           | 8.2.1        | bundler (Rolldown)      |
-| @anthropic-ai/claude-agent-sdk | 0.3.299      | agent integration       |
-| zod                            | 4.4.3        | on-disk data validation |
-| vitest                         | 4.1.10       | core tests              |
+| vite                           | 8.3.4        | bundler (Rolldown)      |
+| @anthropic-ai/claude-agent-sdk | 0.3.307      | agent integration       |
+| zod                            | 4.6.7        | on-disk data validation |
+| vitest                         | 4.1.11       | core tests              |
 | eslint                         | 10.8.0       | linting                 |
 | typescript-eslint              | 8.66.0       | typed rules             |
 | prettier                       | 3.9.6        | formatting              |

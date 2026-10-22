@@ -602,6 +602,15 @@ outside its own worktrees and refuses a removal with uncommitted work on
 purpose, and either answer is the line below it. A move with neither name nor
 path says "a new worktree", since only the result knows the name the CLI made
 up. A subagent's move stays a step inside its row: it moves the subagent only.
+A move made any other way is not seen — most likely a `cd` in the shell, which
+the CLI keeps as the session's directory, with nothing in the call to say where
+to. The CLI's `CwdChanged` hook would be the place, and measured against SDK
+0.3.307 (CLI 2.1.307) a `hooks.CwdChanged` callback fired neither on
+`EnterWorktree` nor on a `cd` that did move the session, so nothing is built on
+it. What does notice the next tool whose call is a move is a test:
+`toolSummary.test.ts` classifies every name in the SDK's `BUILTIN_TOOL_NAMES`,
+so a tool the SDK adds to that list fails the typecheck until somebody says
+which it is.
 
 **A subagent's work is inside the call that started it.** Its messages arrive on
 the conversation's own stream, told apart only by the id of that call
