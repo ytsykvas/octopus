@@ -332,6 +332,11 @@ describe('channel names', () => {
       () => method('workspaces', 'instruction')('w' as never, 'pullRequest' as never),
       'instructions:effective'
     ],
+    [
+      'workspaces.helpContext',
+      () => method('workspaces', 'helpContext')('w' as never),
+      'workspaces:helpContext'
+    ],
     ['files.open', () => method('files', 'open')('w' as never, 'a.ts' as never), 'files:open'],
     ['files.tree', () => method('files', 'tree')('w' as never), 'files:tree'],
     [

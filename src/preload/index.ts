@@ -17,6 +17,7 @@ import type {
   ChatEvent,
   ChatsChangedEvent,
   ChatStatusEvent,
+  HelpContext,
   PermissionAnswer,
   PermissionRequest,
   PluginApplied,
@@ -688,6 +689,13 @@ const api = {
      */
     instruction: (workspaceId: string, kind: InstructionKind): Promise<Result<string>> =>
       ipcRenderer.invoke('instructions:effective', workspaceId, kind) as Promise<Result<string>>,
+
+    /**
+     * What Help writes under its instruction: the checkout, the scripts and env
+     * set in effect, what is carried, and the variables by name — never a value.
+     */
+    helpContext: (workspaceId: string): Promise<Result<HelpContext>> =>
+      ipcRenderer.invoke('workspaces:helpContext', workspaceId) as Promise<Result<HelpContext>>,
 
     /**
      * Copies the project's carried files into this workspace, where it lacks

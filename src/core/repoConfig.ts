@@ -87,7 +87,9 @@ const ITEM_PATHS: Record<RepoItemId, string> = {
   'instruction.addressReview': join(INSTRUCTIONS, INSTRUCTION_FILES.addressReview),
   'instruction.review': join(INSTRUCTIONS, INSTRUCTION_FILES.review),
   'instruction.multiAgentReview': join(INSTRUCTIONS, INSTRUCTION_FILES.multiAgentReview),
-  'instruction.resolveConflicts': join(INSTRUCTIONS, INSTRUCTION_FILES.resolveConflicts)
+  'instruction.resolveConflicts': join(INSTRUCTIONS, INSTRUCTION_FILES.resolveConflicts),
+  'instruction.setupScripts': join(INSTRUCTIONS, INSTRUCTION_FILES.setupScripts),
+  'instruction.diagnoseRun': join(INSTRUCTIONS, INSTRUCTION_FILES.diagnoseRun)
 }
 
 /**

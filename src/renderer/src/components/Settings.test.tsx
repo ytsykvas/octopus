@@ -149,7 +149,9 @@ describe('the instruction every project falls back to', () => {
       'addressReview',
       'review',
       'multiAgentReview',
-      'resolveConflicts'
+      'resolveConflicts',
+      'setupScripts',
+      'diagnoseRun'
     ])
   })
 

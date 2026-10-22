@@ -594,7 +594,13 @@ export const en = {
       'Sent when you ask for a review run by several subagents at once, each reading for one thing.',
     resolveConflicts: 'Resolving conflicts',
     resolveConflictsHint:
-      'Sent when the pull request conflicts with its base branch and you ask the agent to settle it.'
+      'Sent when the pull request conflicts with its base branch and you ask the agent to settle it.',
+    setupScripts: 'Setting the project up to run',
+    setupScriptsHint:
+      'Put in a new conversation, unsent, when you choose Help → “Set this project up to run”. Octopus adds the checkout, the scripts in effect, the files it carries and the names of the variables below it — never their values.',
+    diagnoseRun: 'Diagnosing a run that failed',
+    diagnoseRunHint:
+      'Put in a new conversation, unsent, when you choose Help → “Why does Run not work?”. Octopus adds the same facts and the last lines of the latest build and server, with their exit codes.'
   },
 
   pullRequest: {

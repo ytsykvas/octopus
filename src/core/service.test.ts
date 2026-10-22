@@ -2896,6 +2896,89 @@ describe('sets of variables', () => {
   })
 })
 
+/*
+ * Help writes these under its instructions, into a message the agent reads and
+ * the reader may send anywhere — so a value never travels, only names.
+ */
+describe('what Help is told about a workspace', () => {
+  async function withWorkspace(): Promise<{
+    projectId: string
+    workspaceId: string
+    repoPath: string
+  }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    // The project's own, which git has canonicalised: `/var` is `/private/var`.
+    return { projectId: project.id, workspaceId: workspace.id, repoPath: project.repoPath }
+  }
+
+  it('names the variables of the set in effect, and never their values', async () => {
+    const { projectId, workspaceId, repoPath } = await withWorkspace()
+    await service.saveEnvProfile(
+      projectId,
+      'default',
+      'API_KEY=sentinel-secret-value\nDB_NAME=app_$OCTOPUS_WORKSPACE_SLUG\n'
+    )
+
+    const context = await service.helpContext(workspaceId)
+
+    expect(context).toMatchObject({
+      rootPath: repoPath,
+      envFile: '.env',
+      profile: 'default',
+      variableNames: ['API_KEY', 'DB_NAME'],
+      envProblems: []
+    })
+    expect(JSON.stringify(context)).not.toContain('sentinel-secret-value')
+    expect(JSON.stringify(context)).not.toContain('app_')
+  })
+
+  // The one problem whose subject is the whole line — which may be a pasted secret.
+  it('reports a line that is not an assignment by its number alone', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'A=1\nsk-live-pasted-token\nA=2\n')
+
+    const { envProblems } = await service.helpContext(workspaceId)
+
+    expect(envProblems).toEqual([
+      { line: 2, reason: 'noAssignment', subject: '' },
+      { line: 3, reason: 'duplicate', subject: 'A' }
+    ])
+  })
+
+  it('answers for the set a workspace was put on, and does not fall back to the default', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'DUMP_URL=s3://staging\n')
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+    await rm(projectEnvProfile(projectId, 'prod', join(dir, 'data')))
+
+    await expect(service.helpContext(workspaceId)).resolves.toMatchObject({
+      profile: 'prod',
+      variableNames: [],
+      envProblems: []
+    })
+  })
+
+  it('names what a run would carry and the scripts it would run', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveProjectCarryList(projectId, '.env\nconfig/master.key\n')
+    await service.saveProjectScript(projectId, 'run', '#!/bin/sh\nexec true\n')
+
+    const context = await service.helpContext(workspaceId)
+
+    expect(context.carry).toEqual(['.env', 'config/master.key'])
+    expect(context.scripts).toEqual(await service.workspaceScripts(workspaceId))
+    expect(context.scripts.scripts.run?.source).toBe('project')
+  })
+
+  it('refuses a workspace it does not know', async () => {
+    await expect(service.helpContext('planner/nobody')).rejects.toThrow()
+  })
+})
+
 describe('removing a project', () => {
   it("runs each workspace's cleanup and deletes what the project kept here", async () => {
     /*

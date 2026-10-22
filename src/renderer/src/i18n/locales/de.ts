@@ -491,7 +491,13 @@ export const de: Translation = {
       'Wird gesendet, wenn du ein Review durch mehrere Subagenten zugleich anforderst, von denen jeder auf eine Sache achtet.',
     resolveConflicts: 'Konflikte lösen',
     resolveConflictsHint:
-      'Wird gesendet, wenn der Pull Request mit seinem Basis-Branch kollidiert und du den Agenten bittest, das zu lösen.'
+      'Wird gesendet, wenn der Pull Request mit seinem Basis-Branch kollidiert und du den Agenten bittest, das zu lösen.',
+    setupScripts: 'Das Projekt startklar machen',
+    setupScriptsHint:
+      'Wird ungesendet in ein neues Gespräch gelegt, wenn du Hilfe → „Dieses Projekt startklar machen“ wählst. Octopus fügt darunter den Checkout, die geltenden Skripte, die mitgenommenen Dateien und die Namen der Variablen an — nie ihre Werte.',
+    diagnoseRun: 'Einen fehlgeschlagenen Lauf untersuchen',
+    diagnoseRunHint:
+      'Wird ungesendet in ein neues Gespräch gelegt, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.'
   },
 
   pullRequest: {

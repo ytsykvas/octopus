@@ -552,6 +552,11 @@ export function registerIpc(
     attempt(() => service.readEffectiveInstruction(workspaceId, InstructionKindSchema.parse(kind)))
   )
 
+  // Beside the instruction it is written under. The id is only looked up.
+  host.handle('workspaces:helpContext', (_event, workspaceId: string) =>
+    attempt(() => service.helpContext(workspaceId))
+  )
+
   /*
    * Every skill argument is parsed rather than trusted, and the name most of
    * all: it becomes a directory under `~/.octopus` and reaches a recursive

@@ -157,7 +157,7 @@ describe('REPO_ITEM_IDS', () => {
     expect(REPO_ITEM_IDS).toContain('carry')
     expect(REPO_ITEM_IDS).toContain('script.archive')
     expect(REPO_ITEM_IDS).toContain('instruction.resolveConflicts')
-    expect(REPO_ITEM_IDS).toHaveLength(12)
+    expect(REPO_ITEM_IDS).toHaveLength(14)
   })
 })
 

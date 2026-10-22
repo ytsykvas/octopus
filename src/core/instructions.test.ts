@@ -8,6 +8,8 @@ import {
   effectiveInstruction,
   InstructionKindSchema,
   instructionPath,
+  instructionTemplate,
+  PUBLISHES_AFTER,
   readInstruction,
   writeInstruction
 } from './instructions.js'
@@ -167,5 +169,26 @@ describe('the installation-wide instruction', () => {
     await writeInstruction('pullRequest', null, 'Say why.', root)
 
     expect(await readInstruction('pullRequest', null, root)).toBe('Say why.')
+  })
+})
+
+describe('the two Help asks for', () => {
+  // A Help chat writes the worktree's scripts at most: nothing the reader asked to push.
+  it('push nothing after the turn', () => {
+    expect(PUBLISHES_AFTER.setupScripts).toBe(false)
+    expect(PUBLISHES_AFTER.diagnoseRun).toBe(false)
+  })
+
+  // A template literal reads `${…}` as its own; the guard line must survive as shell.
+  it('keep the shell in the setup template as written', () => {
+    expect(instructionTemplate('setupScripts')).toContain(
+      ': "${OCTOPUS_WORKSPACE_SLUG:?refusing to run without a workspace slug}"'
+    )
+  })
+
+  it('never ask for a value to be written', () => {
+    for (const kind of ['setupScripts', 'diagnoseRun'] as const) {
+      expect(instructionTemplate(kind)).toMatch(/never write a (?:value|variable's value)/i)
+    }
   })
 })

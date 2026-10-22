@@ -400,6 +400,7 @@ describe('channel table', () => {
     'instructions:read',
     'instructions:save',
     'instructions:effective',
+    'workspaces:helpContext',
     'skills:list',
     'skills:read',
     'skills:save',
@@ -744,6 +745,20 @@ describe('validation at the boundary', () => {
     await expect(invoke('instructions:effective', workspace.id, 'pullRequest')).resolves.toEqual({
       ok: true,
       value: 'Project rules.'
+    })
+  })
+
+  it('carries what Help is told about a workspace across, names and no values', async () => {
+    const projectId = await addProject('helped')
+    const workspace = await createWorkspace(projectId)
+    await invoke('env:save', projectId, 'default', 'API_KEY=sentinel\n')
+
+    const answer = await invoke('workspaces:helpContext', workspace.id)
+
+    expect(answer).toMatchObject({ ok: true, value: { variableNames: ['API_KEY'] } })
+    expect(JSON.stringify(answer)).not.toContain('sentinel')
+    await expect(invoke('workspaces:helpContext', 'helped/nobody')).resolves.toMatchObject({
+      ok: false
     })
   })
 
@@ -1587,7 +1602,7 @@ describe('scripts and instructions of a real project', () => {
     }
 
     expect(answer.ok).toBe(true)
-    expect(answer.value).toHaveLength(13)
+    expect(answer.value).toHaveLength(15)
     // The workspace is parsed rather than trusted.
     await expect(invoke('sources:read', projectId, 7)).resolves.toMatchObject({ ok: false })
   })

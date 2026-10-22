@@ -102,7 +102,7 @@ import { type CliPermission, readCliPermissions } from './cliPermissions.js'
 import { allowedStanding, type StandingPermission, withStanding } from './standingPermissions.js'
 import type { CarryReport, PreparedWorkspace } from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
-import { parseEnvBody, substituteEnv } from './envBlock.js'
+import { checkEnvBody, type EnvProblem, parseEnvBody, substituteEnv } from './envBlock.js'
 import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
   createProfile,
@@ -789,6 +789,30 @@ function standingFrom(request: PendingPermission): StandingPermission {
   return { toolName: request.toolName, ruleContent: null }
 }
 
+/**
+ * What octopus knows about a workspace that its agent cannot find for itself —
+ * the facts Help writes under its two instructions.
+ *
+ * Built from what a run already reads, so Help and Run cannot disagree. **No
+ * value of a variable is in here**: names only, and a line of the env set that
+ * is not an assignment is reported by its number alone, since the line may
+ * well be a pasted secret.
+ */
+export interface HelpContext {
+  /** The checkout, as `$OCTOPUS_ROOT_PATH` gives it to a script. */
+  readonly rootPath: string
+  /** The file in the worktree the env block is written into. */
+  readonly envFile: string
+  /** The env set in effect. */
+  readonly profile: string
+  /** What it defines, by name. */
+  readonly variableNames: readonly string[]
+  readonly envProblems: readonly EnvProblem[]
+  /** The paths carried into the workspace before a run, the repository's included. */
+  readonly carry: readonly string[]
+  readonly scripts: ScriptsInWorkspace
+}
+
 export interface OctopusService {
   getConfig(): Config
   updateConfig(
@@ -834,6 +858,11 @@ export interface OctopusService {
    * one they learn to click through.
    */
   workspaceScripts(workspaceId: string): Promise<ScriptsInWorkspace>
+  /**
+   * The facts Help adds under its instructions: where the checkout is, which
+   * scripts and env set are in effect, what is carried and the variable names.
+   */
+  helpContext(workspaceId: string): Promise<HelpContext>
   /**
    * Records that these scripts were read, so they may run.
    *
@@ -4030,6 +4059,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
+  /** Which script would run for each kind in this workspace, and whether it may. */
+  async function scriptsIn(workspace: Workspace, project: Project): Promise<ScriptsInWorkspace> {
+    const scripts = await resolveScripts(workspace.path, project.id, dataRoot, project.preferLocal)
+    const digest = scriptsDigest(scripts)
+
+    // Nothing supplied by the repository is nothing to approve, which is
+    // every project configured the way they all used to be.
+    return { approved: allowedToRun(project, digest), digest, scripts }
+  }
+
   /**
    * Whether the scripts a repository supplies may run.
    *
@@ -5149,18 +5188,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async workspaceScripts(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-      const scripts = await resolveScripts(
-        workspace.path,
-        project.id,
-        dataRoot,
-        project.preferLocal
-      )
-      const digest = scriptsDigest(scripts)
+      return scriptsIn(workspace, requireProject(workspace.projectId))
+    },
 
-      // Nothing supplied by the repository is nothing to approve, which is
-      // every project configured the way they all used to be.
-      return { approved: allowedToRun(project, digest), digest, scripts }
+    async helpContext(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      const { values, stored, variables } = await scriptSetFor(project, workspace)
+
+      return {
+        rootPath: values.rootPath,
+        envFile: await envFileFor(project, workspace),
+        profile: values.profile,
+        variableNames: Object.keys(variables),
+        // The one reason whose subject is the whole line, which may be a value.
+        envProblems: checkEnvBody(stored).map((problem) =>
+          problem.reason === 'noAssignment' ? { ...problem, subject: '' } : problem
+        ),
+        carry: (await carriedIn(project, workspace.path)).map((file) => file.path),
+        scripts: await scriptsIn(workspace, project)
+      }
     },
 
     async projectScripts(projectId, workspaceId) {
