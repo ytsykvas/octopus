@@ -9,6 +9,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useConfirm } from '../hooks/useConfirm.js'
 import { useErrorMessage } from '../hooks/useErrorMessage.js'
+import { useLatest } from '../hooks/useLatest.js'
 import { Button } from './Button.js'
 import { Placeholder } from './Placeholder.js'
 import { Terminal } from './Terminal.js'
@@ -233,10 +234,7 @@ function Runner({
    * A cleanup closes over the render that installed it, so plain state would
    * always say what it said when the component first mounted.
    */
-  const stillRunning = useRef(running)
-  useEffect(() => {
-    stillRunning.current = running
-  }, [running])
+  const stillRunning = useLatest(running)
 
   /*
    * Announced on the listener as well as on the state, which is the whole of
@@ -274,10 +272,7 @@ function Runner({
    * closure would be the one from before. Kept in an effect rather than written
    * during render, so it changes once the render that carries it has committed.
    */
-  const latestStop = useRef(stopToken)
-  useEffect(() => {
-    latestStop.current = stopToken
-  }, [stopToken])
+  const latestStop = useLatest(stopToken)
 
   /*
    * A start asked for while one is already going.

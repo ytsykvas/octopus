@@ -10,6 +10,7 @@ export type TabChat = Omit<WorkspaceChat, 'turnStartedAt'>
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useErrorMessage } from './useErrorMessage.js'
 import { onChatEvent } from './chatEvents.js'
+import { useLatest } from './useLatest.js'
 
 /**
  * How long to wait after a turn ends before asking git again.
@@ -74,11 +75,7 @@ export function useWorkspaces(
 
   // Read inside callbacks without making them depend on the projects array,
   // which changes identity on every refresh.
-  const latestProjects = useRef(projects)
-
-  useEffect(() => {
-    latestProjects.current = projects
-  }, [projects])
+  const latestProjects = useLatest(projects)
 
   const load = useCallback(async (): Promise<Map<string, readonly WorkspaceView[]>> => {
     const entries = await Promise.all(
@@ -89,7 +86,7 @@ export function useWorkspaces(
     )
 
     return new Map(entries)
-  }, [])
+  }, [latestProjects])
 
   const refresh = useCallback(async () => {
     setByProject(await load())
@@ -245,7 +242,7 @@ export function useWorkspaces(
       for (const pending of timers.values()) clearTimeout(pending)
       timers.clear()
     }
-  }, [patchWorkspace])
+  }, [patchWorkspace, latestProjects])
 
   /*
    * What a workspace is doing, patched in as the core says so.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -14,6 +14,7 @@ import {
 } from '../attention.js'
 import { chime } from '../sound.js'
 import { onChatEvent } from './chatEvents.js'
+import { useLatest } from './useLatest.js'
 
 /** How many toasts are drawn at once; older news stays on the project's tab. */
 export const TOAST_LIMIT = 3
@@ -52,14 +53,9 @@ export function useAttention(
 
   // Read by the listener, which is subscribed once: resubscribing on every
   // click would drop whatever arrived in between.
-  const open = useRef(openWorkspaceId)
-  const known = useRef(workspaces)
-  const audible = useRef(sound)
-  useEffect(() => {
-    open.current = openWorkspaceId
-    known.current = workspaces
-    audible.current = sound
-  }, [openWorkspaceId, workspaces, sound])
+  const open = useLatest(openWorkspaceId)
+  const known = useLatest(workspaces)
+  const audible = useLatest(sound)
 
   useEffect(
     () =>
@@ -73,7 +69,7 @@ export function useAttention(
           chime(notice.kind, audible.current)
         }
       }),
-    []
+    [audible, known, open]
   )
 
   // Opening a workspace is going to look; adjusted during render rather than

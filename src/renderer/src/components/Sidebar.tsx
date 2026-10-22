@@ -3,12 +3,12 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { shortBranchName } from '@core/branches.js'
-import { MAX_CHATS_PER_WORKSPACE } from '@core/chats.js'
 import type { Project } from '@core/store.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { AddTile } from './AddTile.js'
+import { chatCapHint } from './chat/chatName.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import type { HelpKind } from './helpMessage.js'
 import { ResizeHandle } from './ResizeHandle.js'
@@ -265,6 +265,12 @@ function FirstWorkspaceButton({
   )
 }
 
+/** What Help can be asked, each item opening a conversation of its own. */
+const HELP_ITEMS = [
+  { kind: 'setupScripts', label: 'help.setup', hint: 'help.setupHint', Icon: Wrench },
+  { kind: 'diagnoseRun', label: 'help.diagnose', hint: 'help.diagnoseHint', Icon: Stethoscope }
+] as const
+
 /**
  * The way to help, at the foot of the list and just above the limits — and only
  * while a workspace is open.
@@ -273,9 +279,7 @@ function FirstWorkspaceButton({
  * to be found at a glance: a faint ring at rest that turns only under the
  * pointer or keyboard focus, so idle it costs nothing.
  *
- * Each item opens a conversation, so at the cap on conversations both are
- * shown disabled, saying why, rather than hidden: a menu whose contents move is
- * harder to learn.
+ * At the cap on conversations every item is disabled, saying why.
  */
 function HelpMenu({
   onHelp,
@@ -285,7 +289,7 @@ function HelpMenu({
   readonly canStartChat: boolean
 }): React.JSX.Element {
   const { t } = useTranslation()
-  const full = t('chat.historyFull', { limit: MAX_CHATS_PER_WORKSPACE })
+  const full = chatCapHint(t)
 
   return (
     <div className="shrink-0 px-2 pt-1 pb-3">
@@ -307,28 +311,16 @@ function HelpMenu({
             <span className="min-w-0 flex-1 truncate">{t('sidebar.help')}</span>
           </button>
         )}
-        actions={[
-          {
-            id: 'setup',
-            label: t('help.setup'),
-            description: canStartChat ? t('help.setupHint') : full,
-            icon: <Wrench aria-hidden size={15} />,
-            disabled: !canStartChat,
-            onSelect: () => {
-              onHelp('setupScripts')
-            }
-          },
-          {
-            id: 'diagnose',
-            label: t('help.diagnose'),
-            description: canStartChat ? t('help.diagnoseHint') : full,
-            icon: <Stethoscope aria-hidden size={15} />,
-            disabled: !canStartChat,
-            onSelect: () => {
-              onHelp('diagnoseRun')
-            }
+        actions={HELP_ITEMS.map(({ kind, label, hint, Icon }) => ({
+          id: kind,
+          label: t(label),
+          description: canStartChat ? t(hint) : full,
+          icon: <Icon aria-hidden size={15} />,
+          disabled: !canStartChat,
+          onSelect: () => {
+            onHelp(kind)
           }
-        ]}
+        }))}
       />
     </div>
   )

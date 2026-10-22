@@ -12,6 +12,7 @@ import { formatHandoff } from '@core/handoff.js'
 import type { SideExchange } from '@core/sideQuestions.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
+import { useLatest } from './useLatest.js'
 
 /**
  * One tab of the chat pane.
@@ -204,11 +205,7 @@ export function useChatTabs(
 
   // The workspace on screen, for the callbacks to check against. Updated in an
   // effect and read only inside a callback, never during render.
-  const shown = useRef(workspaceId)
-
-  useEffect(() => {
-    shown.current = workspaceId
-  }, [workspaceId])
+  const shown = useLatest(workspaceId)
 
   /*
    * The strip as it stands, for the callbacks that rebuild it.
@@ -326,7 +323,7 @@ export function useChatTabs(
 
         void load(announced.workspaceId, () => shown.current !== announced.workspaceId)
       }),
-    [load]
+    [load, shown]
   )
 
   useEffect(
@@ -349,28 +346,36 @@ export function useChatTabs(
             : current
         )
       }),
-    []
+    [shown]
   )
 
-  const bind = useCallback((key: string, chat: Chat) => {
-    const id = shown.current
-    /* v8 ignore next */
-    if (id === null) return
+  const bind = useCallback(
+    (key: string, chat: Chat) => {
+      const id = shown.current
+      /* v8 ignore next */
+      if (id === null) return
 
-    const next = latestTabs.current.map((tab) => (tab.key === key ? { ...tabOf(chat), key } : tab))
+      const next = latestTabs.current.map((tab) =>
+        tab.key === key ? { ...tabOf(chat), key } : tab
+      )
 
-    latestTabs.current = next
-    setTabs(next)
-    publish.current(id, next)
-  }, [])
+      latestTabs.current = next
+      setTabs(next)
+      publish.current(id, next)
+    },
+    [shown]
+  )
 
-  const select = useCallback((key: string) => {
-    const id = shown.current
-    /* v8 ignore next */
-    if (id === null) return
+  const select = useCallback(
+    (key: string) => {
+      const id = shown.current
+      /* v8 ignore next */
+      if (id === null) return
 
-    setActiveByWorkspace((current) => new Map(current).set(id, key))
-  }, [])
+      setActiveByWorkspace((current) => new Map(current).set(id, key))
+    },
+    [shown]
+  )
 
   const selectIn = useCallback((workspaceId: string, key: string) => {
     setActiveByWorkspace((current) => new Map(current).set(workspaceId, key))
@@ -426,7 +431,7 @@ export function useChatTabs(
       await load(id, () => shown.current !== id)
       select(created.value.id)
     },
-    [tabs, load, select, describeFailure]
+    [tabs, load, select, describeFailure, shown]
   )
 
   const fork = useCallback(
@@ -448,7 +453,7 @@ export function useChatTabs(
       select(forked.value.id)
       return true
     },
-    [load, select, describeFailure]
+    [load, select, describeFailure, shown]
   )
 
   const copyTranscript = useCallback(
@@ -482,7 +487,7 @@ export function useChatTabs(
 
     if (closed.ok) setHistory(closed.value)
     else report.current(describeFailure(closed))
-  }, [describeFailure])
+  }, [describeFailure, shown])
 
   /*
    * No confirmation. Closing used to discard the conversation, and asking was
@@ -509,7 +514,7 @@ export function useChatTabs(
       // what the menu does, and each entry costs a read of its transcript.
       await load(id, () => shown.current !== id)
     },
-    [load, describeFailure]
+    [load, describeFailure, shown]
   )
 
   const reopen = useCallback(
@@ -530,7 +535,7 @@ export function useChatTabs(
       await load(id, () => shown.current !== id)
       select(reopened.value.id)
     },
-    [load, select, describeFailure]
+    [load, select, describeFailure, shown]
   )
 
   const reopenLast = useCallback(async () => {
@@ -550,7 +555,7 @@ export function useChatTabs(
 
     const [latest] = closed.value
     if (latest) await reopen(latest.chat.id)
-  }, [reopen, describeFailure])
+  }, [reopen, describeFailure, shown])
 
   const rename = useCallback(
     async (chatId: string, title: string) => {
@@ -571,7 +576,7 @@ export function useChatTabs(
 
       await load(id, () => shown.current !== id)
     },
-    [load, describeFailure]
+    [load, describeFailure, shown]
   )
 
   return {

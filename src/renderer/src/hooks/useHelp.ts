@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { type HelpKind, helpMessage } from '../components/helpMessage.js'
 import type { ChatTabsController } from './useChatTabs.js'
 import { useErrorMessage } from './useErrorMessage.js'
+import { useLatest } from './useLatest.js'
 
 /**
  * What Help does when one of its items is chosen: a new conversation with the
@@ -31,11 +32,7 @@ export function useHelp(
   // The workspace on screen, for the answer to check against when it comes
   // back. Updated in an effect and read only inside the callback, as in
   // `useChatTabs`, never during render.
-  const shown = useRef(workspaceId)
-
-  useEffect(() => {
-    shown.current = workspaceId
-  }, [workspaceId])
+  const shown = useLatest(workspaceId)
 
   // A press while the last one is still reading would open a second conversation.
   const busy = useRef(false)
@@ -79,6 +76,6 @@ export function useHelp(
         }
       })()
     },
-    [workspaceId, create, keepDraft, report, describeFailure, t]
+    [workspaceId, create, keepDraft, report, describeFailure, t, shown]
   )
 }

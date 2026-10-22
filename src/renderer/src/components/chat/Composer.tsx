@@ -20,6 +20,7 @@ import type { SkillListing } from '@core/skills.js'
 import type { ChatMode } from '../../hooks/useChat.js'
 
 import { useDismiss } from '../../hooks/useDismiss.js'
+import { useLatest } from '../../hooks/useLatest.js'
 import { type ChatNote, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
@@ -275,17 +276,13 @@ export function Composer({
    * Refs, written in a handler and read in a cleanup, never during render.
    */
   const latest = useRef(draft)
-  const leave = useRef(onDraftLeave)
-
-  useEffect(() => {
-    leave.current = onDraftLeave
-  })
+  const leave = useLatest(onDraftLeave)
 
   useEffect(
     () => () => {
       leave.current(latest.current)
     },
-    []
+    [leave]
   )
 
   /** The one way the text moves, so what is handed up cannot fall behind it. */

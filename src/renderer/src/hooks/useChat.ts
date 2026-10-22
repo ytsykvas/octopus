@@ -20,6 +20,7 @@ import type { Failure, Result } from '../../../preload/index.js'
 import { useMainWorking } from './backgroundTasks.js'
 import { onChatEvent } from './chatEvents.js'
 import { type StreamStore, useStreaming } from './useStreaming.js'
+import { useLatest } from './useLatest.js'
 
 /** A tool call the agent is blocked on, waiting to be told whether it may run. */
 /**
@@ -296,10 +297,7 @@ export function useChat(
    * everything built on it, down to the log's "carry out this plan" — a new
    * function on every render of the pane, which redrew every row of the log.
    */
-  const announce = useRef(onOpened)
-  useEffect(() => {
-    announce.current = onOpened
-  }, [onOpened])
+  const announce = useLatest(onOpened)
 
   // Reset during render rather than in an effect. React supports this for
   // state derived from a prop, and it matters here: an effect runs after the
@@ -540,7 +538,7 @@ export function useChat(
     announce.current(opened.value)
 
     return opened.value
-  }, [chat, workspaceId, describeFailure])
+  }, [chat, workspaceId, describeFailure, announce])
 
   const send = useCallback(
     async (text: string) => {
