@@ -39,6 +39,7 @@ import { DisclosureButton } from '../Disclosure.js'
 import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { shown } from '../diff/shown.js'
 import { NOTHING_STREAMING, type Streaming } from '../../hooks/useStreaming.js'
+import { sameMap, sameSet, useSameValue } from '../../hooks/useSameValue.js'
 import { DaySeparator } from './DayChip.js'
 import { exitCodeOf, formatClock, formatFullTime, formatTokens } from './format.js'
 import { Markdown } from './Markdown.js'
@@ -56,7 +57,7 @@ import {
   retractedUuids
 } from './logBlocks.js'
 import { nameOf } from './agentFormat.js'
-import { AgentsContext } from './agentTasks.js'
+import { useAgentTasks, useTaskById } from './agentTasks.js'
 import { ToolRow } from './ToolRow.js'
 import { WorkingLine } from './WorkingLine.js'
 import { readFailure } from './toolFailure.js'
@@ -163,11 +164,23 @@ export const ChatLog = memo(function ChatLog({
    * `Edit` replacing a 400-line block is a 160,000-cell table. Keyed this way
    * the work happens when the log actually grows, and not when a question is
    * answered or the turn ends.
+   *
+   * And what they gather is handed on as the same object for as long as it
+   * reads the same. Every row takes these through the context below and is
+   * memoised on it, so a map rebuilt for every append redrew every row to add
+   * one line — the set of plans changes when a plan is handed over, not when
+   * the agent reads a file.
    */
   // Gathered once for the whole log: an answer is recorded as its own event, so
   // it sits further down than the question whose card draws it.
-  const answers = useMemo(() => answersByRequest(entries), [entries])
-  const elicitationAnswers = useMemo(() => elicitationsByRequest(entries), [entries])
+  const answers = useSameValue(
+    useMemo(() => answersByRequest(entries), [entries]),
+    sameMap
+  )
+  const elicitationAnswers = useSameValue(
+    useMemo(() => elicitationsByRequest(entries), [entries]),
+    sameMap
+  )
   const blocks = useMemo(() => buildBlocks(entries), [entries])
   // What the working line counts from.
   const turnStart = useMemo(() => turnStartedAt(entries), [entries])
@@ -176,16 +189,56 @@ export const ChatLog = memo(function ChatLog({
   const links = useMemo(() => ({ workspacePath, onOpenFile }), [workspacePath, onOpenFile])
   // Which calls handed over a plan, so that a plan sent back for another round
   // is not drawn as something that broke.
-  const plans = useMemo(() => planCalls(entries), [entries])
+  const plans = useSameValue(
+    useMemo(() => planCalls(entries), [entries]),
+    sameSet
+  )
   // What the agent took back, so the rows it names can say so rather than
   // standing above their own replacement as though they still held.
-  const retracted = useMemo(() => retractedUuids(entries), [entries])
-  const agentsAway = liveAgents(useContext(AgentsContext).tasks)
+  const retracted = useSameValue(
+    useMemo(() => retractedUuids(entries), [entries]),
+    sameSet
+  )
 
   // The turns as the library's runtime holds them. Held against the blocks:
   // it caches each message by the object it was handed, and a list rebuilt on
   // every render would make it walk the whole thread for every streamed token.
   const messages = useMemo(() => toThreadMessages(blocks, entries), [blocks, entries])
+
+  // Built once per change of anything in it, so the rows — memoised on it —
+  // are left alone when the log renders for a reason that is none of theirs.
+  const rows = useMemo<RowProps>(
+    () => ({
+      plans,
+      retracted,
+      waiting,
+      busy,
+      answerable,
+      pendingElicitationId,
+      elicitationAnswers,
+      onAnswerElicitation,
+      answers,
+      onAnswer,
+      onAnswerQuestions,
+      onExecutePlan,
+      onRewind
+    }),
+    [
+      plans,
+      retracted,
+      waiting,
+      busy,
+      answerable,
+      pendingElicitationId,
+      elicitationAnswers,
+      onAnswerElicitation,
+      answers,
+      onAnswer,
+      onAnswerQuestions,
+      onExecutePlan,
+      onRewind
+    ]
+  )
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({
     messages,
     isRunning: false,
@@ -203,23 +256,7 @@ export const ChatLog = memo(function ChatLog({
       <AssistantRuntimeProvider runtime={runtime}>
         <ExpandContext.Provider value={expansion}>
           <FileLinkContext.Provider value={links}>
-            <RowsContext.Provider
-              value={{
-                plans,
-                retracted,
-                waiting,
-                busy,
-                answerable,
-                pendingElicitationId,
-                elicitationAnswers,
-                onAnswerElicitation,
-                answers,
-                onAnswer,
-                onAnswerQuestions,
-                onExecutePlan,
-                onRewind
-              }}
-            >
+            <RowsContext.Provider value={rows}>
               <ThreadPrimitive.Root className="contents">
                 <ThreadPrimitive.Messages>{renderTurn}</ThreadPrimitive.Messages>
               </ThreadPrimitive.Root>
@@ -232,15 +269,33 @@ export const ChatLog = memo(function ChatLog({
         <StreamingTail />
       </ExpandContext.Provider>
 
-      {/* With the main agent's turn over, what is still at work is the agents it
-          sent off, and a clock from the turn's start would be counting the
-          wrong thing. */}
-      {(busy || agentsAway > 0) && (
-        <WorkingLine since={busy ? turnStart : null} agents={busy ? 0 : agentsAway} />
-      )}
+      <AgentsAtWork busy={busy} since={turnStart} />
     </div>
   )
 })
+
+/**
+ * The working line, with the agents counted here and not above.
+ *
+ * The only part of the log that reads the tasks, so progress from an agent
+ * redraws this line and nothing else: read in the log itself, every arrival —
+ * up to five a second per working agent — redrew every row.
+ */
+function AgentsAtWork({
+  busy,
+  since
+}: {
+  readonly busy: boolean
+  readonly since: string | null
+}): React.JSX.Element | null {
+  const agentsAway = liveAgents(useAgentTasks())
+  // With the main agent's turn over, what is still at work is the agents it
+  // sent off, and a clock from the turn's start would be counting the wrong
+  // thing.
+  if (!busy && agentsAway === 0) return null
+
+  return <WorkingLine since={busy ? since : null} agents={busy ? 0 : agentsAway} />
+}
 
 /**
  * The block still being written, below the rows that are done.
@@ -288,8 +343,15 @@ const neverSentHere = (): Promise<void> => Promise.resolve()
 /** What every row needs, from the log that holds them. */
 const RowsContext = createContext<RowProps | null>(null)
 
-/** One log block, drawn the way the log has always drawn it. */
-function BlockRow({ block }: { block: LogBlock }): React.JSX.Element | null {
+/**
+ * One log block, drawn the way the log has always drawn it.
+ *
+ * Memoised on the block and the context: the library hands a part its data
+ * again whenever its message is rebuilt, and a message is rebuilt only for the
+ * turn that grew — so a row above it is drawn again only when what the rows
+ * share has changed.
+ */
+const BlockRow = memo(function BlockRow({ block }: { block: LogBlock }): React.JSX.Element | null {
   const rows = useContext(RowsContext)
   // Rendered only inside the provider above, which always supplies it. The
   // guard is for the type, which cannot know that.
@@ -303,7 +365,7 @@ function BlockRow({ block }: { block: LogBlock }): React.JSX.Element | null {
   }
 
   return <EntryRow entry={block.entry} {...rows} />
-}
+})
 
 /** The part that carries a block: typed by what `toThreadMessages` puts in it. */
 const BlockPart = ({ data }: { data: LogBlock }): React.JSX.Element => <BlockRow block={data} />
@@ -922,7 +984,7 @@ function PermissionCard({
   const target = describeToolInput(input)
   // Several agents can ask at once, and "may it run Bash" is a different
   // question depending on which of them wants to.
-  const asker = useContext(AgentsContext).byId.get(taskId ?? '')
+  const asker = useTaskById(taskId ?? null)
 
   return (
     <div className="border-warning/30 bg-warning-bg rounded-[var(--radius-panel)] border px-3 py-2.5">

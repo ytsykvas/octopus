@@ -284,6 +284,17 @@ export function useChat(
    */
   const created = useRef<string | null>(null)
 
+  /*
+   * The strip's announcer, kept where a steady `ensureChat` can read it: the
+   * pane writes it inline, and taken as it came it made `ensureChat` — and
+   * everything built on it, down to the log's "carry out this plan" — a new
+   * function on every render of the pane, which redrew every row of the log.
+   */
+  const announce = useRef(onOpened)
+  useEffect(() => {
+    announce.current = onOpened
+  }, [onOpened])
+
   // Reset during render rather than in an effect. React supports this for
   // state derived from a prop, and it matters here: an effect runs after the
   // paint, so switching conversation would show the previous one for a frame
@@ -520,10 +531,10 @@ export function useChat(
     setChat(opened.value)
     // The strip drew this tab without a record; now there is one, and its dot,
     // its menu and its number all come from it.
-    onOpened(opened.value)
+    announce.current(opened.value)
 
     return opened.value
-  }, [chat, workspaceId, describeFailure, onOpened])
+  }, [chat, workspaceId, describeFailure])
 
   const send = useCallback(
     async (text: string) => {

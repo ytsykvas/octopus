@@ -1070,3 +1070,25 @@ describe('what each conversation is doing', () => {
     expect(result.current.tabs[0]?.status).toBe('idle')
   })
 })
+
+describe('a status that moves nothing', () => {
+  // Announced several times a turn, and every tab is memoised on the list.
+  it('leaves the tabs as they were', async () => {
+    givenChats([chat()])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(1)
+    })
+    const before = result.current.tabs
+
+    emitChatStatus('chat-1', 'idle')
+    expect(result.current.tabs).toBe(before)
+
+    emitChatStatus('chat-9', 'running')
+    expect(result.current.tabs).toBe(before)
+
+    emitChatStatus('chat-1', 'running')
+    expect(result.current.tabs).not.toBe(before)
+    expect(result.current.tabs[0]?.status).toBe('running')
+  })
+})

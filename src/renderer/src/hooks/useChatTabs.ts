@@ -317,10 +317,14 @@ export function useChatTabs(
         // draws one.
         if (announced.workspaceId !== shown.current) return
 
+        // The list as it was when nothing in it moved: a status is announced
+        // several times a turn, and every tab in the strip is memoised on it.
         setTabs((current) =>
-          current.map((tab) =>
-            tab.id === announced.chatId ? { ...tab, status: announced.status } : tab
-          )
+          current.some((tab) => tab.id === announced.chatId && tab.status !== announced.status)
+            ? current.map((tab) =>
+                tab.id === announced.chatId ? { ...tab, status: announced.status } : tab
+              )
+            : current
         )
       }),
     []

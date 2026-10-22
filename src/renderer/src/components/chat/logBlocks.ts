@@ -127,6 +127,37 @@ function reuse(event: ToolUse, fresh: ToolCall): ToolCall {
   return fresh
 }
 
+/**
+ * The block each entry, and each call, was last wrapped in.
+ *
+ * A block is what a row is keyed and memoised on, and the messages the library
+ * is handed are rebuilt from the blocks on every append. A fresh wrapper for
+ * every block made every message new, so the library re-walked the whole
+ * thread, and drew it, to add one line at the end. Keyed by the entry or the
+ * call, which the log keeps as they are from one append to the next; the
+ * position is checked as well, since a block names it.
+ */
+const entryBlocks = new WeakMap<ChatEntry, LogBlock>()
+const toolBlocks = new WeakMap<ToolCall, LogBlock>()
+
+function entryBlock(at: number, entry: ChatEntry): LogBlock {
+  const known = entryBlocks.get(entry)
+  if (known?.at === at) return known
+
+  const block: LogBlock = { kind: 'entry', at, entry }
+  entryBlocks.set(entry, block)
+  return block
+}
+
+function toolBlock(at: number, call: ToolCall): LogBlock {
+  const known = toolBlocks.get(call)
+  if (known?.at === at) return known
+
+  const block: LogBlock = { kind: 'tool', at, call }
+  toolBlocks.set(call, block)
+  return block
+}
+
 /** The id an entry hangs under, when it is a subagent's. */
 function parentOf(entry: ChatEntry): string | undefined {
   return entry.role === 'agent' && 'parentToolUseId' in entry.event
@@ -178,7 +209,7 @@ export function buildBlocks(entries: readonly ChatEntry[]): LogBlock[] {
 
   const blocksFor = (list: readonly { index: number; entry: ChatEntry }[]): LogBlock[] =>
     list.flatMap(({ index, entry }): LogBlock[] => {
-      if (entry.role === 'user') return [{ kind: 'entry', at: index, entry }]
+      if (entry.role === 'user') return [entryBlock(index, entry)]
       const { event } = entry
 
       if (event.type === 'tool_use' && rows.has(event.toolUseId)) {
@@ -194,7 +225,7 @@ export function buildBlocks(entries: readonly ChatEntry[]): LogBlock[] {
           settled: index < lastResult,
           steps: nested === undefined ? null : blocksFor(nested)
         })
-        return [{ kind: 'tool', at: index, call }]
+        return [toolBlock(index, call)]
       }
 
       // Drawn inside the row of the call they answer.
@@ -205,7 +236,7 @@ export function buildBlocks(entries: readonly ChatEntry[]): LogBlock[] {
         return []
       }
 
-      return [{ kind: 'entry', at: index, entry }]
+      return [entryBlock(index, entry)]
     })
 
   /*

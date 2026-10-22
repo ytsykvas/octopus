@@ -1,6 +1,11 @@
-import { byToolUse, type TaskView } from '@core/backgroundTasks.js'
+import type { TaskView } from '@core/backgroundTasks.js'
 
-import { type Agents, NO_AGENTS } from '../components/chat/agentTasks.js'
+import {
+  type Agents,
+  createAgentsStore,
+  NO_AGENTS,
+  snapshotOf
+} from '../components/chat/agentTasks.js'
 
 /** A subagent at work, started before `NOW`, with anything overridden. */
 export function task(overrides: Partial<TaskView> = {}): TaskView {
@@ -37,9 +42,7 @@ export const NOW = Date.parse('2026-10-20T10:01:42.000Z')
 export function agentsOf(tasks: readonly TaskView[], overrides: Partial<Agents> = {}): Agents {
   return {
     ...NO_AGENTS,
-    tasks,
-    byToolUse: byToolUse(tasks),
-    byId: new Map(tasks.map((each) => [each.taskId, each])),
+    store: createAgentsStore(snapshotOf(tasks)),
     ...overrides
   }
 }

@@ -1,4 +1,3 @@
-import { useContext } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { liveAgents, liveCount, visibleTasks } from '@core/backgroundTasks.js'
@@ -6,7 +5,7 @@ import { liveAgents, liveCount, visibleTasks } from '@core/backgroundTasks.js'
 import { useAnchoredPanel } from '../../hooks/useAnchoredPanel.js'
 import { chatStatusTone } from '../agentStatus.js'
 import { AgentMap, PANEL_MAX_SHARE } from './AgentMap.js'
-import { AgentsContext } from './agentTasks.js'
+import { useAgentTasks } from './agentTasks.js'
 
 /** Wide enough for a description, its time and a model without the row wrapping. */
 const PANEL_WIDTH = 380
@@ -25,7 +24,7 @@ const PANEL_WIDTH = 380
  */
 export function AgentsChip(): React.JSX.Element | null {
   const { t } = useTranslation()
-  const { tasks } = useContext(AgentsContext)
+  const tasks = useAgentTasks()
   const { open, position, container, toggle, close } = useAnchoredPanel()
 
   const shown = visibleTasks(tasks)

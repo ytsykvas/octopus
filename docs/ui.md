@@ -557,29 +557,48 @@ What the library is handed has to keep its identity. It caches a message by the
 object it was given and the part renderers by the object they came in, so a map
 or an arrow function rebuilt inside the render makes every row re-render by
 itself: measured under jsdom, 592 ms for one update at a thousand turns with
-them inline and 18 ms with them hoisted. `toThreadMessages` is held against the
-blocks, and the part map, the message renderer and the converter are module
-constants. Token streaming never goes through the runtime, which also sidesteps
-an open upstream issue where the cost of each update grows with the thread's
-length. Nor does it go through the log's props: `useStreaming` gathers the
-fragments and draws them every 50 ms, and hands them to `StreamingContext`,
-which only the tail below the thread reads — so a token renders that tail and
-nothing above it. Dependency pinned
-to an exact version: it is 0.x and its minors have broken things.
+them inline and 18 ms with them hoisted. The part map, the message renderer and
+the converter are module constants, and `toThreadMessages` hands a turn over as
+the same message for as long as its blocks are the same objects — which
+`buildBlocks` sees to by wrapping each entry and each call once (`logBlocks.ts`
+keeps the wrappers in `WeakMap`s, as it already kept the calls). Measured under
+jsdom at 600 turns, one line appended to the log cost 188 ms with every message
+rebuilt, 70 ms with the blocks stable and the messages still new, 10 ms with
+both held: the library converts and re-walks every message it has not seen.
+Token streaming never goes through the runtime, which also sidesteps an open
+upstream issue where the cost of each update grows with the thread's length.
+Nor does it go through the log's props: `useStreaming` gathers the fragments and
+draws them every 50 ms, and hands them to `StreamingContext`, which only the
+tail below the thread reads — so a token renders that tail and nothing above
+it. Dependency pinned to an exact version: it is 0.x and its minors have broken
+things.
 
-The rows' own props travel in a context rebuilt on every render, so every row
-re-renders with the log — which is why the log is memoised and `ChatSession`
-holds every prop it hands it still. It then renders when the conversation does,
-not on each poll or keystroke in the pane around it. `Markdown` is memoised on
-its text, so a row drawn again does not parse it again; parsing was what a poll
-or a token used to cost across the whole conversation. `ToolRow` is memoised on its call and the turn's
-state, and reads what it needs to open a file from a context held still, so a
-streamed token leaves the tool rows alone. The blocks are rebuilt each time the
-log grows, but a call none of whose parts moved is handed back as the same
-object, so an append redraws the rows that changed rather than all of them.
-Measured under jsdom at 500 calls against the log before this shape: a streamed
-token 27 → 8 ms, an append 72 → 50 ms. Whether the log is expanded is a
-context of its own for the same reason: it changes on a press, not per render.
+The rows' own props travel in a context, built once per change of anything in
+it: what the rows share — the answers by request, the calls that were plans,
+what the agent took back — is gathered from the whole log on every append and
+handed on as the object it was last time while it reads the same
+(`useSameValue`), so a line appended at the end leaves every row above it
+alone, and the turn ending redraws them all, once. The log itself is memoised,
+and `ChatSession` holds every prop it hands it still, down to the announcer
+`useChat` is given for a record it creates, which the pane writes inline and
+the hook keeps in a ref: taken as it came, it made every setting's callback —
+and the log's "carry out this plan" — new on each render of the pane. `Markdown`
+is memoised on its text, so a row drawn again does not parse it again; parsing
+was what a poll or a token used to cost across the whole conversation.
+`ToolRow` is memoised on its call and the turn's state, and reads what it needs
+to open a file from a context held still, so a streamed token leaves the tool
+rows alone. Whether the log is expanded is a context of its own for the same
+reason: it changes on a press, not per render.
+
+The tasks beside the conversation are the one thing that moves while nothing
+is appended: progress arrives for every working agent up to five times a
+second. `AgentsContext` therefore holds still — the pane's three callbacks and
+a store (`agentTasks.ts`) the pane publishes each list into before the paint —
+and every reader takes what it draws through `useSyncExternalStore`: a tool row
+its own task, the chip and the map the list, the working line under the log
+the count of agents away. A row is redrawn when its task is a different object,
+which the core sees to only when the task moved; the log, which used to read
+the list itself and redraw every row with each arrival, no longer reads it.
 
 **Not moved: the composer.** The slash list and the `@` list were built here, on
 the field's own keys, with the draft kept per tab, an IME guard on every key, a

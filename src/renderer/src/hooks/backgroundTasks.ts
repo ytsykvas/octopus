@@ -12,7 +12,7 @@
  * one conversation, so it always wins over a list that was asked for earlier.
  */
 
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 
 import {
   liveAgents,
@@ -23,6 +23,8 @@ import {
 } from '@core/backgroundTasks.js'
 import type { TasksEvent } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
+
+import { useSameValue } from './useSameValue.js'
 
 const NONE: readonly TaskView[] = []
 
@@ -95,11 +97,7 @@ export function useChatTasks(chatId: string, entries: readonly ChatEntry[]): rea
     [live, entries]
   )
 
-  // Adjusted during render, as React has state derived from props done.
-  const [kept, setKept] = useState(merged)
-  const current = sameTasks(kept, merged) ? kept : merged
-  if (current !== kept) setKept(current)
-  return current
+  return useSameValue(merged, sameTasks)
 }
 
 /**
