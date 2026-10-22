@@ -27,7 +27,7 @@ import { onChatEvent } from '../../hooks/chatEvents.js'
 import { stopTask, useChatTasks } from '../../hooks/backgroundTasks.js'
 import { clearTasks, useClearedTasks } from '../../hooks/clearedTasks.js'
 import { useChat } from '../../hooks/useChat.js'
-import type { ChatTab } from '../../hooks/useChatTabs.js'
+import type { ChatTab, ForkedPlan } from '../../hooks/useChatTabs.js'
 import type { AttachedFileController } from '../../hooks/useAttachedFiles.js'
 import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
@@ -101,6 +101,8 @@ interface ChatSessionProps {
   readonly sideQuestions: SideQuestionController
   /** Opens a conversation continuing this one from a side answer; says whether it did. */
   readonly onForkSide: (chatId: string, exchange: SideExchange) => Promise<boolean>
+  /** Opens a conversation continuing this one on a plan; says whether it started. */
+  readonly onForkPlan: (chatId: string, plan: ForkedPlan) => Promise<boolean>
   /**
    * What the settings say a new conversation starts with.
    *
@@ -153,6 +155,7 @@ export function ChatSession({
   attachedFiles,
   sideQuestions,
   onForkSide,
+  onForkPlan,
   defaultWorkingMode,
   planExecutionMode,
   defaultEffort,
@@ -556,6 +559,34 @@ export function ChatSession({
     },
     [record, planExecutionMode, setMode, sendMessage, t]
   )
+  // The same plan carried out in a fork instead, while this conversation stays
+  // in planning. Stopped only once the fork is under way: the turn here is
+  // blocked on the plan's question, and an interrupt is what lets it go without
+  // an answer the agent would act on — "keep planning" would set it planning
+  // again, and approving would start the very work the fork now does. A fork
+  // that did not start leaves the question standing, so nothing is lost.
+  //
+  // An edited plan travels in the message, since the fork's agent only ever
+  // saw the original. `modeAfterPlan` is the rule `executePlan` applies, and
+  // it already answers the conversation's own mode when it was not planning.
+  const { interrupt } = chat
+  const forkPlan = useCallback(
+    async (plan: string, edited: string | null) => {
+      // A plan is only ever asked about in a conversation that has a record.
+      /* v8 ignore next */
+      if (record === null) return
+      const message =
+        edited === null
+          ? t('chat.executePlanMessage', { title: planTitle(plan) })
+          : t('chat.executePlanEditedMessage', { plan: edited })
+      const started = await onForkPlan(record.id, {
+        mode: modeAfterPlan(record, planExecutionMode),
+        message
+      })
+      if (started) await interrupt()
+    },
+    [record, planExecutionMode, onForkPlan, interrupt, t]
+  )
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
   /* Null until a conversation says otherwise, which is most of them: there is
@@ -809,6 +840,7 @@ export function ChatSession({
                   ...(edited === null ? [] : [edited])
                 )
               }}
+              onFork={(edited) => forkPlan(plan, edited)}
               onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
             />
           )}

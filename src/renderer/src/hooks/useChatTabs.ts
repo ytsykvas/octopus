@@ -6,10 +6,13 @@ import {
   type ChatStatus,
   type ClosedChat,
   DEFAULT_AGENT,
-  MAX_CHATS_PER_WORKSPACE
+  MAX_CHATS_PER_WORKSPACE,
+  type WorkingMode
 } from '@core/chats.js'
 import { formatHandoff } from '@core/handoff.js'
 import type { SideExchange } from '@core/sideQuestions.js'
+
+import type { Result } from '../../../preload/index.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
 
@@ -62,6 +65,12 @@ export interface ChatTabsController {
    */
   readonly fork: (chatId: string, aside?: SideExchange) => Promise<boolean>
   /**
+   * Opens a conversation continuing this one and has it carry out a plan: in
+   * `mode`, told `message`. Says whether the plan is under way there — the
+   * caller leaves the source alone otherwise, so its question stays answerable.
+   */
+  readonly forkPlan: (chatId: string, plan: ForkedPlan) => Promise<boolean>
+  /**
    * Puts the conversation on the clipboard as text another one can start from.
    *
    * Says whether it got there: the strip is what shows the answer, because the
@@ -101,6 +110,27 @@ export interface ChatTabsController {
    * needs it to draw a dot and to offer the menu.
    */
   readonly bind: (key: string, chat: Chat) => void
+}
+
+/** What a fork carrying out a plan is started with. */
+export interface ForkedPlan {
+  readonly mode: WorkingMode
+  readonly message: string
+}
+
+/**
+ * Starts a freshly forked conversation on a plan.
+ *
+ * The mode first, so the turn the message opens already runs in it. Only when
+ * it differs: a fork keeps its source's working mode, and asking for the one it
+ * has is a round trip that can only fail.
+ */
+async function carryOut(chat: Chat, { mode, message }: ForkedPlan): Promise<Result<unknown>> {
+  if (mode !== chat.workingMode) {
+    const moved = await window.octopus.chats.setWorkingMode(chat.id, mode)
+    if (!moved.ok) return moved
+  }
+  return window.octopus.chats.send(chat.id, message)
 }
 
 /** The key the first tab carries before it has a record of its own. */
@@ -412,8 +442,21 @@ export function useChatTabs(
     select(created.value.id)
   }, [tabs, load, select, describeFailure])
 
-  const fork = useCallback(
-    async (chatId: string, aside?: SideExchange) => {
+  /*
+   * Forks, then optionally starts the fork on something before showing it.
+   *
+   * The start comes before the tab is loaded rather than after: the message is
+   * on disk by the time `send` answers, so the pane that mounts reads it with
+   * the rest of the history instead of racing the core to draw it. A failed
+   * start still shows the fork — it exists, and hiding it would leave a tab
+   * the user never saw open.
+   */
+  const forkThen = useCallback(
+    async (
+      chatId: string,
+      aside: SideExchange | undefined,
+      start?: (chat: Chat) => Promise<Result<unknown>>
+    ) => {
       const id = shown.current
       /* v8 ignore next */
       if (id === null) return false
@@ -427,11 +470,26 @@ export function useChatTabs(
         return false
       }
 
+      const started = start === undefined ? null : await start(forked.value)
+      if (shown.current !== id) return false
+      if (started !== null && !started.ok) report.current(describeFailure(started))
+
       await load(id, () => shown.current !== id)
       select(forked.value.id)
-      return true
+      return started?.ok ?? true
     },
     [load, select, describeFailure]
+  )
+
+  const fork = useCallback(
+    (chatId: string, aside?: SideExchange) => forkThen(chatId, aside),
+    [forkThen]
+  )
+
+  const forkPlan = useCallback(
+    (chatId: string, plan: ForkedPlan) =>
+      forkThen(chatId, undefined, (chat) => carryOut(chat, plan)),
+    [forkThen]
   )
 
   const copyTranscript = useCallback(
@@ -568,6 +626,7 @@ export function useChatTabs(
     canCreate: tabs.length < MAX_CHATS_PER_WORKSPACE,
     create,
     fork,
+    forkPlan,
     copyTranscript,
     close,
     history,

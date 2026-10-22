@@ -7,7 +7,7 @@ interface SendButtonProps {
   readonly disabled?: boolean
 }
 
-/** The small blue round button that sends what has been written beside it. */
+/** The small green round button that sends what has been written beside it. */
 export function SendButton({ label, onClick, disabled }: SendButtonProps): React.JSX.Element {
   return (
     <button
@@ -16,7 +16,7 @@ export function SendButton({ label, onClick, disabled }: SendButtonProps): React
       disabled={disabled}
       title={label}
       aria-label={label}
-      className="focus-ring bg-accent text-on-accent hover:bg-accent-hover grid size-6 shrink-0 place-items-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40"
+      className="focus-ring bg-success text-on-accent hover:brightness-110 grid size-6 shrink-0 place-items-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40"
     >
       <ArrowUp aria-hidden size={13} />
     </button>

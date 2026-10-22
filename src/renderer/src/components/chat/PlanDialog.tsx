@@ -43,6 +43,12 @@ interface PlanDialogProps {
    * different when it is.
    */
   readonly onExecute: (editedPlan: string | null) => void
+  /**
+   * Carries the plan out in a fork of the conversation instead, leaving this
+   * one in planning. `editedPlan` as for `onExecute`. Settles once the fork has
+   * either started or failed.
+   */
+  readonly onFork: (editedPlan: string | null) => Promise<void>
   /** Sends the plan back with the user's note, which may be empty. */
   readonly onKeepPlanning: (feedback: string) => void
   /**
@@ -60,10 +66,12 @@ interface PlanDialogProps {
  * a strip with `Allow` and `Deny` on it the whole thing was read past on the way
  * to a button. The next thing the agent did was start editing files.
  *
- * One button, and a field. Writing in the field *is* carrying on planning, so a
- * button saying so was the same decision offered twice; the note travels to the
- * agent as the refusal's reason, and the plan it comes back with raises this
- * dialog again.
+ * Two ways to carry it out, and a field. Writing in the field *is* carrying on
+ * planning, so a button saying so was the same decision offered twice; the note
+ * travels to the agent as the refusal's reason, and the plan it comes back with
+ * raises this dialog again. Forking carries the plan out in a new conversation
+ * that remembers this one, while this one stays in planning — for a plan worth
+ * keeping the planning context clean of the work.
  *
  * Executing out of planning goes on in `acceptEdits`, whatever the
  * conversation was asking before — the composer's one mode control has no
@@ -85,11 +93,16 @@ export function PlanDialog({
   onFeedback,
   goesOnIn,
   onExecute,
+  onFork,
   onKeepPlanning,
   onMinimize
 }: PlanDialogProps): React.JSX.Element {
   const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
+  // One fork at a time, and no approval behind one: a second click while the
+  // first is out would open a second tab, and approving here would start the
+  // same work twice.
+  const [forking, setForking] = useState(false)
 
   // Null for an untouched plan, and for one edited back to what it was: only a
   // real difference is worth telling the agent about.
@@ -98,6 +111,11 @@ export function PlanDialog({
   const keepPlanning = (): void => {
     onKeepPlanning(feedback.trim())
   }
+
+  const edited = changed ? text.trim() : null
+  // An emptied editor is not a plan. Carrying out the original under it would
+  // do something the field plainly says it is not doing.
+  const unusable = text.trim() === '' || forking
 
   return (
     <Modal
@@ -124,11 +142,21 @@ export function PlanDialog({
           </Button>
           <Button
             variant="accent"
-            // An emptied editor is not a plan. Approving the original under it
-            // would do something the field plainly says it is not doing.
-            disabled={text.trim() === ''}
+            disabled={unusable}
             onClick={() => {
-              onExecute(changed ? text.trim() : null)
+              setForking(true)
+              void onFork(edited).finally(() => {
+                setForking(false)
+              })
+            }}
+          >
+            {t('chat.planFork')}
+          </Button>
+          <Button
+            variant="success"
+            disabled={unusable}
+            onClick={() => {
+              onExecute(edited)
             }}
           >
             {t('chat.planExecute')}

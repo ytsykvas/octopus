@@ -29,6 +29,15 @@ function open(
   )
 }
 
+/** A promise the test settles by hand, to answer after something has moved on. */
+function held<T>(): { promise: Promise<T>; settle: (value: T) => void } {
+  let settle: ((value: T) => void) | null = null
+  const promise = new Promise<T>((resolve) => {
+    settle = resolve
+  })
+  return { promise, settle: (value) => settle?.(value) }
+}
+
 describe('a workspace nobody has spoken to', () => {
   it('shows one tab, with no record behind it', async () => {
     const { result } = open()
@@ -340,14 +349,6 @@ describe('the key a tab keeps', () => {
  * then would draw one workspace's conversations over another's.
  */
 describe('an answer that arrives after the workspace has been left', () => {
-  function held<T>(): { promise: Promise<T>; settle: (value: T) => void } {
-    let settle: ((value: T) => void) | null = null
-    const promise = new Promise<T>((resolve) => {
-      settle = resolve
-    })
-    return { promise, settle: (value) => settle?.(value) }
-  }
-
   it('drops a list read that outlives the pane', async () => {
     const onChats = vi.fn()
     const list = held<{ ok: true; value: Chat[] }>()
@@ -977,6 +978,134 @@ describe('continuing a conversation in a new tab', () => {
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('no such session'))
     expect(result.current.tabs).toHaveLength(1)
     expect(opened).toBe(false)
+  })
+})
+
+describe('carrying a plan out in a new tab', () => {
+  const PLAN = { mode: 'acceptEdits', message: 'Carry out the plan “Tests”.' } as const
+
+  async function opened(onError = vi.fn()): Promise<ReturnType<typeof open>> {
+    givenChats([chat({ sessionId: 'sess-1' })])
+    const rendered = open({ onError })
+    await waitFor(() => {
+      expect(rendered.result.current.tabs[0]?.id).toBe('chat-1')
+    })
+    vi.mocked(octopus().chats.fork).mockResolvedValue({
+      ok: true,
+      value: chat({ id: 'chat-2', sessionId: 'sess-2' })
+    })
+    givenChats([chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2', sessionId: 'sess-2' })])
+    return rendered
+  }
+
+  // The mode before the message, so the turn the message opens runs in it; the
+  // message before the tab is shown, so the pane reads it with the history.
+  it('moves the fork to the mode, tells it the plan, then shows it', async () => {
+    const { result } = await opened()
+    const order: string[] = []
+    vi.mocked(octopus().chats.setWorkingMode).mockImplementation((id, mode) => {
+      order.push(`mode ${id} ${mode}`)
+      return Promise.resolve({ ok: true, value: undefined })
+    })
+    vi.mocked(octopus().chats.send).mockImplementation((id, text) => {
+      order.push(`send ${id} ${text}`)
+      return Promise.resolve({ ok: true, value: null })
+    })
+    vi.mocked(octopus().chats.list).mockImplementation(() => {
+      order.push('list')
+      return Promise.resolve({
+        ok: true,
+        value: [chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2', sessionId: 'sess-2' })]
+      })
+    })
+
+    let started = false
+    await act(async () => {
+      started = await result.current.forkPlan('chat-1', PLAN)
+    })
+
+    expect(octopus().chats.fork).toHaveBeenCalledWith('chat-1', undefined)
+    expect(order).toEqual(['mode chat-2 acceptEdits', `send chat-2 ${PLAN.message}`, 'list'])
+    expect(result.current.activeKey).toBe('chat-2')
+    expect(started).toBe(true)
+  })
+
+  // A fork keeps its source's working mode; asking for it again is a round
+  // trip that can only fail.
+  it('leaves the mode alone when the fork is already in it', async () => {
+    const { result } = await opened()
+
+    await act(async () => {
+      await result.current.forkPlan('chat-1', { ...PLAN, mode: 'default' })
+    })
+
+    expect(octopus().chats.setWorkingMode).not.toHaveBeenCalled()
+    expect(octopus().chats.send).toHaveBeenCalledWith('chat-2', PLAN.message)
+  })
+
+  // The fork exists either way, so it is shown; what did not happen is said,
+  // and the answer tells the caller to leave the source's question standing.
+  it('shows the fork and says so when the mode cannot be set', async () => {
+    const onError = vi.fn()
+    const { result } = await opened(onError)
+    vi.mocked(octopus().chats.setWorkingMode).mockResolvedValue({ ok: false, error: 'no mode' })
+
+    let started = true
+    await act(async () => {
+      started = await result.current.forkPlan('chat-1', PLAN)
+    })
+
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('no mode'))
+    expect(octopus().chats.send).not.toHaveBeenCalled()
+    expect(result.current.activeKey).toBe('chat-2')
+    expect(started).toBe(false)
+  })
+
+  it('shows the fork and says so when the plan cannot be sent', async () => {
+    const onError = vi.fn()
+    const { result } = await opened(onError)
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'agent is gone' })
+
+    let started = true
+    await act(async () => {
+      started = await result.current.forkPlan('chat-1', PLAN)
+    })
+
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('agent is gone'))
+    expect(result.current.activeKey).toBe('chat-2')
+    expect(started).toBe(false)
+  })
+
+  it('sends nothing when the agent cannot fork', async () => {
+    const { result } = await opened()
+    vi.mocked(octopus().chats.fork).mockResolvedValue({ ok: false, error: 'no such session' })
+
+    let started = true
+    await act(async () => {
+      started = await result.current.forkPlan('chat-1', PLAN)
+    })
+
+    expect(octopus().chats.send).not.toHaveBeenCalled()
+    expect(started).toBe(false)
+  })
+
+  it('drops a plan started for a workspace no longer shown', async () => {
+    const { result, rerender } = await opened()
+    const sending = held<{ ok: true; value: null }>()
+    vi.mocked(octopus().chats.send).mockReturnValue(sending.promise)
+
+    const started = result.current.forkPlan('chat-1', PLAN)
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalled()
+    })
+    rerender({ id: 'planner/bob' })
+
+    await act(async () => {
+      sending.settle({ ok: true, value: null })
+      await expect(started).resolves.toBe(false)
+    })
+
+    expect(result.current.activeKey).not.toBe('chat-2')
   })
 })
 
