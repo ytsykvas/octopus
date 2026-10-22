@@ -627,6 +627,11 @@ describe('channel names', () => {
     ['terminal.dispose', () => method('terminal', 'dispose')('t' as never), 'terminal:dispose'],
     ['terminal.list', () => method('terminal', 'list')(), 'terminal:list'],
     [
+      'terminal.refused',
+      () => method('terminal', 'refused')('planner/anna' as never, 'run' as never, 'x' as never),
+      'terminal:refused'
+    ],
+    [
       'projects.saveInstruction',
       () =>
         method('projects', 'saveInstruction')('p' as never, 'pullRequest' as never, 'x' as never),

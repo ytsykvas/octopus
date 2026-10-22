@@ -3071,6 +3071,34 @@ describe('what Help is told about a workspace', () => {
     expect(lastRuns[0]?.output).toBe('auth failed for [SMTP_PASSWORD]')
   })
 
+  it('leaves out a build on record once there is no build script to run', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    const build: RecordedRun = {
+      purpose: 'setup',
+      outcome: { kind: 'exited', at: '2026-10-22T09:41:00.000Z', exitCode: 1 },
+      raw: 'old failure'
+    }
+    const runs = [build, server('listening')]
+
+    const before = await service.helpContext(workspaceId, runs)
+    expect(before.lastRuns.map(({ purpose }) => purpose)).toEqual(['run'])
+
+    await service.saveProjectScript(projectId, 'setup', '#!/bin/sh\nnpm install\n')
+    const after = await service.helpContext(workspaceId, runs)
+    expect(after.lastRuns.map(({ purpose }) => purpose)).toEqual(['setup', 'run'])
+  })
+
+  it('masks a refusal’s reason as it masks output', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'DB_PASSWORD=Pa$$w0rd123\n')
+
+    const { lastRuns } = await service.helpContext(workspaceId, [
+      { purpose: 'run', outcome: { kind: 'refused', reason: 'bad Pa$$w0rd123' }, raw: '' }
+    ])
+
+    expect(lastRuns[0]?.outcome).toEqual({ kind: 'refused', reason: 'bad [DB_PASSWORD]' })
+  })
+
   it('refuses a workspace it does not know', async () => {
     await expect(service.helpContext('planner/nobody', [])).rejects.toMatchObject({
       code: 'worktreeMissing'

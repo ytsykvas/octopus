@@ -536,6 +536,7 @@ export const de: Translation = {
       lastRun: '{{stage}}: um {{at}} mit Exit-Code {{code}} beendet. Die letzten Zeilen:',
       lastRunStopped: '{{stage}}: um {{at}} durch ein Signal beendet. Die letzten Zeilen:',
       lastRunRunning: '{{stage}}: läuft noch. Die letzten Zeilen bisher:',
+      lastRunRefused: '{{stage}}: nicht gestartet. Der Tab Skripte meldete: {{reason}}',
       noOutput: '(keine Ausgabe)',
       noRun:
         'Seit octopus gestartet wurde, ist in diesem Workspace nichts gelaufen. Drück Run im Tab Skripte und frag dann noch einmal.'

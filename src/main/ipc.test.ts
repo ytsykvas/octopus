@@ -159,6 +159,7 @@ interface TerminalSpies {
   readonly dispose: Mock<(id: string) => void>
   readonly lastRuns: Mock<(workspaceId: string) => RecordedRun[]>
   readonly forgetRuns: Mock<(workspaceId: string) => void>
+  readonly refuse: Mock<(workspaceId: string, purpose: string, reason: string) => void>
 }
 
 function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } {
@@ -167,7 +168,8 @@ function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } 
     resize: vi.fn(),
     dispose: vi.fn(),
     lastRuns: vi.fn((): RecordedRun[] => []),
-    forgetRuns: vi.fn()
+    forgetRuns: vi.fn(),
+    refuse: vi.fn()
   }
 
   // Enough of a manager to answer `list`, so a test about the channel can read
@@ -493,6 +495,7 @@ describe('channel table', () => {
     'terminal:resize',
     'terminal:dispose',
     'terminal:list',
+    'terminal:refused',
     'accounts:status',
     'accounts:github',
     'accounts:signOut',
@@ -3453,6 +3456,24 @@ describe('the list of what is still running', () => {
       ok: true,
       value: [{ owner: { workspaceId: null, purpose: 'shell' } }]
     })
+  })
+
+  it('keeps a Run the Scripts tab refused, its purpose and reason parsed', async () => {
+    await expect(invoke('terminal:refused', 'planner/anna', 'run', 'Port taken.')).resolves.toEqual(
+      {
+        ok: true,
+        value: undefined
+      }
+    )
+    expect(sessions.refuse).toHaveBeenCalledWith('planner/anna', 'run', 'Port taken.')
+
+    await expect(invoke('terminal:refused', 'planner/anna', 'mining', 'x')).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(
+      invoke('terminal:refused', 'planner/anna', 'run', 'x'.repeat(2001))
+    ).resolves.toMatchObject({ ok: false })
+    expect(sessions.refuse).toHaveBeenCalledOnce()
   })
 
   it('refuses a purpose that is none of the five', async () => {

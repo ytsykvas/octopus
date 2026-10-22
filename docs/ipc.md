@@ -180,8 +180,14 @@ tab by looking at an argv.
 A workspace's last build and server reach the window only inside
 `workspaces:helpContext`, as `lastRuns`: build first, whichever have run,
 each `{ purpose, outcome, output }` (`LastRun`, `runLog.ts`). `outcome` is
-`running`, or `exited` with when and the exit code — null when a signal ended
-it, as `terminal:exit` says. `output` is what the script printed with the
+`running`, `exited` with when and the exit code — null when a signal ended
+it, as `terminal:exit` says — or `refused` with the reason the Scripts tab
+showed, for a start that stopped before its script ran (`terminal:refused`): a
+port it could not settle, an env file it would not write, a stray server that
+would not stop, a shell that would not spawn. None of those leaves a session
+behind, so without it Help said nothing had run, or quoted the Run before as
+this one. A build on record is left out once the workspace has no build script:
+Run then starts the server alone, and the build is from before. `output` is what the script printed with the
 terminal's escapes stripped and each `\r`-redrawn line kept at its final state,
 then every secret a script could have printed masked as `[NAME]` — or
 `[masked]` where no name owns it — from six characters up, then cut to the last
@@ -202,9 +208,9 @@ its own: `main` keeps the runs (`RecordedRun`, raw) and only the core knows the
 values, so the one way out is through `helpRun` in the core.
 
 `main` keeps the raw tail — the last 64K characters — of every session whose
-owner names a workspace and the purpose `setup` or `run`; a new run of either
-replaces the last, and a new build drops the last server too, so a failed build
-is not shown beside a server from the Run before. It lives in `main` because
+owner names a workspace and the purpose `setup` or `run`; a new run or refusal
+of either replaces the last, and a new build drops the last server too, so a
+failed build is not shown beside a server from the Run before. It lives in `main` because
 the window throws a pane's buffer away when it unmounts, and "why does Run not
 work?" is asked after the run; it lives in memory, so it survives a reload of
 the window and not a restart. A workspace's records go when `workspaces:remove`
@@ -377,12 +383,13 @@ without creating one — the first message is what brings it into being.
 
 ### Terminals
 
-| Channel            | Arguments            | Notes                                                     |
-| ------------------ | -------------------- | --------------------------------------------------------- |
-| `terminal:create`  | `spec`               | answers with a session id                                 |
-| `terminal:write`   | `id`, `data`         |                                                           |
-| `terminal:resize`  | `id`, `cols`, `rows` | a resize after the session ended is ignored, not an error |
-| `terminal:dispose` | `id`                 | resolves when the session has gone, not when it was asked |
+| Channel            | Arguments                          | Notes                                                                       |
+| ------------------ | ---------------------------------- | --------------------------------------------------------------------------- |
+| `terminal:create`  | `spec`                             | answers with a session id                                                   |
+| `terminal:write`   | `id`, `data`                       |                                                                             |
+| `terminal:resize`  | `id`, `cols`, `rows`               | a resize after the session ended is ignored, not an error                   |
+| `terminal:dispose` | `id`                               | resolves when the session has gone, not when it was asked                   |
+| `terminal:refused` | `workspaceId`, `purpose`, `reason` | keeps a build or server the Scripts tab refused before it started, for Help |
 
 Output flows the other way, on `terminal:data` and `terminal:exit`. It is sent
 in batches: the first chunk at once, so typing does not lag, and what follows

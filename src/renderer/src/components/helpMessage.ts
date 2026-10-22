@@ -44,10 +44,15 @@ function runHeader({ purpose, outcome }: LastRun, t: TFunction): string {
         ? t('help.context.lastRunStopped', { stage, at })
         : t('help.context.lastRun', { stage, at, code: outcome.exitCode })
     }
+    case 'refused':
+      return t('help.context.lastRunRefused', { stage, reason: outcome.reason })
   }
 }
 
 function runPart(run: LastRun, t: TFunction): string {
+  // Nothing ran, so there is no output to fence.
+  if (run.outcome.kind === 'refused') return runHeader(run, t)
+
   const output = run.output === '' ? t('help.context.noOutput') : run.output
   return `${runHeader(run, t)}\n\n\`\`\`\n${output}\n\`\`\``
 }

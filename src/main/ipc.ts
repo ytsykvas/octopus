@@ -74,7 +74,7 @@ import type {
 } from '../core/service.js'
 import { SideExchangeSchema, SideHistorySchema, SideQuestionSchema } from '../core/sideQuestions.js'
 import { ProjectEditSchema, ProjectPatchSchema } from '../core/store.js'
-import { TerminalSpecSchema } from '../core/terminal.js'
+import { TerminalPurposeSchema, TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
 import type { RemoveOptions } from '../core/workspaces.js'
@@ -183,6 +183,9 @@ export interface IpcHost {
  * workspace it claims.
  */
 const FilePathSchema = z.string().min(1).max(4096)
+
+/** Why a Run did not start, as the Scripts tab worded it. */
+const RefusalSchema = z.string().max(2000)
 
 /** A message of a conversation, by the id it was sent under. */
 const MessageIdSchema = z.uuid()
@@ -300,6 +303,23 @@ export function registerIpc(
    * the asker could never show it.
    */
   host.handle('terminal:list', () => attempt(() => Promise.resolve(terminals.list())))
+
+  /*
+   * A Run the Scripts tab refused before its script started, in the words it
+   * showed, kept beside the runs Help quotes. The reason is parsed rather than
+   * trusted: it is held for the life of the app and written into a message.
+   */
+  host.handle(
+    'terminal:refused',
+    (_event, workspaceId: string, purpose: unknown, reason: unknown) =>
+      attempt(() => {
+        terminals.refuse(
+          workspaceId,
+          TerminalPurposeSchema.parse(purpose),
+          RefusalSchema.parse(reason)
+        )
+      })
+  )
 
   // The patch is validated rather than trusted: it arrives from the renderer
   // and its base branch reaches a git command.

@@ -282,6 +282,12 @@ describe('ScriptRunner', () => {
 
     expect(await screen.findByText(/no workspace/)).toBeInTheDocument()
     expect(octopus().terminal.create).not.toHaveBeenCalled()
+    // Kept for Help, in the words shown here.
+    expect(octopus().terminal.refused).toHaveBeenCalledWith(
+      anna.id,
+      'run',
+      expect.stringContaining('no workspace')
+    )
   })
 
   it('runs nothing when it mounts with a token already standing', () => {
@@ -1011,6 +1017,11 @@ describe('ScriptRunner', () => {
 
     expect(await screen.findByText(/Permission denied/)).toBeInTheDocument()
     expect(octopus().terminal.create).not.toHaveBeenCalled()
+    expect(octopus().terminal.refused).toHaveBeenCalledWith(
+      anna.id,
+      'setup',
+      expect.stringContaining('Permission denied')
+    )
     // A sequence waiting on this half would otherwise wait for ever.
     expect(onOutcome).toHaveBeenCalledWith(false)
   })
@@ -1056,6 +1067,11 @@ describe('ScriptRunner', () => {
        renderer suite in four, measured. */
     const shown = await screen.findAllByText(/spawn \/bin\/zsh ENOENT/)
     expect(shown.filter((node) => node.tagName === 'P')).toHaveLength(1)
+    expect(octopus().terminal.refused).toHaveBeenCalledWith(
+      anna.id,
+      'setup',
+      'spawn /bin/zsh ENOENT'
+    )
   })
   /*
    * A server octopus did not start, still serving from the worktree — the
@@ -1121,6 +1137,8 @@ describe('ScriptRunner', () => {
       })
       expect(octopus().workspaces.stopStrays).not.toHaveBeenCalled()
       expect(octopus().terminal.create).not.toHaveBeenCalled()
+      // The person said no; nothing was refused.
+      expect(octopus().terminal.refused).not.toHaveBeenCalled()
     })
 
     it('says so and runs nothing when it will not stop', async () => {
@@ -1140,6 +1158,11 @@ describe('ScriptRunner', () => {
       ).toBeInTheDocument()
       expect(onOutcome).toHaveBeenCalledWith(false)
       expect(octopus().terminal.create).not.toHaveBeenCalled()
+      expect(octopus().terminal.refused).toHaveBeenCalledWith(
+        anna.id,
+        'run',
+        'Process 76404 would not stop. Stop it yourself, then run again.'
+      )
     })
 
     // A check that could not run says nothing about the workspace.

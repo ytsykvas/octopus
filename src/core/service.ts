@@ -5239,6 +5239,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const envFile = await envFileFor(project, workspace)
       const carry = (await carriedIn(project, workspace.path)).map((file) => file.path)
       const secrets = await secretsIn(workspace, substituteEnv(stored, values), envFile, carry)
+      const scripts = await scriptsIn(workspace, project)
+      // Without a build script a Run starts the server alone, so a build on
+      // record is from before the script went and would read as this Run's.
+      const current = runs.filter(
+        (run) => run.purpose !== 'setup' || scripts.scripts.setup !== undefined
+      )
 
       return {
         rootPath: values.rootPath,
@@ -5249,8 +5255,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           NAMED_PROBLEMS.has(problem.reason) ? problem : { ...problem, subject: '' }
         ),
         carry,
-        scripts: await scriptsIn(workspace, project),
-        lastRuns: runs.map((run) => helpRun(run, secrets))
+        scripts,
+        lastRuns: current.map((run) => helpRun(run, secrets))
       }
     },
 

@@ -17,6 +17,7 @@ import {
   resolveShell,
   type TerminalId,
   type TerminalOwner,
+  type TerminalPurpose,
   type TerminalSession,
   type TerminalSpec
 } from '../core/terminal.js'
@@ -280,10 +281,27 @@ export class TerminalManager {
    * not answer with the failure.
    */
   private startRecord(owner: TerminalOwner): RunRecord | null {
-    const { workspaceId, purpose } = owner
+    return this.record(owner.workspaceId, owner.purpose, { kind: 'running' })
+  }
+
+  /**
+   * Keeps a start the Scripts tab refused before its script ran, in the words
+   * it showed: a port somebody else holds, an env file it would not write, a
+   * shell that would not spawn. None of those leaves a session behind, so Help
+   * would have said nothing had run — or quoted the Run before as this one.
+   */
+  refuse(workspaceId: string, purpose: TerminalPurpose, reason: string): void {
+    this.record(workspaceId, purpose, { kind: 'refused', reason })
+  }
+
+  private record(
+    workspaceId: string | null,
+    purpose: TerminalPurpose,
+    outcome: RunOutcome
+  ): RunRecord | null {
     if (workspaceId === null || !isRunPurpose(purpose)) return null
 
-    const record: RunRecord = { purpose, outcome: { kind: 'running' }, raw: '' }
+    const record: RunRecord = { purpose, outcome, raw: '' }
     // A build starts a new Run, and the server from the one before would read
     // as this one's: a fresh failed build beside an older server that came up.
     const kept = purpose === 'setup' ? {} : this.runs.get(workspaceId)

@@ -1152,6 +1152,33 @@ describe('the last runs of a workspace', () => {
     ])
   })
 
+  it('keeps a start the Scripts tab refused, and why', () => {
+    manager.refuse(ANNA, 'run', 'Port 3110 is taken.')
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'run', outcome: { kind: 'refused', reason: 'Port 3110 is taken.' }, raw: '' }
+    ])
+  })
+
+  it('keeps the build beside a refused server, and drops the server for a refused build', () => {
+    started('setup').end({ exitCode: 0 })
+    started('run').end({ exitCode: 1 })
+
+    manager.refuse(ANNA, 'run', 'no port')
+    expect(manager.lastRuns(ANNA).map(({ outcome }) => outcome.kind)).toEqual(['exited', 'refused'])
+
+    manager.refuse(ANNA, 'setup', 'env file escapes')
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'setup', outcome: { kind: 'refused', reason: 'env file escapes' }, raw: '' }
+    ])
+  })
+
+  it('keeps no refusal of anything but a build or a server', () => {
+    manager.refuse(ANNA, 'archive', 'no cleanup')
+
+    expect(manager.lastRuns(ANNA)).toEqual([])
+  })
+
   it('keeps nothing of a terminal tab, of a sign-in, or of another workspace', () => {
     started('shell').emit('ls')
     started('run', null).emit('signing in')

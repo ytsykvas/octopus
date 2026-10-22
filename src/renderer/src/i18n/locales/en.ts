@@ -634,6 +634,7 @@ export const en = {
       lastRun: '{{stage}} ended at {{at}} with exit code {{code}}. Its last lines:',
       lastRunStopped: '{{stage}} was ended by a signal at {{at}}. Its last lines:',
       lastRunRunning: '{{stage}} is still running. Its last lines so far:',
+      lastRunRefused: '{{stage}} did not start. The Scripts tab said: {{reason}}',
       noOutput: '(it printed nothing)',
       noRun:
         'Nothing has been run in this workspace since octopus started. Press Run on the Scripts tab, then ask again.'

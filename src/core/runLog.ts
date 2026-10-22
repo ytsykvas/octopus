@@ -134,6 +134,8 @@ export type RunOutcome =
   | { readonly kind: 'running' }
   /** `exitCode` is null when a signal ended it, as `terminal:exit` reports it. */
   | { readonly kind: 'exited'; readonly at: string; readonly exitCode: number | null }
+  /** Stopped before its script ran, and why, in the words the Scripts tab showed. */
+  | { readonly kind: 'refused'; readonly reason: string }
 
 /**
  * A workspace's most recent build or server as `main` keeps it.
@@ -180,5 +182,13 @@ export function helpRun(
   secrets: readonly EnvSecret[]
 ): LastRun {
   const masked = maskValues(cleanTerminalOutput(fromWholeLine(raw)), secrets)
-  return { purpose, outcome, output: lastLines(masked, TAIL_LINES, TAIL_OUTPUT_CHARS) }
+  return {
+    purpose,
+    // A refusal can quote what it refused: a port's holder, a file's contents.
+    outcome:
+      outcome.kind === 'refused'
+        ? { kind: 'refused', reason: maskValues(outcome.reason, secrets) }
+        : outcome,
+    output: lastLines(masked, TAIL_LINES, TAIL_OUTPUT_CHARS)
+  }
 }

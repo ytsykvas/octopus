@@ -147,6 +147,18 @@ describe('helpMessage', () => {
     )
   })
 
+  it('says why a run never started, with no output to fence', () => {
+    const refused: LastRun = {
+      purpose: 'run',
+      outcome: { kind: 'refused', reason: 'Port 3110 is taken.' },
+      output: ''
+    }
+
+    expect(helpMessage('diagnoseRun', 'Why?', context({ lastRuns: [refused] }), t)).toMatch(
+      /\n\nServer did not start\. The Scripts tab said: Port 3110 is taken\.$/
+    )
+  })
+
   it('asks for a run first where there has been none', () => {
     expect(helpMessage('diagnoseRun', 'Why?', context(), t)).toMatch(
       /Nothing has been run in this workspace since octopus started\. .*$/

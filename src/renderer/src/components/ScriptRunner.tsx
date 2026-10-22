@@ -293,6 +293,18 @@ function Runner({
   const pendingStart = useRef<number | null>(null)
 
   /**
+   * A start that stopped before its script ran, said here and kept for Help.
+   *
+   * The pane's banner is gone with the pane, and `main` keeps a run's record
+   * only once a session starts — so without this "why does Run not work?"
+   * answered that nothing had run, or quoted the run before as this one.
+   */
+  const refuse = (reason: string): void => {
+    setError(reason)
+    void window.octopus.terminal.refused(workspace.id, kind, reason)
+  }
+
+  /**
    * Whether the server may start, once anything left serving from the worktree
    * has been dealt with (`strayServers.ts`).
    *
@@ -324,7 +336,7 @@ function Runner({
       workspace.id,
       found.value.map(({ pid }) => pid)
     )
-    if (!stopped.ok) setError(describeFailure(stopped))
+    if (!stopped.ok) refuse(describeFailure(stopped))
     return stopped.ok
   }
 
@@ -367,7 +379,7 @@ function Runner({
         if (latestStop.current !== stopWhenAsked) return
 
         if (!settled.ok) {
-          setError(describeFailure(settled))
+          refuse(describeFailure(settled))
           onOutcome?.(false)
           return
         }
@@ -395,7 +407,7 @@ function Runner({
       if (!carried.ok) {
         // Refusing to start is the point. A script missing what it needs fails
         // further in, complaining about whatever the missing file fed.
-        setError(describeFailure(carried))
+        refuse(describeFailure(carried))
         // A sequence waiting on this half would otherwise wait for ever.
         onOutcome?.(false)
         return
@@ -571,7 +583,7 @@ function Runner({
              */
             onFailed={(reason) => {
               setRunning(false)
-              setError(reason)
+              refuse(reason)
               reportOutcome(false)
             }}
             onClosed={() => {
