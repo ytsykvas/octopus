@@ -5490,6 +5490,155 @@ describe('the agent chat', () => {
     expect(await decide('git checkout -b feat/elsewhere')).toBe('{}')
   })
 
+  /*
+   * A session is a CLI process of a hundred megabytes and more, kept for as
+   * long as its tab was open: a conversation that answered once in the
+   * morning held its process all day. At rest long enough it is let go, and
+   * the next message starts one again from the same id, as a restart does.
+   */
+  describe('a session at rest', () => {
+    const SOON = { idleReleaseMs: 150, idleSweepMs: 20, readingFreshMs: 10_000 }
+
+    async function resting(): Promise<{
+      service: OctopusService
+      workspaceId: string
+      chatId: string
+    }> {
+      const { service, workspaceId } = await withWorkspace(SOON)
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      return { service, workspaceId, chatId: chat.id }
+    }
+
+    const letGo = (): Promise<void> =>
+      vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+
+    const after = (ms: number): Promise<void> =>
+      new Promise((resolve) => {
+        setTimeout(resolve, ms)
+      })
+
+    it('is let go once it has rested long enough, and the next message starts it again from its id', async () => {
+      const { service, workspaceId, chatId } = await resting()
+
+      await letGo()
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+
+      await service.sendToChat(chatId, 'more')
+      expect(agents).toHaveLength(2)
+      expect(agents[1]?.options().resume).toBe('sess-1')
+    })
+
+    it('rests from its last word, not from its first', async () => {
+      await resting()
+      await after(60)
+      agent().emit({
+        type: 'system',
+        subtype: 'commands_changed',
+        commands: []
+      } as unknown as SDKMessage)
+      await after(60)
+
+      expect(agents[0]?.closed()).toBe(0)
+      await letGo()
+    })
+
+    it('is kept while a turn runs', async () => {
+      const { service, workspaceId } = await withWorkspace(SOON)
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+
+      await after(300)
+
+      expect(agents[0]?.closed()).toBe(0)
+    })
+
+    it('is kept while the account is being read through it', async () => {
+      const { service } = await resting()
+      let answer: (value: unknown) => void = () => undefined
+      usageAnswer = () =>
+        new Promise((resolve) => {
+          answer = resolve
+        })
+      const read = service.refreshSubscriptionUsage()
+
+      await after(300)
+      expect(agents[0]?.closed()).toBe(0)
+
+      answer(USAGE_RESPONSE)
+      await read
+      await letGo()
+    })
+
+    // Best effort, as a tab closing is: a process that will not die is not a
+    // reason to keep its conversation from starting another.
+    it('is let go even when its process will not close', async () => {
+      const base = fakeQuery()
+      const { service, workspaceId } = await withWorkspace({
+        ...SOON,
+        query: (...args) =>
+          Object.assign(base(...args), {
+            close: () => {
+              throw new Error('the process would not die')
+            }
+          })
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      await after(300)
+      await service.sendToChat(chat.id, 'more')
+
+      expect(agents).toHaveLength(2)
+    })
+
+    // The strip above the composer would otherwise go blank until the next
+    // message, where it had shown a figure a moment before.
+    it('keeps answering the context reading it last gave', async () => {
+      const { service, chatId } = await resting()
+      const before = await service.sessionUsage(chatId)
+      expect(before.context).not.toBeNull()
+
+      await letGo()
+
+      await expect(service.sessionUsage(chatId)).resolves.toEqual(before)
+    })
+
+    /*
+     * With every session let go, the sidebar's timer would start a probe
+     * every three minutes to read figures nobody has been moving — the very
+     * process the release saved. A reading younger than the release stands
+     * for the timer; a press is a question, and asks.
+     */
+    it('answers the timer from the reading kept, and a press by asking', async () => {
+      const { service } = await resting()
+      await service.refreshSubscriptionUsage()
+      await letGo()
+
+      await expect(service.refreshSubscriptionUsage()).resolves.toMatchObject({ kind: 'read' })
+      expect(agents).toHaveLength(1)
+
+      await expect(service.refreshSubscriptionUsage(true)).resolves.toMatchObject({ kind: 'read' })
+      expect(agents).toHaveLength(2)
+    })
+  })
+
   describe('where a conversation compacts', () => {
     /** Sends one message and lets its turn finish, leaving a session with history. */
     async function idleAfterOneTurn(): Promise<{

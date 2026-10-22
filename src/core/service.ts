@@ -406,6 +406,21 @@ const SIDE_TIMEOUT_MS = 5 * 60_000
 const FINISHED_AFTER_MS = 1500
 
 /**
+ * How long a conversation's session may sit at rest before it is let go.
+ *
+ * A session is a CLI process of a hundred megabytes and more, plus whatever
+ * MCP servers it started, and it was kept for as long as its tab was open: a
+ * conversation that answered once in the morning held its process all day.
+ * Let go, it costs nothing until the next message, which starts one again
+ * from the same `sessionId` — the way a restart of the app does. Ten
+ * minutes is longer than a pause for thought and shorter than lunch.
+ */
+const IDLE_RELEASE_MS = 10 * 60_000
+
+/** How often the sessions are looked over for ones at rest that long. */
+const IDLE_SWEEP_MS = 60_000
+
+/**
  * The events that mean the model itself spoke — what a session's headers are
  * refreshed by. Deltas count: they are the response in progress.
  */
@@ -494,6 +509,11 @@ export interface ServiceOptions {
   readonly pluginReloadMs?: number
   /** How long a conversation stays at rest before it is said to be done. */
   readonly finishedAfterMs?: number
+  /** How long a session may rest before it is let go; see `IDLE_RELEASE_MS`. */
+  readonly idleReleaseMs?: number
+  readonly idleSweepMs?: number
+  /** How young a kept account reading answers the timer with no session running; the release's own length by default. */
+  readonly readingFreshMs?: number
   /**
    * How a skill is downloaded, injected for the reason `makeGh` is: the real
    * one leaves the machine, and a suite that used it would be testing
@@ -1550,7 +1570,8 @@ export interface OctopusService {
    * four outcomes, because the block has four things to say and inferring them
    * from one nullable value got two of them wrong.
    */
-  refreshSubscriptionUsage(): Promise<UsageOutcome>
+  /** `pressed` says a person asked, which always asks the account; a timer takes a recent reading. */
+  refreshSubscriptionUsage(pressed?: boolean): Promise<UsageOutcome>
   /** Subscribes to agent events; the returned function unsubscribes. */
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
@@ -1629,6 +1650,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const plugins = options.pluginCli ?? pluginCli()
   const pluginReloadMs = options.pluginReloadMs ?? PLUGIN_RELOAD_MS
   const finishedAfterMs = options.finishedAfterMs ?? FINISHED_AFTER_MS
+  const idleReleaseMs = options.idleReleaseMs ?? IDLE_RELEASE_MS
+  const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
+  const readingFreshMs = options.readingFreshMs ?? idleReleaseMs
   /** A "done" waiting out `FINISHED_AFTER_MS`, per conversation. */
   const finishing = new Map<string, ReturnType<typeof setTimeout>>()
   const runForkSession = options.forkSession ?? defaultForkSession
@@ -1662,6 +1686,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const download = { fetch: options.fetch ?? globalThis.fetch, timeoutMs: DOWNLOAD_TIMEOUT_MS }
 
   const sessions = new Map<string, AgentSession>()
+  /**
+   * When each conversation's session was last used or heard from, in epoch
+   * milliseconds — what "at rest for ten minutes" is measured from.
+   */
+  const lastActivity = new Map<string, number>()
+  /**
+   * The last context reading each conversation's session gave.
+   *
+   * A session let go cannot be asked, and the strip above the composer would
+   * go blank until the next message where it had shown a figure a moment
+   * before. The figure is still true of the conversation — nothing has been
+   * said since — so it is what a released conversation answers with.
+   */
+  const lastUsage = new Map<string, SessionUsage>()
   /**
    * What each running session was started with, as far as compaction goes,
    * and what its readings have said since.
@@ -2255,12 +2293,27 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * enough to give it one. The chat is the *address* of a directory here and
    * nothing more — see `startProbe` for why that distinction is the fix.
    */
-  function askAccount(): Promise<UsageOutcome> {
+  function askAccount(pressed = false): Promise<UsageOutcome> {
     if (reading !== null) return reading
 
     const run = (async (): Promise<UsageOutcome> => {
       const running = freshestSession()
       if (running) return readWindows(running)
+
+      /*
+       * With no session running — every conversation at rest long enough to
+       * be let go — the timer would start a probe every three minutes to read
+       * figures that nobody has been moving, and keep the very process the
+       * release saved. A reading no older than the release itself stands;
+       * only a press asks regardless, since a press is a question.
+       */
+      if (
+        !pressed &&
+        usageWindows !== null &&
+        Date.parse(now()) - Date.parse(usageWindows.readAt) < readingFreshMs
+      ) {
+        return { kind: 'read', windows: usageWindows }
+      }
 
       const chat = state.chats.at(-1)
       const workspace = state.workspaces.find((item) => item.id === chat?.workspaceId)
@@ -2773,6 +2826,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const speaker = sessions.get(chat.id)
     if (speaker) {
       spoke.set(speaker, ++spokenCount)
+      lastActivity.set(chat.id, Date.parse(now()))
       if (MODEL_EVENTS.has(event.type)) modelHeardAt.set(speaker, Date.parse(now()))
     }
 
@@ -3433,10 +3487,79 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * steps that can still fail. `discardHistories` takes it, after the record
    * has gone.
    */
+  /**
+   * Whether nothing at all is going on in a conversation.
+   *
+   * Everything that makes its session worth keeping: a turn open, an agent
+   * still working, a question waiting for an answer, a message the CLI holds
+   * in its queue, an edit announced and not finished, a `/clear` or a rewind
+   * under way, a push promised for after the turn, a session on its way up,
+   * and the account being read through whatever session there is.
+   */
+  function atRest(chatId: string): Chat | null {
+    const chat = findChat(state, chatId)
+    // A registered session always has its record — the two go together in
+    // `closeOneChat` — so this is for the type, which cannot know that.
+    /* v8 ignore next */
+    if (!chat) return null
+    return (chat.status === 'idle' || chat.status === 'error') &&
+      !registry.turnOpen(chatId) &&
+      liveCount(registry.tasks(chatId)) === 0 &&
+      [...pending.values()].every((request) => request.chatId !== chatId) &&
+      [...pendingElicitations.values()].every((request) => request.chatId !== chatId) &&
+      (heldMessages.get(chatId)?.size ?? 0) === 0 &&
+      [...editsInFlight.values()].every((edit) => edit.chatId !== chatId) &&
+      !clearRequests.has(chatId) &&
+      !rewinding.has(chatId) &&
+      !publishAfterTurn.has(chatId) &&
+      !starts.has(chatId) &&
+      reading === null
+      ? chat
+      : null
+  }
+
+  /**
+   * Lets a conversation's session go, keeping the conversation.
+   *
+   * Only what belongs to the process: the record, its tasks' history and the
+   * last reading of its context stay, and the next message starts a session
+   * again from the same id. A session being closed still speaks for a moment,
+   * and `handleEvent` takes nothing from one that is no longer registered.
+   */
+  async function releaseSession(chatId: string, session: AgentSession): Promise<void> {
+    sessions.delete(chatId)
+    compaction.delete(chatId)
+    lastActivity.delete(chatId)
+    await session.close().catch(() => undefined)
+  }
+
+  /** Lets go of every session that has been at rest for `idleReleaseMs`. */
+  function releaseIdleSessions(): void {
+    const nowMs = Date.parse(now())
+    for (const [chatId, since] of [...lastActivity]) {
+      const session = sessions.get(chatId)
+      // Every stamp is a registered session's — written with it, taken away
+      // with it — so this is for the type, which cannot know that.
+      /* v8 ignore next */
+      if (!session || nowMs - since < idleReleaseMs) continue
+      const chat = atRest(chatId)
+      if (chat) background(chat, releaseSession(chatId, session))
+    }
+  }
+
+  // Looked over once a minute rather than timed per session: one clock, and a
+  // session that is busy at the moment its rest would end is simply looked at
+  // again a minute later. Unreferenced, so a service with sessions still
+  // registered does not hold the process open on its own.
+  const idleSweep = setInterval(releaseIdleSessions, idleSweepMs)
+  idleSweep.unref()
+
   async function closeOneChat(chat: Chat): Promise<void> {
     const session = sessions.get(chat.id)
     sessions.delete(chat.id)
     compaction.delete(chat.id)
+    lastActivity.delete(chat.id)
+    lastUsage.delete(chat.id)
     // Its queue goes with its process, and so does a push promised for a turn
     // it will now never finish — the next session's turns were asked nothing.
     heldMessages.delete(chat.id)
@@ -4422,7 +4545,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   function sessionFor(chat: Chat, workspace: Workspace): Promise<AgentSession> {
     const live = sessions.get(chat.id)
-    if (live) return Promise.resolve(live)
+    if (live) {
+      // Asked for is used: a message, a rewind, a setting applied.
+      lastActivity.set(chat.id, Date.parse(now()))
+      return Promise.resolve(live)
+    }
 
     const starting = starts.get(chat.id)
     if (starting) return starting
@@ -4547,6 +4674,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
 
     sessions.set(chat.id, session)
+    lastActivity.set(chat.id, Date.parse(now()))
     compaction.set(chat.id, {
       startedWith: chat.autoCompactWindow,
       override,
@@ -6551,8 +6679,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return usageWindows
     },
 
-    refreshSubscriptionUsage() {
-      return askAccount()
+    refreshSubscriptionUsage(pressed = false) {
+      return askAccount(pressed)
     },
 
     async askSideQuestion(chatId, question, history) {
@@ -6591,8 +6719,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const session = sessions.get(chatId)
       // Deliberately not started. Spawning an agent to fill a gauge would also
       // create a record for a workspace nobody has spoken to, which is the very
-      // thing `openChat`'s laziness exists to avoid.
-      if (!session) return { context: null, autoCompact: null }
+      // thing `openChat`'s laziness exists to avoid. A conversation whose
+      // session was let go answers with the reading it last gave.
+      if (!session) return lastUsage.get(chatId) ?? { context: null, autoCompact: null }
 
       const context = await session.contextUsage()
       if (context === null) return { context: null, autoCompact: null }
@@ -6629,7 +6758,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         })
       }
 
-      return { context, autoCompact }
+      const usage = { context, autoCompact }
+      lastUsage.set(chatId, usage)
+      return usage
     },
 
     onAgentEvent(handler) {
@@ -6686,6 +6817,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // A gathered push left for after the quit would reach no window, and
       // its timer would hold the process open for nothing.
       registry.stop()
+      clearInterval(idleSweep)
       for (const timer of finishing.values()) clearTimeout(timer)
       finishing.clear()
 

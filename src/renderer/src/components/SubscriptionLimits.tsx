@@ -87,7 +87,7 @@ export function SubscriptionLimits({ subscription }: SubscriptionLimitsProps): R
 
         <button
           type="button"
-          onClick={() => void refresh()}
+          onClick={() => void refresh(true)}
           disabled={busy}
           title={t('limits.refresh')}
           aria-label={t('limits.refresh')}

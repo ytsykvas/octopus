@@ -205,6 +205,20 @@ describe('what the sidebar knows about the account', () => {
    * under a second — worth keeping roughly current, not worth asking about
    * every minute.
    */
+  // The timer says it is not a press, so the service may answer it from a
+  // recent reading rather than start a process to read figures nobody moved;
+  // a press always asks.
+  it('tells the service whether a person pressed', async () => {
+    const { result } = renderHook(() => useSubscriptionUsage())
+    expect(octopus().chats.refreshSubscription).toHaveBeenLastCalledWith(false)
+
+    await act(async () => {
+      await result.current.refresh(true)
+    })
+
+    expect(octopus().chats.refreshSubscription).toHaveBeenLastCalledWith(true)
+  })
+
   it('asks again on a slow timer while it is being looked at', async () => {
     vi.useFakeTimers()
     try {

@@ -657,6 +657,20 @@ compaction window — goes through `closeOneChat`, which empties both; none is
 dropped on an agent error. A session that dies is kept in `sessions`, so there
 is no later turn for a stale flag to swallow.
 
+A session also goes when its conversation has been **at rest for ten minutes**
+(`IDLE_RELEASE_MS`, swept once a minute): a CLI process of a hundred megabytes
+and more, plus the MCP servers it started, held for as long as its tab was
+open — a conversation that answered once in the morning kept its process all
+day. `releaseSession` takes only what belongs to the process (`sessions`,
+`compaction`, the activity clock) and leaves the record, the tasks' history and
+the last context reading, which `sessionUsage` goes on answering so the strip
+above the composer does not blank; the next message starts a session again from
+the same id, as a restart does. "At rest" is `atRest`: idle or errored, no turn
+open, no agent live, no question waiting, nothing held in the CLI's queue, no
+edit announced and unfinished, no `/clear`, rewind or push pending, no session
+on its way up, and the account not being read. Rest is measured from the last
+event heard or the last time the session was asked for.
+
 The log has the matching rule, because the transcripts written before this did
 not get one: a footer at the head of the log closes no turn, so `buildBlocks`
 does not draw it.

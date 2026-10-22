@@ -31,7 +31,8 @@ export interface SubscriptionController {
    * account with no plan windows was told to open a workspace first.
    */
   readonly outcome: SubscriptionOutcome
-  readonly refresh: () => Promise<void>
+  /** `pressed` is a person asking, which always asks the account; the timer takes a recent reading. */
+  readonly refresh: (pressed?: boolean) => Promise<void>
 }
 
 /**
@@ -65,9 +66,9 @@ export function useSubscriptionUsage(): SubscriptionController {
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<SubscriptionOutcome>('unread')
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (pressed = false) => {
     setBusy(true)
-    const read = await window.octopus.chats.refreshSubscription()
+    const read = await window.octopus.chats.refreshSubscription(pressed)
     setBusy(false)
 
     // The call itself failing is the same story as the read failing, and there

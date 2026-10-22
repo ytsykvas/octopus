@@ -442,8 +442,8 @@ const api = {
      * session runs in a worktree, so an installation with no workspace has
      * nowhere to start one.
      */
-    refreshSubscription: (): Promise<Result<UsageOutcome>> =>
-      ipcRenderer.invoke('chats:refreshSubscription') as Promise<Result<UsageOutcome>>,
+    refreshSubscription: (pressed = false): Promise<Result<UsageOutcome>> =>
+      ipcRenderer.invoke('chats:refreshSubscription', pressed) as Promise<Result<UsageOutcome>>,
 
     onEvent: (handler: (event: ChatEvent) => void): (() => void) => {
       const listener = (_event: unknown, chatEvent: ChatEvent): void => {
