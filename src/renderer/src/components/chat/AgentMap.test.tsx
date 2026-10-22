@@ -8,25 +8,48 @@ import type { ChatEntry } from '@core/transcript.js'
 
 import { agentsOf, task } from '../../test/tasks.js'
 import { AgentMap } from './AgentMap.js'
-import { AgentLogContext, AgentsContext } from './agentTasks.js'
+import { AgentLogContext, type Agents, AgentsContext } from './agentTasks.js'
 
 const AT = '2026-10-20T10:00:00.000Z'
 const agent = (event: AgentEvent): ChatEntry => ({ role: 'agent', at: AT, event })
 
-function renderMap(
+interface Actions {
+  readonly onStop: ReturnType<typeof vi.fn>
+  readonly onShow: ReturnType<typeof vi.fn>
+  readonly onClear: ReturnType<typeof vi.fn>
+}
+
+/** The map with every group opened, which is where most of these start. */
+async function renderMap(
   tasks: readonly TaskView[],
   entries: readonly ChatEntry[] = []
-): { onStop: ReturnType<typeof vi.fn>; onShow: ReturnType<typeof vi.fn> } {
-  const onStop = vi.fn()
-  const onShow = vi.fn()
-  render(mapOf(tasks, entries, { onStop, onShow }))
-  return { onStop, onShow }
+): Promise<Actions> {
+  const actions = renderFolded(tasks, entries)
+  await unfold()
+  return actions
 }
+
+/** The map as it opens: every group folded. */
+function renderFolded(tasks: readonly TaskView[], entries: readonly ChatEntry[] = []): Actions {
+  const actions = { onStop: vi.fn(), onShow: vi.fn(), onClear: vi.fn() }
+  render(mapOf(tasks, entries, actions))
+  return actions
+}
+
+async function unfold(): Promise<void> {
+  for (const group of screen.queryAllByRole('button', { expanded: false })) {
+    await userEvent.click(group)
+  }
+}
+
+/** A group's header, by the name it starts with. */
+const group = (name: string): HTMLElement =>
+  screen.getByRole('button', { name: new RegExp(`^${name}`) })
 
 function mapOf(
   tasks: readonly TaskView[],
   entries: readonly ChatEntry[] = [],
-  actions: { onStop?: (taskId: string) => void; onShow?: (toolUseId: string) => void } = {}
+  actions: Partial<Pick<Agents, 'onStop' | 'onShow' | 'onClear'>> = {}
 ): React.JSX.Element {
   return (
     <AgentsContext.Provider value={agentsOf(tasks, actions)}>
@@ -42,8 +65,8 @@ const row = (name: string): HTMLElement =>
   screen.getByRole('button', { name: new RegExp(`^${name}, `) })
 
 describe('the agent map', () => {
-  it('lists each agent with its kind, model, tokens, time and what it is doing', () => {
-    renderMap([task()])
+  it('lists each agent with its kind, model, tokens, time and what it is doing', async () => {
+    await renderMap([task()])
 
     expect(row('Audit route handlers')).toHaveAccessibleName('Audit route handlers, Working')
     // The lines under the name are read too, rather than lost behind a label.
@@ -56,8 +79,8 @@ describe('the agent map', () => {
   })
 
   // Agents start agents, and a flat list would hide which one is whose.
-  it('nests an agent under the one that started it, and commands apart', () => {
-    renderMap([
+  it('nests an agent under the one that started it, and commands apart', async () => {
+    await renderMap([
       task(),
       task({ taskId: 't-2', parentTaskId: 't-1', description: 'Check token expiry' }),
       task({
@@ -75,28 +98,30 @@ describe('the agent map', () => {
     expect(parent).not.toBeNull()
     expect(within(parent as HTMLElement).getByText('Check token expiry')).toBeInTheDocument()
 
-    const commands = screen.getByText('Background commands').parentElement
+    const commands = screen.getByText('Background commands').closest('section')
     expect(within(commands!).getByText('npm run dev')).toBeInTheDocument()
-    expect(screen.getByText('3 working · 1 done')).toBeInTheDocument()
+    // Each group counts its own, the nested ones included.
+    expect(group('Agents')).toHaveTextContent('2 working · 1 done')
+    expect(group('Background commands')).toHaveTextContent('1 working')
     // An ended agent says no step: there is none under way.
     expect(row('Map the SDK')).toHaveAccessibleName('Map the SDK, Done')
   })
 
-  it('says only how many are done when none is working, and nothing of the waiting', () => {
-    renderMap([task({ status: 'failed', activity: null })])
+  it('says only how many are done when none is working, and nothing of the waiting', async () => {
+    await renderMap([task({ status: 'failed', activity: null })])
 
     expect(screen.getByText('1 done')).toBeInTheDocument()
     expect(row('Audit route handlers')).toHaveAccessibleName('Audit route handlers, Failed')
   })
 
-  it('lists commands alone when there are no agents', () => {
-    renderMap([task({ kind: 'shell', description: 'sleep 60' })])
+  it('lists commands alone when there are no agents', async () => {
+    await renderMap([task({ kind: 'shell', description: 'sleep 60' })])
 
     expect(screen.getByText('Background commands')).toBeInTheDocument()
   })
 
   it('stops one that is working, and offers no Stop for one that is not', async () => {
-    const { onStop } = renderMap([
+    const { onStop } = await renderMap([
       task(),
       task({ taskId: 't-2', status: 'stopped', description: 'Old one' })
     ])
@@ -108,13 +133,89 @@ describe('the agent map', () => {
   })
 
   it('names an agent waiting on an answer as waiting, in the list and opened', async () => {
-    renderMap([task({ waiting: true })])
+    await renderMap([task({ waiting: true })])
 
     expect(row('Audit route handlers')).toHaveAccessibleName(
       'Audit route handlers, Needs your answer'
     )
     await userEvent.click(row('Audit route handlers'))
     expect(screen.getByText('Needs your answer')).toHaveClass('text-warning')
+  })
+
+  describe('its groups', () => {
+    const tasks = [
+      task(),
+      task({ taskId: 't-2', status: 'completed', description: 'Map the SDK', activity: null }),
+      task({ taskId: 't-3', kind: 'shell', description: 'npm run dev', status: 'completed' })
+    ]
+
+    // A long conversation runs dozens; the counts are what a glance wants.
+    it('open folded, each header saying how it stands', async () => {
+      renderFolded(tasks)
+
+      expect(group('Agents')).toHaveAttribute('aria-expanded', 'false')
+      expect(group('Agents')).toHaveTextContent('1 working · 1 done')
+      expect(group('Background commands')).toHaveAttribute('aria-expanded', 'false')
+      expect(group('Background commands')).toHaveTextContent('1 done')
+      expect(screen.queryByText('Map the SDK')).not.toBeInTheDocument()
+
+      await userEvent.click(group('Agents'))
+      expect(row('Map the SDK')).toBeInTheDocument()
+      expect(screen.queryByText('npm run dev')).not.toBeInTheDocument()
+
+      await userEvent.click(group('Agents'))
+      expect(screen.queryByText('Map the SDK')).not.toBeInTheDocument()
+    })
+
+    it('stay as they were when an opened agent goes back to the list', async () => {
+      renderFolded(tasks)
+      await userEvent.click(group('Agents'))
+
+      await userEvent.click(row('Map the SDK'))
+      await userEvent.click(screen.getByRole('button', { name: 'All agents' }))
+
+      expect(group('Agents')).toHaveAttribute('aria-expanded', 'true')
+      expect(group('Background commands')).toHaveAttribute('aria-expanded', 'false')
+    })
+
+    // Folded, the amber of a waiting row would be out of sight.
+    it('say in the header that something in them is waiting on an answer', () => {
+      renderFolded([task({ waiting: true }), task({ taskId: 't-2', kind: 'shell' })])
+
+      expect(group('Agents')).toHaveAccessibleName(/Needs your answer/)
+      expect(group('Agents').querySelector('.bg-warning')).not.toBeNull()
+      expect(group('Background commands')).not.toHaveAccessibleName(/Needs your answer/)
+    })
+
+    // Nothing working, a column of green asks for a look nobody owes it.
+    it('grey the ticks once nothing is working, and keep a failure red', async () => {
+      await renderMap([
+        task({ status: 'completed', activity: null }),
+        task({ taskId: 't-2', status: 'failed', description: 'Broke' })
+      ])
+
+      expect(row('Audit route handlers').querySelector('.text-success')).toBeNull()
+      expect(row('Audit route handlers').querySelector('.text-ink-faint')).not.toBeNull()
+      expect(row('Broke').querySelector('.text-danger')).not.toBeNull()
+    })
+
+    it('keep the ticks green while something is working', async () => {
+      await renderMap(tasks)
+      expect(row('Map the SDK').querySelector('.text-success')).not.toBeNull()
+    })
+
+    it('offer to clear only what has ended, and clear just that', async () => {
+      const { onClear } = renderFolded(tasks)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Clear finished' }))
+
+      expect(onClear).toHaveBeenCalledWith(['t-2', 't-3'])
+    })
+
+    it('offer nothing to clear while all of it is working', () => {
+      renderFolded([task()])
+      expect(screen.queryByRole('button', { name: 'Clear finished' })).not.toBeInTheDocument()
+    })
   })
 
   describe('a workflow', () => {
@@ -132,8 +233,8 @@ describe('the agent map', () => {
     })
 
     // Its agents raise no events of their own; its progress is all there is.
-    it('lists its agents phase by phase, with how many are still going', () => {
-      renderMap([
+    it('lists its agents phase by phase, with how many are still going', async () => {
+      await renderMap([
         task({
           kind: 'workflow',
           subagentType: null,
@@ -199,7 +300,7 @@ describe('the agent map', () => {
     ]
 
     it('says what it is, what it was asked and what it did', async () => {
-      renderMap(
+      await renderMap(
         [task(), task({ taskId: 't-2', parentTaskId: 't-1', description: 'Nested' })],
         entries
       )
@@ -226,7 +327,7 @@ describe('the agent map', () => {
     })
 
     it('shows the row in the log and stops the agent from its footer', async () => {
-      const { onShow, onStop } = renderMap([task()], entries)
+      const { onShow, onStop } = await renderMap([task()], entries)
       await userEvent.click(row('Audit route handlers'))
 
       await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
@@ -238,7 +339,7 @@ describe('the agent map', () => {
 
     // Once it is over, the report is what there is to read — as the agent wrote it.
     it('draws an ended one’s report as markdown, with nothing to stop', async () => {
-      renderMap(
+      await renderMap(
         [
           task({
             status: 'completed',
@@ -261,7 +362,7 @@ describe('the agent map', () => {
     // A command has no prompt and no steps in the log, and one that ended has
     // nothing to show or stop.
     it('has no footer for a command that has ended and no call to show', async () => {
-      renderMap([
+      await renderMap([
         task({
           kind: 'shell',
           subagentType: null,
@@ -278,7 +379,7 @@ describe('the agent map', () => {
     })
 
     it('stops a running command that has no call to show', async () => {
-      const { onStop } = renderMap([task({ kind: 'shell', toolUseId: null })])
+      const { onStop } = await renderMap([task({ kind: 'shell', toolUseId: null })])
       await userEvent.click(row('Audit route handlers'))
 
       await userEvent.click(screen.getByRole('button', { name: 'Stop agent' }))
@@ -288,6 +389,7 @@ describe('the agent map', () => {
 
     it('goes back to the list when the agent it showed is gone', async () => {
       const { rerender } = render(mapOf([task()]))
+      await unfold()
       await userEvent.click(row('Audit route handlers'))
 
       rerender(mapOf([task({ taskId: 't-9', description: 'Another' })]))

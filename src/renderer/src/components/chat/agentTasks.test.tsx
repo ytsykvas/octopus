@@ -8,6 +8,7 @@ import {
   AgentsContext,
   createAgentsStore,
   useAgentTasks,
+  useMenuTasks,
   useTaskById,
   useTaskFor
 } from './agentTasks.js'
@@ -29,6 +30,21 @@ describe('the store the pane publishes into', () => {
     expect(store.read().tasks).toBe(list)
     expect(store.read().byToolUse.get('call-1')).toBe(reading)
     expect(store.read().byId.get('t-1')).toBe(reading)
+  })
+
+  // Clearing moves the menu alone: the log's list is the same object throughout.
+  it('tells its readers when only the menu moves', () => {
+    const store = createAgentsStore()
+    const reader = vi.fn()
+    store.subscribe(reader)
+
+    const list = [reading, writing]
+    store.publish(list)
+    store.publish(list, [writing])
+
+    expect(reader).toHaveBeenCalledTimes(2)
+    expect(store.read().tasks).toBe(list)
+    expect(store.read().menu).toEqual([writing])
   })
 
   it('stops telling a reader that left', () => {
@@ -95,12 +111,14 @@ describe('the other readings', () => {
     <AgentsContext.Provider value={agentsOf([reading, writing])}>{children}</AgentsContext.Provider>
   )
 
-  it('hand over every task, and one by its id', () => {
+  it('hand over every task, the menu, and one by its id', () => {
     const all = renderHook(() => useAgentTasks(), { wrapper })
+    const menu = renderHook(() => useMenuTasks(), { wrapper })
     const one = renderHook(() => useTaskById('t-2'), { wrapper })
     const none = renderHook(() => useTaskById(null), { wrapper })
 
     expect(all.result.current).toEqual([reading, writing] satisfies readonly TaskView[])
+    expect(menu.result.current).toEqual([reading, writing])
     expect(one.result.current).toBe(writing)
     expect(none.result.current).toBeUndefined()
   })

@@ -5,7 +5,7 @@ import { liveAgents, liveCount, visibleTasks } from '@core/backgroundTasks.js'
 import { useAnchoredPanel } from '../../hooks/useAnchoredPanel.js'
 import { chatStatusTone } from '../agentStatus.js'
 import { AgentMap, PANEL_MAX_SHARE } from './AgentMap.js'
-import { useAgentTasks } from './agentTasks.js'
+import { useMenuTasks } from './agentTasks.js'
 
 /** Wide enough for a description, its time and a model without the row wrapping. */
 const PANEL_WIDTH = 380
@@ -16,7 +16,8 @@ const PANEL_WIDTH = 380
  * The one place it says so without opening anything — Claude Code's VS Code
  * panel keeps it in the same spot. Absent until an agent has run; then the
  * count of those working with a dot that turns amber when one is waiting on
- * an answer, or, once all are done, how many there were, quietly. While any
+ * an answer, or, once all are done, how many there were, quietly — grey and
+ * without a dot, since nothing there needs a look any more. While any
  * is working the chip wears the composer's colours as a turning line: work
  * nobody is watching is the one thing on the strip worth a second look.
  *
@@ -24,7 +25,8 @@ const PANEL_WIDTH = 380
  */
 export function AgentsChip(): React.JSX.Element | null {
   const { t } = useTranslation()
-  const tasks = useAgentTasks()
+  // Without what was cleared: clearing the last of it takes the chip away too.
+  const tasks = useMenuTasks()
   const { open, position, container, toggle, close } = useAnchoredPanel()
 
   const shown = visibleTasks(tasks)
@@ -50,12 +52,15 @@ export function AgentsChip(): React.JSX.Element | null {
       ? t('agents.chipWorking', { count: working })
       : t('agents.chipDone')
 
-  // The tab strip's dot for the same three states, so the two never disagree.
-  const dot = chatStatusTone({
-    status: waiting ? 'waiting_permission' : working > 0 ? 'running' : 'idle',
-    started: true,
-    interrupted: false
-  })
+  // The tab strip's dot for working and waiting, so the two never disagree.
+  const dot =
+    waiting || working > 0
+      ? chatStatusTone({
+          status: waiting ? 'waiting_permission' : 'running',
+          started: true,
+          interrupted: false
+        })
+      : null
 
   return (
     <div ref={container} className="contents">
@@ -78,7 +83,7 @@ export function AgentsChip(): React.JSX.Element | null {
         }`}
       >
         {working > 0 && <span aria-hidden className="agents-chip-line" />}
-        <span aria-hidden className={`${dot} size-1.5 shrink-0 rounded-full`} />
+        {dot !== null && <span aria-hidden className={`${dot} size-1.5 shrink-0 rounded-full`} />}
         {label}
       </button>
 
