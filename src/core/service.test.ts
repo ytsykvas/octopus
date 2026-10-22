@@ -2947,9 +2947,8 @@ describe('what Help is told about a workspace', () => {
 
   /*
    * A line's subject is text from it — what comes before its `=` for a bad
-   * name, all of it for no assignment — and lines are checked one by one: a
-   * pasted `KEY: value` and a base64 line of a key, quoted or not, both put a
-   * secret there.
+   * name, all of it for no assignment — so a pasted `KEY: value` and a line of
+   * a key pasted without its quotes both put a secret there.
    */
   it('reports a badly named line by its number alone too', async () => {
     const { projectId, workspaceId } = await withWorkspace()
@@ -2958,9 +2957,9 @@ describe('what Help is told about a workspace', () => {
       'default',
       [
         'DATABASE_URL: postgres://app:hunter2@db.internal/app?sslmode=require',
-        'PRIVATE_KEY="-----BEGIN KEY-----',
+        'PRIVATE_KEY=-----BEGIN KEY-----',
         'q3Zx/9Yp+abcDEF==',
-        '-----END KEY-----"',
+        '-----END KEY-----',
         'A=1',
         'A=$OCTOPUS_PROT',
         ''
@@ -3010,7 +3009,7 @@ describe('what Help is told about a workspace', () => {
     await service.saveEnvProfile(
       projectId,
       'default',
-      'KEY=-----BEGIN KEY-----\nMIIEvQIBADANBgkq\ndGhpc2lzYXNlY3JldA==\n'
+      'KEY=-----BEGIN KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj\ndGhpc2lzYXNlY3JldA==\n'
     )
 
     const context = await service.helpContext(workspaceId, [])

@@ -89,6 +89,12 @@ describe('substituteEnv', () => {
   })
 })
 
+/** A full line of a key as PEM wraps it: base64, 64 characters. */
+const KEY_LINE = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj'
+
+/** A key pasted without its quotes, its last line ending in base64's padding. */
+const UNQUOTED_KEY = `KEY=-----BEGIN KEY-----\n${KEY_LINE}\nq3ZxYpabcDEFgh==`
+
 describe('parseEnvBody', () => {
   it('reads one name and value per line', () => {
     expect(parseEnvBody('DUMP_URL=s3://staging/latest.sql\nMYSQL_HOST=dev.example')).toEqual({
@@ -181,8 +187,8 @@ describe('parseEnvBody', () => {
    * as a variable while being a piece of the key.
    */
   it('leaves out a line of base64 that ends in padding', () => {
-    const pasted = 'KEY=-----BEGIN KEY-----\nMIIEvQIBADANBgkqhkiG9w0\nq3ZxYpabcDEFgh==\nr4Zx='
-    expect(parseEnvBody(pasted)).toEqual({ KEY: '-----BEGIN KEY-----' })
+    expect(parseEnvBody(UNQUOTED_KEY)).toEqual({ KEY: '-----BEGIN KEY-----' })
+    expect(parseEnvBody(`${KEY_LINE}\nr4Zx=`)).toEqual({})
   })
 
   it('still reads an empty value after an assignment, a comment or the first line', () => {
@@ -192,6 +198,23 @@ describe('parseEnvBody', () => {
       B: '',
       C: ''
     })
+  })
+
+  // Padding follows a line of a key and nothing else: these are what they say.
+  it('reads a value of equals signs, or none, anywhere else', () => {
+    expect(parseEnvBody('SEP==')).toEqual({ SEP: '=' })
+    expect(parseEnvBody('oops\nEMPTY=')).toEqual({ EMPTY: '' })
+    expect(parseEnvBody('my-var=1\nEMPTY=')).toEqual({ EMPTY: '' })
+  })
+
+  it('reads an empty value after a value spanning lines', () => {
+    const pem = `KEY="-----BEGIN KEY-----\n${KEY_LINE}\n-----END KEY-----"\nEMPTY=\nNEXT=1`
+    expect(parseEnvBody(pem)).toEqual({ EMPTY: '', NEXT: '1' })
+  })
+
+  it('takes a line of base64 for a key from 40 characters, short of any width keys wrap at', () => {
+    expect(parseEnvBody(`${'A'.repeat(39)}\nab=`)).toEqual({ ab: '' })
+    expect(parseEnvBody(`${'A'.repeat(40)}\nab=`)).toEqual({})
   })
 
   it('reads lines that end in a carriage return', () => {
@@ -296,20 +319,34 @@ describe('checkEnvBody', () => {
 
 describe('base64 padding in a block', () => {
   it('is not an assignment, so its text is never taken for a name', () => {
-    expect(
-      checkEnvBody('KEY=-----BEGIN KEY-----\nMIIEvQIBADANBgkqhkiG9w0\nq3ZxYpabcDEFgh==\nr4Zx=')
-    ).toEqual([
-      { line: 2, reason: 'noAssignment', subject: 'MIIEvQIBADANBgkqhkiG9w0' },
-      { line: 3, reason: 'noAssignment', subject: 'q3ZxYpabcDEFgh==' },
-      { line: 4, reason: 'noAssignment', subject: 'r4Zx=' }
+    expect(checkEnvBody(UNQUOTED_KEY)).toEqual([
+      { line: 2, reason: 'noAssignment', subject: KEY_LINE },
+      { line: 3, reason: 'noAssignment', subject: 'q3ZxYpabcDEFgh==' }
     ])
   })
 
-  // One `=` is a value of nothing anywhere but straight after a line that was no assignment.
-  it('leaves an empty value after a bad name to be read as padding too', () => {
-    expect(checkEnvBody('ab+cd/ef=\nr4Zx=')).toEqual([
-      { line: 1, reason: 'badName', subject: 'ab+cd/ef' },
-      { line: 2, reason: 'noAssignment', subject: 'r4Zx=' }
+  it('is not read after a typo or a bad name, where an empty value is one', () => {
+    expect(checkEnvBody('oops\nEMPTY=')).toEqual([
+      { line: 1, reason: 'noAssignment', subject: 'oops' }
+    ])
+    expect(checkEnvBody('my-var=1\nEMPTY=')).toEqual([
+      { line: 1, reason: 'badName', subject: 'my-var' }
+    ])
+  })
+})
+
+describe('a value spanning lines', () => {
+  const pem = `KEY="-----BEGIN KEY-----\n${KEY_LINE}\nq3ZxYpabcDEFgh==\n-----END KEY-----"\nEMPTY=`
+
+  // Its lines are the value's: no `=`, or a `+` before one, is right in there.
+  it('is checked as one assignment', () => {
+    expect(checkEnvBody(pem)).toEqual([])
+    expect(checkEnvBody("A='x\nab+cd=\n'")).toEqual([])
+  })
+
+  it('still has a marker inside it warned about', () => {
+    expect(checkEnvBody('A="x\n# <<< octopus\ny"')).toEqual([
+      { line: 2, reason: 'marker', subject: '# <<< octopus' }
     ])
   })
 })
@@ -351,11 +388,19 @@ describe('envSecrets', () => {
     ])
   })
 
+  it('keeps a value spanning lines under no name where its name is not one', () => {
+    expect(envSecrets('my-key="first-line\nsecond-line"')).toEqual([
+      { name: null, value: 'my-key="first-line' },
+      { name: null, value: 'first-line' },
+      { name: null, value: 'second-line' }
+    ])
+  })
+
   it('keeps a line that is no assignment whole, under no name', () => {
     expect(
-      envSecrets('MIIEvQIBADAN\nq3ZxYpabcDEFgh==\nDATABASE_URL: postgres://u:pw@db?ssl=on')
+      envSecrets(`${KEY_LINE}\nq3ZxYpabcDEFgh==\nDATABASE_URL: postgres://u:pw@db?ssl=on`)
     ).toEqual([
-      { name: null, value: 'MIIEvQIBADAN' },
+      { name: null, value: KEY_LINE },
       { name: null, value: 'q3ZxYpabcDEFgh==' },
       { name: null, value: 'DATABASE_URL: postgres://u:pw@db?ssl=on' },
       { name: null, value: 'on' },

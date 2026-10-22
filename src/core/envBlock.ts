@@ -49,6 +49,20 @@ const BRACED = /\$\{(OCTOPUS_[A-Z0-9_]+)\}/g
 const BARE = /\$(OCTOPUS_[A-Z0-9_]+)/g
 
 /**
+ * The body with any marker line of ours taken out.
+ *
+ * Belt to `checkEnvBody`'s braces: the warning is advisory and the block is
+ * written anyway, so the thing that would corrupt the file has to be removed
+ * rather than merely mentioned.
+ */
+export function withoutMarkers(body: string): string {
+  return body
+    .split('\n')
+    .filter((line) => line.trim() !== OPEN && line.trim() !== CLOSE)
+    .join('\n')
+}
+
+/**
  * The block with our names replaced by this workspace's values.
  *
  * The block is one text for the whole project, and the port is the one thing
@@ -63,20 +77,6 @@ const BARE = /\$(OCTOPUS_[A-Z0-9_]+)/g
  * Substituted **on the way into the workspace**, never in the stored block:
  * the port can move between runs, and a stored number would be yesterday's.
  */
-/**
- * The body with any marker line of ours taken out.
- *
- * Belt to `checkEnvBody`'s braces: the warning is advisory and the block is
- * written anyway, so the thing that would corrupt the file has to be removed
- * rather than merely mentioned.
- */
-export function withoutMarkers(body: string): string {
-  return body
-    .split('\n')
-    .filter((line) => line.trim() !== OPEN && line.trim() !== CLOSE)
-    .join('\n')
-}
-
 export function substituteEnv(body: string, values: ScriptValues): string {
   const table = scriptEnv('run', values)
   const swap = (whole: string, name: string): string => table[name] ?? whole
@@ -91,7 +91,10 @@ export interface EnvProblem {
   /** 1-based, so it matches what the editor shows. */
   readonly line: number
   readonly reason: 'noAssignment' | 'badName' | 'duplicate' | 'unknownVariable' | 'marker'
-  /** The name at fault where there is one — a key, or a variable reference. */
+  /**
+   * What is at fault: a key, a variable reference — or, for a line that is no
+   * assignment or a marker, the whole line, which can be a pasted secret.
+   */
   readonly subject: string
 }
 
@@ -118,7 +121,7 @@ export function checkEnvBody(body: string): EnvProblem[] {
   const problems: EnvProblem[] = []
   const seen = new Set<string>()
 
-  envLines(body).forEach(({ read }, index) => {
+  envLines(body).forEach((read, index) => {
     const line = index + 1
 
     /*
@@ -135,10 +138,11 @@ export function checkEnvBody(body: string): EnvProblem[] {
       problems.push({ line, reason: 'noAssignment', subject: read.text })
       return
     }
-    if (read.kind === 'blank') return
+    // A line inside a quoted value is the value's, and right as it is.
+    if (read.kind === 'blank' || read.kind === 'continuation') return
 
     const { name } = read
-    if (!KEY.test(name)) {
+    if (!read.named) {
       problems.push({ line, reason: 'badName', subject: name })
     } else if (seen.has(name)) {
       // The earlier line does nothing at all: last wins, which is the same rule
@@ -161,31 +165,55 @@ type EnvLine =
   | { readonly kind: 'marker'; readonly text: string }
   /** Not an assignment at all, however it is read. */
   | { readonly kind: 'loose'; readonly text: string }
-  /** A name — which may be one no parser accepts — and its value, as written. */
+  /** A name and its value, as written. */
   | {
       readonly kind: 'assignment'
       readonly text: string
       readonly name: string
+      /** Whether the name is one every parser accepts (`KEY`). */
+      readonly named: boolean
       readonly value: string
+      /** Whether the value opens a quote this line does not close. */
+      readonly spans: boolean
     }
+  /** A line inside a quoted value: the part before its closing quote, if it has one. */
+  | { readonly kind: 'continuation'; readonly owner: string | null; readonly text: string }
+
+/** A quote a value opened and has not closed yet, and the name that opened it. */
+interface Opening {
+  readonly quote: string
+  readonly owner: string | null
+}
 
 /**
  * Each line of a block, and what it is.
  *
  * One reading for the check, the parse and the mask, so the three cannot
- * disagree about which lines are assignments.
+ * disagree about which lines are assignments — or about where a value spanning
+ * several lines ends, which none of them can see from one line alone.
  */
-function envLines(body: string): { readonly raw: string; readonly read: EnvLine }[] {
-  let afterLoose = false
+function envLines(body: string): EnvLine[] {
+  let open: Opening | null = null
+  let afterKeyLine = false
 
   return body.split('\n').map((raw) => {
-    const read = readLine(raw, afterLoose)
-    afterLoose = read.kind === 'loose' || (read.kind === 'assignment' && !KEY.test(read.name))
-    return { raw, read }
+    if (open !== null) {
+      const inside = readInside(raw, open)
+      if (raw.includes(open.quote)) open = null
+      afterKeyLine = false
+      return inside
+    }
+
+    const read = readLine(raw, afterKeyLine)
+    if (read.kind === 'assignment' && read.spans) {
+      open = { quote: read.value.charAt(0), owner: read.named ? read.name : null }
+    }
+    afterKeyLine = read.kind === 'loose' && KEY_LINE.test(read.text)
+    return read
   })
 }
 
-function readLine(raw: string, afterLoose: boolean): EnvLine {
+function readLine(raw: string, afterKeyLine: boolean): EnvLine {
   const text = raw.trim().replace(EXPORT, '')
 
   // Before the comments, which our markers would otherwise pass for.
@@ -196,24 +224,49 @@ function readLine(raw: string, afterLoose: boolean): EnvLine {
   if (equals === -1) return { kind: 'loose', text }
 
   const value = text.slice(equals + 1).trim()
-  if (isPadding(value, afterLoose)) return { kind: 'loose', text }
+  if (afterKeyLine && /^=*$/.test(value)) return { kind: 'loose', text }
 
-  return { kind: 'assignment', text, name: text.slice(0, equals).trim(), value }
+  const name = text.slice(0, equals).trim()
+  const quote = value.charAt(0)
+  return {
+    kind: 'assignment',
+    text,
+    name,
+    named: KEY.test(name),
+    value,
+    spans: QUOTES.includes(quote) && !value.includes(quote, 1)
+  }
 }
 
 /**
- * Whether the `=` on a line ends base64 rather than starting a value.
+ * A line while a quoted value is open.
  *
- * A key pasted without its quotes puts its lines in the block one by one, and
- * the last of them can end in padding: `MIIE…Q==` reads as the name `MIIE…Q`
- * set to `=`, and `MIIE…Q=` as one set to nothing — a piece of the key that
- * would be listed as a name. Two signs always are padding: no value is a lone
- * `=`. One is when the line before was not an assignment either, which is the
- * key's line before it.
+ * A marker is still a marker: `withoutBlock` cuts at one wherever it stands, so
+ * inside a value it corrupts the file just the same.
  */
-function isPadding(value: string, afterLoose: boolean): boolean {
-  return /^=+$/.test(value) || (value === '' && afterLoose)
+function readInside(raw: string, { quote, owner }: Opening): EnvLine {
+  const text = raw.trim()
+  if (text === OPEN || text === CLOSE) return { kind: 'marker', text }
+
+  const closing = raw.indexOf(quote)
+  return {
+    kind: 'continuation',
+    owner,
+    text: (closing === -1 ? raw : raw.slice(0, closing)).trim()
+  }
 }
+
+/**
+ * A line of a key pasted without its quotes: base64 and nothing else, as long
+ * as the shortest width keys are wrapped at (PEM 64, OpenSSH 70, MIME 76) comes
+ * nowhere near — and longer than any typo.
+ *
+ * The line after one can end in padding: `…Q==` reads as the name `…Q` set to
+ * `=`, and `…Q=` as one set to nothing — a piece of the key that would be
+ * listed as a name. Only there: anywhere else `SEP==` and `EMPTY=` are what
+ * they say.
+ */
+const KEY_LINE = /^[A-Za-z0-9+/]{40,}$/
 
 /**
  * A block as the name-to-value table a script's environment is built from.
@@ -245,26 +298,12 @@ function isPadding(value: string, afterLoose: boolean): boolean {
  */
 export function parseEnvBody(body: string): Record<string, string> {
   const parsed = new Map<string, string>()
-  // The quote a multi-line value opened and has not closed yet.
-  let open: string | null = null
 
-  for (const { raw, read } of envLines(body)) {
-    if (open !== null) {
-      if (raw.includes(open)) open = null
-      continue
-    }
-    if (read.kind !== 'assignment') continue
-
-    const quote = read.value.charAt(0)
-    // Before the name is judged: a line that opens a value spanning several
-    // has to be followed to its end whatever its name is.
-    if (QUOTES.includes(quote) && !read.value.includes(quote, 1)) {
-      open = quote
-      continue
-    }
+  for (const read of envLines(body)) {
+    if (read.kind !== 'assignment' || read.spans || !read.named) continue
 
     const value = readValue(read.value)
-    if (KEY.test(read.name) && value !== null) parsed.set(read.name, value)
+    if (value !== null) parsed.set(read.name, value)
   }
 
   return Object.fromEntries(parsed)
@@ -289,27 +328,20 @@ export interface EnvSecret {
  */
 export function envSecrets(body: string): EnvSecret[] {
   const secrets: EnvSecret[] = []
-  let open: { readonly quote: string; readonly name: string | null } | null = null
 
-  for (const { raw, read } of envLines(body)) {
-    if (open !== null) {
-      const closing = raw.indexOf(open.quote)
-      secrets.push({
-        name: open.name,
-        value: (closing === -1 ? raw : raw.slice(0, closing)).trim()
-      })
-      if (closing !== -1) open = null
+  for (const read of envLines(body)) {
+    if (read.kind === 'blank' || read.kind === 'marker') continue
+    if (read.kind === 'continuation') {
+      secrets.push({ name: read.owner, value: read.text })
       continue
     }
-    if (read.kind === 'blank' || read.kind === 'marker') continue
     if (read.kind === 'loose') {
       secrets.push({ name: null, value: read.text })
       continue
     }
 
-    const named = KEY.test(read.name)
-    const name = named ? read.name : null
-    if (!named) secrets.push({ name, value: read.text })
+    const name = read.named ? read.name : null
+    if (name === null) secrets.push({ name, value: read.text })
 
     const { value } = read
     const quote = value.charAt(0)
@@ -319,16 +351,13 @@ export function envSecrets(body: string): EnvSecret[] {
       secrets.push({ name, value }, { name, value: cut })
       continue
     }
-
-    const closing = value.indexOf(quote, 1)
-    if (closing === -1) {
-      open = { quote, name }
+    if (read.spans) {
       secrets.push({ name, value: value.slice(1) })
       continue
     }
 
     // Both ways a `\n` is printed: as written, and as the newline dotenv makes of it.
-    const inner = value.slice(1, closing)
+    const inner = value.slice(1, value.indexOf(quote, 1))
     secrets.push(...[inner, ...inner.split('\\n')].map((piece) => ({ name, value: piece })))
   }
 
