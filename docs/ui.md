@@ -1428,8 +1428,17 @@ Because that widens what the agent may do, the plan dialog says so beside its
 button, before the click.
 
 The dialog's note field sends on Enter, as the composer does, and also has the
-composer's own send button (`SendButton`) in its corner. It is never disabled:
-a plan sent back with nothing written is still an answer.
+composer's own send button (`SendButton`, green like every send) in its corner.
+It is never disabled: a plan sent back with nothing written is still an answer.
+
+Beside Execute (green) sits **Fork in new chat** (the accent): the plan is
+carried out in a fork of the conversation while this one stays in planning.
+`useChatTabs.forkPlan` forks, moves the fork to the mode above, sends it the
+plan — the rewrite in full when the user edited it, since the fork never saw
+it — and only then shows the tab, so the pane reads the message with the
+history. The source's turn is then stopped rather than answered: either answer
+would set its agent working again. A fork that fails to start leaves the
+question standing. Both buttons are held while a fork is on its way.
 
 **Only out of planning, and never down from `Auto`.** The agent may call the
 plan tool from any mode, and handing over there would let it raise a

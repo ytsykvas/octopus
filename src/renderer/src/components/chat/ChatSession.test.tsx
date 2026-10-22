@@ -1896,6 +1896,85 @@ describe('the permission mode', () => {
     })
   })
 
+  // The plan carried out in a fork while this conversation stays in planning:
+  // the fork is started on it, and the question here is let go with a Stop
+  // rather than answered — either answer would set this agent working again.
+  describe('carrying a plan out in a new conversation', () => {
+    const PLAN = '# Normalising the locales'
+    const planRequest = {
+      type: 'permission_request' as const,
+      requestId: 'r-plan',
+      toolName: 'ExitPlanMode',
+      input: { plan: PLAN }
+    }
+
+    async function planWaiting(): Promise<void> {
+      givenChat([], { planMode: true, workingMode: 'default', sessionId: 'sess-1' })
+      await openLoadedChat()
+      vi.mocked(octopus().chats.fork).mockResolvedValue({
+        ok: true,
+        value: chat({ id: 'chat-2', sessionId: 'sess-2' })
+      })
+      emitAgentEvent(planRequest)
+      await screen.findByRole('button', { name: 'Fork in new chat' })
+    }
+
+    it('starts the fork on the plan in Accept edits, and stops this turn', async () => {
+      const user = userEvent.setup()
+      await planWaiting()
+
+      await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+      await waitFor(() => {
+        expect(octopus().chats.interrupt).toHaveBeenCalledWith(CHAT_ID)
+      })
+      expect(octopus().chats.fork).toHaveBeenCalledWith(CHAT_ID, undefined)
+      expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith('chat-2', 'acceptEdits')
+      expect(octopus().chats.send).toHaveBeenCalledWith(
+        'chat-2',
+        'Carry out the plan “Normalising the locales”.'
+      )
+      expect(octopus().chats.answerPermission).not.toHaveBeenCalled()
+      // Still planning here: only the fork was moved on.
+      expect(screen.getByRole('button', { name: /^Permissions:/ })).toHaveTextContent('Plan')
+    })
+
+    // The fork's agent only ever saw the original, so it is given the rewrite.
+    it('sends the plan as the user rewrote it', async () => {
+      const user = userEvent.setup()
+      await planWaiting()
+
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
+      await user.clear(editor)
+      await user.type(editor, '# Only English first')
+      await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+      await waitFor(() => {
+        expect(octopus().chats.send).toHaveBeenCalledWith(
+          'chat-2',
+          'Carry out this plan:\n\n# Only English first'
+        )
+      })
+    })
+
+    // A fork that never started leaves the question standing, so the plan can
+    // still be carried out here.
+    it('leaves this turn waiting when the fork fails', async () => {
+      const user = userEvent.setup()
+      await planWaiting()
+      vi.mocked(octopus().chats.fork).mockResolvedValue({ ok: false, error: 'no such session' })
+
+      await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Fork in new chat' })).toBeEnabled()
+      })
+      expect(octopus().chats.interrupt).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Execute' })).toBeInTheDocument()
+    })
+  })
+
   // Minimising is how a plan is checked against the code before answering it.
   // It answers nothing, keeps a way back on screen, and loses nothing typed.
   describe('setting a plan aside to check something', () => {
