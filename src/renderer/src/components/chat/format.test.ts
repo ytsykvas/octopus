@@ -291,6 +291,7 @@ describe('what a day separator says', () => {
   it('writes an earlier day out, without the year while it is this one', () => {
     expect(formatDayLabel('2026-10-14', labels, from)).toBe('14 October')
     expect(formatDayLabel('2026-10-14', { ...labels, locale: 'uk' }, from)).toBe('14 жовтня')
+    expect(formatDayLabel('2026-10-14', { ...labels, locale: 'de-DE' }, from)).toBe('14. Oktober')
   })
 
   it('adds the year once it is not this one', () => {

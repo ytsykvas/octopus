@@ -12,8 +12,10 @@ documentation and commit messages. No exceptions.
 
 User-facing strings never appear inline. They live in
 `src/renderer/src/i18n/locales/`, with English as the source of truth and the
-default language. Add the key to `en.ts` first; TypeScript then requires every
-other locale to match.
+default language. **There are three locales — `en.ts`, `uk.ts`, `de.ts` — and
+every string added, reworded or removed changes all three in the same commit**:
+`en.ts` first, then the other two. TypeScript catches a missing key, never a
+stale one: reword the English and the other two keep saying the old thing.
 
 Core throws errors carrying a machine-readable `code`, which the renderer maps
 onto a localised message. The English text on the error is a fallback for logs.
@@ -199,7 +201,7 @@ everything else here:
 - **`## Summary`** — under five sentences: the behaviour change, the modules and
   components touched, the tests added. It covers the whole branch
   (`git diff origin/main...HEAD`), not only this session's part. Strings are
-  mentioned only when `en.ts` and `uk.ts` gained or changed keys — never a
+  mentioned only when the locales gained or changed keys — never a
   "no strings changed" line.
 - **`## Reason and result`** — plain language for someone who does not read
   code, with three labelled parts: **Problem**, **Before** and **After**, the

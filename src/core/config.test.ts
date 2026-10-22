@@ -226,6 +226,24 @@ describe('loadConfig', () => {
   })
 })
 
+describe('language', () => {
+  // The list main validates against is this one, so a locale the window ships
+  // but the schema leaves out is a setting that reverts on the next read.
+  it('accepts every language the window ships', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+
+    for (const language of ['en', 'uk', 'de']) {
+      expect(ConfigSchema.safeParse({ ...base, language }).success).toBe(true)
+    }
+  })
+
+  it('rejects one it does not', () => {
+    const base = createDefaultConfig('ytsykvas', NOW, () => UUID)
+
+    expect(ConfigSchema.safeParse({ ...base, language: 'fr' }).success).toBe(false)
+  })
+})
+
 describe('rightPanelWidth', () => {
   // Too narrow to read build output in, or wider than any real display.
   it('rejects a width outside the usable range', () => {

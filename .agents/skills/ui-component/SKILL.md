@@ -19,7 +19,10 @@ tokens only, otherwise the dark theme breaks.
 
 No user-facing text appears in a component. Add the key to
 `src/renderer/src/i18n/locales/en.ts` first — English is the source of truth —
-then translate it in `uk.ts`. TypeScript rejects a locale that drifts.
+then translate it in `uk.ts` and `de.ts`. TypeScript rejects a missing key, but
+not a stale one: rewording the English means rewording both translations too.
+German addresses the user as _du_, keeps developer terms English (der Branch,
+der Pull Request, der Workspace) and avoids long compounds.
 
 ```tsx
 const { t } = useTranslation()
@@ -31,7 +34,7 @@ rather than printing `failure.error` directly.
 
 **Delete a key when its last caller goes.** A key nothing reads is a claim
 about the interface that has quietly stopped being true, and it survives every
-type check — `en.ts` types `uk.ts`, but nothing types either against the code.
+type check — `en.ts` types the other locales, but nothing types them against the code.
 
 ## State that is not this component's
 

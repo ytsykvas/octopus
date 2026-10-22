@@ -399,7 +399,7 @@ The right pane collapses — three columns do not fit on a narrow screen.
 
 User-facing strings never appear inline. They live in `src/renderer/src/i18n/locales/`, where `en.ts` is the source of truth and the default language. Other locales are typed against it, so a missing or renamed key is a compile error rather than a raw key rendered on screen.
 
-Ukrainian ships alongside English.
+Ukrainian and German ship alongside English.
 
 Core throws errors carrying a machine-readable `code` and parameters; the renderer maps those onto localised messages. The English text on the error stays as a fallback for logs.
 

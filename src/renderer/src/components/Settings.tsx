@@ -213,7 +213,8 @@ function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
           value={config.language}
           options={[
             { value: 'en', label: 'English' },
-            { value: 'uk', label: 'Українська' }
+            { value: 'uk', label: 'Українська' },
+            { value: 'de', label: 'Deutsch' }
           ]}
           onChange={(language) => void onChange({ language })}
         />

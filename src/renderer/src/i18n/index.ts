@@ -9,17 +9,19 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
+import { de } from './locales/de.js'
 import { en } from './locales/en.js'
 import { uk } from './locales/uk.js'
 
 export const DEFAULT_LANGUAGE = 'en'
-export const SUPPORTED_LANGUAGES = ['en', 'uk'] as const
+export const SUPPORTED_LANGUAGES = ['en', 'uk', 'de'] as const
 export type Language = (typeof SUPPORTED_LANGUAGES)[number]
 
 void i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
-    uk: { translation: uk }
+    uk: { translation: uk },
+    de: { translation: de }
   },
   lng: DEFAULT_LANGUAGE,
   fallbackLng: DEFAULT_LANGUAGE,
