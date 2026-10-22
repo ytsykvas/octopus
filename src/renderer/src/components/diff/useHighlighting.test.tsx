@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DiffLine } from '@core/diff.js'
@@ -199,6 +199,28 @@ describe('the colours a diff is drawn in', () => {
       expect(result.current.size).toBe(0)
     })
   })
+  it('drops colours that land after the diff was replaced', async () => {
+    const line = added('const x = 1')
+    const first = workspaceDiff([fileDiff('a.ts', { hunks: [hunk({ lines: [line] })] })])
+    let finish: (rows: ReturnType<typeof rowsOf>) => void = () => undefined
+    vi.mocked(highlight).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      })
+    )
+
+    const { result, rerender } = renderHook(({ diff }) => useHighlighting(diff, NO_SIDES, EVERY), {
+      initialProps: { diff: first }
+    })
+    rerender({ diff: workspaceDiff([]) })
+    await act(async () => {
+      finish(rowsOf('const x = 1'))
+      await Promise.resolve()
+    })
+
+    expect(result.current.size).toBe(0)
+  })
+
   /*
    * The finding this exists for. Joining the hunks end to end hides a construct
    * opened in the lines *between* two of them — a block comment, a template

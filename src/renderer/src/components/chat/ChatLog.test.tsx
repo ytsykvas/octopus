@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReactMarkdown from 'react-markdown'
 import type * as ReactMarkdownModule from 'react-markdown'
@@ -8,7 +8,7 @@ import type { TaskView } from '@core/backgroundTasks.js'
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
-import { type Streaming, streamOf } from '../../hooks/useStreaming.js'
+import { createStreamStore, type Streaming, streamOf } from '../../hooks/useStreaming.js'
 import { agentsOf, task } from '../../test/tasks.js'
 import { highlight } from '../diff/highlight.js'
 import { AgentsContext } from './agentTasks.js'
@@ -632,6 +632,48 @@ describe('what the log shows', () => {
     rerender(<ChatLog {...props} entries={grown} busy={false} />)
     expect(drawn()).toBe(before + 3)
     expect(asked()).toBe(askedBefore + 1)
+  })
+
+  /*
+   * A long reply was parsed in full at every flush, twenty times a second.
+   * Past a page of it, what is settled is parsed once and kept, and only the
+   * part still moving is parsed again.
+   */
+  it('parses the settled part of a long reply once, and only the tail again', () => {
+    const store = createStreamStore()
+    render(
+      <StreamingContext.Provider value={store}>
+        <ChatLog
+          entries={[]}
+          busy
+          answerable={NOTHING_ASKED}
+          pendingElicitationId={null}
+          onAnswer={vi.fn()}
+          onAnswerElicitation={vi.fn()}
+          onAnswerQuestions={vi.fn()}
+          onExecutePlan={vi.fn()}
+          onRewind={vi.fn()}
+          waiting={NOT_WAITING}
+          expansion={COLLAPSED}
+          workspacePath={WORKSPACE}
+          onOpenFile={vi.fn()}
+        />
+      </StreamingContext.Provider>
+    )
+    const settled = `${'settled words '.repeat(120).trim()}\n\n`
+
+    act(() => {
+      store.publish({ text: `${settled}still arriving`, thinking: '' })
+    })
+    expect(parsesOf(settled)).toBe(1)
+    expect(parsesOf('still arriving')).toBe(1)
+
+    act(() => {
+      store.publish({ text: `${settled}still arriving, and more`, thinking: '' })
+    })
+    expect(parsesOf(settled)).toBe(1)
+    expect(parsesOf('still arriving, and more')).toBe(1)
+    expect(screen.getByText('still arriving, and more')).toBeInTheDocument()
   })
 
   // The whole of the previous change, arriving on ordinary answers: an answer

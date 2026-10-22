@@ -1076,8 +1076,9 @@ describe('a status that moves nothing', () => {
   it('leaves the tabs as they were', async () => {
     givenChats([chat()])
     const { result } = open()
+    // The record, not the placeholder tab drawn before the list has landed.
     await waitFor(() => {
-      expect(result.current.tabs).toHaveLength(1)
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
     })
     const before = result.current.tabs
 

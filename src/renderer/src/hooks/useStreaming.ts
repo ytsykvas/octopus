@@ -32,11 +32,12 @@ export interface StreamStore {
   readonly read: () => Streaming
 }
 
-interface Publishing extends StreamStore {
+export interface PublishingStream extends StreamStore {
   readonly publish: (streaming: Streaming) => void
 }
 
-function createStreamStore(initial: Streaming = NOTHING_STREAMING): Publishing {
+/** A store and the way to fill it — the hook's own, and a test's for a log. */
+export function createStreamStore(initial: Streaming = NOTHING_STREAMING): PublishingStream {
   let streaming = initial
   const listeners = new Set<() => void>()
 

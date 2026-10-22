@@ -35,6 +35,12 @@ describe('a reply being written', () => {
     expect(splitStreamed(text)).toEqual({ settled, tail: '```sh\necho one\n\necho two\n\n' })
   })
 
+  it('is cut again once the fence has closed', () => {
+    const settled = `${paragraph('first')}\n\n${paragraph('second')}\n\n\`\`\`sh\necho\n\`\`\`\n\n`
+
+    expect(splitStreamed(`${settled}after`)).toEqual({ settled, tail: 'after' })
+  })
+
   it('is not cut before a line that may read on from the block above', () => {
     const settled = `${paragraph('first')}\n\n${paragraph('second')}\n\n`
     for (const next of ['- item', '2. item', '| cell |', '> quoted', '  indented', '*emphasis*']) {
