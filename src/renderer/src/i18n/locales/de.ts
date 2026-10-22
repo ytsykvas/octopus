@@ -1295,8 +1295,12 @@ export const de: Translation = {
       'Verbinde GitHub, um Projekte durch Klonen deiner Repositorys hinzuzufügen, Pull Requests zu öffnen und Checks zu lesen. Die Zugangsdaten bleiben bei der gh-CLI im Schlüsselbund.',
     claudeAccount: 'Claude',
     claudeAccountHint: 'Der Agent läuft über dieses Konto.',
+    claudeAccountSetup:
+      'Zur Anmeldung muss Claude Code auf diesem Mac installiert sein. Ohne Konto öffnet sich octopus trotzdem, aber der Agent kann nicht antworten.',
     githubAccount: 'GitHub',
     githubAccountHint: 'Projekte von GitHub, Pull Requests und Checks.',
+    githubAccountSetup:
+      'Benötigt die GitHub CLI (brew install gh). Ohne sie funktioniert alles andere, Pull Requests und Klonen jedoch nicht.',
     connected: 'Verbunden',
     notConnected: 'Nicht verbunden',
     signIn: 'Anmelden',
