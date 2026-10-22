@@ -261,7 +261,11 @@ the row redraws itself from the write rather than from a second read.
 Events flow the other way, on `chats:event`, carrying `{ chatId, workspaceId,
 event }`. A **broadcast**, not a reply to whoever asked: events keep arriving
 long after the call that started them returned, and a second window on the same
-workspace should see the same conversation.
+workspace should see the same conversation. Two kinds never cross: an agent's
+progress and the CLI's list of what is alive (`isTaskFrame` in `events.ts`)
+reach a window folded into `tasks:changed` below, gathered, and nothing in the
+window reads them as events — sent as well, they went to every window at the
+rate the gathering exists to avoid.
 
 **`workspaces:status`** carries `{ workspaceId, status }` whenever a workspace starts working, stops, or blocks
 on a question. A stream rather than something the list re-reads for itself:

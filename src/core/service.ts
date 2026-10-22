@@ -1906,10 +1906,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    *
    * Nothing inside `change` may call `commit` again: it would queue behind the
    * write it is already part of, and wait for itself.
+   *
+   * A change that hands the state back as it was writes nothing. Several
+   * arrive a turn — a status set to what it already is, a session id announced
+   * again by every slash command — and each used to serialise and write the
+   * whole file to the same bytes. The changes that can say "nothing moved"
+   * say it by returning `current` rather than a copy.
    */
   function commit(change: (current: State) => State): Promise<void> {
     return stateWrites(async () => {
       const next = change(state)
+      if (next === state) return
       await saveState(next, statePath, stateTempPath)
       state = next
     })
@@ -2532,6 +2539,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     return commit((current) => {
       const next = change(current)
+      // Nothing moved, so the status that follows from the chats has not either.
+      if (next === current) return current
 
       // Mapped rather than looked up and updated, so a workspace removed while
       // its last events were still arriving is simply not among them — there is
@@ -2676,9 +2685,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // Mapped for the same reason the workspaces are: a conversation removed
     // while its session's last events were still arriving is not in the list,
     // and that is the whole of what has to happen about it.
-    return commitChats(workspaceId, (current) => ({
-      ...current,
-      chats: current.chats.map((chat) => {
+    return commitChats(workspaceId, (current) => {
+      const chats = current.chats.map((chat) => {
         // A closing session goes on emitting for a moment after its
         // conversation was closed. A closed conversation is not a tab any more:
         // a late `result` must not leave it `error`, red on the day it is
@@ -2691,7 +2699,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         changed = true
         return { ...chat, status }
       })
-    })).then(() => {
+      // The state as it was, so `commit` writes nothing for a status that is
+      // already recorded — which is most of them: `running` is set again when
+      // a queued message starts, and once more when an answer lets the turn go on.
+      return changed ? { ...current, chats } : current
+    }).then(() => {
       if (!changed) return
       const turnStartedAt = turnStarts.get(chatId) ?? null
       for (const listener of chatStatusListeners) {

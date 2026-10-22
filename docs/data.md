@@ -131,7 +131,10 @@ corrupt value, which is the one thing this reader exists to shout about.
 Writes to `state.json` and `config.json` are serialised — `commit` and
 `applyConfig` in [`service.ts`](../src/core/service.ts) chain them — and each
 one is written to a temp file and renamed, so a crash cannot leave a truncated
-file behind. Both are about **one** process. Neither is exclusive.
+file behind. Both are about **one** process. Neither is exclusive. A change
+that hands `commit` the state back as it was writes nothing: a status set to
+what it already is, a session id announced again by a slash command — several
+a turn — used to serialise and write the whole file to the same bytes.
 
 Two copies of the app open the same file, hold it in memory and write it whole,
 so the last writer wins: what the other window did is not merged and not

@@ -2990,6 +2990,74 @@ describe('the agent chat', () => {
       await expect(invoke('tasks:list')).resolves.toEqual({ ok: true, value: [] })
     })
 
+    /*
+     * Progress arrives per tool call per agent, and the list of what is alive
+     * with it. Each reaches a window folded into the task list, gathered — and
+     * used to reach it a second time as an event, to every window, which no
+     * window read: serialised, delivered and dropped, at the rate the
+     * gathering exists to avoid.
+     */
+    it('keeps an agent’s progress out of the event stream, in the task list', async () => {
+      const projectId = await addProject()
+      const workspace = await createWorkspace(projectId)
+      await useService({
+        query: () => {
+          async function* stream(): AsyncGenerator<SDKMessage> {
+            await Promise.resolve()
+            yield {
+              type: 'system',
+              subtype: 'task_started',
+              task_id: 'task-1',
+              tool_use_id: 'call-1',
+              description: 'Look around',
+              task_type: 'local_agent',
+              is_backgrounded: true,
+              uuid: 'frame',
+              session_id: 'sess-1'
+            } as unknown as SDKMessage
+            yield {
+              type: 'system',
+              subtype: 'task_progress',
+              task_id: 'task-1',
+              description: 'Reading auth.rb',
+              usage: { total_tokens: 12, tool_uses: 1, duration_ms: 100 },
+              uuid: 'frame',
+              session_id: 'sess-1'
+            } as unknown as SDKMessage
+            yield {
+              type: 'system',
+              subtype: 'background_tasks_changed',
+              task_ids: ['task-1'],
+              uuid: 'frame',
+              session_id: 'sess-1'
+            } as unknown as SDKMessage
+          }
+
+          return Object.assign(stream(), {
+            interrupt: () => Promise.resolve(undefined),
+            setPermissionMode: () => Promise.resolve()
+          }) as unknown as Query
+        }
+      })
+
+      const chatId = chatIdOf(await invoke('chats:open', workspace.id))
+      await invoke('chats:send', chatId, 'look around')
+
+      // The stream ends with the turn, which closes the session and empties the
+      // list; the progress is in the push before that.
+      await vi.waitFor(() => {
+        expect(
+          bench.taskEvents.some((push) =>
+            push.tasks.some((task) => task.activity === 'Reading auth.rb' && task.tokens === 12)
+          )
+        ).toBe(true)
+      })
+      const types = bench.chatEvents.map((entry) => entry.event.type)
+      expect(types).toContain('task_started')
+      expect(types).not.toContain('task_progress')
+      expect(types).not.toContain('background_tasks')
+    })
+
     // The same wiring the set of conversations needed a test for: that a push
     // reaches the sender at all, and that the list answers what was pushed.
     it('broadcasts an agent starting, lists it and stops it', async () => {

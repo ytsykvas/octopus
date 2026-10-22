@@ -7,6 +7,7 @@ import {
   forTranscript,
   isEphemeral,
   isTaskBoundary,
+  isTaskFrame,
   turnOutcome
 } from './events.js'
 
@@ -452,5 +453,19 @@ describe('a task starting or ending', () => {
 
   it('and coming to rest is live only', () => {
     expect(isEphemeral({ type: 'finished' })).toBe(true)
+  })
+})
+
+describe('a frame about the tasks', () => {
+  // Folded into the task list a window is pushed, and read from there; sent
+  // across as an event as well it reached every window at the rate the
+  // folding exists to avoid.
+  it('is told apart from what a window reads as an event', () => {
+    expect(
+      isTaskFrame({ type: 'task_progress', taskId: 't', tokens: 1, toolUses: 0, durationMs: 1 })
+    ).toBe(true)
+    expect(isTaskFrame({ type: 'background_tasks', taskIds: [] })).toBe(true)
+    expect(isTaskFrame({ type: 'task_ended', taskId: 't', status: 'completed' })).toBe(false)
+    expect(isTaskFrame({ type: 'text_delta', text: 'a' })).toBe(false)
   })
 })

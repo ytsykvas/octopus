@@ -6056,6 +6056,37 @@ describe('the agent chat', () => {
     // Read up to three times a turn, so a write per read would put the state
     // file under the busiest path in the app to record a number that had not
     // moved.
+    /*
+     * The session id arrives with every init — every slash command sends one —
+     * and a status is set to what it already is several times a turn. Each
+     * used to write the whole file to the same bytes; a change that hands the
+     * state back as it was writes nothing now. A write is a rename, so the
+     * file's inode is what says whether one happened.
+     */
+    it('writes nothing for a change that changed nothing', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      const session = agent()
+      session.emit(initMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.sessionId).toBe('sess-1')
+      })
+      const { ino: before } = await stat(join(dir, 'state.json'))
+
+      // The same id again, and the status it already has.
+      session.emit(initMessage)
+      session.emit(lifecycle('m-1', 'started'))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      expect((await stat(join(dir, 'state.json'))).ino).toBe(before)
+
+      // And a change that did change something is written, so the file was
+      // not simply left alone for every reason.
+      await service.setWorkspaceNotes(workspaceId, 'half done')
+      expect((await stat(join(dir, 'state.json'))).ino).not.toBe(before)
+    })
+
     it('writes nothing when the reading has not changed', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)

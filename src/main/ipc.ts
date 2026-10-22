@@ -11,6 +11,7 @@ import type { OpenDialogOptions, WebContents } from 'electron'
 import { z } from 'zod'
 
 import { type Config, ConfigEditSchema, type ConfigPatch } from '../core/config.js'
+import { isTaskFrame } from '../core/events.js'
 import {
   type AccountKind,
   BUTTON_TIMEOUT_MS,
@@ -927,7 +928,10 @@ export function registerIpc(
 
   // The agent chat. Everything the renderer sends here reaches a model or a
   // stored record, so each argument is validated rather than trusted.
-  service.onAgentEvent(host.broadcastChatEvent)
+  // Not every event is a window's business: see `isTaskFrame`.
+  service.onAgentEvent((event) => {
+    if (!isTaskFrame(event.event)) host.broadcastChatEvent(event)
+  })
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
   service.onUsageWindows(host.broadcastUsageWindows)
   service.onChatStatus(host.broadcastChatStatus)
