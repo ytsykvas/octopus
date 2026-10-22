@@ -374,9 +374,9 @@ describe('channel names', () => {
       'chats:planMode'
     ],
     [
-      'chats.setEffort',
-      () => method('chats', 'setEffort')('c' as never, 'xhigh' as never),
-      'chats:effort'
+      'chats.setEfforts',
+      () => method('chats', 'setEfforts')('c' as never, { effort: 'xhigh' } as never),
+      'chats:setEfforts'
     ],
     [
       'chats.setAutoCompact',
@@ -384,19 +384,9 @@ describe('channel names', () => {
       'chats:autoCompact'
     ],
     [
-      'chats.setPlanEffort',
-      () => method('chats', 'setPlanEffort')('c' as never, 'high' as never),
-      'chats:planEffort'
-    ],
-    [
-      'chats.setModel',
-      () => method('chats', 'setModel')('c' as never, 'claude-opus-5' as never),
-      'chats:model'
-    ],
-    [
-      'chats.setPlanModel',
-      () => method('chats', 'setPlanModel')('c' as never, 'claude-opus-5' as never),
-      'chats:planModel'
+      'chats.setModels',
+      () => method('chats', 'setModels')('c' as never, { model: 'claude-opus-5' } as never),
+      'chats:setModels'
     ],
     ['chats.models', () => method('chats', 'models')(), 'chats:models'],
     ['chats.commands', () => method('chats', 'commands')('c' as never), 'chats:commands'],

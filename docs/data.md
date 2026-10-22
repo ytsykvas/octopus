@@ -342,6 +342,11 @@ is _no split at all_ — planning runs on whatever `model` says — which is wha
 keeps a conversation nobody has touched behaving exactly as it did before the
 field existed.
 
+The panels present the pair the other way round — the plan is the choice and
+the writing may be `Same as plan` — without the stored shape changing: with no
+split one value does both jobs, so which field carries it is only naming.
+`JobPair` and its helpers in `chats.ts` are the one place that translates.
+
 That leaves the plan side without a way to say "the agent's own default", since
 its null is taken. It says it with the word: `DEFAULT_MODEL`, which is a row the
 picker offers like any other. The asymmetry is forced rather than untidy, and

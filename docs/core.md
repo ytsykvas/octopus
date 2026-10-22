@@ -539,19 +539,17 @@ the command to the session, so the record stayed at `null` and the panel drew
 Opus on both rows over a session running two models. The alias is exactly what a
 split already says — Opus while planning, Sonnet otherwise — so `opusPlanSplit`
 (`chats.ts`) turns the message into the two settings, and the window writes them
-through `setModel` and `setPlanModel` once the send has been accepted. It is the
+through `setModels` once the send has been accepted. It is the
 window's job rather than the core's because nothing tells a window that a record
 changed; a write made in `sendToChat` would never have reached the panel.
 
-The pair is written **planning first, and the writing model only if that was
-taken**. Both calls push the effective model to the running session, so the
-order decides what a refusal leaves behind. With the writing model first, a
-refused second write left Sonnet under both jobs and the session had been told,
-so planning would have run on it. Planning first, a refusal at either step leaves
-the record unchanged or the writing model on the default — which is what the
-panel showed before — and the error is on the banner in both. `setModel` and
-`setPlanModel` answer whether they were applied for exactly this reason; the
-other settings do not, having no pair to keep whole.
+The pair is written **in one call**. Two calls, one per field, each pushed the
+effective model to the running session, so a refusal of the second left half a
+split behind that the session had already been told — Sonnet under both jobs,
+with planning about to run on it. The same holds for the panels: a click there
+can move both fields (`chooseWork` in `chats.ts`), so `setChatModels` and
+`setChatEfforts` take either field or both, and nothing writes them one at a
+time.
 
 The names come from the catalogue, not from the alias: a live one holds
 `opus[1m]` and no plain `opus`, and `default` resolves to the same model without
@@ -602,8 +600,8 @@ default" here, because effort is always a level and `null` can mean nothing but
 
 `pushEffort` is `pushModel`'s twin, at the same two moments and with the same
 guard: a conversation whose two jobs share an effort is never pushed at, so
-`/effort` given to one still stands for its turn. It also runs on the two
-setters, which the model pair does not need — setting the working level while a
+`/effort` given to one still stands for its turn. It also runs on the setter,
+which the model pair does not need — setting the working level while a
 plan is being made must move nothing, and the guard is what says so.
 
 `planEffort` starts null and is never copied from the settings: there is no

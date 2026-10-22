@@ -7,6 +7,8 @@ import {
   type AgentEntry,
   type AgentModel,
   type AutoCompactWindow,
+  type ChatEfforts,
+  type ChatModels,
   DEFAULT_MODEL,
   type EffortChoice,
   findAgentModel,
@@ -68,10 +70,10 @@ interface ComposerProps {
   readonly onMode: (mode: ChatMode) => void
   /** How much thinking the next message asks for; always answered. */
   readonly effort: EffortChoice
-  readonly onEffort: (effort: EffortChoice) => void
   /** The effort planning runs at; null means the one above does both. */
   readonly planEffort: EffortChoice | null
-  readonly onPlanEffort: (effort: EffortChoice | null) => void
+  /** Either or both of the two above, written together. */
+  readonly onEfforts: (efforts: ChatEfforts) => void
   /** Where the conversation compacts itself; the choice lives in the context menu. */
   readonly onAutoCompact: (window: AutoCompactWindow | null) => void
   /**
@@ -98,10 +100,10 @@ interface ComposerProps {
    * the model, which is this row's business rather than the pane's.
    */
   readonly model: string | null
-  readonly onModel: (model: string | null) => void
   /** The model it plans with; null means the one above does both jobs. */
   readonly planModel: string | null
-  readonly onPlanModel: (model: string | null) => void
+  /** Either or both of the two above, written together. */
+  readonly onModels: (models: ChatModels) => void
   /** What the agent last said this account may use; empty on a first run. */
   readonly models: readonly AgentModel[]
   /**
@@ -225,9 +227,8 @@ export function Composer({
   planMode,
   onMode,
   effort,
-  onEffort,
   planEffort,
-  onPlanEffort,
+  onEfforts,
   onAutoCompact,
   files,
   onRemoveFile,
@@ -235,9 +236,8 @@ export function Composer({
   onDropFiles,
   onPasteImage,
   model,
-  onModel,
   planModel,
-  onPlanModel,
+  onModels,
   models,
   activeModel,
   commands,
@@ -705,18 +705,16 @@ export function Composer({
           <ModelPicker
             models={models}
             model={model}
-            onModel={onModel}
             planModel={planModel}
-            onPlanModel={onPlanModel}
+            onChange={onModels}
             display={modelLabel}
             sessionMovedTo={sessionMovedTo}
           />
 
           <EffortPicker
             value={effort}
-            onChange={onEffort}
             planValue={planEffort}
-            onPlanChange={onPlanEffort}
+            onChange={onEfforts}
             planMode={planMode}
             model={modelInForce}
           />

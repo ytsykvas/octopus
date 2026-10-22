@@ -1,7 +1,17 @@
 import { Map, PencilLine, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type AgentModel, DEFAULT_MODEL, findAgentModel } from '@core/chats.js'
+import {
+  type AgentModel,
+  type ChatModels,
+  choosePlan,
+  chooseWork,
+  findAgentModel,
+  type JobPair,
+  modelPair,
+  planInForce,
+  storedModels
+} from '@core/chats.js'
 
 import { useAnchoredPanel } from '../../hooks/useAnchoredPanel.js'
 import { ComposerChip } from './ComposerChip.js'
@@ -12,10 +22,10 @@ interface ModelPickerProps {
   readonly models: readonly AgentModel[]
   /** The model that writes the code; null is the agent's own default. */
   readonly model: string | null
-  readonly onModel: (model: string | null) => void
   /** The model that plans; null means the one above does both jobs. */
   readonly planModel: string | null
-  readonly onPlanModel: (model: string | null) => void
+  /** Both, as they are to be stored after a click. */
+  readonly onChange: (models: ChatModels) => void
   /**
    * What the chip says: the model in force, which the caller works out.
    *
@@ -63,7 +73,7 @@ const PANEL_PADDING = 12
 interface Choice {
   readonly key: string
   readonly label: string
-  /** A faint second line: what "the same" resolves to, or "by default". */
+  /** A faint second line: what "the same as plan" resolves to, or "by default". */
   readonly note: string
   readonly selected: boolean
   readonly onSelect: () => void
@@ -71,6 +81,10 @@ interface Choice {
 
 /**
  * Which model plans and which one writes the code.
+ *
+ * The plan is the choice and the writing may follow it, so "the same" sits at
+ * the head of the writing column. Every click goes through `choosePlan` and
+ * `chooseWork`, which say what that means for the two stored fields.
  *
  * The composer's model chip, and it opens a panel rather than a list because
  * the question has two halves now. Neither answer means much alone: a
@@ -90,9 +104,8 @@ interface Choice {
 export function ModelPicker({
   models,
   model,
-  onModel,
   planModel,
-  onPlanModel,
+  onChange,
   display,
   sessionMovedTo
 }: ModelPickerProps): React.JSX.Element {
@@ -100,59 +113,62 @@ export function ModelPicker({
   const { open, position, container, toggle } = useAnchoredPanel()
 
   const labels = { fallback: t('chat.modelDefault'), note: t('chat.modelDefaultNote') }
+  const pair = modelPair({ model, planModel })
+  const plan = planInForce(pair)
+  const split = planModel !== null
+  const choose = (next: JobPair<string>): void => {
+    onChange(storedModels(next))
+  }
+
   // Two calls rather than one shared list: each column pins its own value, and
   // `modelRows` keeps a pinned model the catalogue has since forgotten. Shared,
   // one column would drop the row the other one is running on.
+  const planRows = modelRows(models, labels, plan)
   const codeRows = modelRows(models, labels, model)
-  const planRows = modelRows(models, labels, planModel)
 
   /*
    * Which row each column ticks, matched through the catalogue rather than by
    * string equality: the record may hold `claude-sonnet-5` while the list
    * offers the row called `sonnet`, and compared as text the two read as
-   * different models — nothing would be ticked at all.
+   * different models — nothing would be ticked at all. `modelRows` pins the
+   * plan's value, so it always finds a row; the fallback is for the type.
    */
-  const chosenCode = model === null ? undefined : findAgentModel(codeRows, model)
-  const chosenPlan = planModel === null ? undefined : findAgentModel(planRows, planModel)
+  /* v8 ignore next */
+  const chosenPlan = findAgentModel(planRows, plan) ?? planRows[0]
+  const chosenCode = split ? findAgentModel(codeRows, pair.work) : undefined
 
-  // What the plan column's first row stands for, named rather than left as
-  // "the same": that row is ticked precisely when the reader wants to know what
-  // planning will actually run on, and this is it.
-  const codeChoice = chosenCode ?? codeRows[0]
-
-  const codeChoices: readonly Choice[] = codeRows.map((row, index) => ({
+  const planChoices: readonly Choice[] = planRows.map((row, index) => ({
     key: row.value,
     label: row.displayName,
     // Only under the head row, and only the wording `modelRows` put there — it
     // empties the description when the default has no real name to wear, which
     // is exactly when "by default" underneath would say it twice.
     note: index === 0 ? row.description : '',
-    selected: (chosenCode?.value ?? DEFAULT_MODEL) === row.value,
+    selected: chosenPlan.value === row.value,
     onSelect: () => {
-      // Null is how "the agent's own choice" is stored on this side.
-      onModel(row.value === DEFAULT_MODEL ? null : row.value)
+      choose(choosePlan(pair, row.value))
     }
   }))
 
-  const planChoices: readonly Choice[] = [
+  const codeChoices: readonly Choice[] = [
     {
       key: 'same',
-      label: t('chat.modelsSame'),
-      note: codeChoice.displayName,
-      selected: planModel === null,
+      label: t('chat.modelsSameAsPlan'),
+      // Named rather than left as "the same": the row is ticked precisely when
+      // the reader wants to know what writing will actually run on.
+      note: chosenPlan.displayName,
+      selected: !split,
       onSelect: () => {
-        onPlanModel(null)
+        choose(chooseWork(pair, null))
       }
     },
-    ...planRows.map((row, index) => ({
+    ...codeRows.map((row, index) => ({
       key: row.value,
       label: row.displayName,
       note: index === 0 ? row.description : '',
-      selected: chosenPlan?.value === row.value,
+      selected: chosenCode?.value === row.value,
       onSelect: () => {
-        // Kept as it stands, `DEFAULT_MODEL` included: null is already spoken
-        // for here — it is the row above, and means there is no split at all.
-        onPlanModel(row.value)
+        choose(chooseWork(pair, row.value))
       }
     }))
   ]

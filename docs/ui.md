@@ -1233,7 +1233,8 @@ instead made the control lie about exactly one message: the first, which is the
 one the user has not sent yet and is looking straight at.
 
 **The effort panel sets two jobs from one scale**, through a pair of tabs:
-writing code, and planning. Tabs rather than the second marker on the scale that
+planning, and writing code — in that order, because the plan is the choice and
+the writing may follow it, as in the model panel. Tabs rather than the second marker on the scale that
 was the other candidate — the scale is one `role="slider"` with one handle, and
 two handles on it is the range pattern, which these two are not: planning may
 sit either side of the work, and `aria-valuenow` has room for one answer. Two
@@ -1247,9 +1248,11 @@ on the half that is actually running, so the picture above it is the one the
 chip named, and the chip names the level in force rather than the working one
 whatever is happening.
 
-Under the planning tab and nowhere else, one quiet button returns the pair to a
-single level. A split is the exception, so undoing it has to be a click rather
-than a hunt for which tick was there before.
+While the two share a level the writing tab says `Same as plan`, and a move on
+the planning tab moves both. Under the writing tab and nowhere else, one quiet
+button returns the pair to a single level — the plan's. A split is the
+exception, so undoing it has to be a click rather than a hunt for which tick was
+there before.
 
 Neither picker offers to say nothing. The effort control had an `Agent decides`
 row, stored as null — a control naming a level nobody had sent, which is the
@@ -1315,11 +1318,15 @@ does not close on being used — and it is a `dialog` rather than a `menu` for t
 same reason. Two columns is two answers, and closing on the first would make
 setting both a matter of opening the thing twice.
 
-**The plan column's first row is what makes the split optional.** `Same as
-writing code` is ticked until someone says otherwise, and while it is, the
-conversation runs one model and behaves exactly as it did before it could hold
-two. The row names the model it resolves to underneath, because that is the fact
-a reader opening the panel came for.
+**The writing column's first row is what makes the split optional.** The plan
+is the choice, so the plan column is a plain list, and `Same as plan` heads the
+writing column. It is ticked until someone says otherwise, and while it is, a
+pick in the plan column moves both jobs and the conversation runs one model,
+exactly as it did before it could hold two. The row names the model it resolves
+to underneath, because that is the fact a reader opening the panel came for.
+Picking a writer of its own is what splits the pair, and the plan keeps the model
+it was on. What each click does to the two stored fields is `choosePlan` and
+`chooseWork` in `chats.ts`, which Settings' default models go through as well.
 
 **The chip names the model in force**, which is the plan model while planning a
 conversation whose two differ, and the coding model everywhere else. The effort

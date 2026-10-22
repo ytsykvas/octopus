@@ -569,8 +569,8 @@ describe('two settings changed in quick succession', () => {
     givenChat()
     const model = held<Result<void>>()
     const effort = held<Result<void>>()
-    vi.mocked(octopus().chats.setModel).mockReturnValue(model.promise)
-    vi.mocked(octopus().chats.setEffort).mockReturnValue(effort.promise)
+    vi.mocked(octopus().chats.setModels).mockReturnValue(model.promise)
+    vi.mocked(octopus().chats.setEfforts).mockReturnValue(effort.promise)
 
     const { result } = renderHook(() => useChat(...open()))
     await waitFor(() => {
@@ -578,8 +578,8 @@ describe('two settings changed in quick succession', () => {
     })
 
     const both = act(async () => {
-      const first = result.current.setModel('claude-opus-5')
-      const second = result.current.setEffort('high')
+      const first = result.current.setModels({ model: 'claude-opus-5' })
+      const second = result.current.setEfforts({ effort: 'high' })
       model.resolve({ ok: true, value: undefined })
       effort.resolve({ ok: true, value: undefined })
       await Promise.all([first, second])
@@ -592,12 +592,10 @@ describe('two settings changed in quick succession', () => {
 })
 
 /*
- * The two model settings say whether they took, so a caller that needs both —
- * `/model opusplan` writes a pair — can stop at the first refusal instead of
- * leaving half of it behind. The refusal itself is still reported on the banner;
- * what the result adds is that a caller can act on it.
+ * A choice in the model panel can move both models, so the pair goes to the
+ * core in one write and the pane moves only once the core has taken it.
  */
-describe('a model setting that says whether it was applied', () => {
+describe('both models written at once', () => {
   async function ready(): Promise<{ current: ReturnType<typeof useChat> }> {
     givenChat()
     const { result } = renderHook(() => useChat(...open()))
@@ -607,70 +605,42 @@ describe('a model setting that says whether it was applied', () => {
     return result
   }
 
-  it('answers true once the core has taken the writing model', async () => {
+  it('sends the pair in one call and moves the record by both', async () => {
     const result = await ready()
 
-    let applied: boolean | undefined
     await act(async () => {
-      applied = await result.current.setModel('claude-opus-5')
+      await result.current.setModels({ model: 'sonnet', planModel: 'opus' })
     })
 
-    expect(applied).toBe(true)
-    expect(result.current.chat?.model).toBe('claude-opus-5')
+    expect(octopus().chats.setModels).toHaveBeenCalledTimes(1)
+    expect(octopus().chats.setModels).toHaveBeenCalledWith(result.current.chat?.id, {
+      model: 'sonnet',
+      planModel: 'opus'
+    })
+    expect(result.current.chat).toMatchObject({ model: 'sonnet', planModel: 'opus' })
   })
 
-  it('answers true once the core has taken the planning model', async () => {
+  it('keeps the record, and says why, when the core refuses the pair', async () => {
     const result = await ready()
+    vi.mocked(octopus().chats.setModels).mockResolvedValue({ ok: false, error: 'no such chat' })
 
-    let applied: boolean | undefined
     await act(async () => {
-      applied = await result.current.setPlanModel('claude-opus-5')
+      await result.current.setModels({ model: 'sonnet', planModel: 'opus' })
     })
 
-    expect(applied).toBe(true)
-    expect(result.current.chat?.planModel).toBe('claude-opus-5')
-  })
-
-  it('answers false, and keeps the record, when the core refuses the writing model', async () => {
-    const result = await ready()
-    vi.mocked(octopus().chats.setModel).mockResolvedValue({ ok: false, error: 'no such chat' })
-
-    let applied: boolean | undefined
-    await act(async () => {
-      applied = await result.current.setModel('claude-opus-5')
-    })
-
-    expect(applied).toBe(false)
-    expect(result.current.chat?.model).toBeNull()
+    expect(result.current.chat).toMatchObject({ model: null, planModel: null })
     expect(result.current.error).toBe('no such chat')
   })
 
-  it('answers false, and keeps the record, when the core refuses the planning model', async () => {
-    const result = await ready()
-    vi.mocked(octopus().chats.setPlanModel).mockResolvedValue({ ok: false, error: 'no such chat' })
-
-    let applied: boolean | undefined
-    await act(async () => {
-      applied = await result.current.setPlanModel('claude-opus-5')
-    })
-
-    expect(applied).toBe(false)
-    expect(result.current.chat?.planModel).toBeNull()
-    expect(result.current.error).toBe('no such chat')
-  })
-
-  // Nothing to write to: no workspace means no record can be made, which is a
-  // refusal like any other and must not read as one that was applied.
-  it('answers false when there is no conversation to put it on', async () => {
+  // Nothing to write to: no workspace means no record can be made.
+  it('sends nothing when there is no conversation to put it on', async () => {
     const { result } = renderHook(() => useChat(null, null, 'idle', describeFailure, noted))
 
-    let applied: boolean | undefined
     await act(async () => {
-      applied = await result.current.setModel('claude-opus-5')
+      await result.current.setModels({ model: 'claude-opus-5' })
     })
 
-    expect(applied).toBe(false)
-    expect(octopus().chats.setModel).not.toHaveBeenCalled()
+    expect(octopus().chats.setModels).not.toHaveBeenCalled()
   })
 })
 

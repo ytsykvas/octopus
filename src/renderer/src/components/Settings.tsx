@@ -19,9 +19,14 @@ import type { TerminalSession } from '@core/terminal.js'
 import { cleanBranchPrefix } from '@core/branches.js'
 import {
   type AgentModel,
-  DEFAULT_MODEL,
+  choosePlan,
+  chooseWork,
   type Effort,
+  type JobPair,
+  modelPair,
+  planInForce,
   type PlanExecutionMode,
+  storedModels,
   type WorkingMode
 } from '@core/chats.js'
 import type {
@@ -475,7 +480,7 @@ function AgentSection({
 }
 
 /**
- * The row standing for "no split", where the config holds null.
+ * The row standing for "the same as the plan", where the config holds no split.
  *
  * The empty string rather than a word, because `ConfigSchema` bounds a model
  * name at one character: nothing can ever be called this, where a sentinel
@@ -485,6 +490,9 @@ const NO_SPLIT = ''
 
 /**
  * Which model a new conversation plans with, and which it writes code with.
+ *
+ * The plan first and the writing allowed to follow it, the way the composer's
+ * panel asks it, and through the same `choosePlan` and `chooseWork`.
  *
  * Global for the reason the mode and the effort above are: which model does
  * which job is a working habit, and answering it again in every conversation
@@ -506,8 +514,13 @@ function DefaultModels({
   const models = useModels()
 
   const labels = { fallback: t('chat.modelDefault'), note: t('chat.modelDefaultNote') }
+  const pair = modelPair(config)
+  const plan = planInForce(pair)
+  const planRows = modelRows(models, labels, plan)
   const codeRows = modelRows(models, labels, config.model)
-  const planRows = modelRows(models, labels, config.planModel)
+  const choose = (next: JobPair<string>): void => {
+    void onChange(storedModels(next))
+  }
 
   const named = (rows: readonly AgentModel[]): { value: string; label: string; hint?: string }[] =>
     rows.map((row, index) => ({
@@ -522,29 +535,24 @@ function DefaultModels({
   return (
     <>
       <div className="border-line border-t pt-6">
-        <Field label={t('settings.model')} hint={t('settings.modelHint')}>
+        <Field label={t('settings.planModel')} hint={t('settings.planModelHint')}>
           <RadioList<string>
-            value={config.model ?? DEFAULT_MODEL}
-            options={named(codeRows)}
+            value={plan}
+            options={named(planRows)}
             onChange={(value) => {
-              // Null is how "the agent's own choice" is stored, the round trip
-              // the composer's picker makes too.
-              void onChange({ model: value === DEFAULT_MODEL ? null : value })
+              choose(choosePlan(pair, value))
             }}
           />
         </Field>
       </div>
 
       <div className="border-line border-t pt-6">
-        <Field label={t('settings.planModel')} hint={t('settings.planModelHint')}>
+        <Field label={t('settings.model')} hint={t('settings.modelHint')}>
           <RadioList<string>
-            value={config.planModel ?? NO_SPLIT}
-            options={[{ value: NO_SPLIT, label: t('chat.modelsSame') }, ...named(planRows)]}
+            value={config.planModel === null ? NO_SPLIT : pair.work}
+            options={[{ value: NO_SPLIT, label: t('chat.modelsSameAsPlan') }, ...named(codeRows)]}
             onChange={(value) => {
-              // Everything but the sentinel is stored as it stands, the word
-              // `default` included: null is already spoken for on this side —
-              // it is the row above, and means one model does both jobs.
-              void onChange({ planModel: value === NO_SPLIT ? null : value })
+              choose(chooseWork(pair, value === NO_SPLIT ? null : value))
             }}
           />
         </Field>

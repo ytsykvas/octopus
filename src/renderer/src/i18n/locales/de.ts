@@ -901,7 +901,7 @@ export const de: Translation = {
     modelsTitle: 'Modelle für diesen Chat',
     modelsPlan: 'Planung und Recherche',
     modelsCode: 'Code schreiben',
-    modelsSame: 'Wie beim Codeschreiben',
+    modelsSameAsPlan: 'Wie beim Planen',
     modelsSessionOnly:
       'Diese Sitzung läuft mit {{model}}: /model hat es nur für diese Sitzung gewählt.',
 
@@ -918,8 +918,8 @@ export const de: Translation = {
     effortJob: 'Welche Aufgabe',
     effortWhileWorking: 'Code schreiben',
     effortWhilePlanning: 'Planen',
-    effortSameAsWork: 'Wie beim Codeschreiben',
-    effortMatchWork: 'Wie beim Codeschreiben übernehmen',
+    effortSameAsPlan: 'Wie beim Planen',
+    effortMatchPlan: 'Wie beim Planen übernehmen',
     effortFaster: 'Schneller',
     effortSmarter: 'Klüger',
 
@@ -1255,12 +1255,12 @@ export const de: Translation = {
     effortHint:
       'Wie viel Nachdenken ein neuer Chat verlangt. Danach lässt sich das für jeden Chat einzeln im Eingabefeld ändern.',
 
-    model: 'Modell für Code',
-    modelHint:
-      'Womit ein neuer Chat läuft. Die Liste kommt vom Agenten selbst und bleibt leer, bis einmal eine Sitzung lief.',
     planModel: 'Modell für Planung und Recherche',
     planModelHint:
-      'Wird genutzt, solange Plan an ist – so kann ein Modell den Plan ausdenken und ein anderes ihn umsetzen. Lass es gleich, um für beides ein Modell zu nutzen.',
+      'Womit ein neuer Chat plant und recherchiert – und auch Code schreibt, solange unten kein anderes Modell gewählt ist. Die Liste kommt vom Agenten selbst und bleibt leer, bis einmal eine Sitzung lief.',
+    model: 'Modell für Code',
+    modelHint:
+      'Wird genutzt, solange Plan aus ist – so kann ein Modell den Plan ausdenken und ein anderes ihn umsetzen. Lass es wie beim Planen, um für beides ein Modell zu nutzen.',
 
     permissionMode: 'Was ein neuer Chat darf',
     permissionModeHint:

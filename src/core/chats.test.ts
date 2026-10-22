@@ -8,7 +8,11 @@ import {
   AgentCommandSchema,
   type AgentModel,
   type Chat,
+  ChatEffortsSchema,
   ChatError,
+  ChatModelsSchema,
+  choosePlan,
+  chooseWork,
   DEFAULT_MODEL,
   defaultAgentModel,
   effortInForce,
@@ -25,14 +29,17 @@ import {
   MAX_CHAT_TITLE,
   MAX_CHATS_PER_WORKSPACE,
   modeAfterPlan,
+  modelPair,
   newChat,
   opusPlanSplit,
   PERMISSION_MODES,
   PermissionAnswerSchema,
   PLAN_EXECUTION_MODES,
+  planInForce,
   sessionEffort,
   sessionMode,
   sessionModel,
+  storedModels,
   WORKING_MODES,
   windowStrayed
 } from './chats.js'
@@ -741,6 +748,96 @@ describe('which effort a conversation is running at', () => {
   // A decision about one task, and planning is where a task is decided.
   it('lets planning ask for a fleet', () => {
     expect(effortInForce({ ...chat, planEffort: 'ultracode', planMode: true })).toBe('ultracode')
+  })
+})
+
+/*
+ * The plan is the choice and the writing may follow it, while the record keeps
+ * the writing half always set and the plan half null for "no split".
+ */
+describe('choosing what plans and what writes the code', () => {
+  const unsplit = { work: 'medium', plan: null }
+  const split = { work: 'low', plan: 'max' }
+
+  it('plans on the shared value with no split, and on its own otherwise', () => {
+    expect(planInForce(unsplit)).toBe('medium')
+    expect(planInForce(split)).toBe('max')
+  })
+
+  // The writing follows the plan, so the shared value is what moves.
+  it('moves the shared value when the plan is chosen with no split', () => {
+    expect(choosePlan(unsplit, 'high')).toEqual({ work: 'high', plan: null })
+  })
+
+  it('moves only the plan when the two are split', () => {
+    expect(choosePlan(split, 'high')).toEqual({ work: 'low', plan: 'high' })
+  })
+
+  // The plan keeps what it was running on, which is what the picker showed.
+  it('splits the pair when the writing is given its own value', () => {
+    expect(chooseWork(unsplit, 'low')).toEqual({ work: 'low', plan: 'medium' })
+  })
+
+  it('moves only the writing when the two are already split', () => {
+    expect(chooseWork(split, 'high')).toEqual({ work: 'high', plan: 'max' })
+  })
+
+  // Back to one value, and it is the plan's: that is the half the reader chose.
+  it('makes the writing follow the plan again', () => {
+    expect(chooseWork(split, null)).toEqual({ work: 'max', plan: null })
+    expect(chooseWork(unsplit, null)).toEqual(unsplit)
+  })
+})
+
+/*
+ * `model` null is the agent's default, `planModel` null is no split — so the
+ * default has to travel as its catalogue name while it is on the plan side.
+ */
+describe("a chat's two models as a pair", () => {
+  it('reads the agent default as its catalogue row', () => {
+    expect(modelPair({ model: null, planModel: null })).toEqual({ work: DEFAULT_MODEL, plan: null })
+    expect(modelPair({ model: 'sonnet', planModel: 'opus' })).toEqual({
+      work: 'sonnet',
+      plan: 'opus'
+    })
+  })
+
+  it('stores the default as null on the writing side and by name on the plan side', () => {
+    expect(storedModels({ work: DEFAULT_MODEL, plan: DEFAULT_MODEL })).toEqual({
+      model: null,
+      planModel: DEFAULT_MODEL
+    })
+    expect(storedModels({ work: 'sonnet', plan: null })).toEqual({
+      model: 'sonnet',
+      planModel: null
+    })
+  })
+
+  // Writing a named model under a plan on the default: the plan must keep it.
+  it('keeps the default planning when the writing is split off it', () => {
+    const pair = modelPair({ model: null, planModel: null })
+
+    expect(storedModels(chooseWork(pair, 'sonnet'))).toEqual({
+      model: 'sonnet',
+      planModel: DEFAULT_MODEL
+    })
+  })
+})
+
+describe('what a change of models or efforts may carry', () => {
+  it('takes either field alone, or both', () => {
+    expect(ChatModelsSchema.parse({ planModel: null })).toEqual({ planModel: null })
+    expect(ChatModelsSchema.parse({ model: 'sonnet', planModel: 'opus' })).toEqual({
+      model: 'sonnet',
+      planModel: 'opus'
+    })
+    expect(ChatEffortsSchema.parse({ effort: 'low' })).toEqual({ effort: 'low' })
+  })
+
+  it('refuses what the record could not hold', () => {
+    expect(ChatModelsSchema.safeParse({ model: '' }).success).toBe(false)
+    expect(ChatEffortsSchema.safeParse({ effort: null }).success).toBe(false)
+    expect(ChatEffortsSchema.safeParse({ planEffort: 'ludicrous' }).success).toBe(false)
   })
 })
 

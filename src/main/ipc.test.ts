@@ -465,11 +465,9 @@ describe('channel table', () => {
     'tasks:stop',
     'chats:mode',
     'chats:planMode',
-    'chats:effort',
+    'chats:setEfforts',
     'chats:autoCompact',
-    'chats:planEffort',
-    'chats:model',
-    'chats:planModel',
+    'chats:setModels',
     'chats:models',
     'chats:commands',
     'chats:agents',
@@ -2652,57 +2650,42 @@ describe('the agent chat', () => {
     })
   })
 
-  // Null used to be a value here, meaning "leave the choice to the agent". It
-  // is not one any more: a chat always holds a level, so a null arriving on
-  // this channel is a caller out of step rather than a choice being expressed.
-  it('rejects an effort it does not know, null included', async () => {
+  // Null used to be a value for the working effort, meaning "leave the choice
+  // to the agent". It is not one any more: a chat always holds a level, so a
+  // null arriving there is a caller out of step rather than a choice expressed.
+  it('rejects a working effort it does not know, null included', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
     const opened = await invoke('chats:open', workspace.id)
+    const efforts = (value: unknown): Promise<unknown> =>
+      invoke('chats:setEfforts', chatIdOf(opened), value)
 
-    await expect(invoke('chats:effort', chatIdOf(opened), 'ludicrous')).resolves.toMatchObject({
-      ok: false
-    })
+    await expect(efforts({ effort: 'ludicrous' })).resolves.toMatchObject({ ok: false })
+    await expect(efforts({ effort: null })).resolves.toMatchObject({ ok: false })
+    await expect(efforts({ effort: 'xhigh' })).resolves.toEqual({ ok: true, value: undefined })
 
-    await expect(invoke('chats:effort', chatIdOf(opened), null)).resolves.toMatchObject({
-      ok: false
-    })
-
-    await expect(invoke('chats:effort', chatIdOf(opened), 'xhigh')).resolves.toEqual({
-      ok: true,
-      value: undefined
-    })
-
-    // Not a level, and the one value on this channel that is not: the schema
-    // here is the wider of the two, or the scale's last notch would be refused
-    // at the boundary rather than run.
-    await expect(invoke('chats:effort', chatIdOf(opened), 'ultracode')).resolves.toEqual({
-      ok: true,
-      value: undefined
-    })
+    // Not a level, and the one value here that is not: the schema is the wider
+    // of the two, or the scale's last notch would be refused at the boundary
+    // rather than run.
+    await expect(efforts({ effort: 'ultracode' })).resolves.toEqual({ ok: true, value: undefined })
   })
 
-  /* Null **is** a value on the planning channel, unlike the working one: it is
-     how the picker says "the same as the work", which is what most
+  /* Null **is** a value for the planning effort, unlike the working one: it is
+     how the picker says the writing follows the plan, which is what most
      conversations want and where every one of them starts. */
   it('accepts a planning effort or none at all, and nothing else', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
     const opened = await invoke('chats:open', workspace.id)
+    const efforts = (value: unknown): Promise<unknown> =>
+      invoke('chats:setEfforts', chatIdOf(opened), value)
 
-    await expect(invoke('chats:planEffort', chatIdOf(opened), 'max')).resolves.toEqual({
+    await expect(efforts({ effort: 'low', planEffort: 'max' })).resolves.toEqual({
       ok: true,
       value: undefined
     })
-
-    await expect(invoke('chats:planEffort', chatIdOf(opened), null)).resolves.toEqual({
-      ok: true,
-      value: undefined
-    })
-
-    await expect(invoke('chats:planEffort', chatIdOf(opened), 'ludicrous')).resolves.toMatchObject({
-      ok: false
-    })
+    await expect(efforts({ planEffort: null })).resolves.toEqual({ ok: true, value: undefined })
+    await expect(efforts({ planEffort: 'ludicrous' })).resolves.toMatchObject({ ok: false })
   })
 
   // The menu's five or none: any other number would go into the agent's
@@ -2734,18 +2717,15 @@ describe('the agent chat', () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
     const opened = await invoke('chats:open', workspace.id)
+    const models = (value: unknown): Promise<unknown> =>
+      invoke('chats:setModels', chatIdOf(opened), value)
 
-    await expect(invoke('chats:model', chatIdOf(opened), '')).resolves.toMatchObject({ ok: false })
-
-    await expect(invoke('chats:model', chatIdOf(opened), 'claude-opus-5')).resolves.toEqual({
+    await expect(models({ model: '' })).resolves.toMatchObject({ ok: false })
+    await expect(models({ model: 'claude-opus-5' })).resolves.toEqual({
       ok: true,
       value: undefined
     })
-
-    await expect(invoke('chats:model', chatIdOf(opened), null)).resolves.toEqual({
-      ok: true,
-      value: undefined
-    })
+    await expect(models({ model: null })).resolves.toEqual({ ok: true, value: undefined })
   })
 
   /*
@@ -2757,20 +2737,14 @@ describe('the agent chat', () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
     const opened = await invoke('chats:open', workspace.id)
+    const models = (value: unknown): Promise<unknown> =>
+      invoke('chats:setModels', chatIdOf(opened), value)
 
-    await expect(invoke('chats:planModel', chatIdOf(opened), '')).resolves.toMatchObject({
-      ok: false
-    })
-
-    await expect(invoke('chats:planModel', chatIdOf(opened), 'claude-opus-5')).resolves.toEqual({
-      ok: true,
-      value: undefined
-    })
-
-    await expect(invoke('chats:planModel', chatIdOf(opened), null)).resolves.toEqual({
-      ok: true,
-      value: undefined
-    })
+    await expect(models({ planModel: '' })).resolves.toMatchObject({ ok: false })
+    await expect(models({ model: 'claude-sonnet-5', planModel: 'claude-opus-5' })).resolves.toEqual(
+      { ok: true, value: undefined }
+    )
+    await expect(models({ planModel: null })).resolves.toEqual({ ok: true, value: undefined })
   })
 
   it('reports no models before a session has ever run', async () => {
