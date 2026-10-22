@@ -17,9 +17,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onSideQuestion: ReturnType<typeof vi.fn>
   onStop: ReturnType<typeof vi.fn>
   onMode: ReturnType<typeof vi.fn>
-  onEffort: ReturnType<typeof vi.fn>
-  onModel: ReturnType<typeof vi.fn>
-  onPlanModel: ReturnType<typeof vi.fn>
+  onModels: ReturnType<typeof vi.fn>
   onRemoveFile: ReturnType<typeof vi.fn>
   onDropFiles: ReturnType<typeof vi.fn>
   onPasteImage: ReturnType<typeof vi.fn>
@@ -32,9 +30,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   const onSideQuestion = vi.fn()
   const onStop = vi.fn()
   const onMode = vi.fn()
-  const onEffort = vi.fn()
-  const onModel = vi.fn()
-  const onPlanModel = vi.fn()
+  const onModels = vi.fn()
   const onRemoveFile = vi.fn()
   const onDropFiles = vi.fn()
   const onPasteImage = vi.fn()
@@ -48,9 +44,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       planMode={false}
       onMode={onMode}
       effort="medium"
-      onEffort={onEffort}
       planEffort={null}
-      onPlanEffort={vi.fn()}
+      onEfforts={vi.fn()}
       onAutoCompact={vi.fn()}
       files={[]}
       onRemoveFile={onRemoveFile}
@@ -58,9 +53,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       onDropFiles={onDropFiles}
       onPasteImage={onPasteImage}
       model={null}
-      onModel={onModel}
       planModel={null}
-      onPlanModel={onPlanModel}
+      onModels={onModels}
       models={[]}
       activeModel={null}
       commands={[]}
@@ -88,9 +82,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
     onSideQuestion,
     onStop,
     onMode,
-    onEffort,
-    onModel,
-    onPlanModel,
+    onModels,
     onRemoveFile,
     onDropFiles,
     onPasteImage,
@@ -679,12 +671,12 @@ describe('the settings the next message runs under', () => {
 
   it('offers the models the agent reported, and reports the one chosen', async () => {
     const user = userEvent.setup()
-    const { onModel } = renderComposer({ models: [OPUS] })
+    const { onModels } = renderComposer({ models: [OPUS] })
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    await user.click(within(codeColumn()).getByRole('radio', { name: /Opus 5/ }))
+    await user.click(within(planColumn()).getByRole('radio', { name: /Opus 5/ }))
 
-    expect(onModel).toHaveBeenCalledExactlyOnceWith('claude-opus-5')
+    expect(onModels).toHaveBeenCalledExactlyOnceWith({ model: 'claude-opus-5', planModel: null })
   })
 
   /*
@@ -700,19 +692,19 @@ describe('the settings the next message runs under', () => {
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
 
-    const rows = within(codeColumn()).getAllByRole('radio')
+    const rows = within(planColumn()).getAllByRole('radio')
     expect(rows.map((row) => row.textContent)).toEqual(['Opus (1M context)by default', 'Sonnet'])
     expect(rows[0]).toBeChecked()
   })
 
   it('turns the default row back into no override at all', async () => {
     const user = userEvent.setup()
-    const { onModel } = renderComposer({ model: 'sonnet', models: CATALOGUE })
+    const { onModels } = renderComposer({ model: 'sonnet', models: CATALOGUE })
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    await user.click(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ }))
+    await user.click(within(planColumn()).getByRole('radio', { name: /Opus \(1M context\)/ }))
 
-    expect(onModel).toHaveBeenCalledExactlyOnceWith(null)
+    expect(onModels).toHaveBeenCalledExactlyOnceWith({ model: null, planModel: null })
   })
 
   // A first run: no session has reported a catalogue yet, so there is no model
@@ -725,7 +717,7 @@ describe('the settings the next message runs under', () => {
     expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Default model')
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    expect(within(codeColumn()).getAllByRole('radio')).toHaveLength(1)
+    expect(within(planColumn()).getAllByRole('radio')).toHaveLength(1)
   })
 
   // The list is remembered from the last session, so a chat can name a model it
@@ -738,7 +730,7 @@ describe('the settings the next message runs under', () => {
     expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('claude-retired-3')
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    expect(within(codeColumn()).getByRole('radio', { name: 'claude-retired-3' })).toBeChecked()
+    expect(within(planColumn()).getByRole('radio', { name: 'claude-retired-3' })).toBeChecked()
   })
 
   describe('the two models a conversation runs on', () => {
@@ -776,14 +768,18 @@ describe('the settings the next message runs under', () => {
       expect(screen.getByRole('button', { name: 'Effort' })).toBeDisabled()
     })
 
-    it('reports the model chosen for planning', async () => {
+    // The plan keeps what it was on — the agent's default, said with the word.
+    it('reports a model of its own for writing as a split', async () => {
       const user = userEvent.setup()
-      const { onPlanModel } = renderComposer({ models: [OPUS] })
+      const { onModels } = renderComposer({ models: [OPUS] })
 
       await user.click(screen.getByRole('button', { name: 'Model' }))
-      await user.click(within(planColumn()).getByRole('radio', { name: /Opus 5/ }))
+      await user.click(within(codeColumn()).getByRole('radio', { name: /Opus 5/ }))
 
-      expect(onPlanModel).toHaveBeenCalledExactlyOnceWith('claude-opus-5')
+      expect(onModels).toHaveBeenCalledExactlyOnceWith({
+        model: 'claude-opus-5',
+        planModel: 'default'
+      })
     })
   })
 
@@ -1156,7 +1152,7 @@ describe('the model the session is running', () => {
     expect(modelButton()).toHaveTextContent('Sonnet')
 
     await user.click(modelButton())
-    expect(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
+    expect(within(planColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
     // And the panel says why its tick and the chip disagree.
     expect(screen.getByRole('dialog')).toHaveTextContent(
       'This session is running Sonnet: /model chose it for this session only.'
@@ -1213,10 +1209,10 @@ describe('the model the session is running', () => {
 
     await user.click(modelButton())
 
-    expect(within(codeColumn()).getByRole('radio', { name: 'Sonnet' })).toBeChecked()
+    expect(within(planColumn()).getByRole('radio', { name: 'Sonnet' })).toBeChecked()
     // And no second row invented for a model already in the list.
     expect(
-      within(codeColumn()).queryByRole('radio', { name: 'claude-sonnet-5' })
+      within(planColumn()).queryByRole('radio', { name: 'claude-sonnet-5' })
     ).not.toBeInTheDocument()
   })
 

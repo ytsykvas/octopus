@@ -357,32 +357,23 @@ export function ChatSession({
    * The CLI scopes the command to the session, so the chat's two model settings
    * stayed null and the panel drew Opus on both rows over a session running
    * two. What the alias asks for is exactly a split, so once the message has
-   * gone the same split is written through the calls the panel itself uses —
+   * gone the same split is written through the call the panel itself uses —
    * which is also the only way a window learns a record changed.
    *
    * After the send and only when it was accepted: a refused message leaves the
-   * panel as it was rather than showing a command that never ran.
-   *
-   * Planning first, and the second only if the first took. A pair written in
-   * the other order and left half done put Sonnet under both jobs — and the
-   * session had been told, so planning would have run on it. Planning first, a
-   * refusal at either step leaves the record unchanged or leaves the writing
-   * model on the default, which is what the panel showed before. The error is
-   * on the banner in both cases.
+   * panel as it was rather than showing a command that never ran. One write
+   * for the pair, so a refusal cannot leave half of it behind.
    */
-  const { send: sendMessage, setModel, setPlanModel } = chat
+  const { send: sendMessage, setModels } = chat
   const send = useCallback(
     async (text: string): Promise<boolean> => {
       const sent = await sendMessage(text)
       const split = sent ? opusPlanSplit(text, commands, models) : null
-
-      if (split !== null && (await setPlanModel(split.planModel))) {
-        await setModel(split.model)
-      }
+      if (split !== null) await setModels(split)
 
       return sent
     },
-    [sendMessage, setModel, setPlanModel, commands, models]
+    [sendMessage, setModels, commands, models]
   )
 
   const scroller = useRef<HTMLDivElement | null>(null)
@@ -872,16 +863,14 @@ export function ChatSession({
               planMode={record?.planMode ?? true}
               onMode={(mode) => void chat.setMode(mode).then(moved)}
               effort={effort}
-              onEffort={(level) => void chat.setEffort(level)}
               planEffort={planEffort}
-              onPlanEffort={(level) => void chat.setPlanEffort(level)}
+              onEfforts={(efforts) => void chat.setEfforts(efforts)}
               onAutoCompact={(window) => {
                 void chat.setAutoCompact(window).then(moved)
               }}
               model={model}
-              onModel={(chosen) => void chat.setModel(chosen).then(moved)}
               planModel={planModel}
-              onPlanModel={(chosen) => void chat.setPlanModel(chosen).then(moved)}
+              onModels={(chosen) => void chat.setModels(chosen).then(moved)}
               models={models}
               // What the session reports it is running, which the chip shows when it
               // differs from what was chosen here. It rides in with the context

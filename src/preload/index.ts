@@ -9,8 +9,9 @@ import type {
   AgentModel,
   AutoCompactWindow,
   Chat,
+  ChatEfforts,
+  ChatModels,
   ClosedChat,
-  EffortChoice,
   WorkingMode
 } from '@core/chats.js'
 import type {
@@ -319,25 +320,23 @@ const api = {
     setPlanMode: (chatId: string, planning: boolean): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:planMode', chatId, planning) as Promise<Result<void>>,
 
-    /** Sets how much thinking the chat asks for; there is always a level. */
-    setEffort: (chatId: string, effort: EffortChoice): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:effort', chatId, effort) as Promise<Result<void>>,
+    /**
+     * Sets how much thinking the chat asks for, writing and planning, in one
+     * write; a field left out stays as it is.
+     */
+    setEfforts: (chatId: string, efforts: ChatEfforts): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:setEfforts', chatId, efforts) as Promise<Result<void>>,
 
     /** Where the chat compacts itself; null leaves it to the agent. */
     setAutoCompact: (chatId: string, window: AutoCompactWindow | null): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:autoCompact', chatId, window) as Promise<Result<void>>,
 
-    /** The effort planning runs at; null means the one above does both. */
-    setPlanEffort: (chatId: string, effort: EffortChoice | null): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:planEffort', chatId, effort) as Promise<Result<void>>,
-
-    /** Sets the model the chat writes code with; null hands the choice to the agent. */
-    setModel: (chatId: string, model: string | null): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:model', chatId, model) as Promise<Result<void>>,
-
-    /** Sets the model the chat plans with; null means the one above does both. */
-    setPlanModel: (chatId: string, model: string | null): Promise<Result<void>> =>
-      ipcRenderer.invoke('chats:planModel', chatId, model) as Promise<Result<void>>,
+    /**
+     * Sets the models the chat writes code and plans with, in one write; a
+     * field left out stays as it is.
+     */
+    setModels: (chatId: string, models: ChatModels): Promise<Result<void>> =>
+      ipcRenderer.invoke('chats:setModels', chatId, models) as Promise<Result<void>>,
 
     /** Models the agent last reported; empty until a session has run once. */
     models: (): Promise<Result<readonly AgentModel[]>> =>

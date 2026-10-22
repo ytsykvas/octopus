@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AgentModel } from '@core/chats.js'
+import type { AgentModel, EffortChoice } from '@core/chats.js'
 
 import { EffortPicker } from './EffortPicker.js'
 
@@ -15,6 +15,10 @@ const OPUS: AgentModel = {
   supportedEffortLevels: null
 }
 
+/*
+ * Planning with one level for both, where a new conversation starts: the panel
+ * opens on the planning half, and a move there moves the shared level.
+ */
 function renderPicker(
   overrides: Partial<React.ComponentProps<typeof EffortPicker>> = {}
 ): ReturnType<typeof vi.fn> {
@@ -23,10 +27,9 @@ function renderPicker(
   render(
     <EffortPicker
       value="medium"
-      onChange={onChange}
       planValue={null}
-      onPlanChange={vi.fn()}
-      planMode={false}
+      onChange={onChange}
+      planMode
       model={OPUS}
       {...overrides}
     />
@@ -34,6 +37,12 @@ function renderPicker(
 
   return onChange
 }
+
+/** What a move on the planning half sends while there is no split. */
+const shared = (level: EffortChoice): { effort: EffortChoice; planEffort: null } => ({
+  effort: level,
+  planEffort: null
+})
 
 const chip = (): HTMLElement => screen.getByRole('button', { name: 'Effort' })
 const scale = (): HTMLElement => screen.getByRole('slider', { name: 'Thinking effort' })
@@ -88,14 +97,7 @@ describe('the effort chip', () => {
   it('changes the picture with the choice', async () => {
     const user = userEvent.setup()
     const { rerender } = render(
-      <EffortPicker
-        value="low"
-        onChange={vi.fn()}
-        planValue={null}
-        onPlanChange={vi.fn()}
-        planMode={false}
-        model={OPUS}
-      />
+      <EffortPicker value="low" planValue={null} onChange={vi.fn()} planMode={false} model={OPUS} />
     )
 
     await user.click(chip())
@@ -107,9 +109,8 @@ describe('the effort chip', () => {
     rerender(
       <EffortPicker
         value="ultracode"
-        onChange={vi.fn()}
         planValue={null}
-        onPlanChange={vi.fn()}
+        onChange={vi.fn()}
         planMode={false}
         model={OPUS}
       />
@@ -152,7 +153,7 @@ describe('the scale', () => {
     await user.click(chip())
     await user.click(screen.getByText('Maximum'))
 
-    expect(onChange).toHaveBeenCalledExactlyOnceWith('max')
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(shared('max'))
   })
 
   // Past the divider and reached the same way as any other notch, whatever the
@@ -164,7 +165,7 @@ describe('the scale', () => {
     await user.click(chip())
     await user.click(screen.getByText('Ultracode'))
 
-    expect(onChange).toHaveBeenCalledExactlyOnceWith('ultracode')
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(shared('ultracode'))
   })
 
   // The half the control is named for: the marker follows the pointer while the
@@ -177,8 +178,8 @@ describe('the scale', () => {
     fireEvent.pointerDown(screen.getByText('Low'), { buttons: 1 })
     fireEvent.pointerMove(screen.getByText('High'), { buttons: 1 })
 
-    expect(onChange).toHaveBeenNthCalledWith(1, 'low')
-    expect(onChange).toHaveBeenNthCalledWith(2, 'high')
+    expect(onChange).toHaveBeenNthCalledWith(1, shared('low'))
+    expect(onChange).toHaveBeenNthCalledWith(2, shared('high'))
   })
 
   // Passing over the scale on the way somewhere else is not a choice.
@@ -212,16 +213,16 @@ describe('the scale', () => {
     scale().focus()
 
     await user.keyboard('{ArrowRight}')
-    expect(onChange).toHaveBeenLastCalledWith('xhigh')
+    expect(onChange).toHaveBeenLastCalledWith(shared('xhigh'))
 
     await user.keyboard('{ArrowLeft}')
-    expect(onChange).toHaveBeenLastCalledWith('medium')
+    expect(onChange).toHaveBeenLastCalledWith(shared('medium'))
 
     await user.keyboard('{Home}')
-    expect(onChange).toHaveBeenLastCalledWith('low')
+    expect(onChange).toHaveBeenLastCalledWith(shared('low'))
 
     await user.keyboard('{End}')
-    expect(onChange).toHaveBeenLastCalledWith('ultracode')
+    expect(onChange).toHaveBeenLastCalledWith(shared('ultracode'))
   })
 
   /*
@@ -317,27 +318,62 @@ describe('how long the scale is', () => {
    * and two handles is the range pattern — which these two are not, since
    * planning may sit either side of the work.
    */
-  it('sets the working level from the first tab and the planning one from the second', async () => {
+  it('puts the plan first and the writing beside it', async () => {
     const user = userEvent.setup()
-    const onPlanChange = vi.fn()
-    const onChange = vi.fn()
-    render(
-      <EffortPicker
-        value="medium"
-        onChange={onChange}
-        planValue={null}
-        onPlanChange={onPlanChange}
-        planMode={false}
-        model={OPUS}
-      />
-    )
+    renderPicker()
+
     await user.click(chip())
 
-    await user.click(screen.getByRole('tab', { name: /Planning/ }))
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'PlanningMedium',
+      'Writing codeSame as plan'
+    ])
+  })
+
+  // The writing follows the plan, so with no split the plan's level is the
+  // shared one, and moving it keeps the pair unsplit.
+  it('moves both halves from the planning tab while there is no split', async () => {
+    const user = userEvent.setup()
+    const onChange = renderPicker()
+    await user.click(chip())
+
     await user.click(screen.getByText('Maximum'))
 
-    expect(onPlanChange).toHaveBeenCalledWith('max')
-    expect(onChange).not.toHaveBeenCalled()
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ effort: 'max', planEffort: null })
+  })
+
+  // A level of its own for the writing is what makes the split, and planning
+  // keeps the level it was on.
+  it('splits the pair when the writing is given its own level', async () => {
+    const user = userEvent.setup()
+    const onChange = renderPicker()
+    await user.click(chip())
+
+    await user.click(screen.getByRole('tab', { name: /Writing code/ }))
+    await user.click(screen.getByText('Low'))
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ effort: 'low', planEffort: 'medium' })
+  })
+
+  it('moves only the planning level once the two are split', async () => {
+    const user = userEvent.setup()
+    const onChange = renderPicker({ value: 'low', planValue: 'max' })
+    await user.click(chip())
+
+    await user.click(screen.getByText('High'))
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ effort: 'low', planEffort: 'high' })
+  })
+
+  it('moves only the writing level once the two are split', async () => {
+    const user = userEvent.setup()
+    const onChange = renderPicker({ value: 'medium', planValue: 'max' })
+    await user.click(chip())
+
+    await user.click(screen.getByRole('tab', { name: /Writing code/ }))
+    await user.click(screen.getByText('Low'))
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ effort: 'low', planEffort: 'max' })
   })
 
   /* The half that is not on screen still says what it is set to, which is most
@@ -353,34 +389,14 @@ describe('how long the scale is', () => {
     expect(screen.getByRole('tab', { name: /Planning/ })).toHaveTextContent('Maximum')
   })
 
-  it('goes back to the working half from the planning one', async () => {
+  it('shows the planning level on the writing half while it follows', async () => {
     const user = userEvent.setup()
-    const onChange = vi.fn()
-    render(
-      <EffortPicker
-        value="medium"
-        onChange={onChange}
-        planValue="max"
-        onPlanChange={vi.fn()}
-        planMode
-        model={OPUS}
-      />
-    )
-    await user.click(chip())
-
-    await user.click(screen.getByRole('tab', { name: /Writing code/ }))
-    await user.click(screen.getByText('Low'))
-
-    expect(onChange).toHaveBeenCalledWith('low')
-  })
-
-  it('says the planning half follows the work when there is no split', async () => {
-    const user = userEvent.setup()
-    renderPicker({ planValue: null })
+    renderPicker({ value: 'high', planMode: false })
 
     await user.click(chip())
 
-    expect(screen.getByRole('tab', { name: /Planning/ })).toHaveTextContent('Same as writing code')
+    expect(screen.getByRole('tab', { name: /Writing code/ })).toHaveTextContent('Same as plan')
+    expect(scale()).toHaveAttribute('aria-valuetext', 'High')
   })
 
   // It opens on the half that is actually running, so the picture above is the
@@ -404,9 +420,8 @@ describe('how long the scale is', () => {
     const user = userEvent.setup()
     const props = {
       value: 'low' as const,
-      onChange: vi.fn(),
       planValue: 'max' as const,
-      onPlanChange: vi.fn(),
+      onChange: vi.fn(),
       model: OPUS
     }
     const { rerender } = render(<EffortPicker {...props} planMode />)
@@ -430,27 +445,17 @@ describe('how long the scale is', () => {
   })
 
   // A split is the exception, so undoing it has to be a click rather than a
-  // hunt for which tick was there before.
+  // hunt for which tick was there before — and it lands on the plan's level.
   it('offers the way back to one level, and only where it means something', async () => {
     const user = userEvent.setup()
-    const onPlanChange = vi.fn()
-    render(
-      <EffortPicker
-        value="medium"
-        onChange={vi.fn()}
-        planValue="max"
-        onPlanChange={onPlanChange}
-        planMode={false}
-        model={OPUS}
-      />
-    )
+    const onChange = renderPicker({ value: 'medium', planValue: 'max' })
     await user.click(chip())
 
-    expect(screen.queryByRole('button', { name: 'Use the same as writing code' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Use the same as plan' })).toBeNull()
 
-    await user.click(screen.getByRole('tab', { name: /Planning/ }))
-    await user.click(screen.getByRole('button', { name: 'Use the same as writing code' }))
+    await user.click(screen.getByRole('tab', { name: /Writing code/ }))
+    await user.click(screen.getByRole('button', { name: 'Use the same as plan' }))
 
-    expect(onPlanChange).toHaveBeenCalledWith(null)
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ effort: 'max', planEffort: null })
   })
 })

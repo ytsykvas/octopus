@@ -255,6 +255,74 @@ export function effortInForce(chat: {
 }
 
 /**
+ * The two answers to "what plans, and what writes the code", for one setting —
+ * the model or the effort.
+ *
+ * Presented with the plan as the choice and the writing as the half that may
+ * follow it ("same as plan"), while it is **stored the other way round**:
+ * `model` and `effort` are always set, and `planModel`/`planEffort` null is "no
+ * split". With no split, one value does both jobs, so which half carries it is
+ * a matter of naming — and flipping the fields would have been a migration of
+ * every record and of the settings for a difference nobody sees. So `work` is
+ * the always-set half and `plan` the nullable one, and the functions below are
+ * the one place that turns a choice in the presentation into the stored pair.
+ * Everything that offers the choice goes through them.
+ */
+export interface JobPair<T> {
+  readonly work: T
+  /** Null while there is no split: the writing follows the plan. */
+  readonly plan: T | null
+}
+
+/** What planning runs on: its own value, or the shared one when there is no split. */
+export function planInForce<T>(pair: JobPair<T>): T {
+  return pair.plan ?? pair.work
+}
+
+/**
+ * The pair after choosing what plans.
+ *
+ * With no split the writing follows the plan, so the shared value moves and the
+ * pair stays unsplit.
+ */
+export function choosePlan<T>(pair: JobPair<T>, value: T): JobPair<T> {
+  return pair.plan === null ? { work: value, plan: null } : { work: pair.work, plan: value }
+}
+
+/**
+ * The pair after choosing what writes the code; null is "the same as the plan".
+ *
+ * Choosing a value while there is no split is what creates one, and the plan
+ * keeps the value it was running on — what the pickers showed it with.
+ */
+export function chooseWork<T>(pair: JobPair<T>, value: T | null): JobPair<T> {
+  if (value === null) return { work: planInForce(pair), plan: null }
+  return { work: value, plan: pair.plan ?? pair.work }
+}
+
+/**
+ * A chat's or a config's two models as a pair of catalogue rows.
+ *
+ * `model` null is the agent's own default, which the catalogue calls
+ * `DEFAULT_MODEL`; read as that row, so the pair can move it into `plan`, where
+ * null is already spoken for.
+ */
+export function modelPair(models: {
+  readonly model: string | null
+  readonly planModel: string | null
+}): JobPair<string> {
+  return { work: models.model ?? DEFAULT_MODEL, plan: models.planModel }
+}
+
+/** `modelPair` the way back: the default row is stored as null on the writing side. */
+export function storedModels(pair: JobPair<string>): {
+  model: string | null
+  planModel: string | null
+} {
+  return { model: pair.work === DEFAULT_MODEL ? null : pair.work, planModel: pair.plan }
+}
+
+/**
  * The tool the agent calls to hand a finished plan back.
  *
  * Named here rather than in `agent.ts` because the renderer needs it too, and
@@ -748,6 +816,25 @@ export function opusPlanSplit(
 
   return { model, planModel }
 }
+
+/**
+ * What a chat's two models may be set to in one write; either may be left out.
+ *
+ * One write rather than one per field: a choice in the panel can move both, and
+ * done in two steps the session was told the half-done pair in between.
+ */
+export const ChatModelsSchema = z.object({
+  model: z.string().min(1).nullable().exactOptional(),
+  planModel: z.string().min(1).nullable().exactOptional()
+})
+export type ChatModels = z.infer<typeof ChatModelsSchema>
+
+/** `ChatModelsSchema`'s twin for effort, for the same reason. */
+export const ChatEffortsSchema = z.object({
+  effort: EffortChoiceSchema.exactOptional(),
+  planEffort: EffortChoiceSchema.nullable().exactOptional()
+})
+export type ChatEfforts = z.infer<typeof ChatEffortsSchema>
 
 export const ChatSchema = z.object({
   /**

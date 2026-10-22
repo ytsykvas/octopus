@@ -2,7 +2,17 @@ import { Gauge } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { type AgentModel, EFFORT_LEVELS, type EffortChoice, effortInForce } from '@core/chats.js'
+import {
+  type AgentModel,
+  type ChatEfforts,
+  choosePlan,
+  chooseWork,
+  EFFORT_LEVELS,
+  type EffortChoice,
+  effortInForce,
+  type JobPair,
+  planInForce
+} from '@core/chats.js'
 
 import { useAnchoredPanel } from '../../hooks/useAnchoredPanel.js'
 import artHigh from '../../assets/effort/high.png'
@@ -16,10 +26,10 @@ import { ComposerChip } from './ComposerChip.js'
 interface EffortPickerProps {
   /** What this conversation asks for while it works; always answered. */
   readonly value: EffortChoice
-  readonly onChange: (value: EffortChoice) => void
-  /** What it asks for while planning, or null for "the same as the work". */
+  /** What it asks for while planning, or null when one level does both. */
   readonly planValue: EffortChoice | null
-  readonly onPlanChange: (value: EffortChoice | null) => void
+  /** Both, as they are to be stored after a move. */
+  readonly onChange: (efforts: ChatEfforts) => void
   /** Whether planning is on, which decides which half the chip is naming. */
   readonly planMode: boolean
   /**
@@ -120,9 +130,8 @@ export function effortChoicesFor(
  */
 export function EffortPicker({
   value,
-  onChange,
   planValue,
-  onPlanChange,
+  onChange,
   planMode,
   model
 }: EffortPickerProps): React.JSX.Element {
@@ -152,7 +161,14 @@ export function EffortPicker({
     setTab(planMode ? 'plan' : 'code')
   }
 
-  const shown = tab === 'plan' ? (planValue ?? value) : value
+  // The plan is the choice and the writing may follow it, as in the model
+  // panel; `choosePlan` and `chooseWork` say what a move does to the record.
+  const pair: JobPair<EffortChoice> = { work: value, plan: planValue }
+  const choose = (next: JobPair<EffortChoice>): void => {
+    onChange({ effort: next.work, planEffort: next.plan })
+  }
+
+  const shown = tab === 'plan' ? planInForce(pair) : value
   const inForce = effortInForce({ planMode, effort: value, planEffort: planValue })
 
   const choices = effortChoicesFor(model, shown)
@@ -167,8 +183,7 @@ export function EffortPicker({
     const choice = choices[to]
     if (choice === undefined || choice === shown) return
 
-    if (tab === 'plan') onPlanChange(choice)
-    else onChange(choice)
+    choose(tab === 'plan' ? choosePlan(pair, choice) : chooseWork(pair, choice))
   }
 
   return (
@@ -202,19 +217,19 @@ export function EffortPicker({
               second copy of the control. */}
           <div role="tablist" aria-label={t('chat.effortJob')} className="mb-3 flex gap-1">
             <JobTab
-              label={t('chat.effortWhileWorking')}
-              note={t(LABELS[value])}
-              selected={tab === 'code'}
-              onSelect={() => {
-                setTab('code')
-              }}
-            />
-            <JobTab
               label={t('chat.effortWhilePlanning')}
-              note={planValue === null ? t('chat.effortSameAsWork') : t(LABELS[planValue])}
+              note={t(LABELS[planInForce(pair)])}
               selected={tab === 'plan'}
               onSelect={() => {
                 setTab('plan')
+              }}
+            />
+            <JobTab
+              label={t('chat.effortWhileWorking')}
+              note={planValue === null ? t('chat.effortSameAsPlan') : t(LABELS[value])}
+              selected={tab === 'code'}
+              onSelect={() => {
+                setTab('code')
               }}
             />
           </div>
@@ -309,16 +324,16 @@ export function EffortPicker({
           {/* The way back, and only where it means something. A split is the
               exception — most conversations want one level — so undoing it has
               to be a click and not a hunt for which tick was there before. */}
-          {tab === 'plan' && (
+          {tab === 'code' && (
             <button
               type="button"
               disabled={planValue === null}
               onClick={() => {
-                onPlanChange(null)
+                choose(chooseWork(pair, null))
               }}
               className="focus-ring text-ink-faint hover:text-ink mt-1 rounded-[var(--radius-control)] disabled:opacity-40 disabled:hover:text-ink-faint"
             >
-              {t('chat.effortMatchWork')}
+              {t('chat.effortMatchPlan')}
             </button>
           )}
         </div>
