@@ -798,7 +798,16 @@ function standingFrom(request: PendingPermission): StandingPermission {
 }
 
 /** The reasons whose subject is a name: a key that passed the check, or a `$OCTOPUS_…` reference. */
-type NamedReason = 'duplicate' | 'unknownVariable'
+const NAMED_REASONS = [
+  'duplicate',
+  'unknownVariable'
+] as const satisfies readonly EnvProblem['reason'][]
+
+type NamedReason = (typeof NAMED_REASONS)[number]
+
+function isNamed(reason: EnvProblem['reason']): reason is NamedReason {
+  return NAMED_REASONS.some((named) => named === reason)
+}
 
 /**
  * A problem in the env set as Help may tell it: the subject only where it is a
@@ -812,9 +821,7 @@ export type HelpEnvProblem =
   | { readonly line: number; readonly reason: Exclude<EnvProblem['reason'], NamedReason> }
 
 function withoutLineText({ line, reason, subject }: EnvProblem): HelpEnvProblem {
-  return reason === 'duplicate' || reason === 'unknownVariable'
-    ? { line, reason, subject }
-    : { line, reason }
+  return isNamed(reason) ? { line, reason, subject } : { line, reason }
 }
 
 /**
@@ -836,7 +843,9 @@ export interface HelpContext {
   readonly envProblems: readonly HelpEnvProblem[]
   /** The paths carried into the workspace before a run, the repository's included. */
   readonly carry: readonly string[]
-  readonly scripts: ScriptsInWorkspace
+  readonly scripts: ScriptsInWorkspace['scripts']
+  /** Whether the scripts above may run here, or wait for _Allow these_. */
+  readonly scriptsApproved: boolean
   /** The last build and server, build first, as `helpRun` makes them fit to quote. */
   readonly lastRuns: readonly LastRun[]
 }
@@ -5250,12 +5259,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const envFile = await envFileFor(project, workspace)
       const carry = (await carriedIn(project, workspace.path)).map((file) => file.path)
       const secrets = await secretsIn(workspace, substituteEnv(stored, values), envFile, carry)
-      const scripts = await scriptsIn(project, workspace)
+      const { scripts, approved } = await scriptsIn(project, workspace)
       // Without a build script a Run starts the server alone, so a build on
       // record is from before the script went and would read as this Run's.
-      const current = runs.filter(
-        (run) => run.purpose !== 'setup' || scripts.scripts.setup !== undefined
-      )
+      const current = runs.filter((run) => run.purpose !== 'setup' || scripts.setup !== undefined)
 
       return {
         rootPath: values.rootPath,
@@ -5265,6 +5272,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         envProblems: checkEnvBody(stored).map(withoutLineText),
         carry,
         scripts,
+        scriptsApproved: approved,
         lastRuns: current.map((run) => helpRun(run, secrets))
       }
     },

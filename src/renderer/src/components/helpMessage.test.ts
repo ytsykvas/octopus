@@ -18,18 +18,15 @@ function context(overrides: Partial<HelpContext> = {}): HelpContext {
     envProblems: [],
     carry: ['.env', 'config/master.key'],
     scripts: {
-      approved: true,
-      digest: '',
-      scripts: {
-        run: {
-          kind: 'run',
-          source: 'repoOctopus',
-          from: '.octopus/scripts/run.sh',
-          path: '/w/.octopus/scripts/run.sh',
-          contents: '#!/bin/sh\n'
-        }
+      run: {
+        kind: 'run',
+        source: 'repoOctopus',
+        from: '.octopus/scripts/run.sh',
+        path: '/w/.octopus/scripts/run.sh',
+        contents: '#!/bin/sh\n'
       }
     },
+    scriptsApproved: true,
     lastRuns: [],
     ...overrides
   }
@@ -91,7 +88,7 @@ describe('helpMessage', () => {
   })
 
   it('says why Run is disabled where the repository’s scripts wait to be allowed', () => {
-    const waiting = context({ scripts: { ...context().scripts, approved: false, digest: 'abc' } })
+    const waiting = context({ scriptsApproved: false })
 
     expect(helpMessage('setupScripts', 'x', waiting, t)).toContain('not been allowed yet')
     expect(helpMessage('setupScripts', 'x', context(), t)).not.toContain('allowed')
@@ -148,8 +145,7 @@ describe('helpMessage', () => {
   it('says why a run never started, with no output to fence', () => {
     const refused: LastRun = {
       purpose: 'run',
-      outcome: { kind: 'refused', reason: 'Port 3110 is taken.' },
-      output: ''
+      outcome: { kind: 'refused', reason: 'Port 3110 is taken.' }
     }
 
     expect(helpMessage('diagnoseRun', 'Why?', context({ lastRuns: [refused] }), t)).toMatch(

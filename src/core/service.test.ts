@@ -3000,8 +3000,10 @@ describe('what Help is told about a workspace', () => {
     const context = await service.helpContext(workspaceId, [])
 
     expect(context.carry).toEqual(['.env', 'config/master.key'])
-    expect(context.scripts).toEqual(await service.workspaceScripts(workspaceId))
-    expect(context.scripts.scripts.run?.source).toBe('project')
+    const { scripts, approved } = await service.workspaceScripts(workspaceId)
+    expect(context.scripts).toEqual(scripts)
+    expect(context.scriptsApproved).toBe(approved)
+    expect(context.scripts.run?.source).toBe('project')
   })
 
   it('does not take a line of a key pasted without quotes for a name', async () => {
@@ -3050,7 +3052,7 @@ describe('what Help is told about a workspace', () => {
       server('sent rotated-away-value, then the-new-value')
     ])
 
-    expect(lastRuns[0]?.output).toBe('sent [API_KEY], then [API_KEY]')
+    expect(lastRuns).toMatchObject([{ output: 'sent [API_KEY], then [API_KEY]' }])
   })
 
   it('masks a carried env file the set never had', async () => {
@@ -3063,7 +3065,7 @@ describe('what Help is told about a workspace', () => {
       server('auth failed for carried-secret')
     ])
 
-    expect(lastRuns[0]?.output).toBe('auth failed for [SMTP_PASSWORD]')
+    expect(lastRuns).toMatchObject([{ output: 'auth failed for [SMTP_PASSWORD]' }])
   })
 
   it('leaves out a build on record once there is no build script to run', async () => {

@@ -11,7 +11,8 @@ import {
   maskValues,
   TAIL_CHARS,
   TAIL_LINES,
-  TAIL_OUTPUT_CHARS
+  TAIL_OUTPUT_CHARS,
+  withRun
 } from './runLog.js'
 
 describe('appendTail', () => {
@@ -147,6 +148,13 @@ describe('helpRun', () => {
     raw
   })
 
+  /** What Help quotes of a run that ran. */
+  const outputOf = (raw: string, secrets: Parameters<typeof helpRun>[1] = []): string => {
+    const last = helpRun(run(raw), secrets)
+    if (!('output' in last)) throw new Error('a run that ran has output')
+    return last.output
+  }
+
   it('cleans what the terminal was sent and masks the secrets in it', () => {
     expect(
       helpRun(run('\u001b[31mcannot reach postgres://u:hunter2@db\u001b[0m\r\n'), [
@@ -162,7 +170,7 @@ describe('helpRun', () => {
   it('holds a server logging long lines to the budget', () => {
     const json = Array.from({ length: TAIL_LINES }, () => 'x'.repeat(400)).join('\n')
 
-    expect(helpRun(run(json), []).output.length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
+    expect(outputOf(json).length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
   })
 
   // Cut first, the budget would start inside the value and leave its end unmatched.
@@ -170,7 +178,7 @@ describe('helpRun', () => {
     const secret = 'sk-live-0123456789abcdef'
     const line = `${'x'.repeat(100)}${secret}${'y'.repeat(TAIL_OUTPUT_CHARS - 10)}`
 
-    const { output } = helpRun(run(line), [{ name: 'API_TOKEN', value: secret }])
+    const output = outputOf(line, [{ name: 'API_TOKEN', value: secret }])
 
     expect(output).not.toContain('abcdef')
     expect(output.length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
@@ -187,10 +195,47 @@ describe('helpRun', () => {
     const raw = appendTail('', `${'x'.repeat(100)}${secret}\r\n${colour}ok\r\n`)
     expect(raw.startsWith(secret.slice(10))).toBe(true)
 
-    expect(helpRun(run(raw), [{ name: 'API_TOKEN', value: secret }]).output).toBe('ok')
+    expect(outputOf(raw, [{ name: 'API_TOKEN', value: secret }])).toBe('ok')
   })
 
   it('keeps nothing of a single line longer than the whole tail', () => {
-    expect(helpRun(run(appendTail('', 'z'.repeat(TAIL_CHARS + 1))), []).output).toBe('')
+    expect(outputOf(appendTail('', 'z'.repeat(TAIL_CHARS + 1)))).toBe('')
+  })
+
+  // A refusal can quote what it refused, and nothing ran to print anything.
+  it('masks a refusal’s reason and gives it no output', () => {
+    expect(
+      helpRun(
+        {
+          purpose: 'setup',
+          outcome: { kind: 'refused', reason: 'cannot write PASSWORD=hunter2-secret' },
+          raw: ''
+        },
+        [{ name: 'PASSWORD', value: 'hunter2-secret' }]
+      )
+    ).toEqual({
+      purpose: 'setup',
+      outcome: { kind: 'refused', reason: 'cannot write PASSWORD=[PASSWORD]' }
+    })
+  })
+})
+
+describe('withRun', () => {
+  it('replaces the last run of the same purpose and keeps the other', () => {
+    expect(withRun({ setup: 'old build', run: 'old server' }, 'run', 'new server')).toEqual({
+      setup: 'old build',
+      run: 'new server'
+    })
+  })
+
+  // The server from the Run before would read as this Run's.
+  it('drops the server when a build starts', () => {
+    expect(withRun({ setup: 'old build', run: 'old server' }, 'setup', 'new build')).toEqual({
+      setup: 'new build'
+    })
+  })
+
+  it('starts a workspace with no runs yet', () => {
+    expect(withRun(undefined, 'run', 'server')).toEqual({ run: 'server' })
   })
 })

@@ -5,10 +5,12 @@ import { homedir } from 'node:os'
 
 import {
   appendTail,
+  isRunPurpose,
   RUN_PURPOSES,
+  withRun,
   type RecordedRun,
   type RunOutcome,
-  type RunPurpose
+  type WorkspaceRuns
 } from '../core/runLog.js'
 import {
   buildTerminalArgv,
@@ -109,17 +111,9 @@ interface Session {
  * chunk would be 30 000 objects a second for a build that prints fast.
  */
 interface RunRecord {
-  readonly purpose: RunPurpose
   outcome: RunOutcome
   /** At most `TAIL_CHARS`; cleaned only when somebody asks. */
   raw: string
-}
-
-/** A workspace's last build and server, whichever it has. */
-type WorkspaceRuns = Partial<Record<RunPurpose, RunRecord>>
-
-function isRunPurpose(purpose: string): purpose is RunPurpose {
-  return RUN_PURPOSES.some((recorded) => recorded === purpose)
 }
 
 export class TerminalManager {
@@ -132,7 +126,7 @@ export class TerminalManager {
    * run, often from somewhere else. Kept in memory only: it survives a reload
    * of the window and not a restart of the application.
    */
-  private readonly runs = new Map<string, WorkspaceRuns>()
+  private readonly runs = new Map<string, WorkspaceRuns<RunRecord>>()
   /**
    * Sessions out of `sessions` whose group has not emptied yet, by id.
    *
@@ -169,7 +163,7 @@ export class TerminalManager {
       rows: spec.rows
     })
 
-    const record = this.startRecord(spec.owner)
+    const record = this.record(spec.owner.workspaceId, spec.owner.purpose, { kind: 'running' })
 
     const send = (data: string): void => {
       // The window can close while the shell is still writing.
@@ -274,17 +268,6 @@ export class TerminalManager {
   }
 
   /**
-   * A fresh record for a workspace's build or server, replacing the last one.
-   *
-   * Replaced at the start rather than the end: the question is about the run
-   * somebody just pressed, and a server restarted after a failed one should
-   * not answer with the failure.
-   */
-  private startRecord(owner: TerminalOwner): RunRecord | null {
-    return this.record(owner.workspaceId, owner.purpose, { kind: 'running' })
-  }
-
-  /**
    * Keeps a start the Scripts tab refused before its script ran, in the words
    * it showed: a port somebody else holds, an env file it would not write, a
    * shell that would not spawn. None of those leaves a session behind, so Help
@@ -294,6 +277,13 @@ export class TerminalManager {
     this.record(workspaceId, purpose, { kind: 'refused', reason })
   }
 
+  /**
+   * A fresh record for a workspace's build or server, replacing the last one.
+   *
+   * Replaced at the start rather than the end: the question is about the run
+   * somebody just pressed, and a server restarted after a failed one should
+   * not answer with the failure.
+   */
   private record(
     workspaceId: string | null,
     purpose: TerminalPurpose,
@@ -301,11 +291,8 @@ export class TerminalManager {
   ): RunRecord | null {
     if (workspaceId === null || !isRunPurpose(purpose)) return null
 
-    const record: RunRecord = { purpose, outcome, raw: '' }
-    // A build starts a new Run, and the server from the one before would read
-    // as this one's: a fresh failed build beside an older server that came up.
-    const kept = purpose === 'setup' ? {} : this.runs.get(workspaceId)
-    this.runs.set(workspaceId, { ...kept, [purpose]: record })
+    const record: RunRecord = { outcome, raw: '' }
+    this.runs.set(workspaceId, withRun(this.runs.get(workspaceId), purpose, record))
     return record
   }
 
@@ -318,7 +305,7 @@ export class TerminalManager {
     const runs = this.runs.get(workspaceId)
     return RUN_PURPOSES.flatMap((purpose) => {
       const record = runs?.[purpose]
-      return record ? [{ purpose, outcome: record.outcome, raw: record.raw }] : []
+      return record ? [{ purpose, ...record }] : []
     })
   }
 

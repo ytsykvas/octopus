@@ -169,7 +169,8 @@ export function installOctopusStub(): Api {
           variableNames: [],
           envProblems: [],
           carry: [],
-          scripts: { approved: true, digest: '', scripts: {} },
+          scripts: {},
+          scriptsApproved: true,
           lastRuns: []
         })
       ),

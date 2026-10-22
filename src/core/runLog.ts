@@ -9,6 +9,8 @@
  * values are masked out of them before Help quotes them.
  */
 
+import { z } from 'zod'
+
 import type { EnvSecret } from './envBlock.js'
 import type { TerminalPurpose } from './terminal.js'
 
@@ -126,7 +128,13 @@ export function maskValues(text: string, secrets: readonly EnvSecret[]): string 
 /** The two purposes worth asking about afterwards, in the order a Run starts them. */
 export const RUN_PURPOSES = ['setup', 'run'] as const satisfies readonly TerminalPurpose[]
 
-export type RunPurpose = (typeof RUN_PURPOSES)[number]
+export const RunPurposeSchema = z.enum(RUN_PURPOSES)
+
+export type RunPurpose = z.infer<typeof RunPurposeSchema>
+
+export function isRunPurpose(purpose: string): purpose is RunPurpose {
+  return RunPurposeSchema.safeParse(purpose).success
+}
 
 /** Where a run got to. */
 export type RunOutcome =
@@ -148,12 +156,38 @@ export interface RecordedRun {
   readonly raw: string
 }
 
-/** One script's most recent run in a workspace, as somebody asking about it reads it. */
-export interface LastRun {
-  readonly purpose: RunPurpose
-  readonly outcome: RunOutcome
-  readonly output: string
+/**
+ * A workspace's last build and server, whichever it has, in the shape whoever
+ * keeps them holds a record in.
+ */
+export type WorkspaceRuns<R> = Partial<Record<RunPurpose, R>>
+
+/**
+ * `runs` once `purpose` has started afresh as `record`, which replaces its last.
+ *
+ * A build starts a new Run, so it drops the server too: the one from the Run
+ * before would read as this one's — a fresh failed build beside an older
+ * server that came up.
+ */
+export function withRun<R>(
+  runs: WorkspaceRuns<R> | undefined,
+  purpose: RunPurpose,
+  record: R
+): WorkspaceRuns<R> {
+  return { ...(purpose === 'setup' ? {} : runs), [purpose]: record }
 }
+
+/**
+ * One script's most recent run in a workspace, as somebody asking about it
+ * reads it. A refused one never ran, so it has no output to read.
+ */
+export type LastRun =
+  | { readonly purpose: RunPurpose; readonly outcome: Extract<RunOutcome, { kind: 'refused' }> }
+  | {
+      readonly purpose: RunPurpose
+      readonly outcome: Exclude<RunOutcome, { kind: 'refused' }>
+      readonly output: string
+    }
 
 /**
  * `raw` from its first whole line, where `appendTail` has cut it.
@@ -180,14 +214,11 @@ export function helpRun(
   { purpose, outcome, raw }: RecordedRun,
   secrets: readonly EnvSecret[]
 ): LastRun {
-  const masked = maskValues(cleanTerminalOutput(fromWholeLine(raw)), secrets)
-  return {
-    purpose,
-    // A refusal can quote what it refused: a port's holder, a file's contents.
-    outcome:
-      outcome.kind === 'refused'
-        ? { kind: 'refused', reason: maskValues(outcome.reason, secrets) }
-        : outcome,
-    output: lastLines(masked, TAIL_LINES, TAIL_OUTPUT_CHARS)
+  // A refusal can quote what it refused: a port's holder, a file's contents.
+  if (outcome.kind === 'refused') {
+    return { purpose, outcome: { kind: 'refused', reason: maskValues(outcome.reason, secrets) } }
   }
+
+  const masked = maskValues(cleanTerminalOutput(fromWholeLine(raw)), secrets)
+  return { purpose, outcome, output: lastLines(masked, TAIL_LINES, TAIL_OUTPUT_CHARS) }
 }

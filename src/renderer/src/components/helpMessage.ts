@@ -42,7 +42,7 @@ function runHeader({ purpose, outcome }: LastRun, t: TFunction): string {
 
 function runPart(run: LastRun, t: TFunction): string {
   // Nothing ran, so there is no output to fence.
-  if (run.outcome.kind === 'refused') return runHeader(run, t)
+  if (!('output' in run)) return runHeader(run, t)
 
   const output = run.output === '' ? t('help.context.noOutput') : run.output
   return `${runHeader(run, t)}\n\n\`\`\`\n${output}\n\`\`\``
@@ -50,7 +50,7 @@ function runPart(run: LastRun, t: TFunction): string {
 
 /** What a workspace has in place: one block, the same for both kinds. */
 function factsPart(context: HelpContext, t: TFunction): string {
-  const { scripts } = context.scripts
+  const { scripts } = context
   const names = [...context.variableNames].sort()
 
   const lines = [
@@ -72,7 +72,7 @@ function factsPart(context: HelpContext, t: TFunction): string {
     })
   ]
 
-  if (!context.scripts.approved) lines.push(t('help.context.unapproved'))
+  if (!context.scriptsApproved) lines.push(t('help.context.unapproved'))
 
   lines.push('')
   if (context.carry.length === 0) lines.push(t('help.context.noCarry'))
