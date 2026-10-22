@@ -192,12 +192,23 @@ describe('FileViewer', () => {
 })
 
 describe('reviewing selected lines', () => {
-  // jsdom lays nothing out, so a range has no box; the toolbar reads one.
+  /*
+   * jsdom lays nothing out, so the code has no box and a range none either;
+   * the toolbar is placed from the code's box and the line numbers, so the
+   * code is given one 100px down. Lines are 18px under 12px of padding.
+   */
+  const codeBox = (top: number): void => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(20, top, 400, 600)
+    )
+  }
   beforeEach(() => {
+    codeBox(100)
     Range.prototype.getBoundingClientRect = () => new DOMRect(20, 100, 80, 36)
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     window.getSelection()?.removeAllRanges()
     vi.useRealTimers()
   })
@@ -240,15 +251,60 @@ describe('reviewing selected lines', () => {
     ])
     expect(buttons[1]).toHaveClass('bg-accent')
     expect(buttons[0]).not.toHaveClass('bg-accent')
-    // Above the selection, which starts 100px down.
-    expect(toolbar()).toHaveStyle({ top: '66px', left: '20px' })
+    // Above line two, which starts 130px down: the code's 100, its padding
+    // and one line. At the code's left edge, since the selection spans lines.
+    expect(toolbar()).toHaveStyle({ top: '96px', left: '20px' })
   })
 
   it('floats below a selection at the very top of the window', async () => {
-    Range.prototype.getBoundingClientRect = () => new DOMRect(20, 10, 80, 36)
+    codeBox(0)
     await selected()
 
-    expect(toolbar()).toHaveStyle({ top: '52px' })
+    // Under line three's bottom edge: padding and three lines, plus the gap.
+    expect(toolbar()).toHaveStyle({ top: '72px' })
+  })
+
+  /*
+   * Every read of the selection — each move of the mouse while dragging one —
+   * used to redraw the whole file, a span per token. The colours are read
+   * through a getter, so a redraw shows up as a count.
+   */
+  it('reads the selection without redrawing the file', async () => {
+    let reads = 0
+    const token = { light: '#111', dark: '#eee' }
+    vi.mocked(highlight).mockResolvedValue([
+      [
+        {
+          ...token,
+          get text() {
+            reads += 1
+            return 'one'
+          }
+        }
+      ],
+      [{ ...token, text: 'two' }],
+      [{ ...token, text: 'three' }]
+    ])
+    answering({ kind: 'text', text: 'one\ntwo\nthree\n', bytes: 14 })
+    renderViewer()
+    await waitFor(() => {
+      expect(code()?.querySelectorAll('span')).toHaveLength(3)
+    })
+    const drawn = reads
+
+    // From inside the first span to inside the last: the file is spans now.
+    const spans = code()?.querySelectorAll('span') ?? []
+    const range = document.createRange()
+    range.setStart(spans[0]?.firstChild ?? document.body, 1)
+    range.setEnd(spans[2]?.firstChild ?? document.body, 2)
+    act(() => {
+      window.getSelection()?.removeAllRanges()
+      window.getSelection()?.addRange(range)
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+
+    expect(screen.getByRole('toolbar', { name: 'Lines 1-3' })).toBeInTheDocument()
+    expect(reads).toBe(drawn)
   })
 
   // A press on the toolbar must not clear the selection it acts on.

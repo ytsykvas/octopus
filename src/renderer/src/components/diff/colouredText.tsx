@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, memo, useEffect, useMemo, useState } from 'react'
 
 import { highlight, type Token } from './highlight.js'
 import { languageFor } from './language.js'
@@ -38,7 +38,9 @@ export interface ColouredText {
  * tokenised never shows the old file's colours over the new one's lines.
  */
 export function useColouredText(path: string, text: string): ColouredText {
-  const lines = linesOf(text)
+  // The same array for the same text, so `ColouredLines` below can tell a
+  // render that changed nothing from one that did.
+  const lines = useMemo(() => linesOf(text), [text])
   const language = languageFor(path)
   const colourable =
     language !== null &&
@@ -73,8 +75,14 @@ export function useColouredText(path: string, text: string): ColouredText {
  * Belongs inside an element with `diff-code`, which is what lets the stylesheet
  * pick each span's colour for the theme: shiki sets `--shiki-light` and
  * `--shiki-dark` on every token, so one tokenising serves both.
+ *
+ * Memoised, because what holds it moves for other reasons: the viewer draws a
+ * toolbar over a selection and reads the selection again on every move of the
+ * mouse, and each read redrew the file — a span per token, 76 000 of them for
+ * a 1 500-line file, 400ms a move (2026-10-22). The lines and the tokens keep
+ * their identity between reads, so a render that changed neither draws nothing.
  */
-export function ColouredLines({
+export const ColouredLines = memo(function ColouredLines({
   lines,
   tokens
 }: Pick<ColouredText, 'lines' | 'tokens'>): React.JSX.Element {
@@ -102,7 +110,7 @@ export function ColouredLines({
       ))}
     </>
   )
-}
+})
 
 /**
  * One line, coloured where there are tokens for it, with anything that would

@@ -324,7 +324,15 @@ of several files is select, note, next; the conversation's tab counts the notes
 waiting in it. Lines are numbered from the text — the newlines between the start
 of the code and either end of the selection — which reads the same whether the
 `<pre>` holds one text node or a span per token, and a selection that only
-reaches the start of a line, as a triple-click does, does not take it. ⌘C in
+reaches the start of a line, as a triple-click does, does not take it. The
+toolbar is placed from those numbers and the code's own box — 18px lines
+under 12px of padding, told to the `<pre>`s and to `codeSelection` from one
+constant — rather than from the range's box, which walks every span the
+selection covers: 32ms down a 1 500-line file. The selection is read on every
+move of the mouse while one is dragged, and each read used to redraw the whole
+file, a span per token, 400ms a move for that file; `ColouredLines` is
+memoised on lines and tokens that keep their identity, so a move redraws the
+toolbar and nothing else — under a millisecond, measured (2026-10-22). ⌘C in
 the code copies the same reference, `src/a.ts:12-18`, rather than the text:
 this is a place to point at code from, and "Open in editor" is there for the
 text.

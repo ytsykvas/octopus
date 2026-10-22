@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { codeReference, lineRange } from '../codeReference.js'
-import { codeSelection } from './codeSelection.js'
+import { codeSelection, type LineGeometry } from './codeSelection.js'
+
+/** The viewer's own: 18px lines under 12px of padding. */
+const GEOMETRY: LineGeometry = { height: 18, padding: 12 }
+
+const read = (code: HTMLElement, selection: Selection | null): ReturnType<typeof codeSelection> =>
+  codeSelection(code, selection, GEOMETRY)
 
 /** The viewer's two shapes of the same three lines. */
 function plain(): HTMLElement {
@@ -51,8 +57,8 @@ describe('codeSelection', () => {
     const node = text(code.firstChild)
 
     // "wo\nth" — from inside line two to inside line three.
-    expect(codeSelection(code, select(node, 5, node, 10))).toMatchObject({ line: 2, endLine: 3 })
-    expect(codeSelection(code, select(node, 0, node, 2))).toMatchObject({ line: 1, endLine: 1 })
+    expect(read(code, select(node, 5, node, 10))).toMatchObject({ line: 2, endLine: 3 })
+    expect(read(code, select(node, 0, node, 2))).toMatchObject({ line: 1, endLine: 1 })
   })
 
   it('numbers them the same across the spans of a highlighted file', () => {
@@ -60,7 +66,7 @@ describe('codeSelection', () => {
     const spans = code.querySelectorAll('span')
 
     expect(
-      codeSelection(code, select(text(spans[1]?.firstChild), 0, text(spans[3]?.firstChild), 1))
+      read(code, select(text(spans[1]?.firstChild), 0, text(spans[3]?.firstChild), 1))
     ).toMatchObject({ line: 1, endLine: 3 })
   })
 
@@ -69,7 +75,7 @@ describe('codeSelection', () => {
     const code = plain()
     const node = text(code.firstChild)
 
-    expect(codeSelection(code, select(node, 4, node, 8))).toMatchObject({ line: 2, endLine: 2 })
+    expect(read(code, select(node, 4, node, 8))).toMatchObject({ line: 2, endLine: 2 })
   })
 
   it('cuts a selection dragged past the code at its edges', () => {
@@ -81,9 +87,9 @@ describe('codeSelection', () => {
     after.textContent = 'below'
     document.body.append(after)
 
-    expect(
-      codeSelection(code, select(text(before.firstChild), 2, text(after.firstChild), 3))
-    ).toMatchObject({ line: 1, endLine: 3 })
+    expect(read(code, select(text(before.firstChild), 2, text(after.firstChild), 3))).toMatchObject(
+      { line: 1, endLine: 3 }
+    )
   })
 
   it('answers nothing for no selection, a click, or text outside the code', () => {
@@ -93,26 +99,58 @@ describe('codeSelection', () => {
     document.body.append(outside)
     const node = text(code.firstChild)
 
-    expect(codeSelection(code, null)).toBeNull()
-    expect(codeSelection(code, select(node, 2, node, 2))).toBeNull()
-    expect(
-      codeSelection(code, select(text(outside.firstChild), 0, text(outside.firstChild), 4))
-    ).toBeNull()
+    expect(read(code, null)).toBeNull()
+    expect(read(code, select(node, 2, node, 2))).toBeNull()
+    expect(read(code, select(text(outside.firstChild), 0, text(outside.firstChild), 4))).toBeNull()
     window.getSelection()?.removeAllRanges()
-    expect(codeSelection(code, window.getSelection())).toBeNull()
+    expect(read(code, window.getSelection())).toBeNull()
   })
 
+  /*
+   * Placed from the line numbers and the code's own box rather than measured
+   * from the range: jsdom's box is all zeros, so the numbers below are the
+   * padding and the lines alone. Within one line the toolbar sits at the first
+   * selected character, which is the one rect still asked for.
+   */
   it('says where the selection is, for the toolbar', () => {
     const code = plain()
     const node = text(code.firstChild)
 
-    // Its left edge, where the lines begin, for a toolbar to sit over.
-    expect(codeSelection(code, select(node, 0, node, 3))).toEqual({
+    expect(read(code, select(node, 1, node, 3))).toEqual({
       line: 1,
       endLine: 1,
-      top: 100,
-      bottom: 116,
+      top: 12,
+      bottom: 30,
       left: 20
+    })
+    expect(read(code, select(node, 5, node, 10))).toMatchObject({ top: 30, bottom: 66 })
+  })
+
+  // Several lines span the whole column, so the toolbar sits where they begin.
+  it('places a selection of several lines at the code’s left edge', () => {
+    const code = plain()
+    code.getBoundingClientRect = () => new DOMRect(40, 200, 600, 300)
+    const node = text(code.firstChild)
+
+    expect(read(code, select(node, 5, node, 10))).toMatchObject({
+      top: 230,
+      bottom: 266,
+      left: 40
+    })
+  })
+
+  // Begun above the code, there is no first character of its own to sit at.
+  it('places a selection begun outside the code at its edge, even within one line', () => {
+    const before = document.createElement('p')
+    before.textContent = 'banner'
+    document.body.append(before)
+    const code = plain()
+    const node = text(code.firstChild)
+
+    expect(read(code, select(text(before.firstChild), 2, node, 2))).toMatchObject({
+      line: 1,
+      endLine: 1,
+      left: 0
     })
   })
 })
