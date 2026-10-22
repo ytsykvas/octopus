@@ -4,6 +4,13 @@ import { spawn, type IPty } from 'node-pty'
 import { homedir } from 'node:os'
 
 import {
+  appendTail,
+  cleanTerminalOutput,
+  lastLines,
+  TAIL_LINES,
+  type LastRun
+} from '../core/runLog.js'
+import {
   buildTerminalArgv,
   buildTerminalEnv,
   resolveCwd,
@@ -94,8 +101,38 @@ interface Session {
   readonly bareShell: boolean
 }
 
+/**
+ * The most recent build or server of one workspace, as it streamed.
+ *
+ * Mutable and local to `main`: it is written on every chunk, and a copy per
+ * chunk would be 30 000 objects a second for a build that prints fast.
+ */
+interface RunRecord {
+  readonly purpose: LastRun['purpose']
+  endedAt: string | null
+  exitCode: number | null
+  /** Raw, at most `TAIL_CHARS`; cleaned only when somebody asks. */
+  tail: string
+}
+
+/** The two purposes worth asking about afterwards, in the order they run. */
+const RECORDED: readonly LastRun['purpose'][] = ['setup', 'run']
+
+function recordKey(workspaceId: string, purpose: LastRun['purpose']): string {
+  return `${workspaceId}\u0000${purpose}`
+}
+
 export class TerminalManager {
   private readonly sessions = new Map<TerminalId, Session>()
+  /**
+   * The last build and server of each workspace, kept past its session.
+   *
+   * Here rather than in the window, because the window throws a pane's buffer
+   * away when it unmounts — and "why does Run not work?" is asked after the
+   * run, often from somewhere else. Kept in memory only: it survives a reload
+   * of the window and not a restart of the application.
+   */
+  private readonly runs = new Map<string, RunRecord>()
   /**
    * Sessions out of `sessions` whose group has not emptied yet, by id.
    *
@@ -128,6 +165,8 @@ export class TerminalManager {
       rows: spec.rows
     })
 
+    const record = this.startRecord(spec.owner)
+
     const send = (data: string): void => {
       // The window can close while the shell is still writing.
       if (!target.isDestroyed()) target.send('terminal:data', { id, data })
@@ -151,6 +190,8 @@ export class TerminalManager {
     }
 
     pty.onData((data) => {
+      if (record) record.tail = appendTail(record.tail, data)
+
       if (batch === null) {
         send(data)
         batch = setTimeout(() => {
@@ -175,6 +216,18 @@ export class TerminalManager {
     target.once('destroyed', closeWithWindow)
 
     pty.onExit(({ exitCode, signal }) => {
+      // The typings say `signal?: number`, but a normal exit reports 0 rather
+      // than undefined — checking for undefined reported every run as killed.
+      // Signal numbers start at 1, so falsy means "no signal".
+      const code = signal ? null : exitCode
+
+      // Before anything that depends on the window: the record is for asking
+      // later, and a window closed mid-run is one of the times it is asked.
+      if (record) {
+        record.endedAt = new Date().toISOString()
+        record.exitCode = code
+      }
+
       // What is still gathered goes first. Told of the exit before it, the pane
       // forgets the session and drops the run's last lines on arrival.
       if (batch !== null) clearTimeout(batch)
@@ -188,10 +241,7 @@ export class TerminalManager {
 
       const report = (): void => {
         if (target.isDestroyed()) return
-        // The typings say `signal?: number`, but a normal exit reports 0 rather
-        // than undefined — checking for undefined reported every run as killed.
-        // Signal numbers start at 1, so falsy means "no signal".
-        target.send('terminal:exit', { id, exitCode: signal ? null : exitCode })
+        target.send('terminal:exit', { id, exitCode: code })
       }
 
       // Gone already means a stop took it, and is ending the group itself.
@@ -220,6 +270,47 @@ export class TerminalManager {
       bareShell: spec.command.length === 0
     })
     return id
+  }
+
+  /**
+   * A fresh record for a workspace's build or server, replacing the last one.
+   *
+   * Replaced at the start rather than the end: the question is about the run
+   * somebody just pressed, and a server restarted after a failed one should
+   * not answer with the failure.
+   */
+  private startRecord(owner: TerminalOwner): RunRecord | null {
+    const { workspaceId, purpose } = owner
+    if (workspaceId === null || (purpose !== 'setup' && purpose !== 'run')) return null
+
+    const record: RunRecord = { purpose, endedAt: null, exitCode: null, tail: '' }
+    this.runs.set(recordKey(workspaceId, purpose), record)
+    return record
+  }
+
+  /**
+   * The last build and server of a workspace, whichever exist, build first.
+   *
+   * Cleaned here, once per question, rather than on every chunk.
+   */
+  lastRuns(workspaceId: string): LastRun[] {
+    return RECORDED.flatMap((purpose) => {
+      const record = this.runs.get(recordKey(workspaceId, purpose))
+      if (!record) return []
+      return [
+        {
+          purpose,
+          endedAt: record.endedAt,
+          exitCode: record.exitCode,
+          output: lastLines(cleanTerminalOutput(record.tail), TAIL_LINES)
+        }
+      ]
+    })
+  }
+
+  /** Drops a workspace's records, once the workspace itself has gone. */
+  forgetRuns(workspaceId: string): void {
+    for (const purpose of RECORDED) this.runs.delete(recordKey(workspaceId, purpose))
   }
 
   write(id: TerminalId, data: string): void {

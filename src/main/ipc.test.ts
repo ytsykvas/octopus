@@ -34,6 +34,7 @@ import type {
   WorkspaceStatusEvent
 } from '../core/service.js'
 import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
+import type { LastRun } from '../core/runLog.js'
 import type { Workspace } from '../core/store.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
@@ -156,13 +157,19 @@ interface TerminalSpies {
   readonly write: Mock<(id: string, data: string) => void>
   readonly resize: Mock<(id: string, cols: number, rows: number) => void>
   readonly dispose: Mock<(id: string) => void>
+  readonly lastRuns: Mock<(workspaceId: string) => LastRun[]>
+  readonly forgetRuns: Mock<(workspaceId: string) => void>
 }
 
 function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } {
   const sessions: TerminalSpies = {
     write: vi.fn(),
     resize: vi.fn(),
-    dispose: vi.fn()
+    dispose: vi.fn(),
+    lastRuns: vi.fn(() => [
+      { purpose: 'setup' as const, endedAt: '2026-10-22T09:00:00.000Z', exitCode: 1, output: 'x' }
+    ]),
+    forgetRuns: vi.fn()
   }
 
   // Enough of a manager to answer `list`, so a test about the channel can read
@@ -487,6 +494,7 @@ describe('channel table', () => {
     'terminal:resize',
     'terminal:dispose',
     'terminal:list',
+    'terminal:lastRuns',
     'accounts:status',
     'accounts:github',
     'accounts:signOut',
@@ -1711,10 +1719,13 @@ describe('workspaces of a real project', () => {
       ok: false,
       code: 'uncommittedChanges'
     })
+    // Still there, so its last runs are still worth asking about.
+    expect(sessions.forgetRuns).not.toHaveBeenCalled()
 
     expect(await invoke('workspaces:remove', workspace.id, { force: true })).toMatchObject({
       ok: true
     })
+    expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
     await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
   })
 
@@ -3396,6 +3407,14 @@ describe('the list of what is still running', () => {
       ok: true,
       value: [{ owner: { workspaceId: null, purpose: 'shell' } }]
     })
+  })
+
+  it('answers with a workspace’s last runs, asked of the manager by its id', async () => {
+    await expect(invoke('terminal:lastRuns', 'planner/anna')).resolves.toEqual({
+      ok: true,
+      value: [{ purpose: 'setup', endedAt: '2026-10-22T09:00:00.000Z', exitCode: 1, output: 'x' }]
+    })
+    expect(sessions.lastRuns).toHaveBeenCalledWith('planner/anna')
   })
 
   it('refuses a purpose that is none of the five', async () => {

@@ -301,6 +301,16 @@ export function registerIpc(
    */
   host.handle('terminal:list', () => attempt(() => Promise.resolve(terminals.list())))
 
+  /*
+   * A workspace's last build and server, kept past the sessions that ran them.
+   *
+   * The id is typed rather than parsed: it is only a key into a map here, and
+   * reaches no process, path or script.
+   */
+  host.handle('terminal:lastRuns', (_event, workspaceId: string) =>
+    attempt(() => Promise.resolve(terminals.lastRuns(workspaceId)))
+  )
+
   // The patch is validated rather than trusted: it arrives from the renderer
   // and its base branch reaches a git command.
   host.handle('projects:update', (_event, projectId: string, patch: unknown) =>
@@ -778,8 +788,13 @@ export function registerIpc(
     attempt(() => service.renameWorkspaceById(workspaceId, name))
   )
 
+  // A removed workspace's last runs go with it, and only once it has gone: a
+  // removal that failed leaves the workspace, and its runs are still worth asking about.
   host.handle('workspaces:remove', (_event, workspaceId: string, options: RemoveOptions) =>
-    attempt(() => service.removeWorkspaceById(workspaceId, options))
+    attempt(async () => {
+      await service.removeWorkspaceById(workspaceId, options)
+      terminals.forgetRuns(workspaceId)
+    })
   )
 
   host.handle('workspaces:hasChanges', (_event, workspaceId: string) =>

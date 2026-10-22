@@ -57,6 +57,7 @@ export function installOctopusStub(): Api {
       // a restart waits on that.
       dispose: vi.fn(() => Promise.resolve()),
       list: vi.fn(() => ok([])),
+      lastRuns: vi.fn(() => ok([])),
       onData: vi.fn(subscription),
       onExit: vi.fn(subscription)
     },

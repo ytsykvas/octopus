@@ -1071,3 +1071,103 @@ describe('what is still running', () => {
     expect(manager.list()).toEqual([])
   })
 })
+
+/*
+ * The output of a run lives only in the terminal on screen, and the window
+ * throws a pane's buffer away when it unmounts — so the question "why does Run
+ * not work?" found nothing to read by the time it was asked.
+ */
+describe('the last runs of a workspace', () => {
+  const ANNA = 'planner/anna'
+
+  function started(
+    purpose: 'shell' | 'setup' | 'run',
+    workspaceId: string | null = ANNA
+  ): InstanceType<typeof FakePty> {
+    manager.create({ ...RUN, owner: { workspaceId, purpose } }, renderer as never)
+    const pty = spawned.at(-1)
+    if (!pty) throw new Error('nothing spawned')
+    return pty
+  }
+
+  it('keeps a build’s output, cleaned, with its exit code', () => {
+    const pty = started('setup')
+    pty.emit('\u001b[32minstalling\u001b[0m\r\n')
+    pty.emit('10%\r100%\r\nerror: no database\r\n')
+    pty.end({ exitCode: 2 })
+
+    const [run] = manager.lastRuns(ANNA)
+    expect(run).toMatchObject({
+      purpose: 'setup',
+      exitCode: 2,
+      output: 'installing\n100%\nerror: no database'
+    })
+    expect(run?.endedAt).toEqual(expect.any(String))
+  })
+
+  it('answers with a run still going, with no end and no code', () => {
+    started('run').emit('listening')
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'run', endedAt: null, exitCode: null, output: 'listening' }
+    ])
+  })
+
+  it('reports no code for a run a signal ended', () => {
+    started('run').end({ exitCode: 0, signal: 15 })
+
+    const [run] = manager.lastRuns(ANNA)
+    expect(run?.exitCode).toBeNull()
+    expect(run?.endedAt).not.toBeNull()
+  })
+
+  it('gives the build before the server, whichever started first', () => {
+    started('run')
+    started('setup')
+
+    expect(manager.lastRuns(ANNA).map((run) => run.purpose)).toEqual(['setup', 'run'])
+  })
+
+  it('keeps nothing of a terminal tab, of a sign-in, or of another workspace', () => {
+    started('shell').emit('ls')
+    started('run', null).emit('signing in')
+    started('run', 'planner/bob').emit('bob')
+
+    expect(manager.lastRuns(ANNA)).toEqual([])
+  })
+
+  it('answers with the newest run, not the one it replaced', () => {
+    const first = started('run')
+    first.emit('first')
+    started('run').emit('second')
+    // The old one ending late must not write over the new one's record.
+    first.end({ exitCode: 1 })
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'run', endedAt: null, exitCode: null, output: 'second' }
+    ])
+  })
+
+  // Asked after the fact, which is usually after the window that ran it closed.
+  it('outlives the session and the window it ran in', () => {
+    started('setup').emit('built')
+
+    renderer.close()
+    spawned[0]?.end({ exitCode: 0, signal: 15 })
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'setup', endedAt: expect.any(String), exitCode: null, output: 'built' }
+    ])
+  })
+
+  it('forgets a workspace’s runs once it is removed, and only that one’s', () => {
+    started('setup')
+    started('run')
+    started('run', 'planner/bob')
+
+    manager.forgetRuns(ANNA)
+
+    expect(manager.lastRuns(ANNA)).toEqual([])
+    expect(manager.lastRuns('planner/bob')).toHaveLength(1)
+  })
+})

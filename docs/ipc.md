@@ -176,6 +176,19 @@ and a list scoped to the asker could never show it. The `owner` is on the spec
 and chosen by the renderer, since `main` cannot tell a dev server from a shell
 tab by looking at an argv.
 
+`terminal:lastRuns` takes a workspace id and answers with that workspace's last
+build and last server, build first, whichever have run: `{ purpose, endedAt,
+exitCode, output }` (`LastRun`, `runLog.ts`). `exitCode` is null while a run is
+going and when a signal ended it, as `terminal:exit` says; `endedAt` is null
+only while it is going. `output` is the last 200 lines of what the script
+printed, with the terminal's escapes stripped and each `\r`-redrawn line kept at
+its final state. `main` keeps the raw tail — the last 64K characters — of every
+session whose owner names a workspace and the purpose `setup` or `run`, and a
+new run of either replaces the last. It lives in `main` because the window
+throws a pane's buffer away when it unmounts, and "why does Run not work?" is
+asked after the run; it lives in memory, so it survives a reload of the window
+and not a restart. A workspace's records go when `workspaces:remove` succeeds.
+
 `chats:elicitation` answers an MCP server's question: the request id, one of
 `accept`, `decline` and `cancel`, and the form as the window holds it — text for
 every field, numbers included. The values are parsed rather than trusted, since
