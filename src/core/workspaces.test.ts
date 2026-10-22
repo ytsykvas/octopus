@@ -1155,6 +1155,7 @@ describe('reconcile', () => {
         knownAgents: [],
         skillOverrides: {},
         closedAt: null,
+        aside: null,
         createdAt: '2026-08-11T09:00:00.000Z',
         ...overrides
       }

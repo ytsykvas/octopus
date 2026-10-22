@@ -1054,6 +1054,12 @@ Questions do not wait for each other. An answer that lands with the drawer shut
 marks the bump and its name, and what the CLI wrote itself rather than the model
 ("no answer available") is drawn quieter.
 
+Under each answer the model gave, a branch button continues from it, as the
+CLI's `f to fork` does. It opens a new tab that continues the conversation with
+the question and its answer as the last exchange, and moves to it. The drawer
+goes once the tab is open and stays when the fork is refused. Only one fork runs
+at a time, so a second click cannot open a second tab.
+
 Three things about that menu:
 
 - **`/clear` asks first**, and is the row drawn in `danger`. Typing the command

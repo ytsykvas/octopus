@@ -719,7 +719,8 @@ export const uk: Translation = {
       send: 'Спитати',
       answering: 'Відповідає…',
       empty: 'Агент не мав відповіді на це питання.',
-      unread: 'На вас чекає відповідь'
+      unread: 'На вас чекає відповідь',
+      fork: 'Продовжити з цієї відповіді в новій розмові'
     },
     tabStatus: '{{name}}: {{state}}',
     tabStatusIdle: 'ще нічого не написано',

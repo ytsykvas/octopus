@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+
+import type { SideExchange } from '@core/sideQuestions.js'
 
 import type { SideItem } from '../../hooks/useSideQuestions.js'
 import { SideQuestions } from './SideQuestions.js'
@@ -13,7 +15,8 @@ function Harness({
   initiallyOpen = false,
   visible = true,
   onAsk = vi.fn(),
-  onClear = vi.fn()
+  onClear = vi.fn(),
+  onFork = vi.fn(() => Promise.resolve())
 }: {
   items?: SideItem[]
   unread?: boolean
@@ -21,6 +24,7 @@ function Harness({
   visible?: boolean
   onAsk?: (question: string) => void
   onClear?: () => void
+  onFork?: (exchange: SideExchange) => Promise<void>
 }): React.JSX.Element {
   const [open, setOpen] = useState(initiallyOpen)
 
@@ -33,6 +37,7 @@ function Harness({
         onOpenChange={setOpen}
         onAsk={onAsk}
         onClear={onClear}
+        onFork={onFork}
       />
     </div>
   )
@@ -206,5 +211,78 @@ describe('SideQuestions', () => {
     rerender(<Harness unread initiallyOpen key="open" />)
     expect(bump(true)).toHaveAccessibleName('Close side questions')
     expect(bump(true).querySelector('span')).toBeNull()
+  })
+
+  describe('continuing from an answer', () => {
+    const fork = (): HTMLElement[] =>
+      screen.queryAllByRole('button', { name: 'Continue from this answer in a new conversation' })
+
+    // Only a real answer has anything to continue from.
+    it('is offered on an answer the agent gave, and nowhere else', () => {
+      render(
+        <Harness
+          initiallyOpen
+          items={[
+            { id: 1, question: 'q1', state: 'answered', answer: 'Kyiv', synthetic: false },
+            { id: 2, question: 'q2', state: 'answered', answer: '(No answer.)', synthetic: true },
+            { id: 3, question: 'q3', state: 'pending' },
+            { id: 4, question: 'q4', state: 'empty' },
+            { id: 5, question: 'q5', state: 'failed', error: 'It timed out.' }
+          ]}
+        />
+      )
+
+      expect(fork()).toHaveLength(1)
+    })
+
+    it('hands over the question and its answer', async () => {
+      const user = userEvent.setup()
+      const onFork = vi.fn(() => Promise.resolve())
+      render(
+        <Harness
+          initiallyOpen
+          onFork={onFork}
+          items={[
+            { id: 1, question: 'where?', state: 'answered', answer: 'Kyiv', synthetic: false }
+          ]}
+        />
+      )
+
+      await user.click(fork()[0]!)
+
+      expect(onFork).toHaveBeenCalledWith({ question: 'where?', response: 'Kyiv' })
+    })
+
+    // A second click while the first is out would open two tabs.
+    it('waits for one fork before offering another', async () => {
+      const user = userEvent.setup()
+      let settle = (): void => undefined
+      const onFork = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            settle = resolve
+          })
+      )
+      render(
+        <Harness
+          initiallyOpen
+          onFork={onFork}
+          items={[
+            { id: 1, question: 'q1', state: 'answered', answer: 'a1', synthetic: false },
+            { id: 2, question: 'q2', state: 'answered', answer: 'a2', synthetic: false }
+          ]}
+        />
+      )
+
+      await user.click(fork()[0]!)
+      for (const button of fork()) expect(button).toBeDisabled()
+
+      await act(async () => {
+        settle()
+        await Promise.resolve()
+      })
+      for (const button of fork()) expect(button).toBeEnabled()
+      expect(onFork).toHaveBeenCalledTimes(1)
+    })
   })
 })

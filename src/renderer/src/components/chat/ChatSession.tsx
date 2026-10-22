@@ -15,6 +15,7 @@ import { callsAbove } from '@core/backgroundTasks.js'
 import type { FormValues } from '@core/elicitation.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
+import type { SideExchange } from '@core/sideQuestions.js'
 import { latestTodos } from '@core/todos.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -97,6 +98,8 @@ interface ChatSessionProps {
   readonly attachedFiles: AttachedFileController
   /** Each conversation's `/btw` thread, held by `App` so it outlives this pane. */
   readonly sideQuestions: SideQuestionController
+  /** Opens a conversation continuing this one from a side answer; says whether it did. */
+  readonly onForkSide: (chatId: string, exchange: SideExchange) => Promise<boolean>
   /**
    * What the settings say a new conversation starts with.
    *
@@ -148,6 +151,7 @@ export function ChatSession({
   codeNotes,
   attachedFiles,
   sideQuestions,
+  onForkSide,
   defaultWorkingMode,
   planExecutionMode,
   defaultEffort,
@@ -323,6 +327,15 @@ export function ChatSession({
       else void withRecord((chatId) => askAside(chatId, question))
     },
     [openSide, askAside, withRecord]
+  )
+  // The drawer goes once the fork is open, as the CLI's panel does: the
+  // answer has moved on into the new tab.
+  const forkSide = useCallback(
+    (exchange: SideExchange) =>
+      withRecord(async (chatId) => {
+        if (await onForkSide(chatId, exchange)) setSideOpen(chatId, false)
+      }),
+    [onForkSide, setSideOpen, withRecord]
   )
   // A thread about a conversation that was cleared or cut back would be
   // replayed to the agent as context it no longer has.
@@ -922,6 +935,7 @@ export function ChatSession({
               onClear={() => {
                 void withRecord(clearSide)
               }}
+              onFork={forkSide}
             />
           </div>
 

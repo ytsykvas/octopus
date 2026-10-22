@@ -929,7 +929,8 @@ export const en = {
       send: 'Ask',
       answering: 'Answering…',
       empty: 'The agent had no answer for this one.',
-      unread: 'An answer is waiting'
+      unread: 'An answer is waiting',
+      fork: 'Continue from this answer in a new conversation'
     },
     /* What a tab says aloud, and what its tooltip shows. Takes the resolved
        name — the one the user gave it, or the automatic one above — because a

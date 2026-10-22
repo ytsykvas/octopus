@@ -257,9 +257,12 @@ const api = {
     create: (workspaceId: string): Promise<Result<Chat>> =>
       ipcRenderer.invoke('chats:create', workspaceId) as Promise<Result<Chat>>,
 
-    /** A new chat continuing this one — the agent keeps what it remembers. */
-    fork: (chatId: string): Promise<Result<Chat>> =>
-      ipcRenderer.invoke('chats:fork', chatId) as Promise<Result<Chat>>,
+    /**
+     * A new chat continuing this one — the agent keeps what it remembers. With
+     * `aside`, it continues from that side answer as well.
+     */
+    fork: (chatId: string, aside?: SideExchange): Promise<Result<Chat>> =>
+      ipcRenderer.invoke('chats:fork', chatId, aside) as Promise<Result<Chat>>,
 
     /** Closes a chat's tab and keeps it, history included; refuses the last one. */
     close: (chatId: string): Promise<Result<void>> =>
