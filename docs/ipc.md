@@ -210,7 +210,8 @@ never finish. There is no channel of
 its own: `main` keeps the runs (`RecordedRun`, raw) and only the core knows the
 values, so the one way out is through `helpRun` in the core.
 
-`main` keeps the raw tail — the last 64K characters — of every session whose
+`main` keeps the raw tail — the last 64K characters that Help reads, held up to
+twice that between trims so a full tail is not copied on every chunk — of every session whose
 owner names a workspace and the purpose `setup` or `run`; a new run or refusal
 of either replaces the last, and a new build drops the last server too, so a
 failed build is not shown beside a server from the Run before. It lives in `main` because

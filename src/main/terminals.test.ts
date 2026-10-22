@@ -1103,9 +1103,9 @@ describe('the last runs of a workspace', () => {
     ])
   })
 
-  it('keeps no more than TAIL_CHARS of what a run printed, the last of it', () => {
+  it('keeps no more than twice TAIL_CHARS of what a run printed, the last of it', () => {
     const pty = started('run')
-    pty.emit('lost'.padEnd(TAIL_CHARS, '.'))
+    pty.emit('lost'.padEnd(2 * TAIL_CHARS, '.'))
     pty.emit('kept')
 
     const [run] = manager.lastRuns(ANNA)

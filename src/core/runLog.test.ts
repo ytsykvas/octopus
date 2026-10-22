@@ -21,17 +21,22 @@ describe('appendTail', () => {
     expect(appendTail('build ', 'ok')).toBe('build ok')
   })
 
-  it('keeps the last TAIL_CHARS and not one more, across the chunk boundary', () => {
-    const kept = 'a'.repeat(TAIL_CHARS - 2)
-    const next = appendTail(kept, 'bcde')
+  // Trimmed on every chunk, the whole tail would be copied for each one.
+  it('lets the tail grow to twice TAIL_CHARS before it trims', () => {
+    const kept = 'a'.repeat(2 * TAIL_CHARS - 4)
+
+    expect(appendTail(kept, 'bcde')).toBe(`${kept}bcde`)
+  })
+
+  it('then keeps the last TAIL_CHARS, across the chunk boundary', () => {
+    const next = appendTail('a'.repeat(2 * TAIL_CHARS - 2), 'bcde')
 
     expect(next).toHaveLength(TAIL_CHARS)
     expect(next.endsWith('aabcde')).toBe(true)
-    expect(next.startsWith('a')).toBe(true)
   })
 
   it('cuts a single chunk larger than the limit to its end', () => {
-    const next = appendTail('', `${'x'.repeat(TAIL_CHARS)}end`)
+    const next = appendTail('', `${'x'.repeat(2 * TAIL_CHARS)}end`)
 
     expect(next).toHaveLength(TAIL_CHARS)
     expect(next.endsWith('end')).toBe(true)
@@ -186,21 +191,21 @@ describe('helpRun', () => {
   })
 
   /*
-   * The tail kept is the last TAIL_CHARS of what was sent, cut wherever that
+   * The tail read is the last TAIL_CHARS of what was sent, cut wherever that
    * falls — here ten characters into a token, behind one long colour code the
    * cleaning removes, so the line holding the token's end is among the last.
    */
-  it('drops the line the kept tail was cut through', () => {
+  it('reads the last TAIL_CHARS, dropping the line they were cut through', () => {
     const secret = 'sk-live-0123456789abcdef'
     const colour = `\u001b[${'0'.repeat(TAIL_CHARS - 23)}m`
-    const raw = appendTail('', `${'x'.repeat(100)}${secret}\r\n${colour}ok\r\n`)
-    expect(raw.startsWith(secret.slice(10))).toBe(true)
+    const raw = `before the tail\n${'x'.repeat(100)}${secret}\r\n${colour}ok\r\n`
+    expect(raw.slice(-TAIL_CHARS).startsWith(secret.slice(10))).toBe(true)
 
     expect(outputOf(raw, [{ name: 'API_TOKEN', value: secret }])).toBe('ok')
   })
 
   it('keeps nothing of a single line longer than the whole tail', () => {
-    expect(outputOf(appendTail('', 'z'.repeat(TAIL_CHARS + 1)))).toBe('')
+    expect(outputOf('z'.repeat(TAIL_CHARS + 1))).toBe('')
   })
 
   // A refusal can quote what it refused, and nothing ran to print anything.

@@ -113,7 +113,7 @@ interface Session {
  */
 interface RunRecord {
   outcome: RunOutcome
-  /** At most `TAIL_CHARS`; cleaned only when somebody asks. */
+  /** At most twice `TAIL_CHARS`; cut and cleaned only when somebody asks. */
   raw: string
 }
 

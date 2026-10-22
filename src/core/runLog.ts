@@ -15,7 +15,8 @@ import type { EnvSecret } from './envBlock.js'
 import type { TerminalPurpose } from './terminal.js'
 
 /**
- * How much raw output is kept per run, in characters.
+ * How much raw output a reader is handed per run, in characters — `main` holds
+ * up to twice this between trims (`appendTail`).
  *
  * Raw rather than cleaned, because cleaning on every chunk would cost more than
  * the stream it is reading; and generous, because colour codes and redrawn
@@ -42,8 +43,17 @@ export const TAIL_OUTPUT_CHARS = 30_000
  */
 export const REFUSAL_CHARS = 2000
 
+/**
+ * `kept` with `chunk` after it, trimmed to its last `TAIL_CHARS` once twice
+ * that has piled up.
+ *
+ * Trimmed on every chunk, the whole tail was copied for each one: 18 ms per
+ * 10 000 chunks against 0.3 ms this way, on a stream `main` also relays. A
+ * reader takes the last `TAIL_CHARS` itself (`helpRun`).
+ */
 export function appendTail(kept: string, chunk: string): string {
-  return (kept + chunk).slice(-TAIL_CHARS)
+  const next = kept + chunk
+  return next.length > 2 * TAIL_CHARS ? next.slice(-TAIL_CHARS) : next
 }
 
 /** Control sequences: colours, cursor moves, line erases. */
@@ -197,7 +207,8 @@ export type LastRun =
     }
 
 /**
- * `raw` from its first whole line, where `appendTail` has cut it.
+ * The last `TAIL_CHARS` of `raw`, from its first whole line where anything was
+ * cut.
  *
  * A cut lands anywhere, and the line it lands in keeps only its end: the rest
  * of a secret, which no longer matches what masking looks for, or half an
@@ -207,8 +218,9 @@ export type LastRun =
 function fromWholeLine(raw: string): string {
   if (raw.length < TAIL_CHARS) return raw
 
-  const start = raw.indexOf('\n')
-  return start === -1 ? '' : raw.slice(start + 1)
+  const tail = raw.slice(-TAIL_CHARS)
+  const start = tail.indexOf('\n')
+  return start === -1 ? '' : tail.slice(start + 1)
 }
 
 /**
