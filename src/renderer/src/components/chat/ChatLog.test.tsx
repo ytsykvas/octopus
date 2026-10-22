@@ -12,7 +12,7 @@ import { createStreamStore, type Streaming, streamOf } from '../../hooks/useStre
 import { agentsOf, task } from '../../test/tasks.js'
 import { highlight } from '../diff/highlight.js'
 import { AgentsContext } from './agentTasks.js'
-import { ChatLog, StreamingContext } from './ChatLog.js'
+import { ChatLog, CwdMovedRow, StreamingContext } from './ChatLog.js'
 import { COLLAPSED } from './expansion.js'
 import { viewOf } from './toolViews.js'
 import type * as ToolViewsModule from './toolViews.js'
@@ -1461,6 +1461,48 @@ describe('what the log shows', () => {
    * Without this line the turn above reads as an ordinary one with an odd
    * answer.
    */
+  /*
+   * A `cd` in the shell moves the session while every pane stays on the
+   * workspace — the same split the worktree line names, with nothing in the
+   * call to draw it from. The path is said from the workspace's root inside
+   * it, whole outside it, and a return to the root says only that.
+   */
+  it('says where the agent’s shell moved, from the workspace’s root', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'cwd_changed',
+          from: WORKSPACE,
+          to: `${WORKSPACE}/.claude/worktrees/spike`
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText(/shell moved to \.claude\/worktrees\/spike\. Changes, Files/)
+    ).toBeVisible()
+  })
+
+  it('says a move outside the workspace by its whole path, and a return as one', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'cwd_changed', from: WORKSPACE, to: '/private/tmp' }),
+        fromAgent({ type: 'cwd_changed', from: '/private/tmp', to: WORKSPACE })
+      ]
+    })
+
+    expect(screen.getByText(/shell moved to \/private\/tmp\./)).toBeVisible()
+    expect(screen.getByText(/back in this workspace’s worktree/)).toBeVisible()
+  })
+
+  // The row reads the workspace from the log's file links; drawn without
+  // them, it has no root to shorten by and says the path whole.
+  it('says the whole path where there is no workspace to say it from', () => {
+    render(<CwdMovedRow to={`${WORKSPACE}/sub`} />)
+
+    expect(screen.getByText(new RegExp(`shell moved to ${WORKSPACE}/sub\\.`))).toBeVisible()
+  })
+
   it('says which model took a turn the first one declined', () => {
     renderLog({
       entries: [

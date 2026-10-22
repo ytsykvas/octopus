@@ -650,6 +650,9 @@ function AgentRow({
         />
       )
 
+    case 'cwd_changed':
+      return <CwdMovedRow to={event.to} />
+
     case 'model_refusal_fallback':
       return <RefusalFallbackRow event={event} />
 
@@ -1255,6 +1258,32 @@ function WorktreeMoveRow({ move }: { move: WorktreeMove }): React.JSX.Element {
     <p className="text-warning border-line flex items-center gap-2 border-t pt-2 text-[11px] wrap-anywhere">
       <FolderGit2 aria-hidden size={12} className="shrink-0" />
       {worktreeMoveText(move, t)}
+    </p>
+  )
+}
+
+/**
+ * The line where a shell command moved the session — a `cd` the call never
+ * named, said from the CLI's own hook (`docs/ui.md`).
+ *
+ * The same register as the worktree line above, for the same split: the agent
+ * works in one directory while the panes show another. Inside the workspace
+ * the path is said from its root, the way the panes spell one; outside it,
+ * whole. Back at the root there is nothing to point at, only relief.
+ *
+ * Exported for the one case the log never produces: no workspace to say the
+ * path from, where it is whole.
+ */
+export function CwdMovedRow({ to }: { readonly to: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  // Null where the log has no workspace to link from, and the path is then whole.
+  const root = useContext(FileLinkContext)?.workspacePath ?? null
+  const shown = root !== null && to.startsWith(`${root}/`) ? to.slice(root.length + 1) : to
+
+  return (
+    <p className="text-warning border-line flex items-center gap-2 border-t pt-2 text-[11px] wrap-anywhere">
+      <FolderGit2 aria-hidden size={12} className="shrink-0" />
+      {to === root ? t('chat.cwdBack') : t('chat.cwdMoved', { path: shown })}
     </p>
   )
 }
