@@ -9,7 +9,14 @@ class FakeContext {
   readonly currentTime = 0
   readonly destination = {}
   readonly tones: number[] = []
-  readonly resume = vi.fn(() => Promise.resolve())
+  readonly resume = vi.fn(() => {
+    this.state = 'running'
+    return Promise.resolve()
+  })
+  readonly suspend = vi.fn(() => {
+    this.state = 'suspended'
+    return Promise.resolve()
+  })
 
   constructor() {
     FakeContext.made.push(this)
@@ -101,7 +108,9 @@ describe('chime', () => {
     expect(FakeContext.made[0]?.tones).toHaveLength(4)
   })
 
-  it('wakes a context that started suspended', async () => {
+  // Asked on every chime rather than when the state says so: the state says
+  // `suspended` only once a suspension has settled.
+  it('asks the context to run on every chime, so one that was suspended wakes', async () => {
     const { chime } = await load()
     chime('done', 'chime', 0)
     const context = FakeContext.made[0]
@@ -110,7 +119,36 @@ describe('chime', () => {
     context.state = 'suspended'
     chime('done', 'chime', 10_000)
 
-    expect(context.resume).toHaveBeenCalledOnce()
+    expect(context.resume).toHaveBeenCalledTimes(2)
+  })
+
+  /*
+   * A running context keeps the audio thread and the device awake for as long
+   * as the window lives, after a sound that lasted half a second.
+   */
+  it('puts the context to rest once the chime is over, unless another comes first', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { chime, CHIME_GAP_MS, REST_AFTER_MS } = await load()
+      chime('done', 'chime', 0)
+      const context = FakeContext.made[0]
+      if (!context) throw new Error('no context was made')
+
+      // Another chime while the first is still sounding: the rest is put off.
+      vi.advanceTimersByTime(300)
+      chime('done', 'chime', CHIME_GAP_MS)
+      vi.advanceTimersByTime(300)
+      expect(context.suspend).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(REST_AFTER_MS + 300)
+      expect(context.suspend).toHaveBeenCalledOnce()
+
+      // And the next chime wakes it.
+      chime('done', 'chime', CHIME_GAP_MS * 2)
+      expect(context.state).toBe('running')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // A missing sound is never worth an error.

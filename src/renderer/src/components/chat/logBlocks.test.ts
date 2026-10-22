@@ -288,3 +288,45 @@ describe('what a subagent did', () => {
     expect(kinds(inner.steps ?? [])).toEqual(['tool'])
   })
 })
+
+/*
+ * A block is what a row is keyed and memoised on, and the messages the library
+ * is handed are rebuilt from the blocks on every append — so a fresh wrapper
+ * for every block made every message new, and the whole log was drawn again
+ * to add one line at the end.
+ */
+describe('a block the log has already built', () => {
+  it('is handed back as it was when the log only grew below it', () => {
+    const asked = user('hi')
+    const read = call('c-1')
+    const found = answer('c-1')
+    const before = buildBlocks([asked, read, found])
+
+    const after = buildBlocks([asked, read, found, said('done')])
+
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).toBe(before[1])
+    expect(after).toHaveLength(3)
+  })
+
+  it('is built again where the same entry now sits at another position', () => {
+    const remark = said('still here')
+    const before = buildBlocks([user('hi'), remark])
+
+    const after = buildBlocks([remark])
+
+    expect(after[0]).not.toBe(before[1])
+    expect(after[0]?.at).toBe(0)
+  })
+
+  it('is built again when its call moved, and not otherwise', () => {
+    const read = call('c-1')
+    const before = buildBlocks([read])
+
+    const unchanged = buildBlocks([read, said('meanwhile')])
+    const answered = buildBlocks([read, said('meanwhile'), answer('c-1')])
+
+    expect(unchanged[0]).toBe(before[0])
+    expect(answered[0]).not.toBe(before[0])
+  })
+})

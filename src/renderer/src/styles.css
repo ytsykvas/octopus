@@ -365,25 +365,87 @@
      shadows" — it is the single place the user types, and it is meant to be
      found at a glance, which a ring that is always lit would stop doing.
 
-     Three layers. The line itself is a span of its own (`.composer-ring-line`),
-     masked down to its 1.5px edge. Under the contents, `::before` is a fill of
-     the frame's surface, which keeps the glow outside, and beneath that
-     `::after` is the glow: the gradient, blurred. A mask was tried for the glow
-     and cut its blur off in a hard rectangle, since a mask clips at the edge
-     of its own box.
+     Three layers, drawn the way every ring is (the block below): the line, a
+     span of its own (`.composer-ring-line`); over its middle, `::before`, a
+     fill of the frame's surface, which also keeps the glow outside; and
+     beneath both `::after`, the glow: the gradient, blurred. A mask was tried
+     for the glow and cut its blur off in a hard rectangle, since a mask clips
+     at the edge of its own box.
 
      A gradient cannot be transitioned into a flat colour, so the plain border
      is the frame's own and the two colour layers fade by opacity instead: the
      border to transparent, the line and the glow up. Both layers are also
      `visibility: hidden` at rest — flipped at the end of the fade out and the
      start of the fade in — so a blurred layer nobody can see is not painted.
+     Nothing in it moves; the block below says what moving measured. */
+  /* A colour ring: the project palette as a 1px line around an element.
 
-     The line turns while focus is inside, and nothing else does. That split
-     is what makes it cheap: the version that turned the gradient under both
-     layers re-blurred the glow every frame and held ~17% of a core while it
-     ran; turning only the line's own angle measured ~0.5%, no different from
-     the still ring, and no more memory. The glow stays still and only
-     brightens. */
+     Four wear it — the composer, the agents chip and two buttons — and they
+     share the one way of drawing it that is cheap. The line is a span of its
+     own, the element's first child, clipped to the element's rounded box. It
+     holds a square of the colours as a conic gradient, big enough to cover the
+     box at any angle, and the element's own `::before` paints its surface over
+     the middle one level above the line, so only the edge of the square shows.
+     Where anything turns, it is the square, by `transform`, which the
+     compositor animates with no work on the main thread.
+
+     The first version turned the gradient's own angle — `--ring-angle`,
+     registered with `@property` — under a mask. Measured in the window with a
+     log of some thousands of nodes on screen, that held 25–30% of a core for
+     as long as it ran, where it had measured 0.5% on an empty page: a
+     registered property animating on the main thread recomputes style every
+     frame, and the frame costs what the page does. The same square turning by
+     `transform` measures 14% on the composer, of which 9% is what any animation
+     at all costs this window — a 10px square turning on its own measures the
+     same — so a turn is kept only where it is brief, under the pointer. A line
+     that would otherwise turn for as long as something is focused or working
+     stays still. */
+  .composer-ring-line,
+  .agents-chip-line,
+  .ai-button-line,
+  .help-button-line {
+    position: absolute;
+    inset: -1px;
+    z-index: -2;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    /* So the square can be sized from this box, in container units. */
+    container-type: size;
+  }
+
+  .composer-ring-line::before,
+  .agents-chip-line::before,
+  .ai-button-line::before,
+  .help-button-line::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    /* A side of the box's width plus its height is never shorter than the
+       box's diagonal, so the square covers the box however it is turned. */
+    width: calc(100cqw + 100cqh);
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    background: conic-gradient(var(--ring-colours));
+  }
+
+  /* The two buttons' lines turn under the pointer or keyboard focus, and are
+     paused rather than stopped at rest so the colours stay where they were
+     instead of jumping back to the start. */
+  .ai-button-line::before,
+  .help-button-line::before {
+    will-change: transform;
+    animation: ring-turn 4s linear infinite paused;
+  }
+
+  .ai-button:hover .ai-button-line::before,
+  .ai-button:focus-visible .ai-button-line::before,
+  .help-button:hover .help-button-line::before,
+  .help-button:focus-visible .help-button-line::before {
+    animation-play-state: running;
+  }
+
   .composer-ring {
     /* A stacking context of its own, or the layers at a negative z-index
        would slide under the pane behind the frame. A z-index rather than
@@ -417,20 +479,9 @@
     background: var(--surface);
   }
 
-  /* Exactly over the frame's 1px border, half a pixel thicker so none of it
-     shows at the edge. The padding is the line's width; the mask keeps the
-     border box and cuts the content box out of it, so only that edge is
-     painted. */
+  /* Hidden at rest — the frame's plain border shows — and lit while focus
+     is inside. Still, for the reasons the ring's own comment gives. */
   .composer-ring-line {
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1.5px;
-    pointer-events: none;
-    background: conic-gradient(from var(--ring-angle), var(--ring-colours));
-    mask:
-      linear-gradient(#000 0 0) content-box exclude,
-      linear-gradient(#000 0 0);
     opacity: 0;
     visibility: hidden;
     transition:
@@ -441,12 +492,12 @@
   .composer-ring:focus-within .composer-ring-line {
     opacity: 1;
     visibility: visible;
-    animation: ring-turn 6s linear infinite;
   }
 
+  /* Beneath the line, so the square never shows through the blur. */
   .composer-ring::after {
     inset: -1px;
-    z-index: -2;
+    z-index: -3;
     background: conic-gradient(var(--ring-colours));
     filter: blur(12px);
     opacity: 0;
@@ -479,18 +530,21 @@
   .ai-button::after {
     content: '';
     position: absolute;
-    inset: -1px;
     border-radius: inherit;
     pointer-events: none;
   }
 
+  /* Inside the border, where the line shows through it; one level above the
+     line, so the square shows only at the edge. */
   .ai-button::before {
+    inset: 0;
     z-index: -1;
     background: var(--surface);
   }
 
   .ai-button::after {
-    z-index: -2;
+    inset: -1px;
+    z-index: -3;
     background: conic-gradient(var(--ring-colours));
     filter: blur(8px);
     opacity: 0.15;
@@ -503,24 +557,13 @@
   }
 
   .ai-button-line {
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    pointer-events: none;
-    background: conic-gradient(from var(--ring-angle), var(--ring-colours));
-    mask:
-      linear-gradient(#000 0 0) content-box exclude,
-      linear-gradient(#000 0 0);
     opacity: 0.55;
     transition: opacity 0.2s ease;
-    animation: ring-turn 4s linear infinite paused;
   }
 
   .ai-button:hover .ai-button-line,
   .ai-button:focus-visible .ai-button-line {
     opacity: 1;
-    animation-play-state: running;
   }
 
   /* Radio and checkbox, drawn rather than left to the platform.
@@ -718,18 +761,19 @@
   .help-button::after {
     content: '';
     position: absolute;
-    inset: -1px;
     border-radius: inherit;
     pointer-events: none;
   }
 
   .help-button::before {
+    inset: 0;
     z-index: -1;
     background: var(--surface);
   }
 
   .help-button::after {
-    z-index: -2;
+    inset: -1px;
+    z-index: -3;
     background: conic-gradient(var(--ring-colours));
     filter: blur(8px);
     opacity: 0.15;
@@ -742,31 +786,19 @@
   }
 
   .help-button-line {
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    pointer-events: none;
-    background: conic-gradient(from var(--ring-angle), var(--ring-colours));
-    mask:
-      linear-gradient(#000 0 0) content-box exclude,
-      linear-gradient(#000 0 0);
     opacity: 0.55;
     transition: opacity 0.2s ease;
-    animation: ring-turn 4s linear infinite paused;
   }
 
   .help-button:hover .help-button-line,
   .help-button:focus-visible .help-button-line {
     opacity: 1;
-    animation-play-state: running;
   }
 
   /* The count of agents at work in the composer (AgentsChip.tsx), wearing the
-     composer's own colours as a 1px line that turns while any of them is
-     working. The one thing on the strip that moves, and only while there is
-     work nobody is watching: no glow, which is the composer's alone, and no
-     line at all once the agents are done. */
+     composer's own colours as a still 1px line while any of them is working:
+     no glow, which is the composer's alone, and no line at all once the
+     agents are done. */
   .agents-chip {
     isolation: isolate;
     --ring-colours:
@@ -774,18 +806,30 @@
       var(--project-blue);
   }
 
-  .agents-chip-line {
+  /* The chip has no border, so its surface sits a pixel in and the line is
+     the chip's own outer pixel. The surface carries the hover and open
+     background that was the chip's own: painted on the chip itself it would
+     sit beneath the line and be hidden by it. */
+  .agents-chip::before {
+    content: '';
     position: absolute;
-    inset: 0;
+    inset: 1px;
+    z-index: -1;
     border-radius: inherit;
-    padding: 1px;
     pointer-events: none;
-    background: conic-gradient(from var(--ring-angle), var(--ring-colours));
-    mask:
-      linear-gradient(#000 0 0) content-box exclude,
-      linear-gradient(#000 0 0);
+    /* The strip's own surface, so the square shows only at the edge. */
+    background: var(--surface);
+    transition: background-color 0.15s ease;
+  }
+
+  .agents-chip:hover::before,
+  .agents-chip[aria-expanded='true']::before {
+    background: var(--muted);
+  }
+
+  .agents-chip-line {
+    inset: 0;
     opacity: 0.7;
-    animation: ring-turn 4s linear infinite;
   }
 
   /* An agent at work: a quarter of a ring turning, in the accent. Drawn rather
@@ -831,17 +875,10 @@
 
 /* A toast arriving (AttentionToasts.tsx): a short fade and lift, so the eye
    finds it without the corner flashing. */
-/* Registered so the angle interpolates: an unregistered custom property only
-   flips at the halfway point, and the ring would jump instead of turn. */
-@property --ring-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
+/* A ring's square turning (see `.composer-ring-line` and the others). */
 @keyframes ring-turn {
   to {
-    --ring-angle: 360deg;
+    transform: rotate(360deg);
   }
 }
 

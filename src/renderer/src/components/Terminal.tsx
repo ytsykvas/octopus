@@ -33,6 +33,17 @@ function readTheme(): ITheme {
   }
 }
 
+/**
+ * How long a change of size is gathered before the terminal is fitted to it.
+ *
+ * A pane being dragged changes size on every frame, and every terminal in it
+ * — the ones offstage included, which keep their layout — fitted itself,
+ * reflowed its scrollback and had its pty signalled sixty times a second
+ * each. Gathered, a drag costs ten fits a second per terminal and ends on the
+ * size it ended on; a tenth of a second behind the pointer is not seen.
+ */
+export const REFIT_MS = 100
+
 interface TerminalProps {
   /** Working directory for the session. */
   readonly cwd: string
@@ -236,9 +247,19 @@ export function Terminal({
       term.focus()
     })()
 
+    // The size the session was last told, so a fit that moved nothing — a box
+    // that changed by less than a cell — does not signal the pty for nothing.
+    let told = { cols: term.cols, rows: term.rows }
+    let refitting: ReturnType<typeof setTimeout> | null = null
     const observer = new ResizeObserver(() => {
-      refit()
-      if (sessionId) window.octopus.terminal.resize(sessionId, term.cols, term.rows)
+      if (refitting !== null) return
+      refitting = setTimeout(() => {
+        refitting = null
+        refit()
+        if (!sessionId || (told.cols === term.cols && told.rows === term.rows)) return
+        told = { cols: term.cols, rows: term.rows }
+        window.octopus.terminal.resize(sessionId, term.cols, term.rows)
+      }, REFIT_MS)
     })
     observer.observe(container)
 
@@ -247,6 +268,7 @@ export function Terminal({
       stopSession.current = null
       themes.disconnect()
       observer.disconnect()
+      if (refitting !== null) clearTimeout(refitting)
       unsubscribeData()
       unsubscribeExit()
       // The dispose answers when the session has gone, so this is the one

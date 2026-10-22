@@ -11,7 +11,7 @@ import {
   type PlanExecutionMode,
   type WorkingMode
 } from '@core/chats.js'
-import { byToolUse, callsAbove } from '@core/backgroundTasks.js'
+import { callsAbove } from '@core/backgroundTasks.js'
 import type { FormValues } from '@core/elicitation.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
@@ -23,7 +23,7 @@ import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { onChatEvent } from '../../hooks/chatEvents.js'
-import { stopTask, useChatTasks, useMainWorking } from '../../hooks/backgroundTasks.js'
+import { stopTask, useChatTasks } from '../../hooks/backgroundTasks.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
 import type { AttachedFileController } from '../../hooks/useAttachedFiles.js'
@@ -44,7 +44,7 @@ import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
 import { useSkills } from '../../hooks/useSkills.js'
 import { shortModel } from './agentFormat.js'
-import { AgentLogContext, type Agents, AgentsContext } from './agentTasks.js'
+import { AgentLogContext, type Agents, AgentsContext, createAgentsStore } from './agentTasks.js'
 import { ChatLog, StreamingContext } from './ChatLog.js'
 import { COLLAPSED, type Expansion } from './expansion.js'
 import { DayChip } from './DayChip.js'
@@ -260,7 +260,8 @@ export function ChatSession({
     tab.status,
     describeFailure,
     onOpened,
-    planExecutionMode
+    planExecutionMode,
+    visible
   )
 
   // Held against the entries, like the log's own walks: this reads the whole
@@ -380,7 +381,6 @@ export function ChatSession({
    */
   const chatId = chat.chat?.id ?? tab.id ?? ''
   const tasks = useChatTasks(chatId, chat.entries)
-  const mainWorking = useMainWorking(chatId)
 
   /*
    * "Show in conversation": the agent's row is opened up to — a nested one is
@@ -409,12 +409,16 @@ export function ChatSession({
     row?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true })
   }, [shownAgent])
 
+  // The tasks go into a store of the pane's own and the context holds still —
+  // see `AgentsContext` for why the rows must not be redrawn by every move.
+  // Published before the paint, so a row never shows a reading one commit old.
+  const [agentsStore] = useState(createAgentsStore)
+  useLayoutEffect(() => {
+    agentsStore.publish(tasks)
+  }, [agentsStore, tasks])
   const agentTasks = useMemo<Agents>(
     () => ({
-      tasks,
-      byToolUse: byToolUse(tasks),
-      byId: new globalThis.Map(tasks.map((task) => [task.taskId, task])),
-      mainWorking,
+      store: agentsStore,
       // The picker's name for a model it offers; a subagent can run on one it
       // does not, which is named as a person would.
       modelName: (model) => findAgentModel(models, model)?.displayName ?? shortModel(model),
@@ -423,7 +427,7 @@ export function ChatSession({
       },
       onShow: showAgent
     }),
-    [tasks, mainWorking, models, chatId, showAgent]
+    [agentsStore, models, chatId, showAgent]
   )
   const pinnedToBottom = useRef(true)
   // More than a screen above the end: where the way back down is worth a button.
@@ -560,19 +564,18 @@ export function ChatSession({
   // this would quietly scroll a background conversation to the top on every
   // event it received — which is exactly when a background conversation is
   // worth coming back to.
+  //
+  // On the entries and not on what streams in: a flush renders the tail of the
+  // log and not this pane, and the tail growing is what the observer below
+  // follows.
   useEffect(() => {
     const element = scroller.current
     if (!visible || !element || !pinnedToBottom.current) return
 
     element.scrollTop = element.scrollHeight
-  }, [visible, chat.entries, chat.streaming])
+  }, [visible, chat.entries])
 
-  const isEmpty =
-    chat.entries.length === 0 &&
-    !chat.loading &&
-    !chat.busy &&
-    chat.streaming.text === '' &&
-    chat.streaming.thinking === ''
+  const isEmpty = chat.entries.length === 0 && !chat.loading && !chat.busy && !chat.streaming
 
   // Rows grow after they are first laid out — markdown, highlighted code — so
   // the scroll above can land short of the end. Followed here for as long as the
@@ -714,7 +717,7 @@ export function ChatSession({
               </Placeholder>
             ) : (
               <div ref={logContent}>
-                <StreamingContext.Provider value={chat.streaming}>
+                <StreamingContext.Provider value={chat.stream}>
                   <ChatLog
                     entries={chat.entries}
                     busy={chat.busy}

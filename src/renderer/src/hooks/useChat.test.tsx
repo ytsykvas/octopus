@@ -146,7 +146,8 @@ describe('the answer being written, once its block has finished', () => {
     // Longer than a flush, so one still waiting would have landed by now.
     await act(() => new Promise((resolve) => setTimeout(resolve, 100)))
 
-    expect(result.current.streaming.text).toBe('')
+    expect(result.current.stream.read().text).toBe('')
+    expect(result.current.streaming).toBe(false)
     expect(result.current.entries).toHaveLength(1)
   })
 })
@@ -180,7 +181,7 @@ describe('a reading that belongs to the account rather than the conversation', (
     emitAgentEvent(READING)
 
     await waitFor(() => {
-      expect(result.current.streaming.text).toBe('Look')
+      expect(result.current.stream.read().text).toBe('Look')
     })
     expect(result.current.entries).toEqual([])
   })
@@ -211,7 +212,7 @@ describe('a background agent starting or ending', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.streaming.text).toBe('Look')
+      expect(result.current.stream.read().text).toBe('Look')
     })
     expect(result.current.entries).toHaveLength(2)
   })
@@ -1222,5 +1223,33 @@ describe('a conversation whose agents alone are at work', () => {
 
     pushTasks(true)
     expect(result.current.busy).toBe(true)
+  })
+})
+
+describe('the strip’s announcer', () => {
+  /*
+   * The pane writes it inline, so it is a new function on every render. Taken
+   * as it came it made `ensure` new as well — and everything built on it, down
+   * to the log's "carry out this plan", which redrew every row of the log on
+   * every render of the pane.
+   */
+  it('changes without changing ensure, and the newest one is told', async () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ announce }: { announce: (chat: Chat) => void }) =>
+        useChat(null, 'planner/anna', 'idle', describeFailure, announce),
+      { initialProps: { announce: first } }
+    )
+    const ensure = result.current.ensure
+
+    rerender({ announce: second })
+    expect(result.current.ensure).toBe(ensure)
+
+    await act(async () => {
+      await result.current.ensure()
+    })
+    expect(second).toHaveBeenCalledWith(expect.objectContaining({ id: 'chat-1' }))
+    expect(first).not.toHaveBeenCalled()
   })
 })

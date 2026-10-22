@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
@@ -418,9 +418,13 @@ export function useWorkspaces(
     [byProject, confirm, refresh, describeFailure, onError, t]
   )
 
+  // Held against the map: a list made anew on every render was a new value
+  // for every memo downstream that takes it, on every render of the window.
+  const flat = useMemo(() => [...byProject.values()].flat(), [byProject])
+
   return {
     byProject,
-    flat: [...byProject.values()].flat(),
+    flat,
     editingId,
     setEditingId,
     refresh,

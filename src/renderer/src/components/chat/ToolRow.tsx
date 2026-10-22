@@ -12,7 +12,7 @@ import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import { activityOf, elapsedOf, formatElapsed } from './agentFormat.js'
 import { STATUS_LABELS } from './AgentGlyph.js'
-import { AgentsContext } from './agentTasks.js'
+import { AgentsContext, useTaskFor } from './agentTasks.js'
 import type { Change } from './changeSummary.js'
 import { DiffPreview } from './DiffPreview.js'
 import { formatTokens } from './format.js'
@@ -82,7 +82,7 @@ export const ToolRow = memo(function ToolRow({
   const { t } = useTranslation()
   const [open, setOpen] = useExpanded(call.toolUseId)
   const links = useContext(FileLinkContext)
-  const task = useContext(AgentsContext).byToolUse.get(call.toolUseId) ?? null
+  const task = useTaskFor(call.toolUseId)
   // A background task's own line while it works or once it is over; a
   // foreground one says what it came back with, as any call does.
   const lineTask = task !== null && (task.status === 'running' || task.backgrounded) ? task : null

@@ -771,6 +771,39 @@ describe('DiffPanel', () => {
     const askButton = (): Promise<HTMLElement> =>
       screen.findByRole('button', { name: 'Add to chat' })
 
+    // The listener walks every drawn line for a selection made anywhere in
+    // the document, and a drag across the chat was paying for a pane behind
+    // another tab.
+    it('reads no selection while it is behind another tab', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts')]))
+      const props = {
+        workspace: anna,
+        view: 'unified' as const,
+        onView: vi.fn(),
+        width: WIDE,
+        comments: commentController(),
+        revert: revertController(),
+        onError: vi.fn(),
+        onOpenFile: vi.fn()
+      }
+      const { rerender } = render(<DiffPanel {...props} visible />)
+      await expandAll()
+      await waitFor(() => {
+        expect(codeLines().length).toBeGreaterThan(1)
+      })
+
+      rerender(<DiffPanel {...props} visible={false} />)
+      const [first, second] = codeLines()
+      selectAcross(first!, second!)
+
+      expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument()
+
+      rerender(<DiffPanel {...props} visible />)
+      selectAcross(first!, second!)
+
+      expect(await askButton()).toBeInTheDocument()
+    })
+
     it('offers to ask about a passage that was selected', async () => {
       answer(workspaceDiff([fileDiff('src/a.ts')]))
       renderWithComments()

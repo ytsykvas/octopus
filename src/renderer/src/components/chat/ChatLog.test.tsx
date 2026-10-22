@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ReactMarkdown from 'react-markdown'
 import type * as ReactMarkdownModule from 'react-markdown'
@@ -8,12 +8,16 @@ import type { TaskView } from '@core/backgroundTasks.js'
 import type { AgentEvent } from '@core/events.js'
 import type { ChatEntry } from '@core/transcript.js'
 
-import type { Streaming } from '../../hooks/useStreaming.js'
+import { createStreamStore, type Streaming, streamOf } from '../../hooks/useStreaming.js'
 import { agentsOf, task } from '../../test/tasks.js'
 import { highlight } from '../diff/highlight.js'
 import { AgentsContext } from './agentTasks.js'
 import { ChatLog, StreamingContext } from './ChatLog.js'
 import { COLLAPSED } from './expansion.js'
+import { viewOf } from './toolViews.js'
+import type * as ToolViewsModule from './toolViews.js'
+import { messageBlocks } from './userMessage.js'
+import type * as UserMessageModule from './userMessage.js'
 
 // Stood in for, as every pane that colours code is tested: the real one loads a
 // grammar, and its answer would land after the test that drew the card.
@@ -23,6 +27,18 @@ vi.mock('../diff/highlight.js', () => ({ highlight: vi.fn(() => Promise.resolve(
 vi.mock('react-markdown', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactMarkdownModule>()
   return { ...actual, default: vi.fn(actual.default) }
+})
+
+// Watched for the same reason: a tool row asks for its view on every draw and
+// a user's message is split into its blocks on every draw, so the counts say
+// how often a row was drawn.
+vi.mock('./toolViews.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof ToolViewsModule>()
+  return { ...actual, viewOf: vi.fn(actual.viewOf) }
+})
+vi.mock('./userMessage.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof UserMessageModule>()
+  return { ...actual, messageBlocks: vi.fn(actual.messageBlocks) }
 })
 
 /** How many times a piece of markdown has been parsed. */
@@ -90,7 +106,7 @@ function renderLog({
 
   render(
     <AgentsContext.Provider value={agentsOf(tasks)}>
-      <StreamingContext.Provider value={streaming}>
+      <StreamingContext.Provider value={streamOf(streaming)}>
         <ChatLog
           entries={[]}
           busy={false}
@@ -561,6 +577,103 @@ describe('what the log shows', () => {
 
     expect(before).toBeGreaterThan(0)
     expect(parsesOf('an answer **already given**')).toBe(before)
+  })
+
+  /*
+   * The log grows by one line for every call the agent makes, and every row
+   * above was drawn again for each: the blocks were new wrappers, the maps the
+   * rows share were new objects, the library was handed new messages. A row
+   * is drawn again now only when its own turn or what every row shares moved.
+   */
+  it('draws a row again only when something of its own changed', () => {
+    const entries = [
+      fromAgent({ type: 'tool_use', toolUseId: 'c-1', name: 'Read', input: { file_path: 'a' } }),
+      fromAgent({ type: 'tool_result', toolUseId: 'c-1', ok: true, content: 'fine' }),
+      { role: 'user', at: AT, text: 'and then?' } as ChatEntry,
+      fromAgent({ type: 'tool_use', toolUseId: 'c-2', name: 'Grep', input: { pattern: 'x' } })
+    ]
+    const props = {
+      busy: true,
+      answerable: NOTHING_ASKED,
+      pendingElicitationId: null,
+      onAnswer: vi.fn(),
+      onAnswerElicitation: vi.fn(),
+      onAnswerQuestions: vi.fn(),
+      onExecutePlan: vi.fn(),
+      onRewind: vi.fn(),
+      waiting: NOT_WAITING,
+      expansion: COLLAPSED,
+      workspacePath: WORKSPACE,
+      onOpenFile: vi.fn()
+    }
+    const { rerender } = render(<ChatLog {...props} entries={entries} />)
+    const drawn = (): number => vi.mocked(viewOf).mock.calls.length
+    const asked = (): number => vi.mocked(messageBlocks).mock.calls.length
+    const before = drawn()
+    const askedBefore = asked()
+    expect(before).toBeGreaterThan(0)
+    expect(askedBefore).toBeGreaterThan(0)
+
+    // The second call answered: its own row moves, the first is left alone.
+    const answered = [
+      ...entries,
+      fromAgent({ type: 'tool_result', toolUseId: 'c-2', ok: true, content: 'found' })
+    ]
+    rerender(<ChatLog {...props} entries={answered} />)
+    expect(drawn()).toBe(before + 1)
+
+    // A line in the same turn moves neither row, nor the question above them.
+    const grown = [...answered, fromAgent({ type: 'text', text: 'done' })]
+    rerender(<ChatLog {...props} entries={grown} />)
+    expect(drawn()).toBe(before + 1)
+    expect(asked()).toBe(askedBefore)
+
+    // The turn ending is news for every row.
+    rerender(<ChatLog {...props} entries={grown} busy={false} />)
+    expect(drawn()).toBe(before + 3)
+    expect(asked()).toBe(askedBefore + 1)
+  })
+
+  /*
+   * A long reply was parsed in full at every flush, twenty times a second.
+   * Past a page of it, what is settled is parsed once and kept, and only the
+   * part still moving is parsed again.
+   */
+  it('parses the settled part of a long reply once, and only the tail again', () => {
+    const store = createStreamStore()
+    render(
+      <StreamingContext.Provider value={store}>
+        <ChatLog
+          entries={[]}
+          busy
+          answerable={NOTHING_ASKED}
+          pendingElicitationId={null}
+          onAnswer={vi.fn()}
+          onAnswerElicitation={vi.fn()}
+          onAnswerQuestions={vi.fn()}
+          onExecutePlan={vi.fn()}
+          onRewind={vi.fn()}
+          waiting={NOT_WAITING}
+          expansion={COLLAPSED}
+          workspacePath={WORKSPACE}
+          onOpenFile={vi.fn()}
+        />
+      </StreamingContext.Provider>
+    )
+    const settled = `${'settled words '.repeat(120).trim()}\n\n`
+
+    act(() => {
+      store.publish({ text: `${settled}still arriving`, thinking: '' })
+    })
+    expect(parsesOf(settled)).toBe(1)
+    expect(parsesOf('still arriving')).toBe(1)
+
+    act(() => {
+      store.publish({ text: `${settled}still arriving, and more`, thinking: '' })
+    })
+    expect(parsesOf(settled)).toBe(1)
+    expect(parsesOf('still arriving, and more')).toBe(1)
+    expect(screen.getByText('still arriving, and more')).toBeInTheDocument()
   })
 
   // The whole of the previous change, arriving on ordinary answers: an answer

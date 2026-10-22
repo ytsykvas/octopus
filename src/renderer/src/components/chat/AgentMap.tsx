@@ -21,7 +21,7 @@ import { shown } from '../diff/shown.js'
 import { activityOf, elapsedOf, formatElapsed, kindLabel, nameOf } from './agentFormat.js'
 import { AgentGlyph, STATUS_TONES, statusLabel } from './AgentGlyph.js'
 import { promptOf, stepsOf } from './agentSteps.js'
-import { AgentLogContext, AgentsContext } from './agentTasks.js'
+import { AgentLogContext, AgentsContext, useAgentTasks, useTaskById } from './agentTasks.js'
 import { formatTokens } from './format.js'
 import { Markdown } from './Markdown.js'
 import { stepText } from './toolViews.js'
@@ -49,16 +49,17 @@ const PANEL_MAX_HEIGHT = { maxHeight: `${String(PANEL_MAX_SHARE * 100)}vh` }
  */
 export function AgentMap(): React.JSX.Element {
   const { t } = useTranslation()
-  const { tasks, byId } = useContext(AgentsContext)
+  const tasks = useAgentTasks()
   const [chosen, setChosen] = useState<string | null>(null)
   const now = useNow(tasks.some(isLive))
 
-  const task = chosen === null ? undefined : byId.get(chosen)
+  const task = useTaskById(chosen)
+  const parent = useTaskById(task?.parentTaskId ?? null)
   if (task !== undefined) {
     return (
       <AgentDetail
         task={task}
-        parent={byId.get(task.parentTaskId ?? '') ?? null}
+        parent={parent ?? null}
         now={now}
         onBack={() => {
           setChosen(null)

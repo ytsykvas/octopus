@@ -19,7 +19,7 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { Failure, Result } from '../../../preload/index.js'
 import { useMainWorking } from './backgroundTasks.js'
 import { onChatEvent } from './chatEvents.js'
-import { type Streaming, useStreaming } from './useStreaming.js'
+import { type StreamStore, useStreaming } from './useStreaming.js'
 
 /** A tool call the agent is blocked on, waiting to be told whether it may run. */
 /**
@@ -109,7 +109,10 @@ function withWaiting(
 export interface ChatController {
   readonly chat: Chat | null
   readonly entries: readonly ChatEntry[]
-  readonly streaming: Streaming
+  /** What the agent is writing, for the tail of the log alone — see `useStreaming`. */
+  readonly stream: StreamStore
+  /** Whether the agent is writing something: true from the first fragment drawn to the block's end. */
+  readonly streaming: boolean
   /** A turn is in flight: the agent is working, or waiting on an answer. */
   readonly busy: boolean
   /**
@@ -237,18 +240,21 @@ export function useChat(
    * the setting's own default, which is what a config that has not been read
    * yet stands for.
    */
-  planExecutionMode: PlanExecutionMode = 'auto'
+  planExecutionMode: PlanExecutionMode = 'auto',
+  /** Whether anybody can see the pane; what streams in while nobody can is drawn when they can. */
+  drawn = true
 ): ChatController {
   const chatId = initial?.id ?? null
 
   const [chat, setChat] = useState<Chat | null>(initial)
   const [entries, setEntries] = useState<readonly ChatEntry[]>([])
   const {
+    stream,
     streaming,
     append: appendStreaming,
     discard: discardStreaming,
     reset: resetStreaming
-  } = useStreaming(chat?.id ?? null)
+  } = useStreaming(chat?.id ?? null, drawn)
   const [busy, setBusy] = useState(false)
   const [waiting, setWaiting] = useState<ReadonlySet<string>>(NOTHING_WAITING)
   /** Messages queued too recently to mark yet, each with the timer that will. */
@@ -283,6 +289,17 @@ export function useChat(
    * over the copy already drawn.
    */
   const created = useRef<string | null>(null)
+
+  /*
+   * The strip's announcer, kept where a steady `ensureChat` can read it: the
+   * pane writes it inline, and taken as it came it made `ensureChat` — and
+   * everything built on it, down to the log's "carry out this plan" — a new
+   * function on every render of the pane, which redrew every row of the log.
+   */
+  const announce = useRef(onOpened)
+  useEffect(() => {
+    announce.current = onOpened
+  }, [onOpened])
 
   // Reset during render rather than in an effect. React supports this for
   // state derived from a prop, and it matters here: an effect runs after the
@@ -520,10 +537,10 @@ export function useChat(
     setChat(opened.value)
     // The strip drew this tab without a record; now there is one, and its dot,
     // its menu and its number all come from it.
-    onOpened(opened.value)
+    announce.current(opened.value)
 
     return opened.value
-  }, [chat, workspaceId, describeFailure, onOpened])
+  }, [chat, workspaceId, describeFailure])
 
   const send = useCallback(
     async (text: string) => {
@@ -805,6 +822,7 @@ export function useChat(
   return {
     chat,
     entries,
+    stream,
     streaming,
     busy: working,
     waiting,

@@ -1,4 +1,3 @@
-import { useContext } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { liveAgents, liveCount, visibleTasks } from '@core/backgroundTasks.js'
@@ -6,7 +5,7 @@ import { liveAgents, liveCount, visibleTasks } from '@core/backgroundTasks.js'
 import { useAnchoredPanel } from '../../hooks/useAnchoredPanel.js'
 import { chatStatusTone } from '../agentStatus.js'
 import { AgentMap, PANEL_MAX_SHARE } from './AgentMap.js'
-import { AgentsContext } from './agentTasks.js'
+import { useAgentTasks } from './agentTasks.js'
 
 /** Wide enough for a description, its time and a model without the row wrapping. */
 const PANEL_WIDTH = 380
@@ -25,7 +24,7 @@ const PANEL_WIDTH = 380
  */
 export function AgentsChip(): React.JSX.Element | null {
   const { t } = useTranslation()
-  const { tasks } = useContext(AgentsContext)
+  const tasks = useAgentTasks()
   const { open, position, container, toggle, close } = useAnchoredPanel()
 
   const shown = visibleTasks(tasks)
@@ -73,9 +72,9 @@ export function AgentsChip(): React.JSX.Element | null {
         }}
         // The attic's own hover surface, cancelled by negative margins as the
         // readings beside it are, so the strip does not grow taller.
-        className={`agents-chip focus-ring hover:bg-muted relative -my-0.5 inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-1.5 py-0.5 tabular-nums transition-colors ${
+        className={`agents-chip focus-ring relative -my-0.5 inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-1.5 py-0.5 tabular-nums transition-colors ${
           working > 0 ? 'text-ink-soft' : 'text-ink-faint'
-        } ${open ? 'bg-muted' : ''}`}
+        }`}
       >
         {working > 0 && <span aria-hidden className="agents-chip-line" />}
         <span aria-hidden className={`${dot} size-1.5 shrink-0 rounded-full`} />

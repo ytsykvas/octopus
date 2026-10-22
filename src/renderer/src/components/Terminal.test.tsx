@@ -5,7 +5,7 @@ import type { TerminalExit, TerminalOutput } from '@core/terminal.js'
 import type { Result } from '../../../preload/index.js'
 
 import { FakeFitAddon, FakeXTerm } from '../test/xterm.js'
-import { Terminal } from './Terminal.js'
+import { REFIT_MS, Terminal } from './Terminal.js'
 import { holdSelectionWhilePaused } from './xtermPause.js'
 
 vi.mock('@xterm/xterm', () => ({ Terminal: FakeXTerm }))
@@ -53,6 +53,17 @@ afterEach(() => {
 })
 
 /** The emulator the component under test just built. */
+/** Long enough for a gathered fit to have run. */
+const settled = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, REFIT_MS + 20)
+  })
+
+/** A box of this height, where jsdom lays nothing out. */
+function measured(height: number): void {
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(height)
+}
+
 function emulator(): FakeXTerm {
   const term = FakeXTerm.instances.at(-1)
   if (!term) throw new Error('the component built no terminal')
@@ -279,6 +290,48 @@ describe('Terminal', () => {
   })
 
   it('resizes the session when its container changes size', async () => {
+    measured(300)
+    render(<Terminal cwd="/tmp/planner/anna" />)
+    await sessionStarted()
+    await waitFor(() => {
+      expect(emulator().focused).toBe(true)
+    })
+
+    FakeFitAddon.proposal = { cols: 100, rows: 30 }
+    resizer().notify()
+    await settled()
+
+    expect(window.octopus.terminal.resize).toHaveBeenCalledWith('term-1', 100, 30)
+  })
+
+  /*
+   * A pane being dragged changes size on every frame, and every terminal in it
+   * fitted itself and signalled its pty for each: gathered, a drag is fitted
+   * ten times a second and ends on the size it ended on.
+   */
+  it('fits once for a burst of changes, to the last of them', async () => {
+    measured(300)
+    render(<Terminal cwd="/tmp/planner/anna" />)
+    await sessionStarted()
+    await waitFor(() => {
+      expect(emulator().focused).toBe(true)
+    })
+
+    FakeFitAddon.proposal = { cols: 100, rows: 30 }
+    resizer().notify()
+    FakeFitAddon.proposal = { cols: 90, rows: 28 }
+    resizer().notify()
+    expect(emulator().resized).toEqual([])
+    await settled()
+
+    expect(emulator().resized).toEqual([[90, 28]])
+    expect(window.octopus.terminal.resize).toHaveBeenCalledTimes(1)
+    expect(window.octopus.terminal.resize).toHaveBeenCalledWith('term-1', 90, 28)
+  })
+
+  // A box that changed by less than a cell moved nothing, and a pty signalled
+  // for nothing makes whatever runs in it redraw for nothing.
+  it('tells the session nothing when the fit changed nothing', async () => {
     render(<Terminal cwd="/tmp/planner/anna" />)
     await sessionStarted()
     await waitFor(() => {
@@ -286,15 +339,32 @@ describe('Terminal', () => {
     })
 
     resizer().notify()
+    await settled()
 
-    expect(window.octopus.terminal.resize).toHaveBeenCalledWith('term-1', 120, 40)
+    expect(window.octopus.terminal.resize).not.toHaveBeenCalled()
   })
 
   // Nothing to resize before the session exists, and the id is what identifies it.
-  it('does not resize a session that has not started yet', () => {
+  it('does not resize a session that has not started yet', async () => {
+    vi.mocked(window.octopus.terminal.create).mockReturnValue(new Promise(() => undefined))
     render(<Terminal cwd="/tmp/planner/anna" />)
 
+    FakeFitAddon.proposal = { cols: 100, rows: 30 }
     resizer().notify()
+    await settled()
+
+    expect(emulator().resized).toEqual([[100, 40]])
+    expect(window.octopus.terminal.resize).not.toHaveBeenCalled()
+  })
+
+  it('drops a fit still waiting when it goes away', async () => {
+    const { unmount } = render(<Terminal cwd="/tmp/planner/anna" />)
+    await sessionStarted()
+
+    FakeFitAddon.proposal = { cols: 100, rows: 30 }
+    resizer().notify()
+    unmount()
+    await settled()
 
     expect(window.octopus.terminal.resize).not.toHaveBeenCalled()
   })
@@ -386,12 +456,8 @@ describe('Terminal', () => {
 
   describe('fitting to its box', () => {
     /** jsdom lays nothing out, so a box's height is whatever the test says. */
-    function boxHeight(height: number): void {
-      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(height)
-    }
-
     it('takes the size a measured box proposes', () => {
-      boxHeight(300)
+      measured(300)
       FakeFitAddon.proposal = { cols: 100, rows: 30 }
 
       render(<Terminal cwd="/tmp/planner/anna" />)
@@ -403,7 +469,7 @@ describe('Terminal', () => {
     // build's progress display could not move above row 1 and every frame
     // would land in the scrollback the reader opens the pane to.
     it('keeps its rows in a box with no height, and takes the columns', () => {
-      boxHeight(0)
+      measured(0)
       FakeFitAddon.proposal = { cols: 100, rows: 30 }
 
       render(<Terminal cwd="/tmp/planner/anna" />)
@@ -414,7 +480,7 @@ describe('Terminal', () => {
     // A hidden box measures nothing at all; guessing a size there is how a
     // terminal came up two columns wide.
     it('leaves its size alone when nothing could be measured', () => {
-      boxHeight(300)
+      measured(300)
       FakeFitAddon.proposal = { cols: Number.NaN, rows: Number.NaN }
 
       render(<Terminal cwd="/tmp/planner/anna" />)
@@ -423,7 +489,7 @@ describe('Terminal', () => {
     })
 
     it('does not resize to the size it already has', () => {
-      boxHeight(300)
+      measured(300)
       FakeFitAddon.proposal = { cols: 120, rows: 40 }
 
       render(<Terminal cwd="/tmp/planner/anna" />)
@@ -432,7 +498,7 @@ describe('Terminal', () => {
     })
 
     it('fits again when its box changes, and tells the session', async () => {
-      boxHeight(300)
+      measured(300)
       render(<Terminal cwd="/tmp/planner/anna" />)
       await sessionStarted()
       await waitFor(() => {
@@ -441,6 +507,7 @@ describe('Terminal', () => {
 
       FakeFitAddon.proposal = { cols: 90, rows: 20 }
       resizer().notify()
+      await settled()
 
       expect(emulator().resized).toEqual([[90, 20]])
       expect(window.octopus.terminal.resize).toHaveBeenCalledWith('term-1', 90, 20)

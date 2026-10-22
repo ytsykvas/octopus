@@ -822,6 +822,19 @@ export function isTaskBoundary(event: AgentEvent): boolean {
 }
 
 /**
+ * A frame about the tasks that no window reads as an event.
+ *
+ * An agent's progress and the CLI's list of what is alive arrive many times a
+ * second per working agent, and reach a window folded into the task list
+ * `onTasks` pushes, gathered. Sent across as events as well, they went to every
+ * window — each one serialised, delivered and dropped on arrival — at exactly
+ * the rate the gathering exists to avoid.
+ */
+export function isTaskFrame(event: AgentEvent): boolean {
+  return event.type === 'task_progress' || event.type === 'background_tasks'
+}
+
+/**
  * What a turn's ending amounts to, from the SDK's nineteen reasons.
  *
  * Grouped rather than passed through: nineteen localised strings would be

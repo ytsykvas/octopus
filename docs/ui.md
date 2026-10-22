@@ -103,7 +103,9 @@ dialog switches off the window's own keys.
 A quiet sound goes with it (`sound.ts`), no more than once in 1.5s, so several
 agents finishing together ring once. The default is a chime synthesised with Web
 Audio: rising for finished, one note for a wait, falling for an error, at a
-twentieth of full volume. Settings → General can pick one of the files in
+twentieth of full volume. The context is suspended once the chime is over and
+woken by the next: left running, it kept the audio thread and the device awake
+for as long as the window lived, after a sound that lasted half a second. Settings → General can pick one of the files in
 `assets/sounds/` instead (`notificationSoundId`); a file sounds the same for
 every kind of news. Files work because each is over 4KB: Vite inlines anything
 smaller as a `data:` URL, which the window's CSP refuses for media, and serves
@@ -557,29 +559,59 @@ What the library is handed has to keep its identity. It caches a message by the
 object it was given and the part renderers by the object they came in, so a map
 or an arrow function rebuilt inside the render makes every row re-render by
 itself: measured under jsdom, 592 ms for one update at a thousand turns with
-them inline and 18 ms with them hoisted. `toThreadMessages` is held against the
-blocks, and the part map, the message renderer and the converter are module
-constants. Token streaming never goes through the runtime, which also sidesteps
-an open upstream issue where the cost of each update grows with the thread's
-length. Nor does it go through the log's props: `useStreaming` gathers the
-fragments and draws them every 50 ms, and hands them to `StreamingContext`,
-which only the tail below the thread reads — so a token renders that tail and
-nothing above it. Dependency pinned
-to an exact version: it is 0.x and its minors have broken things.
+them inline and 18 ms with them hoisted. The part map, the message renderer and
+the converter are module constants, and `toThreadMessages` hands a turn over as
+the same message for as long as its blocks are the same objects — which
+`buildBlocks` sees to by wrapping each entry and each call once (`logBlocks.ts`
+keeps the wrappers in `WeakMap`s, as it already kept the calls). Measured under
+jsdom at 600 turns, one line appended to the log cost 188 ms with every message
+rebuilt, 70 ms with the blocks stable and the messages still new, 10 ms with
+both held: the library converts and re-walks every message it has not seen.
+Token streaming never goes through the runtime, which also sidesteps an open
+upstream issue where the cost of each update grows with the thread's length.
+Nor does it go through the log's props, nor through anybody's state:
+`useStreaming` gathers the fragments and publishes them every 50 ms into a
+store of the conversation's own, which `StreamingContext` carries and only the
+tail below the thread reads, through `useSyncExternalStore` — so a flush
+renders that tail and nothing else, where as state of the hook it rendered the
+whole pane, composer and pickers included, twenty times a second. The hook's
+own state says only whether something is being written, which is what the
+empty placeholder asks. A pane nobody can see — behind another tab, behind a
+file — gathers and draws nothing, and draws what gathered the moment it comes
+forward. And past 1 500 characters the tail itself is drawn in two parts
+(`streamedText.ts`): everything up to the last blank line that precedes a
+paragraph or heading, outside any fence, parsed once and kept by `Markdown`'s
+memo, and the moving remainder — so a long reply no longer costs its whole
+length at every flush. The final text arrives whole in its own event and is
+parsed whole. Dependency pinned to an exact version: it is 0.x and its minors
+have broken things.
 
-The rows' own props travel in a context rebuilt on every render, so every row
-re-renders with the log — which is why the log is memoised and `ChatSession`
-holds every prop it hands it still. It then renders when the conversation does,
-not on each poll or keystroke in the pane around it. `Markdown` is memoised on
-its text, so a row drawn again does not parse it again; parsing was what a poll
-or a token used to cost across the whole conversation. `ToolRow` is memoised on its call and the turn's
-state, and reads what it needs to open a file from a context held still, so a
-streamed token leaves the tool rows alone. The blocks are rebuilt each time the
-log grows, but a call none of whose parts moved is handed back as the same
-object, so an append redraws the rows that changed rather than all of them.
-Measured under jsdom at 500 calls against the log before this shape: a streamed
-token 27 → 8 ms, an append 72 → 50 ms. Whether the log is expanded is a
-context of its own for the same reason: it changes on a press, not per render.
+The rows' own props travel in a context, built once per change of anything in
+it: what the rows share — the answers by request, the calls that were plans,
+what the agent took back — is gathered from the whole log on every append and
+handed on as the object it was last time while it reads the same
+(`useSameValue`), so a line appended at the end leaves every row above it
+alone, and the turn ending redraws them all, once. The log itself is memoised,
+and `ChatSession` holds every prop it hands it still, down to the announcer
+`useChat` is given for a record it creates, which the pane writes inline and
+the hook keeps in a ref: taken as it came, it made every setting's callback —
+and the log's "carry out this plan" — new on each render of the pane. `Markdown`
+is memoised on its text, so a row drawn again does not parse it again; parsing
+was what a poll or a token used to cost across the whole conversation.
+`ToolRow` is memoised on its call and the turn's state, and reads what it needs
+to open a file from a context held still, so a streamed token leaves the tool
+rows alone. Whether the log is expanded is a context of its own for the same
+reason: it changes on a press, not per render.
+
+The tasks beside the conversation are the one thing that moves while nothing
+is appended: progress arrives for every working agent up to five times a
+second. `AgentsContext` therefore holds still — the pane's three callbacks and
+a store (`agentTasks.ts`) the pane publishes each list into before the paint —
+and every reader takes what it draws through `useSyncExternalStore`: a tool row
+its own task, the chip and the map the list, the working line under the log
+the count of agents away. A row is redrawn when its task is a different object,
+which the core sees to only when the task moved; the log, which used to read
+the list itself and redraw every row with each arrival, no longer reads it.
 
 **Not moved: the composer.** The slash list and the `@` list were built here, on
 the field's own keys, with the draft kept per tab, an IME guard on every key, a
@@ -696,13 +728,16 @@ outside it. It is the one deliberate exception to panes taking borders rather
 than shadows (§10.2 of PROJECT.md).
 
 Three layers. The line is a span of its own, `.composer-ring-line`, the
-frame's first child: a conic gradient masked down to its 1.5px edge. Under the
-contents, the frame's `::before` is a fill of its own surface, and its `::after`
-is the glow, the gradient blurred, beneath that. The fill is what keeps the
-glow outside — a mask cut the blur off in a hard rectangle, since a mask clips
-at the edge of its own box. The frame takes `z-index: 20` to hold those layers:
-`isolation` would have done it at level zero, and the menus that open upwards
-out of the frame then slid under the log's floating day chip.
+frame's first child: a square of the gradient, big enough to cover the frame
+at any angle, clipped to the frame's rounded box. Over its middle, one level
+up, the frame's `::before` is a fill of its own surface, so only the square's
+outer pixel shows; beneath both, the frame's `::after` is the glow, the
+gradient blurred. The fill is what keeps the glow outside — a mask cut the blur
+off in a hard rectangle, since a mask clips at the edge of its own box. The
+frame takes `z-index: 20` to hold those layers: `isolation` would have done it
+at level zero, and the menus that open upwards out of the frame then slid under
+the log's floating day chip. The same three layers draw the ring everywhere
+else it is worn, from one block of rules in `styles.css`.
 
 A gradient cannot be transitioned into a flat colour, so the plain border is
 the frame's own and the fade is by opacity: the border to transparent, the line
@@ -715,18 +750,20 @@ sparkle icon and the width of its words. There the line is faint at rest and
 turns only under the pointer or keyboard focus, never the glow; once the title
 has text, the button is the plain accent "Open pull request" again.
 
-**The line turns while focus is inside the composer, and nothing else moves.**
-It turns its gradient's own angle (`--ring-angle`, registered with `@property`
-so it interpolates) once every six seconds; the glow stays still and only
-brightens. The split is the whole reason it is affordable. The first turning
-versions kept the line and the fill in one layer and turned the gradient
-under the glow as well, so every frame re-blurred it: measured in an isolated
-page on the same Electron, that held ~17% of a core while it ran (an earlier
-in-app reading put it at 29%), and a compositor rotation 6–8% for as long as
-the window was on screen. Turning only the line measured ~0.5% while focused —
-no different from the still ring — and no change in memory; unfocused it costs
-nothing at all, and now nothing is lit either. So there is no pause for an inactive window either: there is
-nothing measurable to save. Reduced motion stops it with every other animation.
+**Nothing in the composer's ring moves.** It did: the line turned its
+gradient's own angle (`--ring-angle`, registered with `@property` so it
+interpolates) once every six seconds, measured at ~0.5% of a core on an empty
+page and shipped on that figure. Measured again in the window with a log of
+some thousands of nodes on screen, the same animation held 25–30% of a core
+for as long as the composer had focus — which is most of the time — because a
+registered property animating on the main thread recomputes style every
+frame, and a frame costs what the page does. Turning the square by `transform`
+instead, which the compositor does on its own, measured 14%, of which 9% is
+what any animation at all costs this window: a 10px square turning alone
+measures the same. The composer's line is therefore still, and so is the
+agents chip's, which would otherwise turn for as long as an agent works. The
+two buttons' lines still turn under the pointer, on the compositor, which is
+brief. Reduced motion stops those with every other animation.
 
 **The field is set in Menlo**, at 13px — `--font-prompt`, falling back to the
 mono stack. A prompt is closer to code than to prose, and the maintainer chose
@@ -2725,6 +2762,15 @@ means a fold resizes no terminal, so a running server is not sent a resize on
 every fold and unfold. While folded no tab counts as visible,
 so nothing in it reads git, and the tab row is measured again on unfolding.
 
+A change of size that does reach a terminal is gathered for a tenth of a second
+before it is fitted (`REFIT_MS` in `Terminal.tsx`): a pane being dragged
+changes size on every frame, and every terminal in it — the offstage ones
+included, since they keep their layout — fitted itself, reflowed its
+scrollback and had its pty signalled sixty times a second each. Gathered, a
+drag costs ten fits a second per terminal and ends on the size it ended on, and
+a fit that moved nothing — a box that changed by less than a cell — signals
+the pty nothing, so whatever runs in it is not made to redraw for nothing.
+
 The fold is kept across launches (`rightPanelOpen`), and every way of unfolding
 — the header's button, ⌘⇧D, ⌘⇧E, opening a pull request — writes it, the tab
 riding in the same write. Dragging the edge well past the floor folds it too, as
@@ -3099,10 +3145,17 @@ measured from a sample of the real monospace face — the cell differs by platfo
 font and zoom. Below that width the toggle stays visible and disabled, saying
 why, and the view falls back to one column without touching what was asked for.
 
-**Syntax colours arrive after the diff does.** A side of a file is tokenised
-whole rather than line by line, or a block comment is coloured wrongly from its
-second line on. Nothing waits for a grammar: an unhighlighted line is drawn in
-`--ink`, and a highlighter that never starts costs the reader only the colours.
+**Syntax colours arrive after the diff does, and only for the files that are
+open.** A side of a file is tokenised whole rather than line by line, or a
+block comment is coloured wrongly from its second line on. Nothing waits for a
+grammar: an unhighlighted line is drawn in `--ink`, and a highlighter that
+never starts costs the reader only the colours. Every file starts folded, and
+colouring both whole sides of each — a one-line edit in a 3 000-line file is
+6 000 lines tokenised, on the main thread — spent the window on lines nobody
+could see, on every read of the diff, which is every turn's end. So
+`useHighlighting` takes the set of open paths beside the diff: a file is
+coloured when it is opened, keeps its colours while the diff stands, and
+"expand all" colours them all as it did before.
 
 **And the whole side means the whole file, not the hunks joined up.** Joining
 them left a construct opened in the gap between two hunks invisible, so the hunk

@@ -45,8 +45,9 @@ export const DAY_PART = 'day'
  *
  * The identity of what is handed over matters to the library: it caches a
  * message by the object it was given, and rebuilding every message on every
- * change makes it re-walk the thread. So this is held against the blocks by the
- * caller, and each message is a fresh object only because its turn changed.
+ * change makes it re-walk the thread — and draw every row of it. So a turn
+ * whose parts are the same objects as last time is handed over as the same
+ * message, and only the turn that grew is a fresh one.
  */
 export function toThreadMessages(
   blocks: readonly LogBlock[],
@@ -80,28 +81,32 @@ export function toThreadMessages(
     const [first] = turn
     if (first === undefined) return
 
-    messages.push({
-      id: `agent-${String(first.at)}`,
-      role: 'assistant',
-      content: [
-        ...opening(first),
-        ...turn.map((block) => ({ type: 'data' as const, name: BLOCK_PART, data: block }))
-      ],
-      // The runtime is never "running": the log draws its own working marker,
-      // and a library-owned one would be a second.
-      status: { type: 'complete', reason: 'stop' }
-    })
+    messages.push(
+      remembered(first, {
+        id: `agent-${String(first.at)}`,
+        role: 'assistant',
+        content: [
+          ...opening(first),
+          ...turn.map((block) => ({ type: 'data' as const, name: BLOCK_PART, data: block }))
+        ],
+        // The runtime is never "running": the log draws its own working marker,
+        // and a library-owned one would be a second.
+        status: { type: 'complete', reason: 'stop' }
+      })
+    )
     turn = []
   }
 
   for (const block of blocks) {
     if (block.kind === 'entry' && block.entry.role === 'user') {
       flush()
-      messages.push({
-        id: `user-${String(block.at)}`,
-        role: 'user',
-        content: [...opening(block), { type: 'data', name: BLOCK_PART, data: block }]
-      })
+      messages.push(
+        remembered(block, {
+          id: `user-${String(block.at)}`,
+          role: 'user',
+          content: [...opening(block), { type: 'data', name: BLOCK_PART, data: block }]
+        })
+      )
       continue
     }
 
@@ -110,4 +115,46 @@ export function toThreadMessages(
 
   flush()
   return messages
+}
+
+/** A part as this module makes them: a block, or the key of a day. */
+interface Part {
+  readonly type: 'data'
+  readonly name: string
+  readonly data: unknown
+}
+
+/**
+ * The message each turn was last handed over as, by the block the turn opens
+ * with — which the log keeps as it is from one append to the next, so it
+ * names the turn for as long as the turn exists.
+ */
+const built = new WeakMap<LogBlock, ThreadMessageLike & { readonly content: readonly Part[] }>()
+
+/**
+ * The message as last built when nothing in it moved; the fresh one otherwise.
+ *
+ * The parts are compared one by one rather than the arrays: the array is new
+ * every time, and what the rows are memoised on is the block each part
+ * carries. A turn's day mark compares by its key.
+ */
+function remembered(
+  first: LogBlock,
+  fresh: ThreadMessageLike & { readonly content: readonly Part[] }
+): ThreadMessageLike {
+  const last = built.get(first)
+  if (
+    last !== undefined &&
+    last.id === fresh.id &&
+    last.content.length === fresh.content.length &&
+    last.content.every((part, index) => {
+      const other = fresh.content[index]
+      return other?.name === part.name && other.data === part.data
+    })
+  ) {
+    return last
+  }
+
+  built.set(first, fresh)
+  return fresh
 }

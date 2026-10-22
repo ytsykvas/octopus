@@ -165,3 +165,44 @@ describe('the log as the library sees it', () => {
     })
   })
 })
+
+/*
+ * The library caches a message by the object it was handed and re-walks the
+ * thread — and draws every row — for a message it has not seen. So a turn
+ * whose blocks are the same objects is handed over as the same message.
+ */
+describe('a turn the library has already been handed', () => {
+  it('is the same message when nothing in it moved', () => {
+    const asked = user(0, 'hi')
+    const reply = said(1, 'ok')
+    const before = messagesOf(asked, reply)
+
+    const after = messagesOf(asked, reply, user(2, 'more'))
+
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).toBe(before[1])
+    expect(after).toHaveLength(3)
+  })
+
+  it('is a fresh message once a block joined it', () => {
+    const asked = user(0, 'hi')
+    const reply = said(1, 'ok')
+    const before = messagesOf(asked, reply)
+
+    const after = messagesOf(asked, reply, said(2, 'and more'))
+
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).not.toBe(before[1])
+  })
+
+  it('is a fresh message when it now opens a day it did not before', () => {
+    const asked = user(1, 'hi')
+    const before = messagesOf(said(0, 'first', AT), asked)
+    expect(days(before)).toEqual(['2026-08-13', null])
+
+    const after = messagesOf(said(0, 'first', '2026-08-11T09:00:00.000Z'), asked)
+
+    expect(days(after)).toEqual(['2026-08-11', '2026-08-13'])
+    expect(after[1]).not.toBe(before[1])
+  })
+})

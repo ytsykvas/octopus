@@ -1162,3 +1162,25 @@ describe('useWorkspaces', () => {
     })
   })
 })
+
+describe('the list of every workspace', () => {
+  // Every memo downstream takes it, and one made anew on each render of the
+  // window was a new value for all of them on every render.
+  it('is the same list until a workspace changes', async () => {
+    vi.mocked(window.octopus.workspaces.list).mockResolvedValue({ ok: true, value: [anna, bob] })
+    // The same projects each time, as the window hands them: a new list of
+    // projects is a reason to read the workspaces again.
+    const projects = [planner]
+    const { result, rerender } = renderHook(() =>
+      useWorkspaces(projects, accepts(), vi.fn<OnError>())
+    )
+    await waitFor(() => {
+      expect(result.current.flat).toHaveLength(2)
+    })
+    const before = result.current.flat
+
+    rerender()
+
+    expect(result.current.flat).toBe(before)
+  })
+})

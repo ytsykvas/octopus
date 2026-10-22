@@ -88,7 +88,6 @@ export function DiffPanel({
   const { diff, sides, loading, error, refresh } = useWorkspaceDiff(workspace?.id ?? null, visible)
   // Measured only once there is a diff on screen: the sample lives in that
   // tree, and an element in a hidden subtree measures zero.
-  const tokens = useHighlighting(diff, sides)
   const { threshold, sample } = useSplitThreshold(visible && (diff?.files.length ?? 0) > 0)
 
   /*
@@ -179,6 +178,12 @@ export function DiffPanel({
     new Map()
   )
   const choices = choicesIn.get(workspace?.id ?? '') ?? NO_CHOICES
+  // The files the reader has opened, which are the ones worth colouring.
+  const openFiles = useMemo(
+    () => new Set([...choices].filter(([, collapsed]) => !collapsed).map(([path]) => path)),
+    [choices]
+  )
+  const tokens = useHighlighting(diff, sides, openFiles)
   /** Where the open note sits; one at a time across the whole pane. */
   const [editing, setEditing] = useState<CommentAnchor | null>(null)
   const [selected, setSelected] = useState<Passage | null>(null)
@@ -223,7 +228,10 @@ export function DiffPanel({
    */
   useEffect(() => {
     const node = scroller.current
-    if (!node) return
+    // Only while the pane is on screen: the listener walks every drawn line
+    // of the diff for a selection made anywhere in the document, and a drag
+    // across the chat was paying for a pane behind another tab.
+    if (!node || !visible) return
 
     const read = (): void => {
       setSelected(passageIn(node, window.getSelection()))
@@ -236,7 +244,7 @@ export function DiffPanel({
       document.removeEventListener('selectionchange', read)
       node.removeEventListener('scroll', read)
     }
-  }, [diff])
+  }, [diff, visible])
 
   /*
    * The four things a file row is handed that are not plain data.
