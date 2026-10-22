@@ -7,6 +7,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { availableParallelism } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 
 import { z } from 'zod'
@@ -491,6 +492,8 @@ export interface ServiceOptions {
   readonly commandExec?: CommandExec
   /** `ps` and `lsof`, injected so a test reads a process table of its own. */
   readonly processExec?: ProcessExec
+  /** The machine's core count, injected so a test's CPU figures do not depend on the machine. */
+  readonly cores?: number
   /**
    * `gh` in a worktree, injected for the reason the two above are: a test that
    * used the real one would open pull requests on somebody's repository.
@@ -1660,6 +1663,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const listening = options.listening ?? isListening
   const strays = options.strays ?? defaultStrayDeps
   const processExec = options.processExec ?? defaultProcessExec
+  const cores = options.cores ?? availableParallelism()
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
   const runQuery = options.query ?? withAgentBinary(defaultQuery, unpackedAgentBinary())
@@ -5269,7 +5273,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     measureResources(rootPid, terminals) {
       const workspaces = state.workspaces.map(({ id, path }) => ({ id, path }))
-      return readResources({ rootPid, terminals, workspaces }, processExec)
+      return readResources({ rootPid, terminals, workspaces, cores }, processExec)
     },
 
     async ensureWorkspacePort(workspaceId) {

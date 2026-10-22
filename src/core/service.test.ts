@@ -3870,10 +3870,11 @@ describe('what the application costs', () => {
     let workspacePath = ''
     const measuring = await createService({
       ...paths(dir),
+      cores: 2,
       processExec: (command) =>
         Promise.resolve(
           command === 'ps'
-            ? '10 1 1.0 100\n11 10 4.0 400\n12 10 2.0 200\n'
+            ? '10 1 2.0 100\n11 10 8.0 400\n12 10 4.0 200\n'
             : `p11\nfcwd\nn${workspacePath}\np12\nfcwd\nn/\n`
         )
     })
