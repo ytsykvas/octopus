@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   CircleAlert,
   CircleCheck,
+  CirclePause,
   CodeXml,
   GitBranchPlus,
   LoaderCircle,
@@ -198,6 +199,7 @@ const MOOD_ICONS: Record<WorkspaceMood, LucideIcon> = {
   running: LoaderCircle,
   waiting: MessageCircleQuestion,
   error: CircleAlert,
+  interrupted: CirclePause,
   done: CircleCheck,
   idle: CodeXml
 }
@@ -230,7 +232,7 @@ function StatusMark({ workspace }: { workspace: WorkspaceView }): React.JSX.Elem
           const described = t('chat.tabStatus', {
             name:
               chat.title ?? t('chat.tab', { agent: AGENT_NAMES[chat.agent], number: index + 1 }),
-            state: t(chatStatusLabel(chat.status, chat.started))
+            state: t(chatStatusLabel(chat))
           })
 
           return (
@@ -239,7 +241,7 @@ function StatusMark({ workspace }: { workspace: WorkspaceView }): React.JSX.Elem
               role="img"
               aria-label={described}
               title={described}
-              className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(chat.status, chat.started)}`}
+              className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(chat)}`}
             />
           )
         })}

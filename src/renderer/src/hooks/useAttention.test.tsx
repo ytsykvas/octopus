@@ -66,7 +66,15 @@ describe('useAttention', () => {
       ...ANNA,
       status,
       chats: [
-        { id: 'c-1', agent: 'claude', title: null, status, started: true, turnStartedAt: null }
+        {
+          id: 'c-1',
+          agent: 'claude',
+          title: null,
+          status,
+          started: true,
+          interrupted: false,
+          turnStartedAt: null
+        }
       ]
     })
     const { result, rerender } = render(BEN.id, [working('running'), BEN])
@@ -143,6 +151,7 @@ describe('useAttention', () => {
           title: null,
           status: 'waiting_permission' as const,
           started: true,
+          interrupted: false,
           turnStartedAt: null
         }
       ]

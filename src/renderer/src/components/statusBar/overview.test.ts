@@ -33,6 +33,7 @@ describe('agents in one state', () => {
           title: null,
           status: 'running',
           started: true,
+          interrupted: false,
           turnStartedAt: null
         },
         {
@@ -41,6 +42,7 @@ describe('agents in one state', () => {
           title: null,
           status: 'waiting_permission',
           started: true,
+          interrupted: false,
           turnStartedAt: null
         }
       ]

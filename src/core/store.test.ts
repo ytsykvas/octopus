@@ -96,6 +96,7 @@ function storedChat(overrides: Partial<Chat> = {}): Chat {
     workspaceId: 'planner/kyiv',
     agent: 'claude',
     status: 'idle',
+    interrupted: false,
     title: null,
     sessionId: null,
     resumeAt: null,
@@ -189,6 +190,32 @@ describe('load and save', () => {
     expect(loaded.chats[0]?.status).toBe('idle')
     expect(loaded.workspaces[0]?.status).toBe('idle')
   })
+
+  /*
+   * Put down, but not as though it had finished: `idle` alone is drawn as done,
+   * and a turn the quit cut off mid-command was announced as finished work.
+   */
+  it.each(['running', 'waiting_permission'] as const)(
+    'remembers a turn left %s as interrupted',
+    async (status) => {
+      const working = addChat(addWorkspace(withProject, makeWorkspace()), storedChat({ status }))
+      await saveState(working, file, `${file}.tmp`)
+
+      const loaded = await loadState(file)
+      expect(loaded.chats[0]?.interrupted).toBe(true)
+    }
+  )
+
+  it.each(['idle', 'error'] as const)(
+    'does not call a conversation left %s interrupted',
+    async (status) => {
+      const resting = addChat(addWorkspace(withProject, makeWorkspace()), storedChat({ status }))
+      await saveState(resting, file, `${file}.tmp`)
+
+      const loaded = await loadState(file)
+      expect(loaded.chats[0]?.interrupted).toBe(false)
+    }
+  )
 
   it('leaves an error alone, which is a record rather than a session', async () => {
     const failed = addChat(
@@ -637,6 +664,7 @@ describe('chats', () => {
       workspaceId: 'planner/kyiv',
       agent: 'claude',
       status: 'idle',
+      interrupted: false,
       title: null,
       sessionId: null,
       resumeAt: null,
@@ -896,6 +924,7 @@ describe('the remembered model list', () => {
       workspaceId: 'planner/kyiv',
       agent: 'claude',
       status: 'idle',
+      interrupted: false,
       title: null,
       sessionId: null,
       model: null,
@@ -947,6 +976,17 @@ describe('the remembered model list', () => {
 
     const state = await loadState(file)
     expect(state.chats[0]?.resumeAt).toBeNull()
+  })
+
+  // Written before a cut-off turn was told apart from a finished one: it was
+  // not interrupted — and the file must still open.
+  it('loads a chat written before interruptions were remembered', async () => {
+    const { interrupted, ...older } = storedChat()
+    expect(interrupted).toBe(false)
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [older] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.interrupted).toBe(false)
   })
 
   // Written before a fork could start from a side answer: it was forked off
@@ -1006,6 +1046,7 @@ describe('the commands a chat remembers', () => {
     workspaceId: 'planner/kyiv',
     agent: 'claude',
     status: 'idle',
+    interrupted: false,
     title: null,
     sessionId: null,
     resumeAt: null,

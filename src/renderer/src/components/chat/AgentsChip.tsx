@@ -51,10 +51,11 @@ export function AgentsChip(): React.JSX.Element | null {
       : t('agents.chipDone')
 
   // The tab strip's dot for the same three states, so the two never disagree.
-  const dot = chatStatusTone(
-    waiting ? 'waiting_permission' : working > 0 ? 'running' : 'idle',
-    true
-  )
+  const dot = chatStatusTone({
+    status: waiting ? 'waiting_permission' : working > 0 ? 'running' : 'idle',
+    started: true,
+    interrupted: false
+  })
 
   return (
     <div ref={container} className="contents">

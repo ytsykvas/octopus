@@ -101,7 +101,7 @@ const emitChatStatus = (event: {
   refuseSilence(handlers.length, 'chats.onStatus')
 
   act(() => {
-    for (const handler of handlers) handler({ turnStartedAt: null, ...event })
+    for (const handler of handlers) handler({ interrupted: false, turnStartedAt: null, ...event })
   })
 }
 
@@ -172,6 +172,7 @@ describe('useWorkspaces', () => {
           title: null,
           status: 'idle' as const,
           started: true,
+          interrupted: false,
           turnStartedAt: null
         },
         {
@@ -180,6 +181,7 @@ describe('useWorkspaces', () => {
           title: null,
           status: 'idle' as const,
           started: true,
+          interrupted: false,
           turnStartedAt: null
         }
       ]
@@ -197,6 +199,39 @@ describe('useWorkspaces', () => {
     expect(result.current.flat[0]?.chats.map((item) => item.status)).toEqual(['idle', 'running'])
   })
 
+  /*
+   * The list copies the flag from the event rather than clearing it itself: the
+   * rule that a move ends it is the core's, and a conversation left holding it
+   * would read "Interrupted" again when the turn that resumed it ended.
+   */
+  it.each(['running', 'idle'] as const)(
+    'stops calling a conversation interrupted once it is announced %s',
+    async (status) => {
+      const cutOff = workspaceView('anna', {
+        chats: [
+          {
+            id: 'chat-1',
+            agent: 'claude' as const,
+            title: null,
+            status: 'idle' as const,
+            started: true,
+            interrupted: true,
+            turnStartedAt: null
+          }
+        ]
+      })
+      workspacesPerProject({ planner: [cutOff] })
+      const { result } = renderHook(() => useWorkspaces([planner], accepts(), vi.fn<OnError>()))
+      await waitFor(() => {
+        expect(result.current.flat).toHaveLength(1)
+      })
+
+      emitChatStatus({ chatId: 'chat-1', workspaceId: cutOff.id, status })
+
+      expect(result.current.flat[0]?.chats[0]).toMatchObject({ status, interrupted: false })
+    }
+  )
+
   // The strip knows its tabs and not when a turn began, which only the core
   // says; handing the list down must not wipe the start the core sent.
   it('keeps when a turn began across a list handed down by the pane', async () => {
@@ -206,7 +241,13 @@ describe('useWorkspaces', () => {
     await waitFor(() => {
       expect(result.current.flat).toHaveLength(1)
     })
-    const tab = { id: 'chat-1', agent: 'claude', title: null, started: true } as const
+    const tab = {
+      id: 'chat-1',
+      agent: 'claude',
+      title: null,
+      started: true,
+      interrupted: false
+    } as const
 
     act(() => {
       result.current.setChats(anna.id, [{ ...tab, status: 'idle' }])
@@ -238,7 +279,14 @@ describe('useWorkspaces', () => {
 
     act(() => {
       result.current.setChats(anna.id, [
-        { id: 'chat-1', agent: 'claude', title: null, status: 'running', started: true }
+        {
+          id: 'chat-1',
+          agent: 'claude',
+          title: null,
+          status: 'running',
+          started: true,
+          interrupted: false
+        }
       ])
     })
 
@@ -249,6 +297,7 @@ describe('useWorkspaces', () => {
         title: null,
         status: 'running',
         started: true,
+        interrupted: false,
         turnStartedAt: null
       }
     ])
@@ -382,6 +431,7 @@ describe('useWorkspaces', () => {
       title: null,
       status: 'running' as const,
       started: true,
+      interrupted: false,
       turnStartedAt: 'a'
     }
     workspacesPerProject({ planner: [{ ...anna, chats: [chat] }] })
@@ -425,6 +475,7 @@ describe('useWorkspaces', () => {
       title: null,
       status: 'running' as const,
       started: true,
+      interrupted: false,
       turnStartedAt: 'a'
     }
     workspacesPerProject({ planner: [{ ...anna, chats: [chat] }] })

@@ -402,6 +402,10 @@ export function workspaceStatusFrom(all: readonly Chat[]): Workspace['status'] {
  * app quit would come back claiming to be working, with nothing behind the
  * claim and nothing that would ever correct it.
  *
+ * Put down as `interrupted` rather than plain `idle`, which the window draws as
+ * finished: the turn was cut off, and the sidebar saying "done" over a worktree
+ * left mid-command is how nobody went back to it.
+ *
  * `error` stays. It is a record of something that happened rather than a
  * session still being waited on.
  *
@@ -413,7 +417,7 @@ export function workspaceStatusFrom(all: readonly Chat[]): Workspace['status'] {
 export function settleStatuses(state: State): State {
   const chats = state.chats.map((chat) =>
     chat.status === 'running' || chat.status === 'waiting_permission'
-      ? { ...chat, status: 'idle' as const }
+      ? { ...chat, status: 'idle' as const, interrupted: true }
       : chat
   )
 

@@ -16,6 +16,7 @@ export function chat(overrides: Partial<Chat> = {}): Chat {
     workspaceId: 'planner/anna',
     agent: 'claude',
     status: 'idle',
+    interrupted: false,
     title: null,
     sessionId: null,
     resumeAt: null,
@@ -105,7 +106,8 @@ export function emitChatStatus(
 
   act(() => {
     for (const handler of handlers) {
-      handler({ chatId, workspaceId, status, turnStartedAt })
+      // False on every status the core announces: any move ends an interruption.
+      handler({ chatId, workspaceId, status, interrupted: false, turnStartedAt })
     }
   })
 }

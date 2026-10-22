@@ -7,8 +7,15 @@
  * colours in one should not have to learn them again in the other.
  */
 
-import type { ChatStatus } from '@core/chats.js'
-import type { WorkspaceView } from '@core/workspaces.js'
+import type { WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
+
+/**
+ * What a conversation's dot and its name for it are read from.
+ *
+ * One object rather than three arguments, two of them booleans that read the
+ * same at the call site. The list's summary and the strip's tab both carry it.
+ */
+export type ChatState = Pick<WorkspaceChat, 'status' | 'started' | 'interrupted'>
 
 /**
  * What the agent is doing there, when it is doing anything.
@@ -42,6 +49,16 @@ export const EMPTY_TONE = 'border-ink-faint border'
 export const DONE_TONE = 'bg-success'
 
 /**
+ * A conversation whose last turn the application's exit cut off.
+ *
+ * The waiting colour, because it means the same thing — the work stopped and
+ * goes nowhere until you act — but a ring rather than a dot: in the tile of
+ * several conversations and in the tab strip there is no icon to tell the two
+ * apart, and "it is asking you something" is not what happened here.
+ */
+export const INTERRUPTED_TONE = 'border-warning border'
+
+/**
  * The label for each tone.
  *
  * Written out rather than built from the status: `t` is typed against the
@@ -59,8 +76,8 @@ export const AGENT_LABELS: Partial<
   error: 'workspaces.statusError'
 }
 
-/** The five things a workspace row can say about its agent. */
-export type WorkspaceMood = 'running' | 'waiting' | 'error' | 'done' | 'idle'
+/** The six things a workspace row can say about its agent. */
+export type WorkspaceMood = 'running' | 'waiting' | 'error' | 'interrupted' | 'done' | 'idle'
 
 /**
  * What a workspace row says about its agent, in a word and in a colour.
@@ -76,6 +93,7 @@ export const WORKSPACE_MOODS: Record<
       | 'workspaces.lineRunning'
       | 'workspaces.lineWaiting'
       | 'workspaces.lineError'
+      | 'workspaces.lineInterrupted'
       | 'workspaces.lineDone'
       | 'workspaces.lineIdle'
     text: string
@@ -84,16 +102,19 @@ export const WORKSPACE_MOODS: Record<
   running: { line: 'workspaces.lineRunning', text: 'text-accent' },
   waiting: { line: 'workspaces.lineWaiting', text: 'text-warning' },
   error: { line: 'workspaces.lineError', text: 'text-danger' },
+  interrupted: { line: 'workspaces.lineInterrupted', text: 'text-warning' },
   done: { line: 'workspaces.lineDone', text: 'text-success' },
   idle: { line: 'workspaces.lineIdle', text: 'text-ink-faint' }
 }
 
 /**
- * Which of the five a workspace is in.
+ * Which of the six a workspace is in.
  *
- * `idle` is the one status that is two states, as it is for a conversation: a
- * workspace where a session has run and stopped is finished, and one nobody has
- * written in is not started. `started` on the chats is what tells them apart.
+ * `idle` is the one status that is three states, as it is for a conversation: a
+ * workspace where a session has run and stopped is finished, one nobody has
+ * written in is not started, and one whose turn the application's exit cut off
+ * is interrupted. That last one wins over finished: a single conversation left
+ * mid-command is the reason to go back, whatever the others did.
  */
 export function workspaceMood(workspace: WorkspaceView): WorkspaceMood {
   switch (workspace.status) {
@@ -104,6 +125,7 @@ export function workspaceMood(workspace: WorkspaceView): WorkspaceMood {
     case 'error':
       return 'error'
     case 'idle':
+      if (workspace.chats.some((chat) => chat.interrupted)) return 'interrupted'
       return workspace.chats.some((chat) => chat.started) ? 'done' : 'idle'
   }
 }
@@ -113,27 +135,33 @@ export function workspaceMood(workspace: WorkspaceView): WorkspaceMood {
  *
  * A tab's dot is always there — the strip would jump by six pixels the moment a
  * turn started otherwise — so the quiet states need something to be called, and
- * there are two of them: one where a turn ended and one where none has run.
+ * there are three of them: one where a turn ended, one where the application's
+ * exit cut it off, and one where none has run.
  */
-export function chatStatusLabel(
-  status: ChatStatus,
-  started: boolean
-):
+export function chatStatusLabel({
+  status,
+  started,
+  interrupted
+}: ChatState):
   | 'workspaces.statusRunning'
   | 'workspaces.statusWaiting'
   | 'workspaces.statusError'
+  | 'chat.tabStatusInterrupted'
   | 'chat.tabStatusDone'
   | 'chat.tabStatusIdle' {
+  if (interrupted) return 'chat.tabStatusInterrupted'
   return AGENT_LABELS[status] ?? (started ? 'chat.tabStatusDone' : 'chat.tabStatusIdle')
 }
 
 /**
  * The tone for a conversation.
  *
- * `started` only decides the quiet case. A conversation that is running, or
- * waiting, or ended in an error has something to say about right now, and how
- * it began is not part of it.
+ * `started` and `interrupted` only decide the quiet case. A conversation that
+ * is running, or waiting, or ended in an error has something to say about
+ * right now, and how it began is not part of it — and `interrupted` is only
+ * ever set on an `idle` one, so asking it first changes nothing for the rest.
  */
-export function chatStatusTone(status: ChatStatus, started: boolean): string {
+export function chatStatusTone({ status, started, interrupted }: ChatState): string {
+  if (interrupted) return INTERRUPTED_TONE
   return AGENT_TONES[status] ?? (started ? DONE_TONE : EMPTY_TONE)
 }

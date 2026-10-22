@@ -137,6 +137,8 @@ export interface WorkspaceChat {
    * session id is written the moment the agent answers and kept afterwards.
    */
   readonly started: boolean
+  /** Whether its last turn was cut off by the application exiting — `Chat['interrupted']`. */
+  readonly interrupted: boolean
   /**
    * When the turn under way began, or null between turns.
    *
@@ -670,6 +672,7 @@ export function viewOf(
       title: chat.title,
       status: chat.status,
       started: chat.sessionId !== null,
+      interrupted: chat.interrupted,
       turnStartedAt: turnStarts.get(chat.id) ?? null
     }))
 

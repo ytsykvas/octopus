@@ -57,6 +57,7 @@ describe('a new chat', () => {
       workspaceId: 'planner/kyiv',
       agent: 'claude',
       status: 'idle',
+      interrupted: false,
       title: null,
       sessionId: null,
       resumeAt: null,
@@ -749,6 +750,7 @@ describe('a conversation continuing another', () => {
     workspaceId: 'planner/kyiv',
     agent: 'claude',
     status: 'running',
+    interrupted: false,
     title: null,
     sessionId: 'session-old',
     resumeAt: null,
@@ -773,6 +775,17 @@ describe('a conversation continuing another', () => {
     id: 'chat-2',
     sessionId: 'session-new',
     createdAt: '2026-08-11T10:00:00.000Z'
+  })
+
+  // The source's cut-off turn is the source's to report: the fork has not had
+  // a turn of its own yet.
+  it('does not inherit an interruption', () => {
+    expect(
+      forkChat(
+        { ...source, interrupted: true },
+        { id: 'chat-2', sessionId: 'sess-2', createdAt: 'x' }
+      ).interrupted
+    ).toBe(false)
   })
 
   it('is its own record in the same workspace', () => {

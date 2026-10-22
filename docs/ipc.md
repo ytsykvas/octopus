@@ -273,7 +273,7 @@ turn, to learn what the main process had already decided. It says nothing about
 a conversation, which is why it is not folded into the one above — the list that
 draws it is not looking at a chat.
 
-**`chats:status`** carries `{ chatId, workspaceId, status, turnStartedAt }` — the last when the turn under way began, kept by the service by the same rule the working line reads a log with (`turns.ts`), so the status bar can count a turn whose log no window has loaded. The twin of the
+**`chats:status`** carries `{ chatId, workspaceId, status, interrupted, turnStartedAt }` — `interrupted` false on every one, since any move ends it, and said rather than assumed so the rule lives in core alone; the last when the turn under way began, kept by the service by the same rule the working line reads a log with (`turns.ts`), so the status bar can count a turn whose log no window has loaded. The twin of the
 one above, a level in: the tab strip draws a conversation while
 the list draws its workspace, and the two move at different moments — a second
 conversation finishing leaves a workspace whose first is still running exactly

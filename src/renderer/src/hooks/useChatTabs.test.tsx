@@ -1090,6 +1090,38 @@ describe('what each conversation is doing', () => {
   })
 })
 
+/*
+ * Cleared by the core on any move and said on the event, so the strip copies
+ * it rather than working the rule out — a tab left holding `true` would come
+ * back "interrupted" at the end of the very turn that resumed it.
+ */
+describe('a conversation the quit cut off', () => {
+  it('stops being interrupted once its status moves', async () => {
+    givenChats([chat({ interrupted: true })])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.interrupted).toBe(true)
+    })
+
+    emitChatStatus('chat-1', 'running')
+
+    expect(result.current.tabs[0]).toMatchObject({ status: 'running', interrupted: false })
+  })
+
+  // The status alone is not what decides whether the tab moved.
+  it('takes the flag even when the status holds', async () => {
+    givenChats([chat({ interrupted: true })])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.interrupted).toBe(true)
+    })
+
+    emitChatStatus('chat-1', 'idle')
+
+    expect(result.current.tabs[0]?.interrupted).toBe(false)
+  })
+})
+
 describe('a status that moves nothing', () => {
   // Announced several times a turn, and every tab is memoised on the list.
   it('leaves the tabs as they were', async () => {

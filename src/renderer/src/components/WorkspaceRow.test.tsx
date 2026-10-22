@@ -123,6 +123,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'running' as const,
             started: true,
+            interrupted: false,
             turnStartedAt: null
           },
           {
@@ -131,6 +132,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'waiting_permission' as const,
             started: true,
+            interrupted: false,
             turnStartedAt: null
           },
           {
@@ -139,6 +141,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'idle' as const,
             started: true,
+            interrupted: false,
             turnStartedAt: null
           }
         ]
@@ -167,6 +170,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'idle',
             started: true,
+            interrupted: false,
             turnStartedAt: null
           },
           {
@@ -175,6 +179,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'idle',
             started: false,
+            interrupted: false,
             turnStartedAt: null
           }
         ]
@@ -198,6 +203,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'error',
             started: true,
+            interrupted: false,
             turnStartedAt: null
           },
           {
@@ -206,6 +212,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'running',
             started: false,
+            interrupted: false,
             turnStartedAt: null
           }
         ]
@@ -227,6 +234,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'error' as const,
             started: true,
+            interrupted: false,
             turnStartedAt: null
           },
           {
@@ -235,6 +243,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'idle' as const,
             started: true,
+            interrupted: false,
             turnStartedAt: null
           }
         ]
@@ -256,6 +265,7 @@ describe('WorkspaceRow', () => {
             title: null,
             status: 'running' as const,
             started: true,
+            interrupted: false,
             turnStartedAt: null
           }
         ]
@@ -452,6 +462,7 @@ describe('WorkspaceRow', () => {
               title: null,
               status: 'idle',
               started: true,
+              interrupted: false,
               turnStartedAt: null
             }
           ]
@@ -473,6 +484,7 @@ describe('WorkspaceRow', () => {
               title: null,
               status: 'idle',
               started: false,
+              interrupted: false,
               turnStartedAt: null
             }
           ]
@@ -481,6 +493,69 @@ describe('WorkspaceRow', () => {
 
       expect(screen.getByText('Not started')).toHaveClass('text-ink-faint')
       expect(screen.queryByText('Finished')).not.toBeInTheDocument()
+    })
+
+    /*
+     * The application quit or restarted in the middle of a turn. `idle` alone
+     * read as finished, and a worktree left mid-command was announced as done.
+     */
+    it('says a workspace whose turn the quit cut off is interrupted', () => {
+      renderRow({
+        workspace: workspaceView('anna', {
+          status: 'idle',
+          chats: [
+            {
+              id: 'chat-1',
+              agent: 'claude' as const,
+              title: null,
+              status: 'idle',
+              started: true,
+              interrupted: true,
+              turnStartedAt: null
+            }
+          ]
+        })
+      })
+
+      expect(screen.getByText('Interrupted')).toHaveClass('text-warning')
+      expect(screen.queryByText('Finished')).not.toBeInTheDocument()
+      expect(document.querySelector('.lucide-circle-pause')).not.toBeNull()
+    })
+
+    // One conversation left mid-command is the reason to go back, whatever
+    // the others did — but one at work still says what is happening now.
+    it.each([
+      ['idle', 'Interrupted'],
+      ['running', 'Working']
+    ] as const)('says a workspace that is %s with one conversation cut off', (status, word) => {
+      renderRow({
+        workspace: workspaceView('anna', {
+          status,
+          chats: [
+            {
+              id: 'chat-1',
+              agent: 'claude' as const,
+              title: null,
+              status,
+              started: true,
+              interrupted: false,
+              turnStartedAt: null
+            },
+            {
+              id: 'chat-2',
+              agent: 'claude' as const,
+              title: null,
+              status: 'idle',
+              started: true,
+              interrupted: true,
+              turnStartedAt: null
+            }
+          ]
+        })
+      })
+
+      expect(screen.getByText(word)).toBeInTheDocument()
+      expect(screen.getByLabelText('Claude 2: interrupted')).toHaveClass('border-warning')
     })
 
     it('puts the change count after the state', () => {

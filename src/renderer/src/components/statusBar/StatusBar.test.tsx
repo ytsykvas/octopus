@@ -18,6 +18,7 @@ const chat = (overrides: Partial<WorkspaceChat> = {}): WorkspaceChat => ({
   title: null,
   status: 'idle',
   started: true,
+  interrupted: false,
   turnStartedAt: null,
   ...overrides
 })

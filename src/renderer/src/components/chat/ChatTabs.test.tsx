@@ -17,6 +17,7 @@ function tab(overrides: Partial<ChatTab> = {}): ChatTab {
     title: null,
     status: 'idle',
     started: true,
+    interrupted: false,
     ...overrides
   }
 }
@@ -87,6 +88,19 @@ describe('the strip', () => {
     expect(
       screen.getByRole('button', { name: 'Claude 1: Waiting for your answer' })
     ).toBeInTheDocument()
+  })
+
+  /*
+   * Cut off by the application's exit, which `idle` alone would draw as
+   * finished. A ring in the waiting colour, so it stays apart from the solid
+   * amber of a question where the dot is all there is.
+   */
+  it('says a conversation the quit cut off was interrupted', () => {
+    render(<ChatTabs tabs={controller({ tabs: [tab({ interrupted: true })] })} />)
+
+    const button = screen.getByRole('button', { name: 'Claude 1: interrupted' })
+    expect(button.querySelector('.border-warning')).not.toBeNull()
+    expect(button.querySelector('.bg-success')).toBeNull()
   })
 
   it('switches on a click', async () => {
