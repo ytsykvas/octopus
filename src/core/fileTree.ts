@@ -593,7 +593,10 @@ export function folderStatuses(
  *
  * `--no-optional-locks` on the status: without it `git status` refreshes the
  * index and takes `index.lock` to write it back, and the agent runs its own git
- * in this same worktree — the two would trip over each other's lock.
+ * in this same worktree — the two would trip over each other's lock. The
+ * service runs this on the worktree's kept index copy (`keptIndexCopies`),
+ * which is what keeps a fresh checkout's status from hashing every file on
+ * every read; the flag stays for an executor that is not.
  *
  * The tracked files with their mode: a submodule is told from a file only by
  * it. The mode costs about fifty bytes a file, which halves how large a

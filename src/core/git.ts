@@ -7,9 +7,8 @@
  */
 
 import { execFile } from 'node:child_process'
-import { copyFile, mkdtemp, rm, stat, utimes } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { access, copyFile, stat, utimes } from 'node:fs/promises'
+import { basename, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 import { describeError } from './persist.js'
@@ -148,8 +147,34 @@ export function gitIn(cwd: string, options: GitOptions = {}): GitExec {
   }
 }
 
+/** An executor for a directory, with options: `gitIn`, or a test's double. */
+export type MakeExec = (cwd: string, options?: GitOptions) => GitExec
+
+/** Reads of a worktree run against a copy of its index: `keptIndexCopies`. */
+export type IndexCopyReader = <T>(
+  cwd: string,
+  makeExec: MakeExec,
+  read: (exec: GitExec) => Promise<T>
+) => Promise<T>
+
+/** One worktree's copy: where it came from, and who is on it. */
+interface KeptCopy {
+  /** The real index the copy was made from — inode, size and time. */
+  stamp: string | null
+  /** Reads in flight on the copy; a fresh copy waits for them to finish. */
+  inFlight: Set<Promise<unknown>>
+  /** A copy being made, which every read arriving meanwhile waits for. */
+  copying: Promise<void> | null
+}
+
+/** What tells one version of an index file from the next. */
+async function stampOf(path: string): Promise<string> {
+  const info = await stat(path)
+  return `${String(info.ino)}:${String(info.size)}:${String(info.mtimeMs)}`
+}
+
 /**
- * Runs reads of a worktree against a throwaway copy of its index.
+ * Runs reads of a worktree against a kept copy of its index.
  *
  * A `git diff` against the working tree refreshes the index for a tracked file
  * whose times moved and whose content did not — a formatter that rewrote it
@@ -166,27 +191,35 @@ export function gitIn(cwd: string, options: GitOptions = {}): GitExec {
  * listing that does not read contents, and `--numstat` for a binary file, then
  * calls such a file changed without looking.
  *
- * The price is that the refresh is thrown away with the copy, so a file whose
- * times moved is hashed again on the next read — what `status
- * --no-optional-locks` already pays — until something else refreshes the
- * index. A worktree always has an index, so one that cannot be copied is a
- * failure rather than an empty answer: read against a copy that is not there,
- * git would call every tracked file deleted.
+ * The copy is kept beside the index (`index.octopus`) and made again only when
+ * the index itself changed, because a copy thrown away after each read never
+ * stops paying: a worktree is checked out in the second its index is written,
+ * so git trusts none of its entries by their times and hashes every file on
+ * every read — four diffs of 85 ms each per turn end on 2,000 files, measured,
+ * and nothing ever wrote the answer down. A fresh copy is written once by git
+ * itself (`update-index --force-write-index`, git 2.19): it checks the entries
+ * it cannot trust, marks the one that did change so the next read looks at it,
+ * and is from then on an index whose entries are older than it is. The same
+ * reads then take 16 ms, and the hashing is paid once per version of the index.
+ *
+ * A worktree always has an index, so one that cannot be read is a failure
+ * rather than an empty answer: pointed at a copy that is not there, git would
+ * call every tracked file deleted.
  */
-export async function withIndexCopy<T>(
-  cwd: string,
-  makeExec: (cwd: string, options?: GitOptions) => GitExec,
-  read: (exec: GitExec) => Promise<T>
-): Promise<T> {
-  // Relative in the main worktree (`.git/index`), absolute in a linked one, so
-  // resolved here: `--path-format=absolute` would ask for git 2.31, and an
-  // older git echoes the flag back as if it were the path.
-  const answer = await makeExec(cwd)(['rev-parse', '--git-path', 'index'])
-  const index = resolve(cwd, answer.trim())
-  const scratch = await mkdtemp(join(tmpdir(), 'octopus-index-'))
-  const copy = join(scratch, 'index')
+export function keptIndexCopies(): IndexCopyReader {
+  const kept = new Map<string, KeptCopy>()
 
-  try {
+  async function makeCopy(
+    cwd: string,
+    makeExec: MakeExec,
+    index: string,
+    copy: string,
+    held: KeptCopy,
+    stamp: string
+  ): Promise<void> {
+    // The copy is replaced only once nobody reads it: git maps the file it was
+    // given, and a read handed the old copy must finish on the old copy.
+    while (held.inFlight.size > 0) await Promise.allSettled([...held.inFlight])
     await copyFile(index, copy)
     // The index's own time, which a copy would otherwise lose. git trusts an
     // entry by its stat only when the entry is older than the index file, and
@@ -195,9 +228,58 @@ export async function withIndexCopy<T>(
     // since rounding up into the next one is the unsafe direction.
     const { atime, mtimeMs } = await stat(index)
     await utimes(copy, atime, Math.floor(mtimeMs / 1000))
-    return await read(makeExec(cwd, { env: { GIT_INDEX_FILE: copy } }))
-  } finally {
-    await rm(scratch, { recursive: true, force: true })
+    // Written once by git under its own rules — see above. `-q` and
+    // `--unmerged` keep a modified file and a conflict from being an error.
+    await makeExec(cwd, { env: { GIT_INDEX_FILE: copy } })([
+      'update-index',
+      '-q',
+      '--unmerged',
+      '--refresh',
+      '--force-write-index'
+    ])
+    held.stamp = stamp
+  }
+
+  return async (cwd, makeExec, read) => {
+    // Relative in the main worktree (`.git/index`), absolute in a linked one, so
+    // resolved here: `--path-format=absolute` would ask for git 2.31, and an
+    // older git echoes the flag back as if it were the path.
+    const answer = await makeExec(cwd)(['rev-parse', '--git-path', 'index'])
+    const index = resolve(cwd, answer.trim())
+    const copy = `${index}.octopus`
+    const held = kept.get(index) ?? { stamp: null, inFlight: new Set(), copying: null }
+    kept.set(index, held)
+
+    for (;;) {
+      if (held.copying !== null) {
+        await held.copying
+        continue
+      }
+      // Asked each time round rather than once: a read that waited out a copy
+      // compares the copy with the index as it is now, not as it was.
+      const stamp = await stampOf(index)
+      if (held.stamp === stamp && (await exists(copy))) break
+      held.copying = makeCopy(cwd, makeExec, index, copy, held, stamp).finally(() => {
+        held.copying = null
+      })
+    }
+
+    const reading = read(makeExec(cwd, { env: { GIT_INDEX_FILE: copy } }))
+    held.inFlight.add(reading)
+    try {
+      return await reading
+    } finally {
+      held.inFlight.delete(reading)
+    }
+  }
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
   }
 }
 

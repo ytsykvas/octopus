@@ -258,8 +258,11 @@ export async function renameBranch(exec: GitExec, from: string, to: string): Pro
  * hook may be running git too — and a `git add` or `git commit` there at that
  * moment fails with "Unable to create index.lock: File exists". `readFileTree`
  * passes it for the same reason. It is not the general cure: `git diff` writes
- * the index back with it all the same, so the diff is read against a copy
- * instead (`withIndexCopy`).
+ * the index back with it all the same, so what a turn's end reads — this
+ * status for the counts, the tree, the diff — runs against the worktree's kept
+ * index copy instead (`keptIndexCopies`), where the flag costs nothing and the
+ * index itself is never touched. The flag stays for a caller on a plain
+ * executor, as `pullRequests.ts` is.
  */
 export async function changedFiles(exec: GitExec): Promise<string[]> {
   const output = await exec(['--no-optional-locks', 'status', '--porcelain', '-uall'])

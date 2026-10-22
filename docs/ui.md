@@ -2108,7 +2108,16 @@ worktree at that moment — another conversation, the terminal, a hook — fails
 with "Unable to create index.lock". The Changes pane's diff, read on the same
 event, writes nothing either, though not by that flag: `git diff` writes the
 index back for a file whose times moved with the flag or without it, so it reads against
-a throwaway copy of the index instead (`withIndexCopy` in `git.ts`).
+a copy of the index instead — and so do that status, the Files tab's and the
+pull-request draft's, all through `keptIndexCopies` in `git.ts`. The copy is
+kept beside the index and made again only when the index changed. Measured on
+a 2,000-file checkout: a turn's end was 18 git processes, 280 ms wall and
+826 ms of CPU, because a worktree is checked out in the second its index is
+written, so git trusts none of its entries by their times and hashed every
+file on every read of a copy it then threw away; kept and written once by git,
+the same reads — 19 processes, one more to find the index for the counts —
+take 125 ms wall and about 220 ms of CPU, and the `status` that was 80 ms
+while it still ran on the index itself is 15.
 
 **The right pane carries six tabs.** Terminal, then Files, Changes, Scripts
 and Pull request, then Notes. Build and server were two tabs and are now two halves of one: they

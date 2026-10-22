@@ -161,7 +161,7 @@ import {
   readPullRequestDetail
 } from './pullRequests.js'
 import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
-import { gitIn, isIgnored, withIndexCopy } from './git.js'
+import { gitIn, isIgnored, keptIndexCopies } from './git.js'
 import { FETCH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
@@ -1627,6 +1627,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const stateTempPath = options.stateTempFilePath ?? stateTempFile()
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
+  // One keeper for the service's life: a copy is reused across reads and
+  // across panes, and made again only when the worktree's index changed.
+  const withIndexCopy = keptIndexCopies()
 
   const commandExec = options.commandExec ?? defaultExec
   const makeGh = options.makeGh ?? ghIn
@@ -2085,8 +2088,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * What a workspace changed against its base, as the pull-request draft reads
    * it; the pane reads the same through `readWorkspaceChanges`, with the sides.
    *
-   * Against a copy of the worktree's index (`withIndexCopy`), so a re-read as a
-   * turn ends never writes the index under a `git add` running beside it. Run
+   * Against the kept copy of the worktree's index (`keptIndexCopies`), so a
+   * re-read as a turn ends never writes the index under a `git add` running
+   * beside it. Run
    * from the worktree, not the repository: the base branch is a fact about the
    * project, but everything else — the working tree, the index, the untracked
    * files — is a fact about this workspace's own directory.
@@ -5597,7 +5601,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // worktrees" marked every workspace missing — which the UI acts on by
       // closing their terminals.
       const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
-      const counts = await countChanges(stored, await baseRefOf(project), makeExec)
+      const counts = await countChanges(stored, await baseRefOf(project), makeExec, withIndexCopy)
 
       return reconcile(stored, worktrees, counts, state.chats.filter(isOpenChat), turnStarts)
     },
@@ -5610,7 +5614,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // The same reads as the list, for one record: `worktree list` still, since
       // whether the directory is there and on its branch are part of the row.
       const worktrees = await listWorktrees(makeExec(project.repoPath)).catch(() => null)
-      const counts = await countChanges([workspace], await baseRefOf(project), makeExec)
+      const counts = await countChanges(
+        [workspace],
+        await baseRefOf(project),
+        makeExec,
+        withIndexCopy
+      )
 
       // Read after the git calls, as the list does, so the conversations are no
       // older than the status events that went out meanwhile.
@@ -5775,15 +5784,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async workspaceHasChanges(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      return (await changeCount(workspace, makeExec)) > 0
+      return (await changeCount(workspace, makeExec, withIndexCopy)) > 0
     },
 
     async readWorkspaceChanges(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      // Against one copy of the index, for the reason `readDiffOf` gives — and
-      // one rather than one per read, since copying it is the price of a read.
+      // Against the copy of the index, for the reason `readDiffOf` gives — and
+      // under one call rather than one per read, so both read the same copy.
       const baseBranch = await baseRefOf(project)
       return withIndexCopy(workspace.path, makeExec, (exec) =>
         readWorkspaceChanges(exec, { baseBranch, root: workspace.path, branch: workspace.branch })
@@ -5835,7 +5844,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const [diff, changed, instruction, commitInstruction] = await Promise.all([
         readDiffOf(workspace, project),
-        changeCount(workspace, makeExec),
+        changeCount(workspace, makeExec, withIndexCopy),
         // The same chain the pane reads and the prepared prompts send. These
         // two called `effectiveInstruction` directly and so skipped the
         // repository's own — the one layer that is a fact about the branch in
@@ -5919,7 +5928,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async readFileTree(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      return readFileTree(makeExec(workspace.path))
+      // On the kept index copy, as every read a turn's end sets off is.
+      return withIndexCopy(workspace.path, makeExec, readFileTree)
     },
 
     async readWorkspaceDirectory(workspaceId, path) {

@@ -6,9 +6,9 @@
  */
 
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -34,7 +34,7 @@ import {
   toSlug,
   reasonFrom,
   upstreamOf,
-  withIndexCopy
+  keptIndexCopies
 } from './git.js'
 
 const run = promisify(execFile)
@@ -627,9 +627,13 @@ describe('ignoredAmong', () => {
  * `index.lock` — `--no-optional-locks` or not. A `git add` beside it then
  * fails. Reads given a copy refresh the copy instead.
  */
-describe('withIndexCopy', () => {
-  async function indexStamp(): Promise<string> {
-    const info = await stat(join(dir, '.git', 'index'))
+describe('keptIndexCopies', () => {
+  const withIndexCopy = keptIndexCopies()
+  const index = (): string => join(dir, '.git', 'index')
+  const copyPath = (): string => `${index()}.octopus`
+
+  async function stampOf(path: string): Promise<string> {
+    const info = await stat(path)
     return `${String(info.ino)}:${String(info.mtimeMs)}`
   }
 
@@ -643,6 +647,8 @@ describe('withIndexCopy', () => {
     return { make, copies }
   }
 
+  const stagedFiles = (copy: GitExec): Promise<string> => copy(['diff', '--cached', '--name-only'])
+
   beforeEach(async () => {
     await initRepo(dir)
   })
@@ -651,9 +657,7 @@ describe('withIndexCopy', () => {
     await writeFile(join(dir, 'staged.txt'), 'staged\n', 'utf8')
     await run('git', ['add', 'staged.txt'], { cwd: dir })
 
-    const staged = await withIndexCopy(dir, gitIn, (copy) =>
-      copy(['diff', '--cached', '--name-only'])
-    )
+    const staged = await withIndexCopy(dir, gitIn, stagedFiles)
 
     expect(staged.trim()).toBe('staged.txt')
   })
@@ -661,42 +665,104 @@ describe('withIndexCopy', () => {
   it('leaves the real index alone while git refreshes', async () => {
     const later = new Date(Date.now() + 60_000)
     await utimes(join(dir, 'README.md'), later, later)
-    const before = await indexStamp()
+    const before = await stampOf(index())
 
     const changed = await withIndexCopy(dir, gitIn, (copy) => copy(['diff', '--name-only', 'HEAD']))
 
     expect(changed).toBe('')
-    expect(await indexStamp()).toBe(before)
+    expect(await stampOf(index())).toBe(before)
   })
 
-  it('leaves no copy behind', async () => {
+  /*
+   * A copy thrown away after each read never stopped paying: checked out in
+   * the second its index was written, a worktree has no entry git trusts by
+   * its times, so every read hashed every file. Kept, and written once by git
+   * itself, the copy is from then on older than its entries — and the next
+   * read is given the same file, not a fresh copy of the untrusting index.
+   */
+  it('keeps the copy beside the index, written once so later reads trust it', async () => {
     const { make, copies } = noting()
 
     await withIndexCopy(dir, make, (copy) => copy(['diff', '--name-only', 'HEAD']))
+    const written = await stampOf(copyPath())
+    await withIndexCopy(dir, make, (copy) => copy(['diff', '--name-only', 'HEAD']))
 
-    const copy = copies.find((path) => path !== undefined)
-    if (copy === undefined) throw new Error('the read was not given a copy')
-    // The directory, not only the file: removing the copy alone would leave
-    // a directory behind on every read.
-    await expect(access(dirname(copy))).rejects.toThrow()
+    // Three executors on the copy: git's one write of it, then one per read.
+    expect(copies.filter((path) => path !== undefined)).toEqual([
+      copyPath(),
+      copyPath(),
+      copyPath()
+    ])
+    expect(await stampOf(copyPath())).toBe(written)
+    expect((await stat(copyPath())).mtimeMs).toBeGreaterThan((await stat(index())).mtimeMs)
   })
 
-  // The read's own failure is the one reported, and the copy still goes.
-  it('leaves no copy behind when the read fails', async () => {
-    const { make, copies } = noting()
+  it('makes the copy again once the index changed', async () => {
+    expect(await withIndexCopy(dir, gitIn, stagedFiles)).toBe('')
+    await writeFile(join(dir, 'staged.txt'), 'staged\n', 'utf8')
+    await run('git', ['add', 'staged.txt'], { cwd: dir })
+
+    expect((await withIndexCopy(dir, gitIn, stagedFiles)).trim()).toBe('staged.txt')
+  })
+
+  // Pointed at a copy that is gone, git would call every tracked file deleted.
+  it('makes the copy again when it went missing', async () => {
+    await withIndexCopy(dir, gitIn, stagedFiles)
+    await rm(copyPath())
+
+    const tracked = await withIndexCopy(dir, gitIn, (copy) => copy(['ls-files']))
+
+    expect(tracked.trim()).toBe('README.md')
+  })
+
+  /*
+   * git maps the file it was given, so the copy is replaced only once nobody
+   * reads it: a read handed the old copy finishes on the old copy, and the one
+   * that found the index moved waits for it before the copy is made again.
+   */
+  it('finishes a read on the copy it was given while the index moves on', async () => {
+    let release = (): void => undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let started = (): void => undefined
+    const first = withIndexCopy(dir, gitIn, async (copy) => {
+      started()
+      await gate
+      return stagedFiles(copy)
+    })
+    await new Promise<void>((resolve) => {
+      started = resolve
+    })
+    await writeFile(join(dir, 'staged.txt'), 'staged\n', 'utf8')
+    await run('git', ['add', 'staged.txt'], { cwd: dir })
+
+    let secondDone = false
+    const second = withIndexCopy(dir, gitIn, stagedFiles).then((staged) => {
+      secondDone = true
+      return staged
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(secondDone).toBe(false)
+    release()
+
+    expect(await first).toBe('')
+    expect((await second).trim()).toBe('staged.txt')
+  })
+
+  // The read's own failure is the one reported, and it holds nothing up.
+  it('reports the read’s failure and lets the next read through', async () => {
     const failure = new Error('the read gave up')
 
-    await expect(withIndexCopy(dir, make, () => Promise.reject(failure))).rejects.toBe(failure)
+    await expect(withIndexCopy(dir, gitIn, () => Promise.reject(failure))).rejects.toBe(failure)
 
-    const copy = copies.find((path) => path !== undefined)
-    if (copy === undefined) throw new Error('the read was not given a copy')
-    await expect(access(dirname(copy))).rejects.toThrow()
+    expect((await withIndexCopy(dir, gitIn, (copy) => copy(['ls-files']))).trim()).toBe('README.md')
   })
 
   // Read against a copy that is not there, git would call every tracked file
   // deleted — a wrong answer that looks like a right one.
   it('fails rather than read a worktree with no index', async () => {
-    await rm(join(dir, '.git', 'index'))
+    await rm(index())
 
     await expect(withIndexCopy(dir, gitIn, (copy) => copy(['ls-files']))).rejects.toMatchObject({
       code: 'ENOENT'
@@ -707,18 +773,18 @@ describe('withIndexCopy', () => {
    * git trusts an entry by its stat only when it is older than the index file.
    * A copy stamped with the time it was made trusted an edit of the same size
    * made in the same second as the last index write, and the edit never
-   * showed — in the pane or in the pull request's draft.
+   * showed — in the pane or in the pull request's draft. The kept copy is
+   * written by git once, which is when git marks such an entry to be looked at.
    */
   it('sees an edit made in the same second as the last index write', async () => {
     await run('git', ['config', 'core.trustctime', 'false'], { cwd: dir })
     const file = join(dir, 'README.md')
-    const index = join(dir, '.git', 'index')
     const then = new Date('2020-01-01T00:00:00Z')
     await utimes(file, then, then)
     await run('git', ['update-index', '--refresh'], { cwd: dir })
     await writeFile(file, '# best\n', 'utf8')
     await utimes(file, then, then)
-    await utimes(index, then, then)
+    await utimes(index(), then, then)
 
     const changed = await withIndexCopy(dir, gitIn, (copy) => copy(['diff', '--name-only', 'HEAD']))
 

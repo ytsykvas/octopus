@@ -18,6 +18,8 @@ import {
   anyBranchExists,
   countAhead,
   type GitExec,
+  type IndexCopyReader,
+  type MakeExec,
   reasonFrom,
   refExists,
   toSlug,
@@ -736,10 +738,11 @@ const NOTHING: WorkspaceCounts = { changedFiles: 0, ahead: 0 }
  */
 export async function changeCount(
   workspace: Workspace,
-  makeExec: (cwd: string) => GitExec
+  makeExec: MakeExec,
+  readIndex: IndexCopyReader
 ): Promise<number> {
   try {
-    return (await changedFiles(makeExec(workspace.path))).length
+    return (await readIndex(workspace.path, makeExec, changedFiles)).length
   } catch {
     return 0
   }
@@ -752,19 +755,23 @@ export async function changeCount(
  * not blank out the counts for every other one. Both reads are local — one
  * `status --porcelain` and one `rev-list --count` — and they run together
  * across every workspace, so a project of eight costs one round of git rather
- * than sixteen in a row.
+ * than sixteen in a row. The status runs against the worktree's kept index
+ * copy (`readIndex`): on the index itself it hashed every file of a fresh
+ * checkout on every turn end, and with `--no-optional-locks` never wrote the
+ * answer down.
  */
 export async function countChanges(
   workspaces: readonly Workspace[],
   baseBranch: string,
-  makeExec: (cwd: string) => GitExec
+  makeExec: MakeExec,
+  readIndex: IndexCopyReader
 ): Promise<Map<string, WorkspaceCounts>> {
   const counts = new Map<string, WorkspaceCounts>()
 
   await Promise.all(
     workspaces.map(async (workspace) => {
       const [changedFiles, ahead] = await allOf([
-        changeCount(workspace, makeExec),
+        changeCount(workspace, makeExec, readIndex),
         countAhead(makeExec(workspace.path), baseBranch, workspace.branch)
       ])
 
