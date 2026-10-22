@@ -824,7 +824,11 @@ export async function readWorkspaceChanges(
 
   const [diff, sides] = await allOf([
     readDiffFrom(exec, baseCommit, options),
-    readWholeFileSides(exec, { baseCommit })
+    // Colouring is a courtesy, and the diff is what the pane is for: when
+    // the sides cannot be read, for whatever reason, the pane draws the diff
+    // from its hunks alone — as it did when the two were separate reads and
+    // a failed second one was simply not drawn.
+    readWholeFileSides(exec, { baseCommit }).catch(() => new Map<string, FileSides>())
   ])
 
   return { diff, sides: Object.fromEntries(sides) }

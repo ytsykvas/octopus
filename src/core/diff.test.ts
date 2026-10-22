@@ -743,6 +743,21 @@ describe('readWorkspaceChanges', () => {
     expect(diff.files).toHaveLength(1)
     expect(sides).toEqual({})
   })
+
+  /* And when git itself will not read them, for any reason: the pane drew the
+     diff without colours when the sides were a read of their own that failed,
+     and one read must not take that away. `readWholeFileSides` on its own still
+     lets the failure through, for a caller that wants to know. */
+  it('still answers the diff when the sides cannot be read at all', async () => {
+    await writeFile(join(dir, 'a.txt'), 'one\nTWO\nthree\n', 'utf8')
+    const broken: GitExec = async (args) =>
+      args.includes('-U100000') ? Promise.reject(new Error('git is gone')) : exec(args)
+
+    const { diff, sides } = await changes(broken)
+
+    expect(diff.files).toHaveLength(1)
+    expect(sides).toEqual({})
+  })
 })
 
 describe('readWorkspaceDiff', () => {
