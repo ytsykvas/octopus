@@ -179,6 +179,8 @@ describe('Settings', () => {
     expect(screen.getByText('Theme')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Follow system' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'English' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Українська' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deutsch' })).toBeInTheDocument()
   })
 
   it('changes the theme to the one chosen', async () => {
@@ -199,6 +201,15 @@ describe('Settings', () => {
     await user.click(screen.getByRole('button', { name: 'English' }))
 
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ language: 'en' })
+  })
+
+  it('changes the language to German', async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await user.click(screen.getByRole('button', { name: 'Deutsch' }))
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ language: 'de' })
   })
 
   it('turns the notice sound off', async () => {

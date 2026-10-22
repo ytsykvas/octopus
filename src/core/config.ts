@@ -66,7 +66,7 @@ export type SettingSourcesMode = z.infer<typeof SettingSourcesModeSchema>
 export const ThemePreferenceSchema = z.enum(['system', 'light', 'dark'])
 export type ThemePreference = z.infer<typeof ThemePreferenceSchema>
 
-export const LanguageSchema = z.enum(['en', 'uk'])
+export const LanguageSchema = z.enum(['en', 'uk', 'de'])
 export type LanguagePreference = z.infer<typeof LanguageSchema>
 
 /**

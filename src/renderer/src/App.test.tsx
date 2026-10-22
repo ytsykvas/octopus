@@ -22,6 +22,7 @@ import { App } from './App.js'
 import { chime } from './sound.js'
 import type * as Sound from './sound.js'
 import i18n, { DEFAULT_LANGUAGE } from './i18n/index.js'
+import { de } from './i18n/locales/de.js'
 
 // A workspace terminal is xterm.js against a real canvas, which jsdom has not
 // got. Standing it in as its working directory keeps the pane observable —
@@ -1309,6 +1310,18 @@ describe('App', () => {
     await waitFor(() => {
       expect(document.documentElement).toHaveAttribute('lang', 'uk')
     })
+  })
+
+  it('follows the language into German and says so', async () => {
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ language: 'de' })
+    })
+
+    await openApp()
+
+    expect(await screen.findByText(de.center.noProjectsTitle)).toBeInTheDocument()
+    expect(document.documentElement).toHaveAttribute('lang', 'de')
   })
 
   /*
