@@ -1059,6 +1059,30 @@ describe('App', () => {
       expect(within(bar).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
     })
 
+    // An agent asked to set the project up writes `.octopus/scripts/`, which
+    // changes neither the list nor a settings dialog — only its turn ending does.
+    it('offers the script an agent wrote once its turn has ended', async () => {
+      await onAnna({})
+      const bar = titleBar()
+      await waitFor(() => {
+        expect(window.octopus.workspaces.scripts).toHaveBeenCalledWith('planner/anna')
+      })
+      expect(within(bar).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+
+      givenScriptsOf({ planner: SERVER_ONLY })
+      emitAgentEvent({
+        type: 'result',
+        ok: true,
+        costUsd: null,
+        durationMs: 1,
+        inputTokens: null,
+        outputTokens: null,
+        terminalReason: null
+      })
+
+      expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
+    })
+
     // One state behind both buttons: a press in the title bar moves the
     // Scripts tab with it, and the other way round.
     it('serves from the title bar and keeps the Scripts tab in step', async () => {

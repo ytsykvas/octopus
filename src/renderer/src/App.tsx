@@ -47,6 +47,7 @@ import { useFileTabs } from './hooks/useFileTabs.js'
 import { usePlugins } from './hooks/usePlugins.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useServerControls } from './hooks/useServerControls.js'
+import { useTurnSettled } from './hooks/useTurnSettled.js'
 import { useWorkspaceScripts } from './hooks/useWorkspaceScripts.js'
 import { useWorkspaces } from './hooks/useWorkspaces.js'
 import { useAttention } from './hooks/useAttention.js'
@@ -724,6 +725,11 @@ export function App(): React.JSX.Element {
     // answer can change without the list changing.
     editingProjectId
   )
+
+  // An agent writing `.octopus/scripts/` is the third way a script appears, and
+  // the only one that changes neither the list nor a settings dialog: without
+  // this the Scripts tab went on saying there was no script after one was written.
+  useTurnSettled(selectedWorkspaceId, true, workspaceScripts.refresh)
 
   /*
    * Build-then-serve for the selected workspace. Held here rather than in the
