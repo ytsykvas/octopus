@@ -88,8 +88,6 @@ describe('useWorkspaceScripts', () => {
     })
   })
 
-  // A turn is heard only for the workspace on screen, so a script an agent wrote
-  // in another one is read when that one is opened.
   it('reads again when another workspace is opened', async () => {
     const { result, rerender } = renderHook(
       ({ shown }: { shown: string | null }) =>

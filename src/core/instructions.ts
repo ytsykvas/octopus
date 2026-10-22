@@ -58,8 +58,9 @@ export const PUBLISHES_AFTER: Readonly<Record<InstructionKind, boolean>> = {
   review: false,
   multiAgentReview: false,
   resolveConflicts: true,
-  // Help's two write the worktree's scripts at most, and the reader has not
-  // asked for those to be pushed.
+  // Never read: Help's text is sent from the composer, not as an instruction.
+  // False should that change — they write scripts at most, and nobody asked
+  // for a push.
   setupScripts: false,
   diagnoseRun: false
 }

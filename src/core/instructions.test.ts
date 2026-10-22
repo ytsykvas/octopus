@@ -173,7 +173,6 @@ describe('the installation-wide instruction', () => {
 })
 
 describe('the two Help asks for', () => {
-  // A Help chat writes the worktree's scripts at most: nothing the reader asked to push.
   it('push nothing after the turn', () => {
     expect(PUBLISHES_AFTER.setupScripts).toBe(false)
     expect(PUBLISHES_AFTER.diagnoseRun).toBe(false)
@@ -186,8 +185,8 @@ describe('the two Help asks for', () => {
     )
   })
 
-  // Read in a composer narrower than eighty columns, where a hard break inside
-  // a paragraph wrapped a second time and left every line ragged.
+  // A line continues a paragraph when it follows a non-blank line and starts no
+  // block — list item, table row, heading, fence.
   it('keep each paragraph and list item on one line', () => {
     const block = /^\s*(?:[-*]|\d+\.|\||#|```)/
     for (const kind of ['setupScripts', 'diagnoseRun'] as const) {

@@ -336,8 +336,6 @@ describe('Sidebar', () => {
       expect(vi.mocked(props.onHelp).mock.calls).toEqual([['setupScripts'], ['diagnoseRun']])
     })
 
-    // Each opens a conversation, so at the cap there is nowhere for it to go —
-    // shown and unavailable, saying why, rather than hidden.
     it('offers neither while the workspace has no room for another conversation', async () => {
       const user = userEvent.setup()
       const props = renderSidebar({ ...inWorkspace, canStartChat: false })

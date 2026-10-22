@@ -832,7 +832,6 @@ export interface HelpContext {
   readonly envFile: string
   /** The env set in effect. */
   readonly profile: string
-  /** What it defines, by name. */
   readonly variableNames: readonly string[]
   readonly envProblems: readonly HelpEnvProblem[]
   /** The paths carried into the workspace before a run, the repository's included. */

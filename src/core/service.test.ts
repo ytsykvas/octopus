@@ -2897,10 +2897,6 @@ describe('sets of variables', () => {
   })
 })
 
-/*
- * Help writes these under its instructions, into a message the agent reads and
- * the reader may send anywhere — so a value never travels, only names.
- */
 describe('what Help is told about a workspace', () => {
   async function withWorkspace(): Promise<{
     projectId: string
@@ -2950,9 +2946,10 @@ describe('what Help is told about a workspace', () => {
   })
 
   /*
-   * A badly named line's subject is everything before its `=`, and checked line
-   * by line: a pasted `KEY: value` and the last line of a multi-line key both
-   * put a secret there.
+   * A line's subject is text from it — what comes before its `=` for a bad
+   * name, all of it for no assignment — and lines are checked one by one: a
+   * pasted `KEY: value` and a base64 line of a key, quoted or not, both put a
+   * secret there.
    */
   it('reports a badly named line by its number alone too', async () => {
     const { projectId, workspaceId } = await withWorkspace()
@@ -2974,7 +2971,6 @@ describe('what Help is told about a workspace', () => {
 
     expect(JSON.stringify(context)).not.toContain('hunter2')
     expect(JSON.stringify(context)).not.toContain('q3Zx')
-    // A key and a reference are names, and say which line is wrong.
     expect(context.envProblems).toContainEqual({ line: 6, reason: 'duplicate', subject: 'A' })
     expect(context.envProblems).toContainEqual({
       line: 6,

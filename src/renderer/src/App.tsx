@@ -341,8 +341,6 @@ export function App(): React.JSX.Element {
     setDrafts((current) => new Map(current).set(`${workspaceId}#${tabKey}`, text))
   }, [])
 
-  // Help's text goes down as the draft of a new conversation, read as its
-  // composer mounts — nothing is sent until the reader sends it.
   const startHelp = useHelp(selectedWorkspaceId, chatTabs.create, keepDraft, setError)
 
   useEffect(() => {

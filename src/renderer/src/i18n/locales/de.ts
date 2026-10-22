@@ -508,8 +508,6 @@ export const de: Translation = {
     diagnoseHint:
       'Der Agent liest die Ausgabe des letzten Laufs, die Skripte und die Variablennamen',
     failed: 'Die Hilfe konnte diesen Workspace nicht lesen: {{reason}}',
-    /* Die Fakten, die octopus unter die Anweisung schreibt. Der Agent liest sie,
-       also schlicht und wörtlich. */
     context: {
       heading: '\u2014 Was octopus über diesen Workspace weiß \u2014',
       checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',

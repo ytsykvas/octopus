@@ -1069,8 +1069,6 @@ describe('App', () => {
       expect(within(bar).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
     })
 
-    // An agent asked to set the project up writes `.octopus/scripts/`, which
-    // changes neither the list nor a settings dialog — only its turn ending does.
     it('offers the script an agent wrote once its turn has ended', async () => {
       await onAnna({})
       const bar = titleBar()
@@ -1085,8 +1083,6 @@ describe('App', () => {
       expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
     })
 
-    // The turn is only heard for the workspace on screen; one that ended while
-    // another was open is read when its own is opened again.
     it('offers the script an agent wrote while another workspace was open', async () => {
       const user = await onAnna({})
       await user.click(screen.getByText('bob'))
@@ -2428,8 +2424,6 @@ describe('App', () => {
     })
   })
 
-  // Help opens a conversation and puts its text in the composer, unsent: the
-  // composer reads its draft once, as it mounts, so it has to be there first.
   it('opens Help’s ask as a new conversation with the text in its composer, unsent', async () => {
     givenTwoProjects()
     givenChats([chat({ id: 'chat-1' })])

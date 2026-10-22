@@ -11,9 +11,9 @@ import { useErrorMessage } from './useErrorMessage.js'
  *
  * Put down rather than sent, because the app adds nothing to what the agent is
  * told that the reader has not seen (§4): the text is there to read, edit and
- * send. A new conversation rather than the one on screen, because the person
- * pressed Help and that is what they asked for — and a draft cannot be put into
- * a composer that is already drawn, which reads its draft once, as it mounts.
+ * send. A new conversation rather than the one on screen, because a draft
+ * cannot be put into a composer that is already drawn: it reads its draft once,
+ * as it mounts.
  *
  * Every read is done before anything is created, so a failure creates nothing;
  * an answer that arrives after the workspace changed is dropped, as

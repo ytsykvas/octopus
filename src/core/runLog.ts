@@ -33,7 +33,6 @@ export const TAIL_LINES = 200
  */
 export const TAIL_OUTPUT_CHARS = 30_000
 
-/** `kept` with `chunk` appended, cut to the last `TAIL_CHARS`. */
 export function appendTail(kept: string, chunk: string): string {
   return (kept + chunk).slice(-TAIL_CHARS)
 }
@@ -55,7 +54,8 @@ const SINGLE = /\u001b[ -/]*[0-~]/g
  * The text a terminal would show, without the bytes that told it how.
  *
  * A progress bar redraws itself with `\r`, so a line keeps only what follows
- * its last one: what was on screen when the next line began. The catch-all
+ * its last one — a trailing one is a CRLF line ending, dropped first: what was
+ * on screen when the next line began. The catch-all
  * pattern runs last: it matches `ESC ]` and `ESC [` too, and run first it
  * would take those alone and leave a window title or a colour's digits behind
  * as text.
@@ -82,8 +82,7 @@ export function lastLines(text: string, lines: number, chars: number): string {
   const all = text.split('\n')
   while (all.length > 0 && all.at(-1)?.trim() === '') all.pop()
 
-  // Walked from the end, so the lines kept are the last ones and the newline
-  // between two is counted once.
+  // `length` starts at -1: n lines are joined by n − 1 newlines.
   const kept: string[] = []
   let length = -1
   for (const line of all.slice(-lines).reverse()) {
@@ -107,7 +106,7 @@ export const MASK_MIN_LENGTH = 6
  * `text` with every secret in it replaced by `[NAME]`, or `[masked]` where no
  * name owns it.
  *
- * A script that runs `set -x`, `cat`s its env file or prints its connection
+ * A script that runs `set -x`, `cat`s an env file or prints its connection
  * string on a failed boot puts a credential in its own output, and Help puts
  * that output in a message. Longest first, so a value that contains another is
  * masked whole rather than around the shorter one.

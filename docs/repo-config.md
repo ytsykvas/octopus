@@ -1,7 +1,7 @@
 # Settings a repository carries: `.octopus/`
 
 Everything a project knows about itself lives under `~/.octopus/projects/<id>/`
-— the three scripts, the carry list, the nine instructions — and its fields
+— the three scripts, the carry list, the instructions — and its fields
 live in `state.json`. That is one directory on one machine. Wipe it, move to
 another laptop, or lose the disk, and all of it is gone with no trace in the
 repository the settings describe.
@@ -21,7 +21,7 @@ project's own — _use mine instead_ — one at a time.
 
 Which of the three scripts runs is asked of the **worktree**, in this order:
 `.octopus/scripts/` in it, then the project's own settings under `~/.octopus`.
-The nine instructions follow the same chain — `.octopus/instructions/`, then
+The instructions follow the same chain — `.octopus/instructions/`, then
 the project's own, then the installation's, then the written template — so a
 clone sends the pull-request description this project wants with nothing
 configured.

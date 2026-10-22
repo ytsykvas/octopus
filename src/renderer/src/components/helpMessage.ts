@@ -72,7 +72,6 @@ function factsPart(context: HelpContext, t: TFunction): string {
     })
   ]
 
-  // Only a repository's scripts wait to be allowed: nothing supplied is approved.
   if (!context.scripts.approved) lines.push(t('help.context.unapproved'))
 
   lines.push('')

@@ -225,8 +225,8 @@ export class TerminalManager {
       // Signal numbers start at 1, so falsy means "no signal".
       const code = signal ? null : exitCode
 
-      // Before anything that depends on the window: the record is for asking
-      // later, and a window closed mid-run is one of the times it is asked.
+      // Here, not in `report`, which does nothing once the window is gone — and
+      // a window closed mid-run is one of the times the record is asked for.
       if (record) record.outcome = { kind: 'exited', at: this.now().toISOString(), exitCode: code }
 
       // What is still gathered goes first. Told of the exit before it, the pane

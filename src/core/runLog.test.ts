@@ -94,11 +94,7 @@ describe('lastLines', () => {
     expect(lastLines('0123456789', 10, 4)).toBe('6789')
   })
 
-  /*
-   * Both runs go into one message under an instruction, and a message longer
-   * than the bridge accepts is a Send that fails on Help's own text. What is
-   * left is room for the facts and the fences around the output.
-   */
+  // The 20 000 left over is room for the facts and the fences around the output.
   it('leaves room for two runs and the longest instruction in one message', () => {
     const ceiling = ChatMessageSchema.maxLength ?? 0
     const instruction = InstructionBodySchema.maxLength ?? 0

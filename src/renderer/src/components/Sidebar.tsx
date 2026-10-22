@@ -273,9 +273,9 @@ function FirstWorkspaceButton({
  * to be found at a glance: a faint ring at rest that turns only under the
  * pointer or keyboard focus, so idle it costs nothing.
  *
- * Each item opens a conversation with its text in the composer and sends
- * nothing, so at the cap on conversations both are shown and unavailable,
- * saying why, rather than hidden: a menu whose contents move is harder to learn.
+ * Each item opens a conversation, so at the cap on conversations both are
+ * shown disabled, saying why, rather than hidden: a menu whose contents move is
+ * harder to learn.
  */
 function HelpMenu({
   onHelp,

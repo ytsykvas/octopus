@@ -799,15 +799,6 @@ describe('validation at the boundary', () => {
 describe('failures come back as results', () => {
   // A throw would cross IPC as an opaque Electron error with the message
   // mangled, so the renderer could say nothing useful about it.
-  // An earlier holder of the id — a removed project added back, a name drawn
-  // again — must not leave its last run behind for the new one.
-  it('starts a new workspace with no last runs', async () => {
-    const projectId = await addProject()
-    const workspace = await createWorkspace(projectId)
-
-    expect(sessions.forgetRuns).toHaveBeenCalledWith(workspace.id)
-  })
-
   it('answers with ok:false rather than throwing', async () => {
     await expect(invoke('workspaces:create', 'no-such-project')).resolves.toMatchObject({
       ok: false
@@ -1745,6 +1736,13 @@ describe('workspaces of a real project', () => {
     })
   })
 
+  it('starts a new workspace with no last runs', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(sessions.forgetRuns).toHaveBeenCalledWith(workspace.id)
+  })
+
   // The renderer asks before it removes, so the refusal and the forced removal
   // are both part of one flow and have to work in that order.
   it('refuses to remove uncommitted work until it is forced', async () => {
@@ -1768,7 +1766,6 @@ describe('workspaces of a real project', () => {
       ok: false,
       code: 'uncommittedChanges'
     })
-    // Still there, so its last runs are still worth asking about.
     expect(sessions.forgetRuns).not.toHaveBeenCalled()
 
     expect(await invoke('workspaces:remove', workspace.id, { force: true })).toMatchObject({

@@ -204,8 +204,6 @@ describe('opening another conversation', () => {
     expect(result.current.activeKey).toBe('chat-2')
   })
 
-  // The composer reads its draft once, as it mounts: Help's text has to be put
-  // down while the record exists and its tab is not drawn yet.
   it('names the new conversation before its tab is drawn', async () => {
     givenChats([chat()])
     vi.mocked(octopus().chats.create).mockResolvedValue({
@@ -226,8 +224,8 @@ describe('opening another conversation', () => {
       await result.current.create(beforeShown)
     })
 
-    // Compared with the read that draws the tab: the tabs a callback could look
-    // at from inside `act` are the snapshot before it, whatever the order.
+    // Ordered against the `chats.list` that draws the tab: inside `act` the
+    // callback would see the old tabs either way, so reading them proves nothing.
     expect(beforeShown).toHaveBeenCalledExactlyOnceWith('chat-2')
     const created = vi.mocked(octopus().chats.create).mock.invocationCallOrder[0] ?? 0
     const drawn = vi

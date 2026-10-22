@@ -793,10 +793,10 @@ export function registerIpc(
   )
 
   /*
-   * A workspace just made has never run, whatever its id was used for before:
-   * names are drawn from 256 and a removed project comes back under the same
-   * id, so a record left by an earlier holder of the id would answer "why does
-   * Run not work?" about a run that never happened here.
+   * A workspace just made has never run here. Removing a project does not
+   * forget its workspaces' runs, and a project added back has the same id and
+   * draws from the same names — so the earlier holder's record would answer
+   * "why does Run not work?" about a run that never happened here.
    */
   host.handle('workspaces:create', (_event, projectId: string) =>
     attempt(async () => {

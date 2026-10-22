@@ -1074,11 +1074,6 @@ describe('what is still running', () => {
   })
 })
 
-/*
- * The output of a run lives only in the terminal on screen, and the window
- * throws a pane's buffer away when it unmounts — so the question "why does Run
- * not work?" found nothing to read by the time it was asked.
- */
 describe('the last runs of a workspace', () => {
   const ANNA = 'planner/anna'
 
@@ -1142,7 +1137,6 @@ describe('the last runs of a workspace', () => {
     expect(manager.lastRuns(ANNA).map((run) => run.purpose)).toEqual(['setup', 'run'])
   })
 
-  // A build is the start of a new Run: the server beside it would be an older one.
   it('drops the last server when a new build starts', () => {
     started('run').end({ exitCode: 0 })
     started('setup').emit('building')
@@ -1199,7 +1193,6 @@ describe('the last runs of a workspace', () => {
     ])
   })
 
-  // Asked after the fact, which is usually after the window that ran it closed.
   it('outlives the session and the window it ran in', () => {
     started('setup').emit('built')
 
