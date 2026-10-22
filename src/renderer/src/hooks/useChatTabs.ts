@@ -55,7 +55,15 @@ export interface ChatTabsController {
   readonly selectIn: (workspaceId: string, key: string) => void
   /** Whether another conversation may be opened here; false at the cap. */
   readonly canCreate: boolean
-  readonly create: () => Promise<void>
+  /**
+   * Opens another conversation and moves to it.
+   *
+   * `beforeShown` is told the new conversation's id once its record exists and
+   * before its tab is drawn — the one moment a draft can be put down for it,
+   * since the composer reads its draft once, as it mounts. A tab's key is its
+   * chat id, so the id is the key the draft is filed under.
+   */
+  readonly create: (beforeShown?: (id: string) => void) => Promise<void>
   /**
    * Opens a conversation continuing this one, from a side answer when `aside`
    * is given, and moves to it. Says whether it did.
@@ -384,33 +392,37 @@ export function useChatTabs(
    * tab nobody has written to yet — and since the array's order is what numbers
    * the tabs, creating the second first would put the older conversation second.
    */
-  const create = useCallback(async () => {
-    const id = shown.current
-    /* v8 ignore next */
-    if (id === null) return
+  const create = useCallback(
+    async (beforeShown?: (id: string) => void) => {
+      const id = shown.current
+      /* v8 ignore next */
+      if (id === null) return
 
-    if (tabs.some((tab) => tab.id === null)) {
-      const opened = await window.octopus.chats.open(id)
+      if (tabs.some((tab) => tab.id === null)) {
+        const opened = await window.octopus.chats.open(id)
+        if (shown.current !== id) return
+
+        if (!opened.ok) {
+          report.current(describeFailure(opened))
+          return
+        }
+      }
+
+      report.current(null)
+      const created = await window.octopus.chats.create(id)
       if (shown.current !== id) return
 
-      if (!opened.ok) {
-        report.current(describeFailure(opened))
+      if (!created.ok) {
+        report.current(describeFailure(created))
         return
       }
-    }
 
-    report.current(null)
-    const created = await window.octopus.chats.create(id)
-    if (shown.current !== id) return
-
-    if (!created.ok) {
-      report.current(describeFailure(created))
-      return
-    }
-
-    await load(id, () => shown.current !== id)
-    select(created.value.id)
-  }, [tabs, load, select, describeFailure])
+      beforeShown?.(created.value.id)
+      await load(id, () => shown.current !== id)
+      select(created.value.id)
+    },
+    [tabs, load, select, describeFailure]
+  )
 
   const fork = useCallback(
     async (chatId: string, aside?: SideExchange) => {

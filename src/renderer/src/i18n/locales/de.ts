@@ -500,6 +500,44 @@ export const de: Translation = {
       'Wird ungesendet in ein neues Gespräch gelegt, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.'
   },
 
+  help: {
+    setup: 'Dieses Projekt startklar machen',
+    setupHint:
+      'Der Agent liest das Repository und schreibt die Skripte für Build, Server und Aufräumen',
+    diagnose: 'Warum funktioniert Run nicht?',
+    diagnoseHint: 'Der Agent liest die Ausgabe des letzten Laufs, die Skripte und die Variablen',
+    /* Die Fakten, die octopus unter die Anweisung schreibt. Der Agent liest sie,
+       also schlicht und wörtlich. */
+    context: {
+      heading: '\u2014 Was octopus über diesen Workspace weiß \u2014',
+      checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',
+      envFile: 'Env-Datei, in die das Variablen-Set geschrieben wird: {{name}}',
+      profile: 'Geltendes Variablen-Set: {{name}}',
+      variables: 'Variablen, die es setzt (nur Namen; die Werte bleiben in octopus): {{names}}',
+      noVariables: 'Das geltende Set setzt keine Variablen.',
+      scripts: 'Geltende Skripte:',
+      script: '- {{kind}}: {{from}}',
+      scriptMissing: '- {{kind}}: keins',
+      unapproved:
+        'Die Skripte des Repositorys sind noch nicht erlaubt, deshalb bleibt Run deaktiviert, bis sie es sind.',
+      carry: 'Dateien, die vor einem Lauf in den Workspace mitgenommen werden:',
+      noCarry: 'Es werden keine Dateien in den Workspace mitgenommen.',
+      problems: 'Probleme im Variablen-Set:',
+      problemNoAssignment: '- Zeile {{line}} ist keine Zuweisung',
+      problemBadName: '- Zeile {{line}}: {{subject}} ist kein Name, den ein Parser akzeptiert',
+      problemDuplicate:
+        '- Zeile {{line}}: {{subject}} ist doppelt gesetzt, und nur der letzte zählt',
+      problemUnknownVariable: '- Zeile {{line}}: {{subject}} ist keine Variable, die octopus setzt',
+      problemMarker: '- Zeile {{line}}: hier wurde eine octopus-Markierung eingefügt',
+      lastRun: '{{stage}}: um {{at}} mit Exit-Code {{code}} beendet. Die letzten Zeilen:',
+      lastRunStopped: '{{stage}}: um {{at}} durch ein Signal beendet. Die letzten Zeilen:',
+      lastRunRunning: '{{stage}}: läuft noch. Die letzten Zeilen bisher:',
+      noOutput: '(keine Ausgabe)',
+      noRun:
+        'Seit octopus gestartet wurde, ist in diesem Workspace nichts gelaufen. Drück Run im Tab Skripte und frag dann noch einmal.'
+    }
+  },
+
   pullRequest: {
     capped:
       'GitHub wurde nach den neuesten hundert Kommentaren und fünfzig Threads gefragt und hat genau so viele geliefert – es kann also ältere geben, die hier fehlen. Auf GitHub sind alle zu sehen.',

@@ -45,6 +45,8 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}): SidebarProps {
     onRemoveWorkspace: vi.fn(),
     editingWorkspaceId: null,
     onEditingWorkspaceChange: vi.fn(),
+    onHelp: vi.fn(),
+    canStartChat: true,
     ...overrides
   }
 
@@ -308,23 +310,48 @@ describe('Sidebar', () => {
       expect(screen.getByRole('button', { name: 'Help' }).closest('nav')).toBeNull()
     })
 
-    it('does nothing yet when pressed', async () => {
+    it('opens a menu of the two things it can ask', async () => {
+      const user = userEvent.setup()
+      renderSidebar(inWorkspace)
+      const button = screen.getByRole('button', { name: 'Help' })
+
+      await user.click(button)
+
+      expect(button).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+        expect.stringContaining('Set this project up to run'),
+        expect.stringContaining('Why does Run not work?')
+      ])
+    })
+
+    it('asks for each by its own kind', async () => {
       const user = userEvent.setup()
       const props = renderSidebar(inWorkspace)
 
       await user.click(screen.getByRole('button', { name: 'Help' }))
+      await user.click(screen.getByRole('menuitem', { name: /Set this project up to run/ }))
+      await user.click(screen.getByRole('button', { name: 'Help' }))
+      await user.click(screen.getByRole('menuitem', { name: /Why does Run not work/ }))
 
-      expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
-      for (const handler of [
-        props.onSelectWorkspace,
-        props.onCreateWorkspace,
-        props.onWidthChange,
-        props.onRenameWorkspace,
-        props.onRemoveWorkspace,
-        props.onEditingWorkspaceChange
-      ]) {
-        expect(handler).not.toHaveBeenCalled()
+      expect(vi.mocked(props.onHelp).mock.calls).toEqual([['setupScripts'], ['diagnoseRun']])
+    })
+
+    // Each opens a conversation, so at the cap there is nowhere for it to go —
+    // shown and unavailable, saying why, rather than hidden.
+    it('offers neither while the workspace has no room for another conversation', async () => {
+      const user = userEvent.setup()
+      const props = renderSidebar({ ...inWorkspace, canStartChat: false })
+
+      await user.click(screen.getByRole('button', { name: 'Help' }))
+      const items = screen.getAllByRole('menuitem')
+
+      expect(items).toHaveLength(2)
+      for (const item of items) {
+        expect(item).toBeDisabled()
+        expect(item).toHaveTextContent('Close a tab first — 3 are open')
       }
+      await user.click(items[0] ?? document.body)
+      expect(props.onHelp).not.toHaveBeenCalled()
     })
   })
 })

@@ -2413,6 +2413,47 @@ describe('App', () => {
     })
   })
 
+  // Help opens a conversation and puts its text in the composer, unsent: the
+  // composer reads its draft once, as it mounts, so it has to be there first.
+  it('opens Help’s ask as a new conversation with the text in its composer, unsent', async () => {
+    givenTwoProjects()
+    givenChats([chat({ id: 'chat-1' })])
+    vi.mocked(window.octopus.workspaces.instruction).mockResolvedValue({
+      ok: true,
+      value: 'Write the scripts for this repository.'
+    })
+    vi.mocked(window.octopus.chats.create).mockImplementation(() => {
+      givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+      return Promise.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
+    })
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await user.click(screen.getByRole('menuitem', { name: /Set this project up to run/ }))
+    await waitFor(() => {
+      expect(screen.getByRole('textbox')).toHaveProperty(
+        'value',
+        expect.stringMatching(
+          /^Write the scripts for this repository\.\n\n[\s\S]*Checkout \(\$OCTOPUS_ROOT_PATH\): \/tmp\/planner/
+        )
+      )
+    })
+    expect(
+      within(screen.getByRole('navigation', { name: 'Conversations' })).getByRole('button', {
+        name: /^Claude 2/,
+        current: 'page'
+      })
+    ).toBeInTheDocument()
+    expect(window.octopus.workspaces.instruction).toHaveBeenCalledWith(
+      'planner/anna',
+      'setupScripts'
+    )
+    expect(window.octopus.chats.send).not.toHaveBeenCalled()
+  })
+
   // The browser's key for "bring back what I just closed". Closing a tab keeps
   // the conversation, so a slipped click is one keystroke from undone.
   it('brings back the conversation closed last with ⌘⇧T', async () => {

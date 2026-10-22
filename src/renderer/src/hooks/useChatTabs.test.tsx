@@ -204,6 +204,51 @@ describe('opening another conversation', () => {
     expect(result.current.activeKey).toBe('chat-2')
   })
 
+  // The composer reads its draft once, as it mounts: Help's text has to be put
+  // down while the record exists and its tab is not drawn yet.
+  it('names the new conversation before its tab is drawn', async () => {
+    givenChats([chat()])
+    vi.mocked(octopus().chats.create).mockResolvedValue({
+      ok: true,
+      value: chat({ id: 'chat-2' })
+    })
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    vi.mocked(octopus().chats.list).mockResolvedValue({
+      ok: true,
+      value: [chat(), chat({ id: 'chat-2' })]
+    })
+    const seen: { id: string; drawn: readonly string[] }[] = []
+    await act(async () => {
+      await result.current.create((id) => {
+        seen.push({ id, drawn: result.current.tabs.map((tab) => tab.key) })
+      })
+    })
+
+    // The first tab keeps the key it was drawn with; the new one is not there yet.
+    expect(seen).toEqual([{ id: 'chat-2', drawn: ['first'] }])
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
+  it('names nothing when the conversation could not be created', async () => {
+    givenChats([chat()])
+    vi.mocked(octopus().chats.create).mockResolvedValue({ ok: false, error: 'full' })
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    const beforeShown = vi.fn()
+    await act(async () => {
+      await result.current.create(beforeShown)
+    })
+
+    expect(beforeShown).not.toHaveBeenCalled()
+  })
+
   it('stops offering at the cap', async () => {
     givenChats([chat(), chat({ id: 'chat-2' }), chat({ id: 'chat-3' })])
     const { result } = open()

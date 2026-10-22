@@ -44,6 +44,7 @@ import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
 import { useFileTabs } from './hooks/useFileTabs.js'
+import { useHelp } from './hooks/useHelp.js'
 import { usePlugins } from './hooks/usePlugins.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useServerControls } from './hooks/useServerControls.js'
@@ -340,6 +341,10 @@ export function App(): React.JSX.Element {
   const keepDraft = useCallback((workspaceId: string, tabKey: string, text: string) => {
     setDrafts((current) => new Map(current).set(`${workspaceId}#${tabKey}`, text))
   }, [])
+
+  // Help's text goes down as the draft of a new conversation, read as its
+  // composer mounts — nothing is sent until the reader sends it.
+  const startHelp = useHelp(selectedWorkspaceId, chatTabs.create, keepDraft, setError)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1054,6 +1059,8 @@ export function App(): React.JSX.Element {
                 onEditingWorkspaceChange={workspaces.setEditingId}
                 width={sidebarWidth}
                 onWidthChange={(next) => void updateConfig({ sidebarWidth: next })}
+                onHelp={startHelp}
+                canStartChat={chatTabs.canCreate}
               />
             )}
           </div>
