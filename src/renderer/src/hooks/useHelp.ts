@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { LastRun } from '@core/runLog.js'
-
-import type { Result } from '../../../preload/index.js'
 import { type HelpKind, helpMessage } from '../components/helpMessage.js'
 import type { ChatTabsController } from './useChatTabs.js'
 import { useErrorMessage } from './useErrorMessage.js'
@@ -48,11 +45,9 @@ export function useHelp(
       if (id === null) return
 
       void (async () => {
-        const noRuns: Result<LastRun[]> = { ok: true, value: [] }
-        const [instruction, context, runs] = await Promise.all([
+        const [instruction, context] = await Promise.all([
           window.octopus.workspaces.instruction(id, kind),
-          window.octopus.workspaces.helpContext(id),
-          kind === 'diagnoseRun' ? window.octopus.terminal.lastRuns(id) : Promise.resolve(noRuns)
+          window.octopus.workspaces.helpContext(id)
         ])
         if (shown.current !== id) return
 
@@ -64,12 +59,8 @@ export function useHelp(
           report(describeFailure(context))
           return
         }
-        if (!runs.ok) {
-          report(describeFailure(runs))
-          return
-        }
 
-        const text = helpMessage(kind, instruction.value, context.value, runs.value, t)
+        const text = helpMessage(kind, instruction.value, context.value, t)
         await create((chatId) => {
           keepDraft(id, chatId, text)
         })

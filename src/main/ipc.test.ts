@@ -34,7 +34,7 @@ import type {
   WorkspaceStatusEvent
 } from '../core/service.js'
 import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
-import type { LastRun } from '../core/runLog.js'
+import type { RecordedRun } from '../core/runLog.js'
 import type { Workspace } from '../core/store.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
@@ -157,7 +157,7 @@ interface TerminalSpies {
   readonly write: Mock<(id: string, data: string) => void>
   readonly resize: Mock<(id: string, cols: number, rows: number) => void>
   readonly dispose: Mock<(id: string) => void>
-  readonly lastRuns: Mock<(workspaceId: string) => LastRun[]>
+  readonly lastRuns: Mock<(workspaceId: string) => RecordedRun[]>
   readonly forgetRuns: Mock<(workspaceId: string) => void>
 }
 
@@ -166,7 +166,7 @@ function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } 
     write: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
-    lastRuns: vi.fn((): LastRun[] => []),
+    lastRuns: vi.fn((): RecordedRun[] => []),
     forgetRuns: vi.fn()
   }
 
@@ -493,7 +493,6 @@ describe('channel table', () => {
     'terminal:resize',
     'terminal:dispose',
     'terminal:list',
-    'terminal:lastRuns',
     'accounts:status',
     'accounts:github',
     'accounts:signOut',
@@ -758,6 +757,29 @@ describe('validation at the boundary', () => {
     await expect(invoke('workspaces:helpContext', 'helped/nobody')).resolves.toMatchObject({
       ok: false
     })
+  })
+
+  it('hands Help a workspace’s last runs with its env set’s values masked', async () => {
+    const projectId = await addProject('masked')
+    const workspace = await createWorkspace(projectId)
+    await invoke('env:save', projectId, 'default', 'DATABASE_URL=postgres://u:hunter2@db/app\n')
+    sessions.lastRuns.mockReturnValueOnce([
+      {
+        purpose: 'run',
+        outcome: { kind: 'running' },
+        raw: 'cannot reach postgres://u:hunter2@db/app'
+      }
+    ])
+
+    await expect(invoke('workspaces:helpContext', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        lastRuns: [
+          { purpose: 'run', outcome: { kind: 'running' }, output: 'cannot reach [DATABASE_URL]' }
+        ]
+      }
+    })
+    expect(sessions.lastRuns).toHaveBeenCalledWith(workspace.id)
   })
 
   it('rejects an instruction body that is not a string', async () => {
@@ -3431,29 +3453,6 @@ describe('the list of what is still running', () => {
       ok: true,
       value: [{ owner: { workspaceId: null, purpose: 'shell' } }]
     })
-  })
-
-  // A script that prints its connection string must not hand Help the password.
-  it('answers with a workspace’s last runs, its env set’s values masked', async () => {
-    const projectId = await addProject('masked')
-    const workspace = await createWorkspace(projectId)
-    await invoke('env:save', projectId, 'default', 'DATABASE_URL=postgres://u:hunter2@db/app\n')
-    sessions.lastRuns.mockReturnValueOnce([
-      {
-        purpose: 'run',
-        endedAt: null,
-        exitCode: null,
-        output: 'cannot reach postgres://u:hunter2@db/app'
-      }
-    ])
-
-    await expect(invoke('terminal:lastRuns', workspace.id)).resolves.toEqual({
-      ok: true,
-      value: [
-        { purpose: 'run', endedAt: null, exitCode: null, output: 'cannot reach [DATABASE_URL]' }
-      ]
-    })
-    expect(sessions.lastRuns).toHaveBeenCalledWith(workspace.id)
   })
 
   it('refuses a purpose that is none of the five', async () => {

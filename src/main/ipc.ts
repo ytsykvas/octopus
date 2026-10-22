@@ -301,18 +301,6 @@ export function registerIpc(
    */
   host.handle('terminal:list', () => attempt(() => Promise.resolve(terminals.list())))
 
-  /*
-   * A workspace's last build and server, kept past the sessions that ran them,
-   * with the values of its env set masked: the output is kept here, the values
-   * are known to the core.
-   *
-   * The id is typed rather than parsed: it is a key into a map and the store,
-   * and reaches no process, path or script.
-   */
-  host.handle('terminal:lastRuns', (_event, workspaceId: string) =>
-    attempt(() => service.maskRunOutput(workspaceId, terminals.lastRuns(workspaceId)))
-  )
-
   // The patch is validated rather than trusted: it arrives from the renderer
   // and its base branch reaches a git command.
   host.handle('projects:update', (_event, projectId: string, patch: unknown) =>
@@ -554,9 +542,13 @@ export function registerIpc(
     attempt(() => service.readEffectiveInstruction(workspaceId, InstructionKindSchema.parse(kind)))
   )
 
-  // Beside the instruction it is written under. The id is only looked up.
+  /*
+   * The runs are kept in `main` and the values to mask out of them are known
+   * only to the core, so this is where the two meet — and the one way a run's
+   * output reaches the window. The id is only looked up.
+   */
   host.handle('workspaces:helpContext', (_event, workspaceId: string) =>
-    attempt(() => service.helpContext(workspaceId))
+    attempt(() => service.helpContext(workspaceId, terminals.lastRuns(workspaceId)))
   )
 
   /*

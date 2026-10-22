@@ -5,10 +5,10 @@ import { homedir } from 'node:os'
 
 import {
   appendTail,
-  cleanTerminalOutput,
-  lastLines,
-  TAIL_LINES,
-  type LastRun
+  RUN_PURPOSES,
+  type RecordedRun,
+  type RunOutcome,
+  type RunPurpose
 } from '../core/runLog.js'
 import {
   buildTerminalArgv,
@@ -108,18 +108,17 @@ interface Session {
  * chunk would be 30 000 objects a second for a build that prints fast.
  */
 interface RunRecord {
-  readonly purpose: LastRun['purpose']
-  endedAt: string | null
-  exitCode: number | null
-  /** Raw, at most `TAIL_CHARS`; cleaned only when somebody asks. */
-  tail: string
+  readonly purpose: RunPurpose
+  outcome: RunOutcome
+  /** At most `TAIL_CHARS`; cleaned only when somebody asks. */
+  raw: string
 }
 
-/** The two purposes worth asking about afterwards, in the order they run. */
-const RECORDED: readonly LastRun['purpose'][] = ['setup', 'run']
+/** A workspace's last build and server, whichever it has. */
+type WorkspaceRuns = Partial<Record<RunPurpose, RunRecord>>
 
-function recordKey(workspaceId: string, purpose: LastRun['purpose']): string {
-  return `${workspaceId}\u0000${purpose}`
+function isRunPurpose(purpose: string): purpose is RunPurpose {
+  return RUN_PURPOSES.some((recorded) => recorded === purpose)
 }
 
 export class TerminalManager {
@@ -132,7 +131,7 @@ export class TerminalManager {
    * run, often from somewhere else. Kept in memory only: it survives a reload
    * of the window and not a restart of the application.
    */
-  private readonly runs = new Map<string, RunRecord>()
+  private readonly runs = new Map<string, WorkspaceRuns>()
   /**
    * Sessions out of `sessions` whose group has not emptied yet, by id.
    *
@@ -194,7 +193,7 @@ export class TerminalManager {
     }
 
     pty.onData((data) => {
-      if (record) record.tail = appendTail(record.tail, data)
+      if (record) record.raw = appendTail(record.raw, data)
 
       if (batch === null) {
         send(data)
@@ -227,10 +226,7 @@ export class TerminalManager {
 
       // Before anything that depends on the window: the record is for asking
       // later, and a window closed mid-run is one of the times it is asked.
-      if (record) {
-        record.endedAt = this.now().toISOString()
-        record.exitCode = code
-      }
+      if (record) record.outcome = { kind: 'exited', at: this.now().toISOString(), exitCode: code }
 
       // What is still gathered goes first. Told of the exit before it, the pane
       // forgets the session and drops the run's last lines on arrival.
@@ -281,44 +277,36 @@ export class TerminalManager {
    *
    * Replaced at the start rather than the end: the question is about the run
    * somebody just pressed, and a server restarted after a failed one should
-   * not answer with the failure. A build clears the server too, for the same
-   * reason one Run later.
+   * not answer with the failure.
    */
   private startRecord(owner: TerminalOwner): RunRecord | null {
     const { workspaceId, purpose } = owner
-    if (workspaceId === null || (purpose !== 'setup' && purpose !== 'run')) return null
+    if (workspaceId === null || !isRunPurpose(purpose)) return null
 
-    const record: RunRecord = { purpose, endedAt: null, exitCode: null, tail: '' }
-    this.runs.set(recordKey(workspaceId, purpose), record)
+    const record: RunRecord = { purpose, outcome: { kind: 'running' }, raw: '' }
     // A build starts a new Run, and the server from the one before would read
     // as this one's: a fresh failed build beside an older server that came up.
-    if (purpose === 'setup') this.runs.delete(recordKey(workspaceId, 'run'))
+    const kept = purpose === 'setup' ? {} : this.runs.get(workspaceId)
+    this.runs.set(workspaceId, { ...kept, [purpose]: record })
     return record
   }
 
   /**
    * The last build and server of a workspace, whichever exist, build first.
    *
-   * Cleaned here, once per question, rather than on every chunk.
+   * Copies, so nothing outside can write into a record still streaming.
    */
-  lastRuns(workspaceId: string): LastRun[] {
-    return RECORDED.flatMap((purpose) => {
-      const record = this.runs.get(recordKey(workspaceId, purpose))
-      if (!record) return []
-      return [
-        {
-          purpose,
-          endedAt: record.endedAt,
-          exitCode: record.exitCode,
-          output: lastLines(cleanTerminalOutput(record.tail), TAIL_LINES)
-        }
-      ]
+  lastRuns(workspaceId: string): RecordedRun[] {
+    const runs = this.runs.get(workspaceId)
+    return RUN_PURPOSES.flatMap((purpose) => {
+      const record = runs?.[purpose]
+      return record ? [{ purpose, outcome: record.outcome, raw: record.raw }] : []
     })
   }
 
-  /** Drops a workspace's records, once the workspace itself has gone. */
+  /** Drops a workspace's records: when it is removed, and when a new one is made under its id. */
   forgetRuns(workspaceId: string): void {
-    for (const purpose of RECORDED) this.runs.delete(recordKey(workspaceId, purpose))
+    this.runs.delete(workspaceId)
   }
 
   write(id: TerminalId, data: string): void {

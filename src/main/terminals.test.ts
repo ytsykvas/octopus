@@ -1090,19 +1090,18 @@ describe('the last runs of a workspace', () => {
     return pty
   }
 
-  it('keeps a build’s output, cleaned, with its exit code and when it ended', () => {
+  it('keeps a build’s output as it was sent, with its exit code and when it ended', () => {
     manager = new TerminalManager(groupKill, () => new Date('2026-10-22T09:41:00.000Z'))
     const pty = started('setup')
     pty.emit('\u001b[32minstalling\u001b[0m\r\n')
-    pty.emit('10%\r100%\r\nerror: no database\r\n')
+    pty.emit('error: no database\r\n')
     pty.end({ exitCode: 2 })
 
     expect(manager.lastRuns(ANNA)).toEqual([
       {
         purpose: 'setup',
-        endedAt: '2026-10-22T09:41:00.000Z',
-        exitCode: 2,
-        output: 'installing\n100%\nerror: no database'
+        outcome: { kind: 'exited', at: '2026-10-22T09:41:00.000Z', exitCode: 2 },
+        raw: '\u001b[32minstalling\u001b[0m\r\nerror: no database\r\n'
       }
     ])
   })
@@ -1111,16 +1110,16 @@ describe('the last runs of a workspace', () => {
     started('run').emit('listening')
 
     expect(manager.lastRuns(ANNA)).toEqual([
-      { purpose: 'run', endedAt: null, exitCode: null, output: 'listening' }
+      { purpose: 'run', outcome: { kind: 'running' }, raw: 'listening' }
     ])
   })
 
   it('reports no code for a run a signal ended', () => {
     started('run').end({ exitCode: 0, signal: 15 })
 
-    const [run] = manager.lastRuns(ANNA)
-    expect(run?.exitCode).toBeNull()
-    expect(run?.endedAt).not.toBeNull()
+    expect(manager.lastRuns(ANNA)).toMatchObject([
+      { outcome: { kind: 'exited', at: expect.any(String), exitCode: null } }
+    ])
   })
 
   it('gives the build before the server', () => {
@@ -1136,7 +1135,7 @@ describe('the last runs of a workspace', () => {
     started('setup').emit('building')
 
     expect(manager.lastRuns(ANNA)).toEqual([
-      { purpose: 'setup', endedAt: null, exitCode: null, output: 'building' }
+      { purpose: 'setup', outcome: { kind: 'running' }, raw: 'building' }
     ])
   })
 
@@ -1156,7 +1155,7 @@ describe('the last runs of a workspace', () => {
     first.end({ exitCode: 1 })
 
     expect(manager.lastRuns(ANNA)).toEqual([
-      { purpose: 'run', endedAt: null, exitCode: null, output: 'second' }
+      { purpose: 'run', outcome: { kind: 'running' }, raw: 'second' }
     ])
   })
 
@@ -1168,7 +1167,11 @@ describe('the last runs of a workspace', () => {
     spawned[0]?.end({ exitCode: 0, signal: 15 })
 
     expect(manager.lastRuns(ANNA)).toEqual([
-      { purpose: 'setup', endedAt: expect.any(String), exitCode: null, output: 'built' }
+      {
+        purpose: 'setup',
+        outcome: { kind: 'exited', at: expect.any(String), exitCode: null },
+        raw: 'built'
+      }
     ])
   })
 

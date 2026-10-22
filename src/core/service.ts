@@ -103,7 +103,7 @@ import { allowedStanding, type StandingPermission, withStanding } from './standi
 import type { CarryReport, PreparedWorkspace } from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
 import { checkEnvBody, type EnvProblem, parseEnvBody, substituteEnv } from './envBlock.js'
-import { type LastRun, maskValues } from './runLog.js'
+import { helpRun, type LastRun, type RecordedRun } from './runLog.js'
 import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
   createProfile,
@@ -819,6 +819,8 @@ export interface HelpContext {
   /** The paths carried into the workspace before a run, the repository's included. */
   readonly carry: readonly string[]
   readonly scripts: ScriptsInWorkspace
+  /** The last build and server, build first, as `helpRun` makes them fit to quote. */
+  readonly lastRuns: readonly LastRun[]
 }
 
 export interface OctopusService {
@@ -867,16 +869,10 @@ export interface OctopusService {
    */
   workspaceScripts(workspaceId: string): Promise<ScriptsInWorkspace>
   /**
-   * The facts Help adds under its instructions: where the checkout is, which
-   * scripts and env set are in effect, what is carried and the variable names.
+   * The facts Help adds under its instructions, with the runs `main` kept for
+   * this workspace (`TerminalManager.lastRuns`) made fit to quote.
    */
-  helpContext(workspaceId: string): Promise<HelpContext>
-  /**
-   * Last runs with the values of the workspace's env set masked out of their
-   * output (`maskValues`), so asking Help about a run cannot quote a credential
-   * the script printed.
-   */
-  maskRunOutput(workspaceId: string, runs: readonly LastRun[]): Promise<LastRun[]>
+  helpContext(workspaceId: string, runs: readonly RecordedRun[]): Promise<HelpContext>
   /**
    * Records that these scripts were read, so they may run.
    *
@@ -5205,13 +5201,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return scriptsIn(workspace, requireProject(workspace.projectId))
     },
 
-    async maskRunOutput(workspaceId, runs) {
-      const workspace = requireWorkspace(workspaceId)
-      const { variables } = await scriptSetFor(requireProject(workspace.projectId), workspace)
-      return runs.map((run) => ({ ...run, output: maskValues(run.output, variables) }))
-    },
-
-    async helpContext(workspaceId) {
+    async helpContext(workspaceId, runs) {
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
       const { values, stored, variables } = await scriptSetFor(project, workspace)
@@ -5225,7 +5215,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           NAMED_PROBLEMS.has(problem.reason) ? problem : { ...problem, subject: '' }
         ),
         carry: (await carriedIn(project, workspace.path)).map((file) => file.path),
-        scripts: await scriptsIn(workspace, project)
+        scripts: await scriptsIn(workspace, project),
+        lastRuns: runs.map((run) => helpRun(run, variables))
       }
     },
 

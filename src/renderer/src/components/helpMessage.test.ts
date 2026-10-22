@@ -30,18 +30,23 @@ function context(overrides: Partial<HelpContext> = {}): HelpContext {
         }
       }
     },
+    lastRuns: [],
     ...overrides
   }
 }
 
 const ENDED = '2026-10-22T09:41:00.000Z'
 
-const BUILD: LastRun = { purpose: 'setup', endedAt: ENDED, exitCode: 1, output: 'error: no db' }
-const SERVER: LastRun = { purpose: 'run', endedAt: null, exitCode: null, output: 'listening' }
+const BUILD: LastRun = {
+  purpose: 'setup',
+  outcome: { kind: 'exited', at: ENDED, exitCode: 1 },
+  output: 'error: no db'
+}
+const SERVER: LastRun = { purpose: 'run', outcome: { kind: 'running' }, output: 'listening' }
 
 describe('helpMessage', () => {
   it('puts the instruction first and the facts under it', () => {
-    const message = helpMessage('setupScripts', '  Set it up.\n', context(), [], t)
+    const message = helpMessage('setupScripts', '  Set it up.\n', context(), t)
 
     expect(message).toBe(
       [
@@ -69,21 +74,17 @@ describe('helpMessage', () => {
 
   // Setting up is about what is in place, not about a run that may never have happened.
   it('says nothing about runs when asked to set the project up', () => {
-    expect(helpMessage('setupScripts', 'x', context(), [BUILD], t)).not.toContain('error: no db')
+    expect(helpMessage('setupScripts', 'x', context({ lastRuns: [BUILD] }), t)).not.toContain(
+      'error: no db'
+    )
   })
 
   it('leaves the facts alone when the instruction was emptied', () => {
-    expect(helpMessage('setupScripts', '   ', context(), [], t)).toMatch(/^— What octopus/)
+    expect(helpMessage('setupScripts', '   ', context(), t)).toMatch(/^— What octopus/)
   })
 
   it('says so where nothing is defined or carried', () => {
-    const message = helpMessage(
-      'setupScripts',
-      'x',
-      context({ variableNames: [], carry: [] }),
-      [],
-      t
-    )
+    const message = helpMessage('setupScripts', 'x', context({ variableNames: [], carry: [] }), t)
 
     expect(message).toContain('The env set in effect defines no variables.')
     expect(message).toContain('No files are carried into the workspace.')
@@ -92,8 +93,8 @@ describe('helpMessage', () => {
   it('says why Run is disabled where the repository’s scripts wait to be allowed', () => {
     const waiting = context({ scripts: { ...context().scripts, approved: false, digest: 'abc' } })
 
-    expect(helpMessage('setupScripts', 'x', waiting, [], t)).toContain('not been allowed yet')
-    expect(helpMessage('setupScripts', 'x', context(), [], t)).not.toContain('allowed')
+    expect(helpMessage('setupScripts', 'x', waiting, t)).toContain('not been allowed yet')
+    expect(helpMessage('setupScripts', 'x', context(), t)).not.toContain('allowed')
   })
 
   it('names each problem in the env set, and the ones about text from the line by number alone', () => {
@@ -109,7 +110,6 @@ describe('helpMessage', () => {
           { line: 6, reason: 'marker', subject: '# >>> octopus' }
         ]
       }),
-      [],
       t
     )
 
@@ -128,7 +128,7 @@ describe('helpMessage', () => {
   })
 
   it('adds the build and then the server, each with its last lines fenced', () => {
-    const message = helpMessage('diagnoseRun', 'Why?', context(), [BUILD, SERVER], t)
+    const message = helpMessage('diagnoseRun', 'Why?', context({ lastRuns: [BUILD, SERVER] }), t)
 
     const build = `Build ended at ${formatClock(ENDED)} with exit code 1. Its last lines:\n\n\`\`\`\nerror: no db\n\`\`\``
     const server = 'Server is still running. Its last lines so far:\n\n```\nlistening\n```'
@@ -136,15 +136,19 @@ describe('helpMessage', () => {
   })
 
   it('tells a run a signal ended from one that failed, and one that printed nothing', () => {
-    const stopped: LastRun = { purpose: 'run', endedAt: ENDED, exitCode: null, output: '' }
+    const stopped: LastRun = {
+      purpose: 'run',
+      outcome: { kind: 'exited', at: ENDED, exitCode: null },
+      output: ''
+    }
 
-    expect(helpMessage('diagnoseRun', 'Why?', context(), [stopped], t)).toContain(
+    expect(helpMessage('diagnoseRun', 'Why?', context({ lastRuns: [stopped] }), t)).toContain(
       `Server was ended by a signal at ${formatClock(ENDED)}. Its last lines:\n\n\`\`\`\n(it printed nothing)\n\`\`\``
     )
   })
 
   it('asks for a run first where there has been none', () => {
-    expect(helpMessage('diagnoseRun', 'Why?', context(), [], t)).toMatch(
+    expect(helpMessage('diagnoseRun', 'Why?', context(), t)).toMatch(
       /Nothing has been run in this workspace since octopus started\. .*$/
     )
   })

@@ -2,7 +2,7 @@ import type { TFunction } from 'i18next'
 
 import type { EnvProblem } from '@core/envBlock.js'
 import type { InstructionKind } from '@core/instructions.js'
-import type { LastRun } from '@core/runLog.js'
+import type { LastRun, RunPurpose } from '@core/runLog.js'
 import { SCRIPT_KINDS } from '@core/scriptEnv.js'
 import type { HelpContext } from '@core/service.js'
 
@@ -28,17 +28,28 @@ function problemLine(problem: EnvProblem, t: TFunction): string {
   }
 }
 
-function runPart(run: LastRun, t: TFunction): string {
-  const stage = t(run.purpose === 'setup' ? 'scripts.build' : 'scripts.server')
-  const header =
-    run.endedAt === null
-      ? t('help.context.lastRunRunning', { stage })
-      : run.exitCode === null
-        ? t('help.context.lastRunStopped', { stage, at: formatClock(run.endedAt) })
-        : t('help.context.lastRun', { stage, at: formatClock(run.endedAt), code: run.exitCode })
-  const output = run.output === '' ? t('help.context.noOutput') : run.output
+const STAGES = { setup: 'scripts.build', run: 'scripts.server' } as const satisfies Record<
+  RunPurpose,
+  string
+>
 
-  return `${header}\n\n\`\`\`\n${output}\n\`\`\``
+function runHeader({ purpose, outcome }: LastRun, t: TFunction): string {
+  const stage = t(STAGES[purpose])
+  switch (outcome.kind) {
+    case 'running':
+      return t('help.context.lastRunRunning', { stage })
+    case 'exited': {
+      const at = formatClock(outcome.at)
+      return outcome.exitCode === null
+        ? t('help.context.lastRunStopped', { stage, at })
+        : t('help.context.lastRun', { stage, at, code: outcome.exitCode })
+    }
+  }
+}
+
+function runPart(run: LastRun, t: TFunction): string {
+  const output = run.output === '' ? t('help.context.noOutput') : run.output
+  return `${runHeader(run, t)}\n\n\`\`\`\n${output}\n\`\`\``
 }
 
 /** What a workspace has in place: one block, the same for both kinds. */
@@ -95,17 +106,15 @@ export function helpMessage(
   kind: HelpKind,
   instruction: string,
   context: HelpContext,
-  lastRuns: readonly LastRun[],
   t: TFunction
 ): string {
-  const runs =
-    kind === 'diagnoseRun'
-      ? lastRuns.length === 0
-        ? [t('help.context.noRun')]
-        : lastRuns.map((run) => runPart(run, t))
-      : []
+  const parts = [instruction.trim(), factsPart(context, t)]
 
-  return [instruction.trim(), factsPart(context, t), ...runs]
-    .filter((part) => part !== '')
-    .join('\n\n')
+  if (kind === 'diagnoseRun') {
+    const { lastRuns } = context
+    if (lastRuns.length === 0) parts.push(t('help.context.noRun'))
+    else parts.push(...lastRuns.map((run) => runPart(run, t)))
+  }
+
+  return parts.filter((part) => part !== '').join('\n\n')
 }

@@ -2922,7 +2922,7 @@ describe('what Help is told about a workspace', () => {
       'API_KEY=sentinel-secret-value\nDB_NAME=app_$OCTOPUS_WORKSPACE_SLUG\n'
     )
 
-    const context = await service.helpContext(workspaceId)
+    const context = await service.helpContext(workspaceId, [])
 
     expect(context).toMatchObject({
       rootPath: repoPath,
@@ -2940,7 +2940,7 @@ describe('what Help is told about a workspace', () => {
     const { projectId, workspaceId } = await withWorkspace()
     await service.saveEnvProfile(projectId, 'default', 'A=1\nsk-live-pasted-token\nA=2\n')
 
-    const { envProblems } = await service.helpContext(workspaceId)
+    const { envProblems } = await service.helpContext(workspaceId, [])
 
     expect(envProblems).toEqual([
       { line: 2, reason: 'noAssignment', subject: '' },
@@ -2969,7 +2969,7 @@ describe('what Help is told about a workspace', () => {
       ].join('\n')
     )
 
-    const context = await service.helpContext(workspaceId)
+    const context = await service.helpContext(workspaceId, [])
 
     expect(JSON.stringify(context)).not.toContain('hunter2')
     expect(JSON.stringify(context)).not.toContain('q3Zx')
@@ -2989,7 +2989,7 @@ describe('what Help is told about a workspace', () => {
     await service.setWorkspaceEnvProfile(workspaceId, 'prod')
     await rm(projectEnvProfile(projectId, 'prod', join(dir, 'data')))
 
-    await expect(service.helpContext(workspaceId)).resolves.toMatchObject({
+    await expect(service.helpContext(workspaceId, [])).resolves.toMatchObject({
       profile: 'prod',
       variableNames: [],
       envProblems: []
@@ -3001,7 +3001,7 @@ describe('what Help is told about a workspace', () => {
     await service.saveProjectCarryList(projectId, '.env\nconfig/master.key\n')
     await service.saveProjectScript(projectId, 'run', '#!/bin/sh\nexec true\n')
 
-    const context = await service.helpContext(workspaceId)
+    const context = await service.helpContext(workspaceId, [])
 
     expect(context.carry).toEqual(['.env', 'config/master.key'])
     expect(context.scripts).toEqual(await service.workspaceScripts(workspaceId))
@@ -3009,10 +3009,7 @@ describe('what Help is told about a workspace', () => {
   })
 
   it('refuses a workspace it does not know', async () => {
-    await expect(service.helpContext('planner/nobody')).rejects.toMatchObject({
-      code: 'worktreeMissing'
-    })
-    await expect(service.maskRunOutput('planner/nobody', [])).rejects.toMatchObject({
+    await expect(service.helpContext('planner/nobody', [])).rejects.toMatchObject({
       code: 'worktreeMissing'
     })
   })

@@ -5,6 +5,7 @@ import { InstructionBodySchema } from './instructions.js'
 import {
   appendTail,
   cleanTerminalOutput,
+  helpRun,
   lastLines,
   maskValues,
   TAIL_CHARS,
@@ -63,16 +64,16 @@ describe('cleanTerminalOutput', () => {
 
 describe('lastLines', () => {
   it('hands back every line when there are fewer than asked for', () => {
-    expect(lastLines('one\ntwo', 5)).toBe('one\ntwo')
+    expect(lastLines('one\ntwo', 5, 100)).toBe('one\ntwo')
   })
 
   it('drops blank lines at the end before counting', () => {
-    expect(lastLines('one\ntwo\nthree\n\n  \n', 2)).toBe('two\nthree')
+    expect(lastLines('one\ntwo\nthree\n\n  \n', 2, 100)).toBe('two\nthree')
   })
 
   it('hands back exactly TAIL_LINES of a longer text, the last ones', () => {
     const text = Array.from({ length: TAIL_LINES + 10 }, (_, index) => String(index)).join('\n')
-    const lines = lastLines(text, TAIL_LINES).split('\n')
+    const lines = lastLines(text, TAIL_LINES, TAIL_OUTPUT_CHARS).split('\n')
 
     expect(lines).toHaveLength(TAIL_LINES)
     expect(lines[0]).toBe('10')
@@ -80,7 +81,7 @@ describe('lastLines', () => {
   })
 
   it('hands back nothing for nothing', () => {
-    expect(lastLines('\n\n', 3)).toBe('')
+    expect(lastLines('\n\n', 3, 100)).toBe('')
   })
 
   it('keeps whole lines within the character budget, the last ones', () => {
@@ -90,12 +91,6 @@ describe('lastLines', () => {
 
   it('keeps the end of a single line longer than the budget', () => {
     expect(lastLines('0123456789', 10, 4)).toBe('6789')
-  })
-
-  it('holds a server logging long lines to the budget by default', () => {
-    const json = Array.from({ length: TAIL_LINES }, () => 'x'.repeat(400)).join('\n')
-
-    expect(lastLines(json, TAIL_LINES).length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
   })
 
   /*
@@ -133,5 +128,42 @@ describe('maskValues', () => {
     expect(maskValues('debug true on 5432', { DEBUG: 'true', PORT: '5432' })).toBe(
       'debug true on 5432'
     )
+  })
+})
+
+describe('helpRun', () => {
+  const run = (raw: string): Parameters<typeof helpRun>[0] => ({
+    purpose: 'run',
+    outcome: { kind: 'running' },
+    raw
+  })
+
+  it('cleans what the terminal was sent and masks the values in it', () => {
+    expect(
+      helpRun(run('\u001b[31mcannot reach postgres://u:hunter2@db\u001b[0m\r\n'), {
+        DATABASE_URL: 'postgres://u:hunter2@db'
+      })
+    ).toEqual({
+      purpose: 'run',
+      outcome: { kind: 'running' },
+      output: 'cannot reach [DATABASE_URL]'
+    })
+  })
+
+  it('holds a server logging long lines to the budget', () => {
+    const json = Array.from({ length: TAIL_LINES }, () => 'x'.repeat(400)).join('\n')
+
+    expect(helpRun(run(json), {}).output.length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
+  })
+
+  // Cut first, the budget would start inside the value and leave its end unmatched.
+  it('masks before it cuts, so no part of a value survives the cut', () => {
+    const secret = 'sk-live-0123456789abcdef'
+    const line = `${'x'.repeat(100)}${secret}${'y'.repeat(TAIL_OUTPUT_CHARS - 10)}`
+
+    const { output } = helpRun(run(line), { API_TOKEN: secret })
+
+    expect(output).not.toContain('abcdef')
+    expect(output.length).toBeLessThanOrEqual(TAIL_OUTPUT_CHARS)
   })
 })

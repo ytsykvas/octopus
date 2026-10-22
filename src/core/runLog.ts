@@ -4,10 +4,12 @@
  * A run's output otherwise lives only in the terminal on screen, and the window
  * throws a pane's buffer away when it unmounts — so by the time anybody asks
  * "why does Run not work?" the answer has usually gone. `main` keeps the raw
- * tail of each run as it streams; these are the pure halves of that: how much
- * is kept, and how the raw bytes of a terminal become lines a person — or an
- * agent — can read.
+ * tail of each run as it streams; this module holds the pure parts: how much is
+ * kept, how raw terminal bytes become readable lines, and how the env set's
+ * values are masked out of them before Help quotes them.
  */
+
+import type { TerminalPurpose } from './terminal.js'
 
 /**
  * How much raw output is kept per run, in characters.
@@ -75,7 +77,7 @@ export function cleanTerminalOutput(raw: string): string {
  * than `chars` of them — whole lines where it can, the end of one where a
  * single line is longer than that.
  */
-export function lastLines(text: string, lines: number, chars: number = TAIL_OUTPUT_CHARS): string {
+export function lastLines(text: string, lines: number, chars: number): string {
   const all = text.split('\n')
   while (all.length > 0 && all.at(-1)?.trim() === '') all.pop()
 
@@ -115,13 +117,46 @@ export function maskValues(text: string, variables: Readonly<Record<string, stri
     .reduce((masked, [name, value]) => masked.replaceAll(value, `[${name}]`), text)
 }
 
+/** The two purposes worth asking about afterwards, in the order a Run starts them. */
+export const RUN_PURPOSES = ['setup', 'run'] as const satisfies readonly TerminalPurpose[]
+
+export type RunPurpose = (typeof RUN_PURPOSES)[number]
+
+/** Where a run got to. */
+export type RunOutcome =
+  | { readonly kind: 'running' }
+  /** `exitCode` is null when a signal ended it, as `terminal:exit` reports it. */
+  | { readonly kind: 'exited'; readonly at: string; readonly exitCode: number | null }
+
+/**
+ * A workspace's most recent build or server as `main` keeps it.
+ *
+ * `raw` is what the terminal was sent — not cleaned, masked or cut yet — so it
+ * is never handed to the window; `helpRun` makes a `LastRun` of it.
+ */
+export interface RecordedRun {
+  readonly purpose: RunPurpose
+  readonly outcome: RunOutcome
+  readonly raw: string
+}
+
 /** One script's most recent run in a workspace, as somebody asking about it reads it. */
 export interface LastRun {
-  readonly purpose: 'setup' | 'run'
-  /** When the shell ended, or null while it is still running. */
-  readonly endedAt: string | null
-  /** Null while running or when a signal ended it, as `terminal:exit` reports it. */
-  readonly exitCode: number | null
-  /** Cleaned, at most the last `TAIL_LINES` lines. */
+  readonly purpose: RunPurpose
+  readonly outcome: RunOutcome
   readonly output: string
+}
+
+/**
+ * A recorded run as Help may quote it: cleaned, masked, then cut.
+ *
+ * Masked before it is cut, so a cut cannot land inside a value and leave the
+ * rest of it unmatched.
+ */
+export function helpRun(
+  { purpose, outcome, raw }: RecordedRun,
+  variables: Readonly<Record<string, string>>
+): LastRun {
+  const masked = maskValues(cleanTerminalOutput(raw), variables)
+  return { purpose, outcome, output: lastLines(masked, TAIL_LINES, TAIL_OUTPUT_CHARS) }
 }

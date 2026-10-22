@@ -153,9 +153,10 @@ block of what octopus knows that the agent cannot find for itself —
 variables **by name only**, the scripts in effect and where they come from,
 whether the repository's still wait for _Allow these_, the carried paths and the
 set's problems. _Why does Run not work?_ adds the last build and server from
-`terminal:lastRuns`, each with its exit code and last lines — the env set's
-values masked out of them — or asks for a run where there has been none. `helpMessage.ts` assembles it; `useHelp` reads all of
-it before creating anything, so a failed read opens nothing.
+the same answer, each with how it ended and its last lines — the env set's
+values masked out of them — or asks for a run where there has been none.
+`helpMessage.ts` assembles it; `useHelp` reads all of it before creating
+anything, so a failed read opens nothing.
 
 A new tab, where the pull request pane refuses to start one, because here the
 person pressed Help and a conversation is what they asked for — and because a

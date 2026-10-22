@@ -34,7 +34,6 @@ import type { QuestionAnswer } from '@core/questions.js'
 import type { ResourceReading } from '@core/resources.js'
 import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
 import type { ChatEntry } from '@core/transcript.js'
-import type { LastRun } from '@core/runLog.js'
 import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
 import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { CliPermission } from '@core/cliPermissions.js'
@@ -218,10 +217,6 @@ const api = {
      */
     list: (): Promise<Result<TerminalSession[]>> =>
       ipcRenderer.invoke('terminal:list') as Promise<Result<TerminalSession[]>>,
-
-    /** A workspace's last build and server, build first, whichever exist. */
-    lastRuns: (workspaceId: string): Promise<Result<LastRun[]>> =>
-      ipcRenderer.invoke('terminal:lastRuns', workspaceId) as Promise<Result<LastRun[]>>,
 
     onData: fanOut('terminal:data'),
 
@@ -691,8 +686,8 @@ const api = {
       ipcRenderer.invoke('instructions:effective', workspaceId, kind) as Promise<Result<string>>,
 
     /**
-     * What Help writes under its instruction: the checkout, the scripts and env
-     * set in effect, what is carried, and the variables by name — never a value.
+     * What Help writes under its instruction (`HelpContext`): names, never a
+     * value, and the last runs with the env set's values masked out.
      */
     helpContext: (workspaceId: string): Promise<Result<HelpContext>> =>
       ipcRenderer.invoke('workspaces:helpContext', workspaceId) as Promise<Result<HelpContext>>,

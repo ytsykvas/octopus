@@ -47,7 +47,6 @@ describe('useHelp', () => {
     })
     expect(octopus().workspaces.instruction).toHaveBeenCalledWith(WORKSPACE, 'setupScripts')
     expect(octopus().workspaces.helpContext).toHaveBeenCalledWith(WORKSPACE)
-    expect(octopus().terminal.lastRuns).not.toHaveBeenCalled()
     expect(create).toHaveBeenCalledOnce()
 
     const [workspaceId, tabKey, text] = keepDraft.mock.calls[0] ?? []
@@ -57,10 +56,15 @@ describe('useHelp', () => {
     expect(text).toContain('/tmp/planner')
   })
 
-  it('reads the last runs as well when asked why Run does not work', async () => {
-    vi.mocked(octopus().terminal.lastRuns).mockResolvedValue({
+  it('puts the last runs down as well when asked why Run does not work', async () => {
+    const context = await octopus().workspaces.helpContext(WORKSPACE)
+    if (!context.ok) throw new Error('the stub answers')
+    vi.mocked(octopus().workspaces.helpContext).mockResolvedValue({
       ok: true,
-      value: [{ purpose: 'setup', endedAt: null, exitCode: null, output: 'bundling' }]
+      value: {
+        ...context.value,
+        lastRuns: [{ purpose: 'setup', outcome: { kind: 'running' }, output: 'bundling' }]
+      }
     })
     const { ask, keepDraft } = open()
 
@@ -72,14 +76,12 @@ describe('useHelp', () => {
       expect(keepDraft).toHaveBeenCalledOnce()
     })
     expect(octopus().workspaces.instruction).toHaveBeenCalledWith(WORKSPACE, 'diagnoseRun')
-    expect(octopus().terminal.lastRuns).toHaveBeenCalledWith(WORKSPACE)
     expect(keepDraft.mock.calls[0]?.[2]).toContain('bundling')
   })
 
   it.each([
     ['the instruction', () => vi.mocked(octopus().workspaces.instruction)],
-    ['the facts', () => vi.mocked(octopus().workspaces.helpContext)],
-    ['the last runs', () => vi.mocked(octopus().terminal.lastRuns)]
+    ['the facts', () => vi.mocked(octopus().workspaces.helpContext)]
   ])('reports %s that could not be read, and opens nothing', async (_, read) => {
     read().mockResolvedValue({ ok: false, error: 'could not read it' } as never)
     const { ask, create, report } = open()
