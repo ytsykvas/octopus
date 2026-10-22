@@ -1,5 +1,5 @@
 import { Copy, ExternalLink, MessageSquarePlus, RefreshCw } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { CodeNote } from '../../hooks/useCodeNotes.js'
@@ -9,7 +9,7 @@ import { NoteEditor } from '../NoteEditor.js'
 import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { fileSize } from '../fileSize.js'
 import { IconButton, Notice } from '../paneControls.js'
-import { type CodeSelection, codeSelection } from './codeSelection.js'
+import { type CodeSelection, codeSelection, type LineGeometry } from './codeSelection.js'
 
 /** A conversation a note on the selected lines can be sent to. */
 export interface NoteTarget {
@@ -116,6 +116,18 @@ const COPY_LABELS: Record<Copied, 'viewer.copyReference' | 'viewer.copied' | 'vi
     failed: 'viewer.copyFailed'
   }
 
+/**
+ * How the code's lines are laid out, told to the `<pre>`s as styles and to
+ * `codeSelection` as numbers: one source, so a toolbar placed from a line's
+ * number lands on the line.
+ */
+const LINE: LineGeometry = { height: 18, padding: 12 }
+const LINE_STYLE: React.CSSProperties = {
+  lineHeight: `${String(LINE.height)}px`,
+  paddingTop: LINE.padding,
+  paddingBottom: LINE.padding
+}
+
 /** Room between the toolbar and the selection it floats over. */
 const TOOLBAR_GAP = 34
 const EDITOR_WIDTH = 320
@@ -162,6 +174,9 @@ function Code({
    * What is selected, watched rather than asked for — the diff's arrangement:
    * `selectionchange` fires for every way a selection is made, and a scroll
    * moves the range, so the toolbar's place is read again rather than closed.
+   * Each read redraws the toolbar and nothing else: the file below it is
+   * memoised (`ColouredLines`), which is what makes a read cost a millisecond
+   * rather than the whole file.
    */
   useEffect(() => {
     const node = scroller.current
@@ -170,7 +185,7 @@ function Code({
     if (!node || !lines) return
 
     const read = (): void => {
-      setSelected(codeSelection(lines, window.getSelection()))
+      setSelected(codeSelection(lines, window.getSelection(), LINE))
     }
 
     document.addEventListener('selectionchange', read)
@@ -221,6 +236,13 @@ function Code({
   const within = (left: number, width: number): number =>
     Math.max(EDGE, Math.min(left, window.innerWidth - EDGE - width))
 
+  // Built once per file rather than per selection read: 20 000 numbers joined
+  // is work, and the column never changes while the file does not.
+  const numbers = useMemo(
+    () => Array.from({ length: lines.length }, (_, index) => index + 1).join('\n'),
+    [lines.length]
+  )
+
   return (
     <>
       {tooLarge && (
@@ -231,15 +253,17 @@ function Code({
       <div ref={scroller} className="flex min-h-0 flex-1 overflow-auto">
         <pre
           aria-hidden
+          style={LINE_STYLE}
           // Its own ground, or long lines scrolled sideways show through it.
-          className="text-ink-faint bg-canvas sticky left-0 shrink-0 py-3 pr-3 pl-4 text-right font-mono text-[12px] leading-[18px] select-none"
+          className="text-ink-faint bg-canvas sticky left-0 shrink-0 pr-3 pl-4 text-right font-mono text-[12px] select-none"
         >
-          {lines.map((_, index) => index + 1).join('\n')}
+          {numbers}
         </pre>
         <pre
           ref={code}
+          style={LINE_STYLE}
           onCopy={(event) => {
-            const passage = codeSelection(event.currentTarget, window.getSelection())
+            const passage = codeSelection(event.currentTarget, window.getSelection(), LINE)
             if (passage === null) return
             event.clipboardData.setData(
               'text/plain',
@@ -247,7 +271,7 @@ function Code({
             )
             event.preventDefault()
           }}
-          className="diff-code text-ink min-w-0 flex-1 py-3 pr-4 font-mono text-[12px] leading-[18px]"
+          className="diff-code text-ink min-w-0 flex-1 pr-4 font-mono text-[12px]"
         >
           <ColouredLines lines={lines} tokens={tokens} />
         </pre>
