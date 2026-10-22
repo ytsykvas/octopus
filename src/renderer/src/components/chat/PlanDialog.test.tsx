@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
@@ -38,8 +38,10 @@ function renderDialog(overrides: Partial<Props> = {}): {
   onExecute: ReturnType<typeof vi.fn>
   onKeepPlanning: ReturnType<typeof vi.fn>
   onMinimize: ReturnType<typeof vi.fn>
+  onFork: ReturnType<typeof vi.fn>
 } {
   const onExecute = vi.fn()
+  const onFork = vi.fn(() => Promise.resolve())
   const onKeepPlanning = vi.fn()
   const onMinimize = vi.fn()
 
@@ -48,13 +50,14 @@ function renderDialog(overrides: Partial<Props> = {}): {
       plan={PLAN}
       goesOnIn="acceptEdits"
       onExecute={onExecute}
+      onFork={onFork}
       onKeepPlanning={onKeepPlanning}
       onMinimize={onMinimize}
       {...overrides}
     />
   )
 
-  return { onExecute, onKeepPlanning, onMinimize }
+  return { onExecute, onKeepPlanning, onMinimize, onFork }
 }
 
 describe('the plan itself', () => {
@@ -127,6 +130,44 @@ describe('the two ways out', () => {
     expect(onKeepPlanning).not.toHaveBeenCalled()
   })
 
+  it('forks to carry it out elsewhere when that is what was chosen', async () => {
+    const user = userEvent.setup()
+    const { onExecute, onFork, onKeepPlanning } = renderDialog()
+
+    await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+    expect(onFork).toHaveBeenCalledExactlyOnceWith(null)
+    expect(onExecute).not.toHaveBeenCalled()
+    expect(onKeepPlanning).not.toHaveBeenCalled()
+  })
+
+  // A second click while the first fork is out would open a second tab, and
+  // approving behind it would start the same work twice.
+  it('holds both ways of carrying it out while a fork is on its way', async () => {
+    const user = userEvent.setup()
+    let settle = (): void => undefined
+    const onFork = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          settle = resolve
+        })
+    )
+    renderDialog({ onFork })
+
+    await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+    expect(screen.getByRole('button', { name: 'Fork in new chat' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Execute' })).toBeDisabled()
+
+    settle()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Fork in new chat' })).toBeEnabled()
+    })
+    expect(screen.getByRole('button', { name: 'Execute' })).toBeEnabled()
+    expect(onFork).toHaveBeenCalledTimes(1)
+  })
+
   describe('rewriting the plan before approving it', () => {
     const editor = (): HTMLElement => screen.getByRole('textbox', { name: 'The plan, as markdown' })
 
@@ -154,6 +195,19 @@ describe('the two ways out', () => {
       await user.click(screen.getByRole('button', { name: 'Execute' }))
 
       expect(onExecute).toHaveBeenCalledExactlyOnceWith('# Only the tests')
+    })
+
+    // The fork's agent only ever saw the original, so it is told the rewrite.
+    it('forks with the words the user wrote', async () => {
+      const user = userEvent.setup()
+      const { onFork } = renderDialog()
+
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      await user.clear(editor())
+      await user.type(editor(), '# Only the tests')
+      await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+      expect(onFork).toHaveBeenCalledExactlyOnceWith('# Only the tests')
     })
 
     // Looking at the rendered plan again must not throw the edits away.
@@ -194,6 +248,7 @@ describe('the two ways out', () => {
       await user.clear(editor())
 
       expect(screen.getByRole('button', { name: 'Execute' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Fork in new chat' })).toBeDisabled()
       expect(onExecute).not.toHaveBeenCalled()
     })
   })

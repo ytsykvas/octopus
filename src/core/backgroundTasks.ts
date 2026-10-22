@@ -276,6 +276,23 @@ export function sameTasks(a: readonly TaskView[], b: readonly TaskView[]): boole
   )
 }
 
+/**
+ * The tasks without the ended ones a person cleared from the map.
+ *
+ * A cleared task that is running again is kept: a resumed task keeps its id
+ * and starts a new run, and that run is news. The same list when nothing is
+ * dropped, so a reader keyed on identity is not redrawn.
+ */
+export function withoutCleared(
+  tasks: readonly TaskView[],
+  cleared: ReadonlySet<string>
+): readonly TaskView[] {
+  return unlessSame(
+    tasks,
+    tasks.filter((task) => task.status === 'running' || !cleared.has(task.taskId))
+  )
+}
+
 /** The tasks a person is shown: all but the CLI's own housekeeping. */
 export function visibleTasks(tasks: readonly TaskView[]): readonly TaskView[] {
   return tasks.filter((task) => !task.ambient)

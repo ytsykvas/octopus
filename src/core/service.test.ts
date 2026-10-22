@@ -4077,10 +4077,11 @@ describe('what the application costs', () => {
     let workspacePath = ''
     const measuring = await createService({
       ...paths(dir),
+      cores: 2,
       processExec: (command) =>
         Promise.resolve(
           command === 'ps'
-            ? '10 1 1.0 100\n11 10 4.0 400\n12 10 2.0 200\n'
+            ? '10 1 2.0 100\n11 10 8.0 400\n12 10 4.0 200\n'
             : `p11\nfcwd\nn${workspacePath}\np12\nfcwd\nn/\n`
         )
     })
@@ -9079,8 +9080,7 @@ describe('the agent chat', () => {
     it('puts a running session back on the coding model when a plan is approved', async () => {
       const { service, workspaceId, events } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatModel(chat.id, 'claude-sonnet-5')
-      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5', planModel: 'claude-opus-5' })
       await service.setChatPlanMode(chat.id, true)
       await service.sendToChat(chat.id, 'plan it')
 
@@ -10003,16 +10003,44 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      await service.setChatModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { model: 'claude-opus-5' })
 
       expect(service.listChats(workspaceId)[0]?.model).toBe('claude-opus-5')
       expect(agent().requestedModels()).toEqual(['claude-opus-5'])
     })
 
+    it('writes both models in one change and tells the session once', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5', planModel: 'claude-opus-5' })
+
+      expect(service.listChats(workspaceId)[0]).toMatchObject({
+        model: 'claude-sonnet-5',
+        planModel: 'claude-opus-5'
+      })
+      // Planning is on in a new conversation, so the plan model is in force.
+      expect(agent().requestedModels()).toEqual(['claude-opus-5'])
+    })
+
+    it('leaves a model it was not given as it was', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5', planModel: 'claude-opus-5' })
+
+      await service.setChatModels(chat.id, { planModel: null })
+
+      expect(service.listChats(workspaceId)[0]).toMatchObject({
+        model: 'claude-sonnet-5',
+        planModel: null
+      })
+    })
+
     it('starts the next session on the model the chat is now on', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatModel(chat.id, 'claude-sonnet-5')
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5' })
 
       await service.sendToChat(chat.id, 'work')
 
@@ -10023,7 +10051,7 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { planModel: 'claude-opus-5' })
 
       expect(service.listChats(workspaceId)[0]?.planModel).toBe('claude-opus-5')
     })
@@ -10031,8 +10059,7 @@ describe('the agent chat', () => {
     it('starts a planning session on the model chosen for planning', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatModel(chat.id, 'claude-sonnet-5')
-      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5', planModel: 'claude-opus-5' })
       await service.setChatPlanMode(chat.id, true)
 
       await service.sendToChat(chat.id, 'plan it')
@@ -10049,8 +10076,7 @@ describe('the agent chat', () => {
     it('asks for no model at all when the plan side names the agent default', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatModel(chat.id, 'claude-sonnet-5')
-      await service.setChatPlanModel(chat.id, 'default')
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5', planModel: 'default' })
       await service.setChatPlanMode(chat.id, true)
 
       await service.sendToChat(chat.id, 'plan it')
@@ -10063,8 +10089,7 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       // A new conversation starts out planning; this one is about the mode it falls back to.
       await service.setChatPlanMode(chat.id, false)
-      await service.setChatModel(chat.id, 'claude-sonnet-5')
-      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5', planModel: 'claude-opus-5' })
       await service.sendToChat(chat.id, 'work')
 
       await service.setChatPlanMode(chat.id, true)
@@ -10078,7 +10103,7 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       // A new conversation starts out planning; this one is about the mode it falls back to.
       await service.setChatPlanMode(chat.id, false)
-      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { planModel: 'claude-opus-5' })
       await service.sendToChat(chat.id, 'work')
 
       await service.setChatPlanMode(chat.id, true)
@@ -10109,7 +10134,7 @@ describe('the agent chat', () => {
     it('sends no model when only how freely it works changes', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { planModel: 'claude-opus-5' })
       await service.sendToChat(chat.id, 'work')
 
       await service.setChatWorkingMode(chat.id, 'acceptEdits')
@@ -10122,11 +10147,11 @@ describe('the agent chat', () => {
     it('leaves a planning session on the plan model when the other one is picked', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { planModel: 'claude-opus-5' })
       await service.setChatPlanMode(chat.id, true)
       await service.sendToChat(chat.id, 'plan it')
 
-      await service.setChatModel(chat.id, 'claude-sonnet-5')
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5' })
 
       expect(service.listChats(workspaceId)[0]?.model).toBe('claude-sonnet-5')
       expect(agent().requestedModels()).toEqual(['claude-opus-5'])
@@ -10136,7 +10161,7 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      await service.setChatEffort(chat.id, 'xhigh')
+      await service.setChatEfforts(chat.id, { effort: 'xhigh' })
 
       expect(service.listChats(workspaceId)[0]?.effort).toBe('xhigh')
     })
@@ -10146,7 +10171,7 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      await service.setChatEffort(chat.id, 'low')
+      await service.setChatEfforts(chat.id, { effort: 'low' })
 
       expect(agent().flagSettings()).toEqual([
         { effortLevel: 'low', ultracode: false, enableWorkflows: false, skillOverrides: {} }
@@ -10165,7 +10190,7 @@ describe('the agent chat', () => {
     it('re-asserts the effort on every message, as it does the mode', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'high')
+      await service.setChatEfforts(chat.id, { effort: 'high' })
       await service.sendToChat(chat.id, 'first')
 
       // The session exists by now, so this is the message that has to say it
@@ -10187,10 +10212,10 @@ describe('the agent chat', () => {
     it('pushes the default at a running session like any other level', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'max')
+      await service.setChatEfforts(chat.id, { effort: 'max' })
       await service.sendToChat(chat.id, 'work')
 
-      await service.setChatEffort(chat.id, 'medium')
+      await service.setChatEfforts(chat.id, { effort: 'medium' })
 
       expect(service.listChats(workspaceId)[0]?.effort).toBe('medium')
       expect(agent().flagSettings()).toEqual([
@@ -10205,8 +10230,7 @@ describe('the agent chat', () => {
     it('drops to the working effort the moment a plan is approved', async () => {
       const { service, workspaceId, events } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'low')
-      await service.setChatPlanEffort(chat.id, 'max')
+      await service.setChatEfforts(chat.id, { effort: 'low', planEffort: 'max' })
       await service.setChatPlanMode(chat.id, true)
       await service.sendToChat(chat.id, 'plan it')
 
@@ -10228,8 +10252,7 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       // A new conversation starts out planning; this one is about the mode it falls back to.
       await service.setChatPlanMode(chat.id, false)
-      await service.setChatEffort(chat.id, 'low')
-      await service.setChatPlanEffort(chat.id, 'max')
+      await service.setChatEfforts(chat.id, { effort: 'low', planEffort: 'max' })
       await service.sendToChat(chat.id, 'work')
 
       await service.setChatPlanMode(chat.id, true)
@@ -10246,7 +10269,7 @@ describe('the agent chat', () => {
     it('ends on the coding model when planning goes on and off at once', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatPlanModel(chat.id, 'claude-opus-5')
+      await service.setChatModels(chat.id, { planModel: 'claude-opus-5' })
       await service.sendToChat(chat.id, 'work')
 
       await Promise.all([
@@ -10262,8 +10285,7 @@ describe('the agent chat', () => {
     it('ends on the working effort when planning goes on and off at once', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'low')
-      await service.setChatPlanEffort(chat.id, 'max')
+      await service.setChatEfforts(chat.id, { effort: 'low', planEffort: 'max' })
       await service.sendToChat(chat.id, 'work')
 
       await Promise.all([
@@ -10280,8 +10302,7 @@ describe('the agent chat', () => {
       const { service, workspaceId, events } = await withWorkspace()
       await service.updateConfig({ planExecutionMode: 'acceptEdits' })
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'low')
-      await service.setChatPlanEffort(chat.id, 'max')
+      await service.setChatEfforts(chat.id, { effort: 'low', planEffort: 'max' })
       await service.sendToChat(chat.id, 'work')
 
       const decision = agent().ask('ExitPlanMode', { plan: 'do the thing' })
@@ -10304,12 +10325,12 @@ describe('the agent chat', () => {
     it('ends on the effort picked last when two are picked at once', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'low')
+      await service.setChatEfforts(chat.id, { effort: 'low' })
       await service.sendToChat(chat.id, 'work')
 
       await Promise.all([
-        service.setChatEffort(chat.id, 'high'),
-        service.setChatEffort(chat.id, 'low')
+        service.setChatEfforts(chat.id, { effort: 'high' }),
+        service.setChatEfforts(chat.id, { effort: 'low' })
       ])
 
       expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
@@ -10318,13 +10339,13 @@ describe('the agent chat', () => {
     it('ends on the effort picked last when two plan efforts are picked at once', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatPlanEffort(chat.id, 'low')
+      await service.setChatEfforts(chat.id, { planEffort: 'low' })
       await service.setChatPlanMode(chat.id, true)
       await service.sendToChat(chat.id, 'plan it')
 
       await Promise.all([
-        service.setChatPlanEffort(chat.id, 'high'),
-        service.setChatPlanEffort(chat.id, 'low')
+        service.setChatEfforts(chat.id, { planEffort: 'high' }),
+        service.setChatEfforts(chat.id, { planEffort: 'low' })
       ])
 
       expect(agent().flagSettings().at(-1)?.effortLevel ?? 'low').toBe('low')
@@ -10346,8 +10367,7 @@ describe('the agent chat', () => {
     it('starts a planning session at the effort chosen for planning', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'low')
-      await service.setChatPlanEffort(chat.id, 'xhigh')
+      await service.setChatEfforts(chat.id, { effort: 'low', planEffort: 'xhigh' })
       await service.setChatPlanMode(chat.id, true)
 
       await service.sendToChat(chat.id, 'plan it')
@@ -10361,11 +10381,11 @@ describe('the agent chat', () => {
     it('leaves a planning session alone when the working effort changes', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatPlanEffort(chat.id, 'max')
+      await service.setChatEfforts(chat.id, { planEffort: 'max' })
       await service.setChatPlanMode(chat.id, true)
       await service.sendToChat(chat.id, 'plan it')
 
-      await service.setChatEffort(chat.id, 'low')
+      await service.setChatEfforts(chat.id, { effort: 'low' })
 
       expect(service.listChats(workspaceId)[0]?.effort).toBe('low')
       expect(agent().flagSettings()).toEqual([])
@@ -10374,7 +10394,7 @@ describe('the agent chat', () => {
     it('starts the next session with the effort the chat is now on', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'medium')
+      await service.setChatEfforts(chat.id, { effort: 'medium' })
 
       await service.sendToChat(chat.id, 'work')
 
@@ -10387,7 +10407,7 @@ describe('the agent chat', () => {
     it('starts the next session on ultracode when the chat was left on it', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
-      await service.setChatEffort(chat.id, 'ultracode')
+      await service.setChatEfforts(chat.id, { effort: 'ultracode' })
 
       await service.sendToChat(chat.id, 'work')
 
@@ -10454,7 +10474,7 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'first')
 
-      await service.setChatModel(chat.id, 'claude-sonnet-5')
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5' })
       await service.sendToChat(chat.id, 'second')
 
       // Once, from the change itself — not again with the message after it.

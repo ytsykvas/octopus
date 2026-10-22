@@ -7,6 +7,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { availableParallelism } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { z } from 'zod'
@@ -41,7 +42,9 @@ import {
   type AgentModel,
   type AutoCompactWindow,
   type Chat,
+  type ChatEfforts,
   ChatError,
+  type ChatModels,
   type ClosedChat,
   type FileRewind,
   type ChatStatus,
@@ -149,6 +152,7 @@ import {
 } from './github.js'
 import type { GitExec, GitOptions } from './git.js'
 import {
+  amendAndPush,
   commitAndPush,
   createPullRequest,
   type GhExec,
@@ -496,6 +500,8 @@ export interface ServiceOptions {
   readonly commandExec?: CommandExec
   /** `ps` and `lsof`, injected so a test reads a process table of its own. */
   readonly processExec?: ProcessExec
+  /** The machine's core count, injected so a test's CPU figures do not depend on the machine. */
+  readonly cores?: number
   /**
    * `gh` in a worktree, injected for the reason the two above are: a test that
    * used the real one would open pull requests on somebody's repository.
@@ -1327,6 +1333,12 @@ export interface OctopusService {
   commitAndPushWorkspace(workspaceId: string, message: string): Promise<void>
 
   /**
+   * Folds everything in a workspace into its branch's last commit and pushes,
+   * replacing that commit on the remote when it was already there.
+   */
+  amendAndPushWorkspace(workspaceId: string): Promise<void>
+
+  /**
    * Sends what is already committed, and nothing else.
    *
    * The other half of the pair above, and the one that was missing: work
@@ -1508,8 +1520,12 @@ export interface OctopusService {
   setChatWorkingMode(chatId: string, mode: WorkingMode): Promise<void>
   /** Turns planning on or off for the chat. */
   setChatPlanMode(chatId: string, planning: boolean): Promise<void>
-  /** Sets how much thinking the chat asks for while it works. */
-  setChatEffort(chatId: string, effort: EffortChoice): Promise<void>
+  /**
+   * Sets how much thinking the chat asks for, writing and planning, in one
+   * write; a field left out stays as it is. `planEffort` null means writing's
+   * level does both.
+   */
+  setChatEfforts(chatId: string, efforts: ChatEfforts): Promise<void>
   /**
    * Sets where the chat compacts itself; null hands it back to the agent.
    *
@@ -1518,12 +1534,12 @@ export interface OctopusService {
    * the next message, which is the first moment nothing queued can be lost.
    */
   setChatAutoCompact(chatId: string, window: AutoCompactWindow | null): Promise<void>
-  /** Sets the effort the chat plans at; null means the one above does both. */
-  setChatPlanEffort(chatId: string, effort: EffortChoice | null): Promise<void>
-  /** Sets the model the chat writes code with; null returns the choice to the agent. */
-  setChatModel(chatId: string, model: string | null): Promise<void>
-  /** Sets the model the chat plans with; null means the one above does both. */
-  setChatPlanModel(chatId: string, model: string | null): Promise<void>
+  /**
+   * Sets the models the chat writes code and plans with, in one write; a field
+   * left out stays as it is. `model` null returns the choice to the agent,
+   * `planModel` null means `model` does both (`JobPair` in `chats.ts`).
+   */
+  setChatModels(chatId: string, models: ChatModels): Promise<void>
   /**
    * What a live session says about its context window and the account's windows.
    *
@@ -1719,6 +1735,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const listening = options.listening ?? isListening
   const strays = options.strays ?? defaultStrayDeps
   const processExec = options.processExec ?? defaultProcessExec
+  const cores = options.cores ?? availableParallelism()
   // Corrected for the packaged app, where the SDK's own guess points into
   // `app.asar` and cannot be started (`agentBinary.ts`).
   const runQuery = options.query ?? withAgentBinary(defaultQuery, unpackedAgentBinary())
@@ -5376,7 +5393,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     measureResources(rootPid, terminals) {
       const workspaces = state.workspaces.map(({ id, path }) => ({ id, path }))
-      return readResources({ rootPid, terminals, workspaces }, processExec)
+      return readResources({ rootPid, terminals, workspaces, cores }, processExec)
     },
 
     async ensureWorkspacePort(workspaceId) {
@@ -6058,6 +6075,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return commitAndPush(message, workspace.branch, makeExec(workspace.path))
     },
 
+    async amendAndPushWorkspace(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      return amendAndPush(workspace.branch, await baseRefOf(project), makeExec(workspace.path))
+    },
+
     pushWorkspace(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
       return pushBranch(workspace.branch, makeExec(workspace.path))
@@ -6598,8 +6621,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await applyMode(chatId, { planMode: planning })
     },
 
-    async setChatEffort(chatId, effort) {
-      const before = await changeInForce(chatId, () => ({ effort }))
+    async setChatEfforts(chatId, efforts) {
+      const before = await changeInForce(chatId, () => efforts)
       // Through the same guard as the two toggles: while planning is on and a
       // plan effort is set, changing the working one moves nothing that is
       // running, and pushing it would drop the session to the wrong level
@@ -6613,25 +6636,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await restartForWindow(chatId, true)
     },
 
-    async setChatPlanEffort(chatId, effort) {
-      const before = await changeInForce(chatId, () => ({ planEffort: effort }))
-      await pushEffort(chatId, before.effort)
-    },
-
-    async setChatModel(chatId, model) {
+    async setChatModels(chatId, models) {
       requireChat(chatId)
-      await commit((current) => updateChat(current, chatId, { model }))
+      await commit((current) => updateChat(current, chatId, models))
 
       // The effective model rather than the one just stored: a conversation
       // planning under a split runs the plan model, and choosing the one that
       // writes the code must not drag the current turn off it.
-      await sessions.get(chatId)?.setModel(sessionModel(requireChat(chatId)))
-    },
-
-    async setChatPlanModel(chatId, model) {
-      requireChat(chatId)
-      await commit((current) => updateChat(current, chatId, { planModel: model }))
-
       await sessions.get(chatId)?.setModel(sessionModel(requireChat(chatId)))
     },
 

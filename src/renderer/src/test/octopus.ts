@@ -94,11 +94,9 @@ export function installOctopusStub(): Api {
       interrupt: vi.fn(() => ok(undefined)),
       setWorkingMode: vi.fn(() => ok(undefined)),
       setPlanMode: vi.fn(() => ok(undefined)),
-      setEffort: vi.fn(() => ok(undefined)),
-      setPlanEffort: vi.fn(() => ok(undefined)),
+      setEfforts: vi.fn(() => ok(undefined)),
       setAutoCompact: vi.fn(() => ok(undefined)),
-      setModel: vi.fn(() => ok(undefined)),
-      setPlanModel: vi.fn(() => ok(undefined)),
+      setModels: vi.fn(() => ok(undefined)),
       models: vi.fn(() => ok([])),
       commands: vi.fn(() => ok([])),
       agents: vi.fn(() => ok([])),
@@ -151,6 +149,7 @@ export function installOctopusStub(): Api {
         })
       ),
       commitAndPush: vi.fn(() => ok(undefined)),
+      amendAndPush: vi.fn(() => ok(undefined)),
       push: vi.fn(() => ok(undefined)),
       // A request nobody has reviewed and nothing has checked, which is what
       // one looks like for the first minute of its life.

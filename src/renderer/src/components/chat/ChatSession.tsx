@@ -11,7 +11,7 @@ import {
   type PlanExecutionMode,
   type WorkingMode
 } from '@core/chats.js'
-import { callsAbove } from '@core/backgroundTasks.js'
+import { callsAbove, withoutCleared } from '@core/backgroundTasks.js'
 import type { FormValues } from '@core/elicitation.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
@@ -25,8 +25,9 @@ import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { onChatEvent } from '../../hooks/chatEvents.js'
 import { stopTask, useChatTasks } from '../../hooks/backgroundTasks.js'
+import { clearTasks, useClearedTasks } from '../../hooks/clearedTasks.js'
 import { useChat } from '../../hooks/useChat.js'
-import type { ChatTab } from '../../hooks/useChatTabs.js'
+import type { ChatTab, ForkedPlan } from '../../hooks/useChatTabs.js'
 import type { AttachedFileController } from '../../hooks/useAttachedFiles.js'
 import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
@@ -101,6 +102,8 @@ interface ChatSessionProps {
   readonly sideQuestions: SideQuestionController
   /** Opens a conversation continuing this one from a side answer; says whether it did. */
   readonly onForkSide: (chatId: string, exchange: SideExchange) => Promise<boolean>
+  /** Opens a conversation continuing this one on a plan; says whether it started. */
+  readonly onForkPlan: (chatId: string, plan: ForkedPlan) => Promise<boolean>
   /**
    * What the settings say a new conversation starts with.
    *
@@ -153,6 +156,7 @@ export function ChatSession({
   attachedFiles,
   sideQuestions,
   onForkSide,
+  onForkPlan,
   defaultWorkingMode,
   planExecutionMode,
   defaultEffort,
@@ -358,32 +362,23 @@ export function ChatSession({
    * The CLI scopes the command to the session, so the chat's two model settings
    * stayed null and the panel drew Opus on both rows over a session running
    * two. What the alias asks for is exactly a split, so once the message has
-   * gone the same split is written through the calls the panel itself uses —
+   * gone the same split is written through the call the panel itself uses —
    * which is also the only way a window learns a record changed.
    *
    * After the send and only when it was accepted: a refused message leaves the
-   * panel as it was rather than showing a command that never ran.
-   *
-   * Planning first, and the second only if the first took. A pair written in
-   * the other order and left half done put Sonnet under both jobs — and the
-   * session had been told, so planning would have run on it. Planning first, a
-   * refusal at either step leaves the record unchanged or leaves the writing
-   * model on the default, which is what the panel showed before. The error is
-   * on the banner in both cases.
+   * panel as it was rather than showing a command that never ran. One write
+   * for the pair, so a refusal cannot leave half of it behind.
    */
-  const { send: sendMessage, setModel, setPlanModel } = chat
+  const { send: sendMessage, setModels } = chat
   const send = useCallback(
     async (text: string): Promise<boolean> => {
       const sent = await sendMessage(text)
       const split = sent ? opusPlanSplit(text, commands, models) : null
-
-      if (split !== null && (await setPlanModel(split.planModel))) {
-        await setModel(split.model)
-      }
+      if (split !== null) await setModels(split)
 
       return sent
     },
-    [sendMessage, setModel, setPlanModel, commands, models]
+    [sendMessage, setModels, commands, models]
   )
 
   const scroller = useRef<HTMLDivElement | null>(null)
@@ -395,6 +390,9 @@ export function ChatSession({
    */
   const chatId = chat.chat?.id ?? tab.id ?? ''
   const tasks = useChatTasks(chatId, chat.entries)
+  // The map and the count leave out what was cleared; the log keeps it all.
+  const cleared = useClearedTasks(chatId)
+  const menu = useMemo(() => withoutCleared(tasks, cleared), [tasks, cleared])
 
   /*
    * "Show in conversation": the agent's row is opened up to — a nested one is
@@ -428,8 +426,8 @@ export function ChatSession({
   // Published before the paint, so a row never shows a reading one commit old.
   const [agentsStore] = useState(createAgentsStore)
   useLayoutEffect(() => {
-    agentsStore.publish(tasks)
-  }, [agentsStore, tasks])
+    agentsStore.publish(tasks, menu)
+  }, [agentsStore, tasks, menu])
   const agentTasks = useMemo<Agents>(
     () => ({
       store: agentsStore,
@@ -439,7 +437,10 @@ export function ChatSession({
       onStop: (taskId) => {
         stopTask(chatId, taskId)
       },
-      onShow: showAgent
+      onShow: showAgent,
+      onClear: (taskIds) => {
+        clearTasks(chatId, taskIds)
+      }
     }),
     [agentsStore, models, chatId, showAgent]
   )
@@ -558,6 +559,34 @@ export function ChatSession({
       })()
     },
     [record, planExecutionMode, setMode, sendMessage, t]
+  )
+  // The same plan carried out in a fork instead, while this conversation stays
+  // in planning. Stopped only once the fork is under way: the turn here is
+  // blocked on the plan's question, and an interrupt is what lets it go without
+  // an answer the agent would act on — "keep planning" would set it planning
+  // again, and approving would start the very work the fork now does. A fork
+  // that did not start leaves the question standing, so nothing is lost.
+  //
+  // An edited plan travels in the message, since the fork's agent only ever
+  // saw the original. `modeAfterPlan` is the rule `executePlan` applies, and
+  // it already answers the conversation's own mode when it was not planning.
+  const { interrupt } = chat
+  const forkPlan = useCallback(
+    async (plan: string, edited: string | null) => {
+      // A plan is only ever asked about in a conversation that has a record.
+      /* v8 ignore next */
+      if (record === null) return
+      const message =
+        edited === null
+          ? t('chat.executePlanMessage', { title: planTitle(plan) })
+          : t('chat.executePlanEditedMessage', { plan: edited })
+      const started = await onForkPlan(record.id, {
+        mode: modeAfterPlan(record, planExecutionMode),
+        message
+      })
+      if (started) await interrupt()
+    },
+    [record, planExecutionMode, onForkPlan, interrupt, t]
   )
   const workingMode = record?.workingMode ?? defaultWorkingMode
   const effort = record?.effort ?? defaultEffort
@@ -812,6 +841,7 @@ export function ChatSession({
                   ...(edited === null ? [] : [edited])
                 )
               }}
+              onFork={(edited) => forkPlan(plan, edited)}
               onKeepPlanning={(feedback) => void chat.answer(pending.requestId, 'deny', feedback)}
             />
           )}
@@ -873,16 +903,14 @@ export function ChatSession({
               planMode={record?.planMode ?? true}
               onMode={(mode) => void chat.setMode(mode).then(moved)}
               effort={effort}
-              onEffort={(level) => void chat.setEffort(level)}
               planEffort={planEffort}
-              onPlanEffort={(level) => void chat.setPlanEffort(level)}
+              onEfforts={(efforts) => void chat.setEfforts(efforts)}
               onAutoCompact={(window) => {
                 void chat.setAutoCompact(window).then(moved)
               }}
               model={model}
-              onModel={(chosen) => void chat.setModel(chosen).then(moved)}
               planModel={planModel}
-              onPlanModel={(chosen) => void chat.setPlanModel(chosen).then(moved)}
+              onModels={(chosen) => void chat.setModels(chosen).then(moved)}
               models={models}
               // What the session reports it is running, which the chip shows when it
               // differs from what was chosen here. It rides in with the context

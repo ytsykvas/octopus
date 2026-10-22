@@ -35,20 +35,17 @@ const CATALOGUE: AgentModel[] = [
 ]
 
 function renderPicker(overrides: Partial<React.ComponentProps<typeof ModelPicker>> = {}): {
-  onModel: ReturnType<typeof vi.fn>
-  onPlanModel: ReturnType<typeof vi.fn>
+  onChange: ReturnType<typeof vi.fn>
 } {
-  const onModel = vi.fn()
-  const onPlanModel = vi.fn()
+  const onChange = vi.fn()
 
   render(
     <div>
       <ModelPicker
         models={CATALOGUE}
         model={null}
-        onModel={onModel}
         planModel={null}
-        onPlanModel={onPlanModel}
+        onChange={onChange}
         display="Opus (1M context)"
         sessionMovedTo={null}
         {...overrides}
@@ -57,7 +54,7 @@ function renderPicker(overrides: Partial<React.ComponentProps<typeof ModelPicker
     </div>
   )
 
-  return { onModel, onPlanModel }
+  return { onChange }
 }
 
 const chip = (): HTMLElement => screen.getByRole('button', { name: 'Model' })
@@ -102,9 +99,9 @@ describe('the model chip', () => {
 
     await user.click(chip())
 
-    // The plan side carries one row more: the one that says there is no split.
-    expect(within(planColumn()).getAllByRole('radio')).toHaveLength(3)
-    expect(within(codeColumn()).getAllByRole('radio')).toHaveLength(2)
+    // The writing side carries one row more: the one that follows the plan.
+    expect(within(planColumn()).getAllByRole('radio')).toHaveLength(2)
+    expect(within(codeColumn()).getAllByRole('radio')).toHaveLength(3)
   })
 
   it('closes again when the chip is clicked a second time', async () => {
@@ -119,66 +116,112 @@ describe('the model chip', () => {
 })
 
 describe('the two columns', () => {
-  it('ticks the agent default on both sides of a conversation that chose nothing', async () => {
+  it('lays the plan out first and the writing beside it', async () => {
     const user = userEvent.setup()
     renderPicker()
 
     await user.click(chip())
 
-    expect(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
-    expect(within(planColumn()).getByRole('radio', { name: /Same as writing code/ })).toBeChecked()
+    const [first, second] = screen.getAllByRole('radiogroup')
+    expect(first).toBe(planColumn())
+    expect(second).toBe(codeColumn())
+  })
+
+  it('ticks the default for planning and has the writing follow it', async () => {
+    const user = userEvent.setup()
+    renderPicker()
+
+    await user.click(chip())
+
+    expect(within(planColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
+    expect(within(codeColumn()).getByRole('radio', { name: /Same as plan/ })).toBeChecked()
+    // Nothing below the first row is the writing's own choice yet.
+    expect(
+      within(codeColumn()).getByRole('radio', { name: /^Opus \(1M context\)/ })
+    ).not.toBeChecked()
   })
 
   /*
-   * The first row of the plan column names what it resolves to rather than
+   * The first row of the writing column names what it resolves to rather than
    * leaving the reader to work it out — it is ticked precisely when the
-   * question is "so what does planning actually run on".
+   * question is "so what does writing actually run on".
    */
-  it('names the model the plan side falls back to', async () => {
+  it('names the model the writing side follows', async () => {
     const user = userEvent.setup()
     renderPicker({ model: 'sonnet' })
 
     await user.click(chip())
 
-    expect(within(planColumn()).getAllByRole('radio')[0]).toHaveTextContent(
-      'Same as writing codeSonnet'
-    )
+    expect(within(codeColumn()).getAllByRole('radio')[0]).toHaveTextContent('Same as planSonnet')
   })
 
-  it('stores the coding side default as no override at all', async () => {
+  // The writing follows the plan, so with no split the plan's choice is the
+  // shared one — and the pair stays unsplit.
+  it('moves both jobs when the plan is chosen with no split', async () => {
     const user = userEvent.setup()
-    const { onModel } = renderPicker({ model: 'sonnet' })
+    const { onChange } = renderPicker()
 
     await user.click(chip())
-    await user.click(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ }))
+    await user.click(within(planColumn()).getByRole('radio', { name: 'Sonnet' }))
 
-    expect(onModel).toHaveBeenCalledExactlyOnceWith(null)
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ model: 'sonnet', planModel: null })
+  })
+
+  it('stores the shared default as no override at all', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderPicker({ model: 'sonnet' })
+
+    await user.click(chip())
+    await user.click(within(planColumn()).getByRole('radio', { name: /Opus \(1M context\)/ }))
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ model: null, planModel: null })
   })
 
   /*
-   * The whole encoding in one assertion. Null is already spoken for on the plan
-   * side — it is the row above, meaning one model does both jobs — so the
-   * agent's own default has to be said with the word. Stored as null instead,
-   * choosing it would silently undo the split.
+   * Null is already spoken for on the plan side — it means one model does both
+   * jobs — so the agent's own default has to be said with the word there.
+   * Stored as null instead, choosing it would silently undo the split.
    */
-  it('stores the plan side default as the word, not as an absence', async () => {
+  it('stores a split plan on the default as the word, not as an absence', async () => {
     const user = userEvent.setup()
-    const { onPlanModel } = renderPicker()
+    const { onChange } = renderPicker({ model: 'sonnet', planModel: 'opus[1m]' })
 
     await user.click(chip())
-    await user.click(within(planColumn()).getByRole('radio', { name: /^Opus \(1M context\)/ }))
+    await user.click(within(planColumn()).getByRole('radio', { name: /Opus \(1M context\)by/ }))
 
-    expect(onPlanModel).toHaveBeenCalledExactlyOnceWith('default')
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ model: 'sonnet', planModel: 'default' })
   })
 
-  it('takes the split back off with the first row', async () => {
+  // A writer of its own is what makes the split, and the plan keeps what it
+  // was running on — here the agent's default, said with the word.
+  it('splits the pair when the writing is given its own model', async () => {
     const user = userEvent.setup()
-    const { onPlanModel } = renderPicker({ planModel: 'sonnet' })
+    const { onChange } = renderPicker()
 
     await user.click(chip())
-    await user.click(within(planColumn()).getByRole('radio', { name: /Same as writing code/ }))
+    await user.click(within(codeColumn()).getByRole('radio', { name: 'Sonnet' }))
 
-    expect(onPlanModel).toHaveBeenCalledExactlyOnceWith(null)
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ model: 'sonnet', planModel: 'default' })
+  })
+
+  it('moves only the writing once the two are split', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderPicker({ model: 'sonnet', planModel: 'opus[1m]' })
+
+    await user.click(chip())
+    await user.click(within(codeColumn()).getByRole('radio', { name: /^Opus \(1M context\)/ }))
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ model: null, planModel: 'opus[1m]' })
+  })
+
+  it('takes the split back off with the first row, onto the plan model', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderPicker({ model: 'sonnet', planModel: 'opus[1m]' })
+
+    await user.click(chip())
+    await user.click(within(codeColumn()).getByRole('radio', { name: /Same as plan/ }))
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ model: 'opus[1m]', planModel: null })
   })
 
   // The record may hold the full name while the catalogue offers the short one.
@@ -201,8 +244,8 @@ describe('the two columns', () => {
 
     await user.click(chip())
 
-    expect(within(codeColumn()).getAllByRole('radio')).toHaveLength(1)
-    expect(within(codeColumn()).getByRole('radio', { name: 'Default model' })).toBeInTheDocument()
+    expect(within(planColumn()).getAllByRole('radio')).toHaveLength(1)
+    expect(within(planColumn()).getByRole('radio', { name: 'Default model' })).toBeChecked()
   })
 
   /*
@@ -236,7 +279,7 @@ describe('a model chosen by /model for this session only', () => {
       'This session is running Sonnet: /model chose it for this session only.'
     )
     // The record is still what the columns tick.
-    expect(within(codeColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
+    expect(within(planColumn()).getByRole('radio', { name: /Opus \(1M context\)/ })).toBeChecked()
   })
 })
 

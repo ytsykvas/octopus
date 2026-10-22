@@ -1266,7 +1266,8 @@ instead made the control lie about exactly one message: the first, which is the
 one the user has not sent yet and is looking straight at.
 
 **The effort panel sets two jobs from one scale**, through a pair of tabs:
-writing code, and planning. Tabs rather than the second marker on the scale that
+planning, and writing code — in that order, because the plan is the choice and
+the writing may follow it, as in the model panel. Tabs rather than the second marker on the scale that
 was the other candidate — the scale is one `role="slider"` with one handle, and
 two handles on it is the range pattern, which these two are not: planning may
 sit either side of the work, and `aria-valuenow` has room for one answer. Two
@@ -1280,9 +1281,11 @@ on the half that is actually running, so the picture above it is the one the
 chip named, and the chip names the level in force rather than the working one
 whatever is happening.
 
-Under the planning tab and nowhere else, one quiet button returns the pair to a
-single level. A split is the exception, so undoing it has to be a click rather
-than a hunt for which tick was there before.
+While the two share a level the writing tab says `Same as plan`, and a move on
+the planning tab moves both. Under the writing tab and nowhere else, one quiet
+button returns the pair to a single level — the plan's. A split is the
+exception, so undoing it has to be a click rather than a hunt for which tick was
+there before.
 
 Neither picker offers to say nothing. The effort control had an `Agent decides`
 row, stored as null — a control naming a level nobody had sent, which is the
@@ -1348,11 +1351,15 @@ does not close on being used — and it is a `dialog` rather than a `menu` for t
 same reason. Two columns is two answers, and closing on the first would make
 setting both a matter of opening the thing twice.
 
-**The plan column's first row is what makes the split optional.** `Same as
-writing code` is ticked until someone says otherwise, and while it is, the
-conversation runs one model and behaves exactly as it did before it could hold
-two. The row names the model it resolves to underneath, because that is the fact
-a reader opening the panel came for.
+**The writing column's first row is what makes the split optional.** The plan
+is the choice, so the plan column is a plain list, and `Same as plan` heads the
+writing column. It is ticked until someone says otherwise, and while it is, a
+pick in the plan column moves both jobs and the conversation runs one model,
+exactly as it did before it could hold two. The row names the model it resolves
+to underneath, because that is the fact a reader opening the panel came for.
+Picking a writer of its own is what splits the pair, and the plan keeps the model
+it was on. What each click does to the two stored fields is `choosePlan` and
+`chooseWork` in `chats.ts`, which Settings' default models go through as well.
 
 **The chip names the model in force**, which is the plan model while planning a
 conversation whose two differ, and the coding model everywhere else. The effort
@@ -1454,8 +1461,17 @@ Because that widens what the agent may do, the plan dialog says so beside its
 button, before the click.
 
 The dialog's note field sends on Enter, as the composer does, and also has the
-composer's own send button (`SendButton`) in its corner. It is never disabled:
-a plan sent back with nothing written is still an answer.
+composer's own send button (`SendButton`, green like every send) in its corner.
+It is never disabled: a plan sent back with nothing written is still an answer.
+
+Beside Execute (green) sits **Fork in new chat** (the accent): the plan is
+carried out in a fork of the conversation while this one stays in planning.
+`useChatTabs.forkPlan` forks, moves the fork to the mode above, sends it the
+plan — the rewrite in full when the user edited it, since the fork never saw
+it — and only then shows the tab, so the pane reads the message with the
+history. The source's turn is then stopped rather than answered: either answer
+would set its agent working again. A fork that fails to start leaves the
+question standing. Both buttons are held while a fork is on its way.
 
 **Only out of planning, and never down from `Auto`.** The agent may call the
 plan tool from any mode, and handing over there would let it raise a
@@ -2036,7 +2052,7 @@ repository with no GitHub remote never gives another.
 **And a row says when its worktree is standing on some other branch.** `git
 checkout` is one command in the workspace terminal, which is a shipped tab, and
 after it the name on the row is no longer where work done there will go. The
-Changes tab says this at length and _Commit and push_ refuses outright; the list
+Changes tab says this at length and _Commit & push_ refuses outright; the list
 is the thing always on screen, and it was the one place that said nothing.
 
 A glyph beside the name, in the same shape as the request mark, with the branch
@@ -2381,15 +2397,25 @@ dropped. That note says merging is allowed anyway, which stopped being true the
 moment a check of ours took the button — two sentences contradicting each other
 under one button is worse than the quieter one going.
 
-**The commit message is typed, and the button waits for it.** The field is the
+**The commit message is typed, and an empty one amends.** The field is the
 same one the create form carries — one component, because two fields for one idea
 drift, and this app has already spent a commit deleting a second copy of a
 function for that reason. What differs is the sentence under it and the fallback:
 the form commits under the title when its field is empty, and the agent's draft
-fills that field rather than standing behind it, and here there is neither, so
-an empty field means the press cannot say what it
-did. It was fixed at "Answer the review" until this, on every press, whether or
-not anybody had reviewed anything.
+fills that field rather than standing behind it. Here there is neither, so an
+empty field does not commit under a sentence nobody chose — the button reads
+_Amend commit & push_ and folds the work into the branch's last commit, which
+keeps the description that commit already has; with text in the field it reads
+_Commit & push_. The message was fixed at "Answer the review" until the field
+existed, on every press, whether or not anybody had reviewed anything.
+
+Amending is refused where it would rewrite what is not the branch's: on a branch
+with no commit of its own the button is disabled and says why, since HEAD is
+then the base's commit. A last commit already on GitHub is replaced there with a
+forced push, but only over a remote tip this checkout already holds — a commit
+pushed from somewhere else would be thrown away, so that case is refused with a
+sentence instead — and with the lease pinned to that tip rather than left bare,
+which a background fetch would otherwise make protect nothing.
 
 **What is left to push is counted from the commit the remote just named.**
 `ls-remote` prints `<sha>\t<ref>`, and the sha was being thrown away — so the
@@ -2409,7 +2435,7 @@ path: `--heads origin anna` also finds `refs/heads/octopus/anna`. Every
 workspace branch is `<prefix>/<name>`, so a branch the remote does not have read
 as pushed whenever another prefix ended in the same segment.
 
-**Push sends what is already committed.** _Commit and push_ appears only while
+**Push sends what is already committed.** _Commit & push_ appears only while
 the worktree is dirty, so work the agent committed — or the reader committed in
 the workspace's terminal — had no way onto the request except the terminal. The
 two sit side by side rather than replacing each other, because a branch can be in
@@ -3216,7 +3242,7 @@ it — two of the three rung labels are themselves claims about GitHub.
 
 Deliberately **not** the "not on GitHub yet" sentence: the branch may well be
 there, and reusing it would trade one false statement for another. The pull
-request tab's _Commit and push_ refuses outright in the same state, which is the
+request tab's _Commit & push_ refuses outright in the same state, which is the
 half that was doing damage — committing lands on whatever is checked out while
 pushing sends a name, so apart the two put the work on one branch and send
 another, both reporting success.

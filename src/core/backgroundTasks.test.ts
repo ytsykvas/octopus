@@ -13,6 +13,7 @@ import {
   tasksFrom,
   visibleTasks,
   withHistory,
+  withoutCleared,
   withWaiting,
   workflowAgentStatus,
   workflowRunning
@@ -585,5 +586,23 @@ describe('what a conversation shows', () => {
 
     expect(found.get('call-a')?.taskId).toBe('a')
     expect(found.size).toBe(1)
+  })
+})
+
+describe('the tasks left once some are cleared', () => {
+  const tasks = fold([
+    start('working'),
+    start('done'),
+    start('again'),
+    { type: 'task_ended', taskId: 'done', status: 'completed' }
+  ])
+
+  it('drops the ended ones cleared, and keeps one that is running again', () => {
+    const left = withoutCleared(tasks, new Set(['working', 'done', 'again']))
+    expect(left.map((task) => task.taskId)).toEqual(['working', 'again'])
+  })
+
+  it('is the same list when nothing it holds was cleared', () => {
+    expect(withoutCleared(tasks, new Set(['working', 'gone']))).toBe(tasks)
   })
 })

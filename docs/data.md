@@ -342,6 +342,11 @@ is _no split at all_ — planning runs on whatever `model` says — which is wha
 keeps a conversation nobody has touched behaving exactly as it did before the
 field existed.
 
+The panels present the pair the other way round — the plan is the choice and
+the writing may be `Same as plan` — without the stored shape changing: with no
+split one value does both jobs, so which field carries it is only naming.
+`JobPair` and its helpers in `chats.ts` are the one place that translates.
+
 That leaves the plan side without a way to say "the agent's own default", since
 its null is taken. It says it with the word: `DEFAULT_MODEL`, which is a row the
 picker offers like any other. The asymmetry is forced rather than untidy, and
@@ -1084,7 +1089,7 @@ Three surfaces say so, and the wording differs because the moment does. The
 project's Env section warns while there is anything in the block to expose — an
 empty block in an unignored file exposes nothing. The pull request pane warns
 beside **both** presses that commit: the form that opens a request, and
-`Commit and push` on one that already exists. Neither of those is gated on the
+`Commit & push` (or _Amend commit & push_) on one that already exists. Neither of those is gated on the
 block's contents, and gating them on it would be the wrong reading of the same
 rule: a project that carries a real env file in through the carry list and types
 nothing into the app has everything to lose and an empty block. What gates them

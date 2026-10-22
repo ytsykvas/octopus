@@ -558,7 +558,7 @@ describe('sending the first message', () => {
     await user.click(screen.getByText('Low'))
 
     expect(await screen.findByText(/no such workspace/)).toBeInTheDocument()
-    expect(octopus().chats.setEffort).not.toHaveBeenCalled()
+    expect(octopus().chats.setEfforts).not.toHaveBeenCalled()
   })
 
   it('says so when the message could not be sent', async () => {
@@ -1645,8 +1645,12 @@ describe('the permission mode', () => {
     await user.click(screen.getByRole('button', { name: 'Model' }))
     await user.click(within(codeColumn()).getByRole('radio', { name: 'Opus 5' }))
 
+    // A writer of its own splits the pair; the plan keeps the default it was on.
     await waitFor(() => {
-      expect(octopus().chats.setModel).toHaveBeenCalledWith(CHAT_ID, 'claude-opus-5')
+      expect(octopus().chats.setModels).toHaveBeenCalledWith(CHAT_ID, {
+        model: 'claude-opus-5',
+        planModel: 'default'
+      })
     })
   })
 
@@ -1689,9 +1693,9 @@ describe('the permission mode', () => {
     expect(screen.getByRole('dialog')).not.toHaveTextContent('/model')
   })
 
-  // The other half of the panel, on its own channel: the two models are two
-  // stored fields, and picking one must not be sent as the other.
-  it('sends the model chosen for planning down its own channel', async () => {
+  // The plan is the choice and the writing follows it, so with no split one
+  // pick moves both — in a single write.
+  it('sends the model chosen for planning as the one both jobs share', async () => {
     const user = userEvent.setup()
     vi.mocked(octopus().chats.models).mockResolvedValue({
       ok: true,
@@ -1718,9 +1722,11 @@ describe('the permission mode', () => {
     )
 
     await waitFor(() => {
-      expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'claude-opus-5')
+      expect(octopus().chats.setModels).toHaveBeenCalledExactlyOnceWith(CHAT_ID, {
+        model: 'claude-opus-5',
+        planModel: null
+      })
     })
-    expect(octopus().chats.setModel).not.toHaveBeenCalled()
   })
 
   /*
@@ -1737,89 +1743,36 @@ describe('the permission mode', () => {
 
     await user.type(field(), '/model opusplan{Enter}')
 
+    // One write for the pair, so a refusal cannot leave half of it behind.
     await waitFor(() => {
-      expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'opus[1m]')
+      expect(octopus().chats.setModels).toHaveBeenCalledExactlyOnceWith(CHAT_ID, {
+        model: 'sonnet',
+        planModel: 'opus[1m]'
+      })
     })
     expect(octopus().chats.send).toHaveBeenCalledWith(CHAT_ID, '/model opusplan')
-    expect(octopus().chats.setModel).toHaveBeenCalledWith(CHAT_ID, 'sonnet')
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
     expect(ticked(codeColumn())).toEqual(['Sonnet'])
     expect(ticked(planColumn())).toEqual(['Opus (1M context)'])
   })
 
-  /*
-   * Planning first, and the order is the point rather than a habit. Each write
-   * pushes the effective model to the running session, and with the writing
-   * model first a chat that was planning was told Sonnet for the moment before
-   * the plan model arrived. It also decides what a refusal leaves behind — see
-   * the two tests that follow.
-   */
-  it('writes the planning model before the writing model', async () => {
+  // A refused pair leaves the panel as it was: no split, nothing on Sonnet.
+  it('leaves the panel as it was when the pair is refused', async () => {
     const user = userEvent.setup()
     givenLiveCatalogue()
     givenChat()
     await openLoadedChat()
     await screen.findByRole('button', { name: 'Model' })
-
-    await user.type(field(), '/model opusplan{Enter}')
-
-    await waitFor(() => {
-      expect(octopus().chats.setModel).toHaveBeenCalled()
-    })
-    const planned = vi.mocked(octopus().chats.setPlanModel).mock.invocationCallOrder[0] ?? 0
-    const written = vi.mocked(octopus().chats.setModel).mock.invocationCallOrder[0] ?? 0
-
-    expect(planned).toBeGreaterThan(0)
-    expect(planned).toBeLessThan(written)
-  })
-
-  /*
-   * Half a split is neither the old state nor the one asked for, and it needs
-   * only one refusal to happen. The first write is the one that says whether
-   * the bridge is there, so a refusal stops the second.
-   */
-  it('stops at a refused planning model rather than writing the other half', async () => {
-    const user = userEvent.setup()
-    givenLiveCatalogue()
-    givenChat()
-    await openLoadedChat()
-    await screen.findByRole('button', { name: 'Model' })
-    vi.mocked(octopus().chats.setPlanModel).mockResolvedValue({ ok: false, error: 'no such chat' })
+    vi.mocked(octopus().chats.setModels).mockResolvedValue({ ok: false, error: 'no such chat' })
 
     await user.type(field(), '/model opusplan{Enter}')
 
     expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
-    expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'opus[1m]')
-    expect(octopus().chats.setModel).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'Model' }))
-    expect(ticked(planColumn())[0]).toContain('Same as writing code')
-    expect(ticked(codeColumn()).join()).not.toContain('Sonnet')
-  })
-
-  /*
-   * The order is also what makes this failure harmless. With the writing model
-   * first, a refused second write left Sonnet for both jobs — and the session
-   * had been told, so planning would have run on it. Planning first leaves the
-   * writing model on the default, which is what the panel showed before.
-   */
-  it('keeps the planning model, and puts Sonnet nowhere, when the writing model is refused', async () => {
-    const user = userEvent.setup()
-    givenLiveCatalogue()
-    givenChat()
-    await openLoadedChat()
-    await screen.findByRole('button', { name: 'Model' })
-    vi.mocked(octopus().chats.setModel).mockResolvedValue({ ok: false, error: 'no such chat' })
-
-    await user.type(field(), '/model opusplan{Enter}')
-
-    expect(await screen.findByText(/no such chat/)).toBeInTheDocument()
-    expect(octopus().chats.setPlanModel).toHaveBeenCalledWith(CHAT_ID, 'opus[1m]')
-
-    await user.click(screen.getByRole('button', { name: 'Model' }))
-    expect(ticked(planColumn())).toEqual(['Opus (1M context)'])
-    expect(ticked(codeColumn()).join()).not.toContain('Sonnet')
+    expect(ticked(codeColumn())[0]).toContain('Same as plan')
+    expect(ticked(planColumn()).join()).not.toContain('Sonnet')
   })
 
   // The command goes to the CLI first and the panel follows it, so a message
@@ -1838,8 +1791,7 @@ describe('the permission mode', () => {
       expect(octopus().chats.send).toHaveBeenCalledWith(CHAT_ID, '/model opusplan')
     })
     await screen.findByText(/the agent is gone/)
-    expect(octopus().chats.setModel).not.toHaveBeenCalled()
-    expect(octopus().chats.setPlanModel).not.toHaveBeenCalled()
+    expect(octopus().chats.setModels).not.toHaveBeenCalled()
   })
 
   // `/model` stays the session's own for everything else; the record is what
@@ -1856,8 +1808,7 @@ describe('the permission mode', () => {
     await waitFor(() => {
       expect(octopus().chats.send).toHaveBeenCalledWith(CHAT_ID, '/model sonnet')
     })
-    expect(octopus().chats.setModel).not.toHaveBeenCalled()
-    expect(octopus().chats.setPlanModel).not.toHaveBeenCalled()
+    expect(octopus().chats.setModels).not.toHaveBeenCalled()
   })
 
   /*
@@ -1942,6 +1893,85 @@ describe('the permission mode', () => {
         undefined,
         '# Only English first'
       )
+    })
+  })
+
+  // The plan carried out in a fork while this conversation stays in planning:
+  // the fork is started on it, and the question here is let go with a Stop
+  // rather than answered — either answer would set this agent working again.
+  describe('carrying a plan out in a new conversation', () => {
+    const PLAN = '# Normalising the locales'
+    const planRequest = {
+      type: 'permission_request' as const,
+      requestId: 'r-plan',
+      toolName: 'ExitPlanMode',
+      input: { plan: PLAN }
+    }
+
+    async function planWaiting(): Promise<void> {
+      givenChat([], { planMode: true, workingMode: 'default', sessionId: 'sess-1' })
+      await openLoadedChat()
+      vi.mocked(octopus().chats.fork).mockResolvedValue({
+        ok: true,
+        value: chat({ id: 'chat-2', sessionId: 'sess-2' })
+      })
+      emitAgentEvent(planRequest)
+      await screen.findByRole('button', { name: 'Fork in new chat' })
+    }
+
+    it('starts the fork on the plan in Accept edits, and stops this turn', async () => {
+      const user = userEvent.setup()
+      await planWaiting()
+
+      await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+      await waitFor(() => {
+        expect(octopus().chats.interrupt).toHaveBeenCalledWith(CHAT_ID)
+      })
+      expect(octopus().chats.fork).toHaveBeenCalledWith(CHAT_ID, undefined)
+      expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith('chat-2', 'acceptEdits')
+      expect(octopus().chats.send).toHaveBeenCalledWith(
+        'chat-2',
+        'Carry out the plan “Normalising the locales”.'
+      )
+      expect(octopus().chats.answerPermission).not.toHaveBeenCalled()
+      // Still planning here: only the fork was moved on.
+      expect(screen.getByRole('button', { name: /^Permissions:/ })).toHaveTextContent('Plan')
+    })
+
+    // The fork's agent only ever saw the original, so it is given the rewrite.
+    it('sends the plan as the user rewrote it', async () => {
+      const user = userEvent.setup()
+      await planWaiting()
+
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      const editor = screen.getByRole('textbox', { name: 'The plan, as markdown' })
+      await user.clear(editor)
+      await user.type(editor, '# Only English first')
+      await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+      await waitFor(() => {
+        expect(octopus().chats.send).toHaveBeenCalledWith(
+          'chat-2',
+          'Carry out this plan:\n\n# Only English first'
+        )
+      })
+    })
+
+    // A fork that never started leaves the question standing, so the plan can
+    // still be carried out here.
+    it('leaves this turn waiting when the fork fails', async () => {
+      const user = userEvent.setup()
+      await planWaiting()
+      vi.mocked(octopus().chats.fork).mockResolvedValue({ ok: false, error: 'no such session' })
+
+      await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Fork in new chat' })).toBeEnabled()
+      })
+      expect(octopus().chats.interrupt).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Execute' })).toBeInTheDocument()
     })
   })
 
@@ -2365,7 +2395,8 @@ describe('the permission mode', () => {
   })
 
   /* The other half of the same judgement: which brain plans, and how hard it
-     thinks while it does. */
+     thinks while it does. With no split the planning level is the shared one,
+     so it moves both — in one write. */
   it('sends the planning effort the scale was set to', async () => {
     const user = userEvent.setup()
     givenChat()
@@ -2377,9 +2408,11 @@ describe('the permission mode', () => {
     await user.click(screen.getByText('Maximum'))
 
     await waitFor(() => {
-      expect(octopus().chats.setPlanEffort).toHaveBeenCalledWith(CHAT_ID, 'max')
+      expect(octopus().chats.setEfforts).toHaveBeenCalledExactlyOnceWith(CHAT_ID, {
+        effort: 'max',
+        planEffort: null
+      })
     })
-    expect(octopus().chats.setEffort).not.toHaveBeenCalled()
   })
 
   it('keeps the old model on screen when the change failed', async () => {
@@ -2397,7 +2430,7 @@ describe('the permission mode', () => {
         }
       ]
     })
-    vi.mocked(octopus().chats.setModel).mockResolvedValue({ ok: false, error: 'no such chat' })
+    vi.mocked(octopus().chats.setModels).mockResolvedValue({ ok: false, error: 'no such chat' })
     givenChat()
     await openLoadedChat()
 
@@ -2454,7 +2487,12 @@ describe('the permission mode', () => {
     await user.click(screen.getByText('Very high'))
 
     await waitFor(() => {
-      expect(octopus().chats.setEffort).toHaveBeenCalledWith(CHAT_ID, 'xhigh')
+      // Not planning, so the writing half is the one on screen; a level of its
+      // own splits it from the plan, which keeps the level it was on.
+      expect(octopus().chats.setEfforts).toHaveBeenCalledWith(CHAT_ID, {
+        effort: 'xhigh',
+        planEffort: 'medium'
+      })
     })
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Very high')
   })
@@ -2471,14 +2509,17 @@ describe('the permission mode', () => {
     await user.click(screen.getByText('Ultracode'))
 
     await waitFor(() => {
-      expect(octopus().chats.setEffort).toHaveBeenCalledWith(CHAT_ID, 'ultracode')
+      expect(octopus().chats.setEfforts).toHaveBeenCalledWith(CHAT_ID, {
+        effort: 'ultracode',
+        planEffort: 'medium'
+      })
     })
     expect(screen.getByRole('button', { name: 'Effort' })).toHaveTextContent('Ultracode')
   })
 
   it('keeps the old effort on screen when the change failed', async () => {
     const user = userEvent.setup()
-    vi.mocked(octopus().chats.setEffort).mockResolvedValue({ ok: false, error: 'no such chat' })
+    vi.mocked(octopus().chats.setEfforts).mockResolvedValue({ ok: false, error: 'no such chat' })
     givenChat()
     await openLoadedChat()
 
@@ -3025,6 +3066,12 @@ describe('showing every step', () => {
  * the reader to the row that started an agent.
  */
 describe('the agents of a conversation', () => {
+  /** The map's agents, which open folded. */
+  const unfoldAgents = async (): Promise<void> => {
+    const map = screen.getByRole('dialog', { name: 'Agents' })
+    await userEvent.click(within(map).getByRole('button', { name: /^Agents/ }))
+  }
+
   const SENT_ONE_OFF: ChatEntry[] = [
     {
       role: 'agent',
@@ -3059,8 +3106,23 @@ describe('the agents of a conversation', () => {
     await userEvent.click(
       await screen.findByTitle('The agents this conversation ran — show what they did')
     )
+    await unfoldAgents()
 
     expect(screen.getByRole('button', { name: 'Look around, Stopped' })).toBeInTheDocument()
+  })
+
+  // Off the map and the count, which go with the last of it — not out of the log.
+  it('clears what has ended from the map, and keeps it in the log', async () => {
+    givenChat(SENT_ONE_OFF)
+    await openLoadedChat()
+    const chip = await screen.findByTitle('The agents this conversation ran — show what they did')
+
+    await userEvent.click(chip)
+    await userEvent.click(screen.getByRole('button', { name: 'Clear finished' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Agents' })).not.toBeInTheDocument()
+    expect(chip).not.toBeInTheDocument()
+    expect(document.querySelector('[data-tool-use-id="call-1"]')).not.toBeNull()
   })
 
   it('takes the reader from the map to the row that started the agent', async () => {
@@ -3078,6 +3140,7 @@ describe('the agents of a conversation', () => {
     await openLoadedChat()
 
     await userEvent.click(await screen.findByTitle('1 agent working — show what it is doing'))
+    await unfoldAgents()
     await userEvent.click(screen.getByRole('button', { name: 'Audit route handlers, Working' }))
     await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
 
@@ -3127,6 +3190,7 @@ describe('the agents of a conversation', () => {
     expect(nested()).toBeNull()
 
     await userEvent.click(await screen.findByTitle('2 agents working — show what they are doing'))
+    await unfoldAgents()
     await userEvent.click(screen.getByRole('button', { name: 'Look deeper, Working' }))
     await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
 

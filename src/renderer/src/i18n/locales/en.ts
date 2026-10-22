@@ -789,7 +789,9 @@ export const en = {
     doReview: 'Review it',
     multiAgentReview: 'Multi-agent review',
     resolveConflicts: 'Resolve the conflicts',
-    commitAndPush: 'Commit and push',
+    commitAndPush: 'Commit & push',
+    amendAndPush: 'Amend commit & push',
+    committing: 'Committing…',
     /* The other half of the pair: work already committed, which had no way onto
        the request short of the terminal. */
     push: 'Push',
@@ -806,9 +808,10 @@ export const en = {
     /* The twin of `commitHint`, for the request that already exists. Said
        because both halves happen to something outside this window, and the
        message is now typed rather than fixed. */
-    commitNeedsMessage: 'Write a commit message above first.',
+    amendNeedsCommit:
+      'This branch has no commit of its own to amend yet. Write a message to make one.',
     commitAndPushHint:
-      'Commits every change in this workspace under this message, then pushes it onto the request.',
+      'Commits every change in this workspace under this message, then pushes it onto the request. Left empty, the changes are added to the last commit instead, which replaces it on GitHub.',
     sending: 'Sending…',
 
     /* Appended to whichever instruction is sent, so the agent does not have to
@@ -1230,10 +1233,10 @@ export const en = {
     modelsTitle: 'Models for this conversation',
     modelsPlan: 'Plan and research',
     modelsCode: 'Writing code',
-    /* The plan column's first row: no split, so whatever writes the code plans
-       as well. The model that resolves to is named underneath, because that is
-       the fact the reader came for. */
-    modelsSame: 'Same as writing code',
+    /* The writing column's first row: no split, so whatever plans writes the
+       code as well. The model that resolves to is named underneath, because
+       that is the fact the reader came for. */
+    modelsSameAsPlan: 'Same as plan',
     /* Above the columns while a `/model` command has the session on a model
        they do not tick: the command lasts for the session, the columns are
        what this conversation chose. */
@@ -1259,8 +1262,8 @@ export const en = {
     effortJob: 'Which job',
     effortWhileWorking: 'Writing code',
     effortWhilePlanning: 'Planning',
-    effortSameAsWork: 'Same as writing code',
-    effortMatchWork: 'Use the same as writing code',
+    effortSameAsPlan: 'Same as plan',
+    effortMatchPlan: 'Use the same as plan',
     /* The ends of the scale rather than labels for its halves: what is being
        traded is the interesting part, and neither end is the good one. */
     effortFaster: 'Faster',
@@ -1339,11 +1342,13 @@ export const en = {
     plan: 'Plan',
     executePlan: 'Execute',
     executePlanMessage: 'Carry out the plan “{{title}}”.',
+    executePlanEditedMessage: 'Carry out this plan:\n\n{{plan}}',
     copy: 'Copy',
     copied: 'Copied',
     copyFailed: 'Copy failed',
     planReady: 'The plan is ready',
     planExecute: 'Execute',
+    planFork: 'Fork in new chat',
     planEdit: 'Edit',
     planEditDone: 'Back to the plan',
     planEditLabel: 'The plan, as markdown',
@@ -1417,6 +1422,8 @@ export const en = {
     ended_many: '{{count}} done',
     ended_other: '{{count}} done',
     commands: 'Background commands',
+    /* Takes the ended ones off the map; the log keeps them. */
+    clear: 'Clear finished',
     commandCount_one: '{{count}} command',
     commandCount_few: '{{count}} commands',
     commandCount_many: '{{count}} commands',
@@ -1641,12 +1648,12 @@ export const en = {
     effortHint:
       'How much thinking a new conversation asks for. Each one can then be changed on its own, from the composer.',
 
-    model: 'Model for writing code',
-    modelHint:
-      'What a new conversation runs on. The list is the agent’s own, so it is empty until a session has run once.',
     planModel: 'Model for planning and research',
     planModelHint:
-      'Used while Plan is on, so a plan can be thought out by one model and carried out by another. Leave it the same to use one model for both.',
+      'What a new conversation plans and researches with, and writes code with too unless the model below says otherwise. The list is the agent’s own, so it is empty until a session has run once.',
+    model: 'Model for writing code',
+    modelHint:
+      'Used while Plan is off, so a plan can be thought out by one model and carried out by another. Leave it the same as the plan to use one model for both.',
 
     permissionMode: 'What a new chat may do',
     permissionModeHint:
@@ -2229,6 +2236,9 @@ export const en = {
     createFailed: 'Could not open the pull request. GitHub said: {{reason}}',
     strayStopFailed: 'Process {{pid}} would not stop. Stop it yourself, then run again.',
     nothingToCommit: 'There is nothing here to commit.',
+    nothingToAmend: 'This branch has no commit of its own to amend.',
+    remoteAhead:
+      'GitHub has commits on this branch that are not here yet, so the last commit was left alone. Pull them in the terminal first.',
     commitFailed: 'Could not commit the changes. Git said: {{reason}}',
     mergeFailed: 'GitHub would not merge #{{number}}. It said: {{reason}}',
     /* Refused before `gh` was asked to do anything. Names both branches,

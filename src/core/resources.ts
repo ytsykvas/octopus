@@ -17,6 +17,10 @@
  *
  * Whatever no workspace claims is the application itself, so the total is
  * right even when attribution is not.
+ *
+ * `ps` counts CPU per core, so a busy tree on a ten-core machine read 153%
+ * and nobody could tell how much of the machine that was. The reading divides
+ * by the core count, and 100% is the whole processor.
  */
 
 import { execFile } from 'node:child_process'
@@ -33,7 +37,7 @@ export type ResourceKind = 'agent' | 'terminal' | 'server'
 export interface ProcessRow {
   readonly pid: number
   readonly ppid: number
-  /** Percent of one core, so a busy tree adds up past 100 the way Activity Monitor does. */
+  /** Percent of one core, as `ps` prints it; a reading divides it by the core count. */
   readonly cpu: number
   /** Resident memory in bytes. */
   readonly memory: number
@@ -47,6 +51,7 @@ export interface ResourceOwner {
 }
 
 export interface Usage {
+  /** Percent of the whole processor, every core together. */
   readonly cpu: number
   readonly memory: number
 }
@@ -255,6 +260,8 @@ export interface ResourceQuery {
   /** The terminals' owners, which `main/` knows because it spawned them. */
   readonly terminals: readonly ResourceOwner[]
   readonly workspaces: readonly WorkspacePlace[]
+  /** How many cores share the load, so the reading tops out at 100%. */
+  readonly cores: number
 }
 
 /**
@@ -267,7 +274,11 @@ export async function readResources(
   query: ResourceQuery,
   exec: ProcessExec = defaultProcessExec
 ): Promise<ResourceReading> {
-  const rows = parseProcessTable(await exec('ps', ['-A', '-o', 'pid=,ppid=,pcpu=,rss=']))
+  // Never below one: a zero would turn every reading into Infinity.
+  const cores = Math.max(1, query.cores)
+  const rows = parseProcessTable(await exec('ps', ['-A', '-o', 'pid=,ppid=,pcpu=,rss='])).map(
+    (row) => ({ ...row, cpu: row.cpu / cores })
+  )
   const candidates = agentCandidates(rows, query.rootPid, query.terminals)
 
   const directories =

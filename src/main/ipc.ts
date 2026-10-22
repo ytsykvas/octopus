@@ -22,10 +22,11 @@ import {
 } from '../core/accounts.js'
 import {
   AutoCompactWindowSchema,
+  ChatEffortsSchema,
   ChatMessageSchema,
+  ChatModelsSchema,
   ChatTitleSchema,
   EditedPlanSchema,
-  EffortChoiceSchema,
   PermissionAnswerSchema,
   PlanFeedbackSchema,
   WorkingModeSchema
@@ -881,6 +882,10 @@ export function registerIpc(
     attempt(() => service.commitAndPushWorkspace(workspaceId, CommitMessageSchema.parse(message)))
   )
 
+  host.handle('workspaces:amendAndPush', (_event, workspaceId: string) =>
+    attempt(() => service.amendAndPushWorkspace(workspaceId))
+  )
+
   // Nothing to validate past the id: the branch and the remote are both facts
   // the service reads from the workspace it resolves, and neither reaches git
   // from here.
@@ -1074,8 +1079,8 @@ export function registerIpc(
     attempt(() => service.setChatPlanMode(chatId, z.boolean().parse(planning)))
   )
 
-  host.handle('chats:effort', (_event, chatId: string, effort: unknown) =>
-    attempt(() => service.setChatEffort(chatId, EffortChoiceSchema.parse(effort)))
+  host.handle('chats:setEfforts', (_event, chatId: string, efforts: unknown) =>
+    attempt(() => service.setChatEfforts(chatId, ChatEffortsSchema.parse(efforts)))
   )
 
   // Null hands the window back to the agent; anything else must be one of the
@@ -1087,16 +1092,8 @@ export function registerIpc(
     )
   )
 
-  host.handle('chats:planEffort', (_event, chatId: string, effort: unknown) =>
-    attempt(() => service.setChatPlanEffort(chatId, EffortChoiceSchema.nullable().parse(effort)))
-  )
-
-  host.handle('chats:model', (_event, chatId: string, model: unknown) =>
-    attempt(() => service.setChatModel(chatId, z.string().min(1).nullable().parse(model)))
-  )
-
-  host.handle('chats:planModel', (_event, chatId: string, model: unknown) =>
-    attempt(() => service.setChatPlanModel(chatId, z.string().min(1).nullable().parse(model)))
+  host.handle('chats:setModels', (_event, chatId: string, models: unknown) =>
+    attempt(() => service.setChatModels(chatId, ChatModelsSchema.parse(models)))
   )
 
   host.handle('chats:models', () => attempt(() => service.knownModels()))

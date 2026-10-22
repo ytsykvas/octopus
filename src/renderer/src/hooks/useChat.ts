@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type AutoCompactWindow,
   type Chat,
+  type ChatEfforts,
+  type ChatModels,
   type ChatStatus,
-  type EffortChoice,
   EXIT_PLAN_MODE,
   modeAfterPlan,
   type PlanExecutionMode,
@@ -171,21 +172,15 @@ export interface ChatController {
    * order matters.
    */
   readonly setMode: (mode: ChatMode) => Promise<void>
-  readonly setEffort: (effort: EffortChoice) => Promise<void>
-  readonly setPlanEffort: (effort: EffortChoice | null) => Promise<void>
+  /** Writing's and planning's effort, either or both, in one write. */
+  readonly setEfforts: (efforts: ChatEfforts) => Promise<void>
   /** Where the conversation compacts itself; null hands it back to the agent. */
   readonly setAutoCompact: (window: AutoCompactWindow | null) => Promise<void>
   /**
-   * The model for writing code. Resolves `true` once the core has taken it and
-   * `false` when it was not — the reason is on the error banner already.
-   *
-   * These two say so, unlike the other settings, because `/model opusplan`
-   * writes a pair and has to stop at the first refusal rather than leave half
-   * of it behind.
+   * The models for writing code and for planning, either or both, in one
+   * write — so a choice that moves both never leaves half of it behind.
    */
-  readonly setModel: (model: string | null) => Promise<boolean>
-  /** The model for planning; resolves as `setModel` does. */
-  readonly setPlanModel: (model: string | null) => Promise<boolean>
+  readonly setModels: (models: ChatModels) => Promise<void>
   /**
    * The conversation's record, created if this is the first thing to need one.
    *
@@ -666,25 +661,18 @@ export function useChat(
   )
 
   /**
-   * One of the chat's settings, changed — and whether it was.
+   * One of the chat's settings, changed.
    *
    * All of them go the same way — make sure there is a record, tell the core,
    * then move the local copy or report why not — and written out each time the
    * differences would be where the bugs hid. `patch` is applied only after the
    * core agrees, so a refused change leaves the picker showing what is actually
-   * in force.
-   *
-   * Answers `false` when no record could be made or the core refused, and the
-   * reason is on the banner either way. Most callers have no use for the answer
-   * and go through `change`; the two that write a pair do.
+   * in force. A refusal is on the banner.
    */
-  const apply = useCallback(
-    async (
-      patch: Partial<Chat>,
-      send: (chatId: string) => Promise<Result<void>>
-    ): Promise<boolean> => {
+  const change = useCallback(
+    async (patch: Partial<Chat>, send: (chatId: string) => Promise<Result<void>>) => {
       const target = await ensureChat()
-      if (!target) return false
+      if (!target) return
 
       const changed = await send(target.id)
 
@@ -698,21 +686,13 @@ export function useChat(
       // `core/diff.ts` is, and for the same reason.
       if (!changed.ok) {
         setError(describeFailure(changed))
-        return false
+        return
       }
 
       /* v8 ignore next */
       setChat((current) => ({ ...(current ?? target), ...patch }))
-      return true
     },
     [ensureChat, describeFailure]
-  )
-
-  const change = useCallback(
-    async (patch: Partial<Chat>, send: (chatId: string) => Promise<Result<void>>) => {
-      await apply(patch, send)
-    },
-    [apply]
   )
 
   const setWorkingMode = useCallback(
@@ -748,21 +728,15 @@ export function useChat(
     [planning, setWorkingMode, setPlanMode]
   )
 
-  const setModel = useCallback(
-    (model: string | null) =>
-      apply({ model }, (chatId) => window.octopus.chats.setModel(chatId, model)),
-    [apply]
+  const setModels = useCallback(
+    (models: ChatModels) =>
+      change(models, (chatId) => window.octopus.chats.setModels(chatId, models)),
+    [change]
   )
 
-  const setPlanModel = useCallback(
-    (planModel: string | null) =>
-      apply({ planModel }, (chatId) => window.octopus.chats.setPlanModel(chatId, planModel)),
-    [apply]
-  )
-
-  const setEffort = useCallback(
-    (effort: EffortChoice) =>
-      change({ effort }, (chatId) => window.octopus.chats.setEffort(chatId, effort)),
+  const setEfforts = useCallback(
+    (efforts: ChatEfforts) =>
+      change(efforts, (chatId) => window.octopus.chats.setEfforts(chatId, efforts)),
     [change]
   )
 
@@ -771,12 +745,6 @@ export function useChat(
       change({ autoCompactWindow }, (chatId) =>
         window.octopus.chats.setAutoCompact(chatId, autoCompactWindow)
       ),
-    [change]
-  )
-
-  const setPlanEffort = useCallback(
-    (planEffort: EffortChoice | null) =>
-      change({ planEffort }, (chatId) => window.octopus.chats.setPlanEffort(chatId, planEffort)),
     [change]
   )
 
@@ -835,10 +803,8 @@ export function useChat(
     pendingElicitation,
     answerQuestions,
     setMode,
-    setEffort,
-    setModel,
-    setPlanModel,
-    setPlanEffort,
+    setEfforts,
+    setModels,
     setAutoCompact,
     ensure: ensureChat
   }

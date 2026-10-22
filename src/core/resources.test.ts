@@ -162,7 +162,8 @@ describe('readResources', () => {
       {
         rootPid: ROOT,
         terminals: [{ pid: 301, workspaceId: 'p/anna', kind: 'terminal' }],
-        workspaces: [{ id: 'p/anna', path: '/ws/anna' }]
+        workspaces: [{ id: 'p/anna', path: '/ws/anna' }],
+        cores: 1
       },
       exec
     )
@@ -182,7 +183,12 @@ describe('readResources', () => {
       command === 'ps' ? Promise.resolve(PS) : Promise.reject(new Error('no lsof'))
 
     const reading = await readResources(
-      { rootPid: ROOT, terminals: [], workspaces: [{ id: 'p/anna', path: '/ws/anna' }] },
+      {
+        rootPid: ROOT,
+        terminals: [],
+        workspaces: [{ id: 'p/anna', path: '/ws/anna' }],
+        cores: 1
+      },
       exec
     )
 
@@ -198,9 +204,32 @@ describe('readResources', () => {
       return Promise.resolve(`${String(ROOT)} 1 1 1\n`)
     }
 
-    await readResources({ rootPid: ROOT, terminals: [], workspaces: [] }, exec)
+    await readResources({ rootPid: ROOT, terminals: [], workspaces: [], cores: 1 }, exec)
 
     expect(commands).toEqual(['ps'])
+  })
+
+  // `ps` counts per core: ten cores at 15% each read 150%, which is 15% of the machine.
+  it('reads CPU as a share of the whole processor', async () => {
+    const exec: ProcessExec = () => Promise.resolve(`${String(ROOT)} 1 150 1\n`)
+
+    const reading = await readResources(
+      { rootPid: ROOT, terminals: [], workspaces: [], cores: 10 },
+      exec
+    )
+
+    expect(reading.total.cpu).toBe(15)
+  })
+
+  it('treats a core count below one as one rather than dividing by zero', async () => {
+    const exec: ProcessExec = () => Promise.resolve(`${String(ROOT)} 1 40 1\n`)
+
+    const reading = await readResources(
+      { rootPid: ROOT, terminals: [], workspaces: [], cores: 0 },
+      exec
+    )
+
+    expect(reading.total.cpu).toBe(40)
   })
 })
 

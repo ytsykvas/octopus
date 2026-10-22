@@ -647,7 +647,9 @@ export const de: Translation = {
     doReview: 'Reviewen',
     multiAgentReview: 'Multi-Agent-Review',
     resolveConflicts: 'Konflikte lösen',
-    commitAndPush: 'Committen und pushen',
+    commitAndPush: 'Committen & pushen',
+    amendAndPush: 'Commit ergänzen & pushen',
+    committing: 'Committe…',
     push: 'Pushen',
     pushing: 'Wird gepusht…',
     unpushed_one: '{{count}} Commit ist noch nicht auf GitHub.',
@@ -656,9 +658,10 @@ export const de: Translation = {
     unpushed_other: '{{count}} Commits sind noch nicht auf GitHub.',
     unpushedUnknown:
       'Was noch zu pushen ist, lässt sich von hier nicht zählen: Diesem Checkout fehlt, was GitHub für diesen Branch hat, oder HEAD steht nicht darauf. Führe zuerst im Terminal git fetch aus.',
-    commitNeedsMessage: 'Schreib zuerst oben eine Commit-Nachricht.',
+    amendNeedsCommit:
+      'Dieser Branch hat noch keinen eigenen Commit zum Ergänzen. Schreib eine Nachricht, um einen anzulegen.',
     commitAndPushHint:
-      'Committet alle Änderungen in diesem Workspace mit dieser Nachricht und pusht sie dann in den Pull Request.',
+      'Committet alle Änderungen in diesem Workspace mit dieser Nachricht und pusht sie dann in den Pull Request. Bleibt das Feld leer, kommen die Änderungen in den letzten Commit, der auf GitHub ersetzt wird.',
     sending: 'Wird gesendet…',
 
     context: 'Pull Request #{{number}} – Branch {{branch}} in {{base}}\n{{url}}',
@@ -949,7 +952,7 @@ export const de: Translation = {
     modelsTitle: 'Modelle für diesen Chat',
     modelsPlan: 'Planung und Recherche',
     modelsCode: 'Code schreiben',
-    modelsSame: 'Wie beim Codeschreiben',
+    modelsSameAsPlan: 'Wie beim Planen',
     modelsSessionOnly:
       'Diese Sitzung läuft mit {{model}}: /model hat es nur für diese Sitzung gewählt.',
 
@@ -966,8 +969,8 @@ export const de: Translation = {
     effortJob: 'Welche Aufgabe',
     effortWhileWorking: 'Code schreiben',
     effortWhilePlanning: 'Planen',
-    effortSameAsWork: 'Wie beim Codeschreiben',
-    effortMatchWork: 'Wie beim Codeschreiben übernehmen',
+    effortSameAsPlan: 'Wie beim Planen',
+    effortMatchPlan: 'Wie beim Planen übernehmen',
     effortFaster: 'Schneller',
     effortSmarter: 'Klüger',
 
@@ -1035,11 +1038,13 @@ export const de: Translation = {
     plan: 'Plan',
     executePlan: 'Ausführen',
     executePlanMessage: 'Setze den Plan „{{title}}“ um.',
+    executePlanEditedMessage: 'Setze diesen Plan um:\n\n{{plan}}',
     copy: 'Kopieren',
     copied: 'Kopiert',
     copyFailed: 'Kopieren fehlgeschlagen',
     planReady: 'Der Plan ist fertig',
     planExecute: 'Ausführen',
+    planFork: 'In neuem Chat forken',
     planEdit: 'Bearbeiten',
     planEditDone: 'Zurück zum Plan',
     planEditLabel: 'Der Plan als Markdown',
@@ -1102,6 +1107,7 @@ export const de: Translation = {
     ended_many: '{{count}} fertig',
     ended_other: '{{count}} fertig',
     commands: 'Hintergrundbefehle',
+    clear: 'Erledigte entfernen',
     commandCount_one: '{{count}} Befehl',
     commandCount_few: '{{count}} Befehle',
     commandCount_many: '{{count}} Befehle',
@@ -1303,12 +1309,12 @@ export const de: Translation = {
     effortHint:
       'Wie viel Nachdenken ein neuer Chat verlangt. Danach lässt sich das für jeden Chat einzeln im Eingabefeld ändern.',
 
-    model: 'Modell für Code',
-    modelHint:
-      'Womit ein neuer Chat läuft. Die Liste kommt vom Agenten selbst und bleibt leer, bis einmal eine Sitzung lief.',
     planModel: 'Modell für Planung und Recherche',
     planModelHint:
-      'Wird genutzt, solange Plan an ist – so kann ein Modell den Plan ausdenken und ein anderes ihn umsetzen. Lass es gleich, um für beides ein Modell zu nutzen.',
+      'Womit ein neuer Chat plant und recherchiert – und auch Code schreibt, solange unten kein anderes Modell gewählt ist. Die Liste kommt vom Agenten selbst und bleibt leer, bis einmal eine Sitzung lief.',
+    model: 'Modell für Code',
+    modelHint:
+      'Wird genutzt, solange Plan aus ist – so kann ein Modell den Plan ausdenken und ein anderes ihn umsetzen. Lass es wie beim Planen, um für beides ein Modell zu nutzen.',
 
     permissionMode: 'Was ein neuer Chat darf',
     permissionModeHint:
@@ -1344,11 +1350,11 @@ export const de: Translation = {
     claudeAccount: 'Claude',
     claudeAccountHint: 'Der Agent läuft über dieses Konto.',
     claudeAccountSetup:
-      'Zur Anmeldung muss Claude Code auf diesem Mac installiert sein. Ohne Konto öffnet sich octopus trotzdem, aber der Agent kann nicht antworten.',
+      'Zum Anmelden muss Claude Code auf diesem Mac installiert sein. Ohne Konto öffnet sich octopus trotzdem, aber der Agent kann nicht antworten.',
     githubAccount: 'GitHub',
     githubAccountHint: 'Projekte von GitHub, Pull Requests und Checks.',
     githubAccountSetup:
-      'Benötigt die GitHub CLI (brew install gh). Ohne sie funktioniert alles andere, Pull Requests und Klonen jedoch nicht.',
+      'Benötigt die GitHub CLI (brew install gh). Ohne sie funktioniert alles andere; Pull Requests und Klonen nicht.',
     connected: 'Verbunden',
     notConnected: 'Nicht verbunden',
     signIn: 'Anmelden',
@@ -1811,6 +1817,9 @@ export const de: Translation = {
     strayStopFailed:
       'Prozess {{pid}} ließ sich nicht stoppen. Stoppe ihn selbst und drück dann erneut „Run“.',
     nothingToCommit: 'Hier gibt es nichts zu committen.',
+    nothingToAmend: 'Dieser Branch hat keinen eigenen Commit zum Ergänzen.',
+    remoteAhead:
+      'Auf GitHub hat dieser Branch Commits, die hier noch fehlen, deshalb blieb der letzte Commit unverändert. Hol sie zuerst im Terminal.',
     commitFailed: 'Die Änderungen ließen sich nicht committen. Git meldet: {{reason}}',
     mergeFailed: 'GitHub hat #{{number}} nicht gemergt. Meldung: {{reason}}',
     requestNotOnBranch:

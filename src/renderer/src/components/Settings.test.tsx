@@ -429,55 +429,77 @@ describe('Settings', () => {
 
     /*
      * The two lists hold the same names, so they are told apart by order —
-     * coding above, planning below, which is the order they are read in too.
+     * planning above, coding below, which is the order they are read in too:
+     * the plan is the choice and the writing may follow it.
      */
     async function rowIn(list: 'coding' | 'planning', name: RegExp): Promise<HTMLElement> {
-      const [coding, planning] = await screen.findAllByRole('button', { name })
+      const [planning, coding] = await screen.findAllByRole('button', { name })
       const found = list === 'coding' ? coding : planning
       if (!found) throw new Error(`no ${list} row matching ${name.source}`)
       return found
     }
 
-    it('sets the model a new conversation writes code with', async () => {
+    // With no split the writing follows, so the plan's choice is the shared one.
+    it('sets the model a new conversation plans and writes code with', async () => {
+      const user = userEvent.setup()
+      const props = await withCatalogue()
+
+      await openSection(user, 'Claude')
+      await user.click(await rowIn('planning', /^Sonnet/))
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: 'sonnet', planModel: null })
+    })
+
+    it('stores the shared default as no override at all', async () => {
+      const user = userEvent.setup()
+      const props = await withCatalogue({ config: config({ model: 'sonnet' }) })
+
+      await openSection(user, 'Claude')
+      await user.click(await rowIn('planning', /^Opus \(1M context\)by default/))
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: null, planModel: null })
+    })
+
+    // A writer of its own splits the pair, and the plan keeps the default it
+    // was on — said with the word, since null on the plan side means no split.
+    it('splits the pair when writing is given a model of its own', async () => {
       const user = userEvent.setup()
       const props = await withCatalogue()
 
       await openSection(user, 'Claude')
       await user.click(await rowIn('coding', /^Sonnet/))
 
-      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: 'sonnet' })
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
+        model: 'sonnet',
+        planModel: 'default'
+      })
     })
 
-    it('stores the coding default as no override at all', async () => {
+    it('moves only the plan once the two are split', async () => {
       const user = userEvent.setup()
-      const props = await withCatalogue({ config: config({ model: 'sonnet' }) })
-
-      await openSection(user, 'Claude')
-      await user.click(await rowIn('coding', /^Opus \(1M context\)by default/))
-
-      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: null })
-    })
-
-    // Null is already spoken for on the plan side — it is the first row, and
-    // means one model does both jobs — so the agent's own default is the word.
-    it('stores the planning default as the word rather than an absence', async () => {
-      const user = userEvent.setup()
-      const props = await withCatalogue({ config: config({ planModel: 'sonnet' }) })
+      const props = await withCatalogue({
+        config: config({ model: 'sonnet', planModel: 'sonnet' })
+      })
 
       await openSection(user, 'Claude')
       await user.click(await rowIn('planning', /^Opus \(1M context\)by default/))
 
-      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ planModel: 'default' })
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
+        model: 'sonnet',
+        planModel: 'default'
+      })
     })
 
-    it('takes the split back off with the first row of the plan list', async () => {
+    it('takes the split back off with the first row of the writing list', async () => {
       const user = userEvent.setup()
-      const props = await withCatalogue({ config: config({ planModel: 'sonnet' }) })
+      const props = await withCatalogue({
+        config: config({ model: 'sonnet', planModel: 'opus[1m]' })
+      })
 
       await openSection(user, 'Claude')
-      await user.click(await screen.findByRole('button', { name: 'Same as writing code' }))
+      await user.click(await screen.findByRole('button', { name: 'Same as plan' }))
 
-      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ planModel: null })
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: 'opus[1m]', planModel: null })
     })
 
     // They sit with the account the agent runs on, not among the behaviour
@@ -488,7 +510,7 @@ describe('Settings', () => {
 
       await openSection(user, 'Agent')
 
-      expect(screen.queryByRole('button', { name: 'Same as writing code' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Same as plan' })).toBeNull()
     })
   })
 

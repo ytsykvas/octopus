@@ -89,6 +89,10 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.strayStopFailed', { pid: failure.params?.pid ?? '' })
         case 'nothingToCommit':
           return t('errors.nothingToCommit')
+        case 'nothingToAmend':
+          return t('errors.nothingToAmend')
+        case 'remoteAhead':
+          return t('errors.remoteAhead')
         case 'commitFailed':
           return t('errors.commitFailed', { reason: failure.params?.reason ?? '' })
         case 'closeFailed':
