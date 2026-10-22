@@ -118,6 +118,14 @@ export function useStreaming(key: string | null, drawn = true): StreamingBuffer 
     pending.current = { text: '', thinking: '' }
   }, [])
 
+  // Read through a ref, so `append` keeps its identity across the pane being
+  // hidden and shown: the pane's event subscription is built on it, and torn
+  // down and up on a change it dropped a rewind's re-read and a queued mark.
+  const shown = useRef(drawn)
+  useEffect(() => {
+    shown.current = drawn
+  }, [drawn])
+
   const schedule = useCallback(() => {
     if (timer.current !== null) return
 
@@ -136,9 +144,9 @@ export function useStreaming(key: string | null, drawn = true): StreamingBuffer 
   const append = useCallback(
     (kind: keyof Streaming, chunk: string) => {
       pending.current[kind] += chunk
-      if (drawn) schedule()
+      if (shown.current) schedule()
     },
-    [drawn, schedule]
+    [schedule]
   )
 
   // What gathered while the pane was hidden is drawn as it comes forward.

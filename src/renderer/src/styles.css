@@ -365,25 +365,19 @@
      shadows" — it is the single place the user types, and it is meant to be
      found at a glance, which a ring that is always lit would stop doing.
 
-     Three layers. The line itself is a span of its own (`.composer-ring-line`),
-     masked down to its 1.5px edge. Under the contents, `::before` is a fill of
-     the frame's surface, which keeps the glow outside, and beneath that
-     `::after` is the glow: the gradient, blurred. A mask was tried for the glow
-     and cut its blur off in a hard rectangle, since a mask clips at the edge
-     of its own box.
+     Three layers, drawn the way every ring is (the block below): the line, a
+     span of its own (`.composer-ring-line`); over its middle, `::before`, a
+     fill of the frame's surface, which also keeps the glow outside; and
+     beneath both `::after`, the glow: the gradient, blurred. A mask was tried
+     for the glow and cut its blur off in a hard rectangle, since a mask clips
+     at the edge of its own box.
 
      A gradient cannot be transitioned into a flat colour, so the plain border
      is the frame's own and the two colour layers fade by opacity instead: the
      border to transparent, the line and the glow up. Both layers are also
      `visibility: hidden` at rest — flipped at the end of the fade out and the
      start of the fade in — so a blurred layer nobody can see is not painted.
-
-     The line turns while focus is inside, and nothing else does. That split
-     is what makes it cheap: the version that turned the gradient under both
-     layers re-blurred the glow every frame and held ~17% of a core while it
-     ran; turning only the line's own angle measured ~0.5%, no different from
-     the still ring, and no more memory. The glow stays still and only
-     brightens. */
+     Nothing in it moves; the block below says what moving measured. */
   /* A colour ring: the project palette as a 1px line around an element.
 
      Four wear it — the composer, the agents chip and two buttons — and they
@@ -802,10 +796,9 @@
   }
 
   /* The count of agents at work in the composer (AgentsChip.tsx), wearing the
-     composer's own colours as a 1px line that turns while any of them is
-     working. The one thing on the strip that moves, and only while there is
-     work nobody is watching: no glow, which is the composer's alone, and no
-     line at all once the agents are done. */
+     composer's own colours as a still 1px line while any of them is working:
+     no glow, which is the composer's alone, and no line at all once the
+     agents are done. */
   .agents-chip {
     isolation: isolate;
     --ring-colours:
@@ -824,6 +817,8 @@
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
+    /* The strip's own surface, so the square shows only at the edge. */
+    background: var(--surface);
     transition: background-color 0.15s ease;
   }
 

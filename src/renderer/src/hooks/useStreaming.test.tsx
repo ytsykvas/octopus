@@ -101,6 +101,21 @@ describe('a pane nobody can see', () => {
     expect(result.current.stream.read().text).toBe('Looking')
   })
 
+  // The pane's event subscription is built on `append`; a new one on every
+  // toggle tore it down and up, dropping a rewind's re-read on the way.
+  it('keeps the same append across being hidden and shown', () => {
+    const { result, rerender } = renderHook(({ drawn }) => useStreaming('c-1', drawn), {
+      initialProps: { drawn: true }
+    })
+    const { append } = result.current
+
+    rerender({ drawn: false })
+    expect(result.current.append).toBe(append)
+
+    rerender({ drawn: true })
+    expect(result.current.append).toBe(append)
+  })
+
   it('schedules nothing on coming forward with nothing gathered', () => {
     const { rerender } = renderHook(({ drawn }) => useStreaming('c-1', drawn), {
       initialProps: { drawn: false }

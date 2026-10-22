@@ -166,9 +166,12 @@ function playTones(kind: NoticeKind): void {
   if (typeof AudioContext === 'undefined') return
 
   context ??= new AudioContext()
-  // A context made before the window was touched can start suspended — and
-  // one that has played is suspended on purpose, below.
-  if (context.state === 'suspended') void context.resume()
+  // A context made before the window was touched can start suspended, and one
+  // that has played is suspended on purpose, below. Asked unconditionally: the
+  // state says `suspended` only once the suspension has settled, and a chime
+  // landing in that moment would be scheduled into a context about to sleep.
+  // Resuming one that runs is a no-op.
+  void context.resume()
   if (rest !== null) clearTimeout(rest)
 
   const audio = context

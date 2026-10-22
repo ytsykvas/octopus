@@ -316,8 +316,15 @@ function StreamingTail(): React.JSX.Element {
   return (
     <>
       {streaming.thinking !== '' && <Thinking text={streaming.thinking} />}
-      {settled !== '' && <Prose text={settled} />}
-      {tail !== '' && <Prose text={tail} />}
+      {/* One box for both parts, stacked at a paragraph's own margin: as two
+          children of the column they sat a column gap apart, a seam that
+          moved down the reply as it settled. */}
+      {streaming.text !== '' && (
+        <div className="flex flex-col gap-1.5">
+          {settled !== '' && <Prose text={settled} />}
+          <Prose text={tail} />
+        </div>
+      )}
     </>
   )
 }

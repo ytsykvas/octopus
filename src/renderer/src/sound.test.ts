@@ -9,7 +9,10 @@ class FakeContext {
   readonly currentTime = 0
   readonly destination = {}
   readonly tones: number[] = []
-  readonly resume = vi.fn(() => Promise.resolve())
+  readonly resume = vi.fn(() => {
+    this.state = 'running'
+    return Promise.resolve()
+  })
   readonly suspend = vi.fn(() => {
     this.state = 'suspended'
     return Promise.resolve()
@@ -105,7 +108,9 @@ describe('chime', () => {
     expect(FakeContext.made[0]?.tones).toHaveLength(4)
   })
 
-  it('wakes a context that started suspended', async () => {
+  // Asked on every chime rather than when the state says so: the state says
+  // `suspended` only once a suspension has settled.
+  it('asks the context to run on every chime, so one that was suspended wakes', async () => {
     const { chime } = await load()
     chime('done', 'chime', 0)
     const context = FakeContext.made[0]
@@ -114,7 +119,7 @@ describe('chime', () => {
     context.state = 'suspended'
     chime('done', 'chime', 10_000)
 
-    expect(context.resume).toHaveBeenCalledOnce()
+    expect(context.resume).toHaveBeenCalledTimes(2)
   })
 
   /*
@@ -140,7 +145,7 @@ describe('chime', () => {
 
       // And the next chime wakes it.
       chime('done', 'chime', CHIME_GAP_MS * 2)
-      expect(context.resume).toHaveBeenCalledOnce()
+      expect(context.state).toBe('running')
     } finally {
       vi.useRealTimers()
     }
