@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
@@ -272,6 +274,26 @@ describe('readWorkspaceEnv', () => {
   // caller says so rather than showing an empty box.
   it('answers with nothing where there is no file', async () => {
     await expect(readWorkspaceEnv(workspace, '.env')).resolves.toBeNull()
+  })
+
+  // Read and quoted to an agent; a link would show a file from anywhere.
+  it('reads nothing through a link', async () => {
+    const outside = join(root, 'secret.txt')
+    await writeFile(outside, 'TOKEN=from-outside\n', 'utf8')
+    await symlink(outside, join(workspace, '.env'))
+
+    await expect(readWorkspaceEnv(workspace, '.env')).resolves.toBeNull()
+  })
+
+  // A pipe is read until something writes to it, which nothing will.
+  it('reads nothing that is not a file, or larger than any env file', async () => {
+    await promisify(execFile)('mkfifo', [join(workspace, '.env.pipe')])
+    await writeFile(join(workspace, '.env'), 'x'.repeat(256 * 1024 + 1), 'utf8')
+    await writeFile(join(workspace, '.env.local'), 'x'.repeat(256 * 1024), 'utf8')
+
+    await expect(readWorkspaceEnv(workspace, '.env.pipe')).resolves.toBeNull()
+    await expect(readWorkspaceEnv(workspace, '.env')).resolves.toBeNull()
+    await expect(readWorkspaceEnv(workspace, '.env.local')).resolves.toHaveLength(256 * 1024)
   })
 })
 
