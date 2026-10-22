@@ -279,7 +279,11 @@ export function PullRequestPanel({
   const commitAndPush = (message: string): void => {
     setCommitting(true)
     void (async () => {
-      const result = await window.octopus.workspaces.commitAndPush(workspace.id, message)
+      // An empty message is the field left blank on purpose: fold into the last commit.
+      const result =
+        message === ''
+          ? await window.octopus.workspaces.amendAndPush(workspace.id)
+          : await window.octopus.workspaces.commitAndPush(workspace.id, message)
       setCommitting(false)
       if (!result.ok) {
         report(result)
@@ -467,6 +471,7 @@ export function PullRequestPanel({
                 }}
                 closing={closing}
                 onCommitAndPush={commitAndPush}
+                ahead={view.ahead}
                 committing={committing}
                 onPush={push}
                 pushing={pushing}

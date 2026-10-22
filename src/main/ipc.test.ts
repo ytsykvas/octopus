@@ -437,6 +437,7 @@ describe('channel table', () => {
     'workspaces:createPullRequest',
     'workspaces:draftPullRequest',
     'workspaces:commitAndPush',
+    'workspaces:amendAndPush',
     'workspaces:push',
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
@@ -1926,6 +1927,19 @@ describe('workspaces of a real project', () => {
       cwd: workspace.path
     })
     expect(pushed.stdout).toContain(workspace.branch)
+  })
+
+  // The service resolves the base, so a workspace with no commit of its own is
+  // told so rather than having the base's commit rewritten.
+  it('refuses to amend a workspace branch with no commit of its own', async () => {
+    const projectId = await addProject('amending')
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'answer.txt'), 'done\n', 'utf8')
+
+    await expect(invoke('workspaces:amendAndPush', workspace.id)).resolves.toMatchObject({
+      ok: false,
+      code: 'nothingToAmend'
+    })
   })
 
   /*

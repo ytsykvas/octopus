@@ -826,6 +826,10 @@ export function registerIpc(
     attempt(() => service.commitAndPushWorkspace(workspaceId, CommitMessageSchema.parse(message)))
   )
 
+  host.handle('workspaces:amendAndPush', (_event, workspaceId: string) =>
+    attempt(() => service.amendAndPushWorkspace(workspaceId))
+  )
+
   // Nothing to validate past the id: the branch and the remote are both facts
   // the service reads from the workspace it resolves, and neither reaches git
   // from here.

@@ -695,8 +695,10 @@ the app never sees a token (§10.9).
   a branch worked on this way ended with four identical commits describing a
   review nobody had left — and that is the only description those changes will
   ever have. There is no title and no drafted text to fall back to on this side,
-  so the button is dead until something is typed, which is what git would say
-  anyway. Both this and opening a request **refuse** while `HEAD` is not on the
+  so an empty field **amends** the branch's last commit instead, keeping that
+  commit's own description, and replaces it on GitHub with a push forced only
+  over a tip this checkout already holds. A branch with no commit of its own
+  cannot be amended — HEAD is then the base's — and says so. Both this and opening a request **refuse** while `HEAD` is not on the
   workspace's branch: committing lands on whatever is checked out and pushing
   sends a name, so apart they put the work on one branch and send another, and
   report success for both. And **pushing on its own**, which is the half that was

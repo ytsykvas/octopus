@@ -626,7 +626,7 @@ describe('the pull request tab', () => {
     vi.mocked(octopus().projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
     renderPanel({ envFile: '.env.local' })
 
-    expect(await screen.findByRole('button', { name: 'Commit and push' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Amend commit & push' })).toBeInTheDocument()
     expect(screen.getByText(/\.env\.local/)).toBeInTheDocument()
   })
 
@@ -1653,32 +1653,83 @@ describe('what the tab can do about a request', () => {
       await screen.findByRole('textbox', { name: 'Commit message' }),
       'Widen the schema'
     )
-    await user.click(screen.getByRole('button', { name: 'Commit and push' }))
+    await user.click(screen.getByRole('button', { name: 'Commit & push' }))
 
     // The exact string, not `any(String)`: the message used to be fixed at
     // "Answer the review", and an assertion about its type held either way.
     expect(octopus().workspaces.commitAndPush).toHaveBeenCalledWith(anna.id, 'Widen the schema')
   })
 
-  /* There is no title and no drafted text to fall back to here, so an empty
-     field would commit under a sentence nobody chose — which is the state this
-     field replaced. */
-  it('will not commit until something is typed', async () => {
+  /* An empty field is not a commit under a sentence nobody chose: it folds the
+     work into the last commit, which keeps the description it already has. */
+  it('amends the last commit when the field is left empty', async () => {
     const user = userEvent.setup()
     answer(view({ request: request(), dirty: true }))
     answerDetail(detail())
     renderPanel()
 
-    const button = await screen.findByRole('button', { name: 'Commit and push' })
+    const button = await screen.findByRole('button', { name: 'Amend commit & push' })
+    expect(button).toBeEnabled()
+
+    // Whitespace is still nothing, and amends rather than committing under it.
+    await user.type(screen.getByRole('textbox', { name: 'Commit message' }), ' ')
+    await user.click(screen.getByRole('button', { name: 'Amend commit & push' }))
+
+    expect(octopus().workspaces.amendAndPush).toHaveBeenCalledWith(anna.id)
+    expect(octopus().workspaces.commitAndPush).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('names the press after what it will do', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request(), dirty: true }))
+    answerDetail(detail())
+    renderPanel()
+
+    const field = await screen.findByRole('textbox', { name: 'Commit message' })
+    expect(screen.getByRole('button', { name: 'Amend commit & push' })).toBeInTheDocument()
+
+    await user.type(field, 'Something')
+    expect(screen.getByRole('button', { name: 'Commit & push' })).toBeInTheDocument()
+
+    await user.clear(field)
+    expect(screen.getByRole('button', { name: 'Amend commit & push' })).toBeInTheDocument()
+  })
+
+  /* A branch with no commit of its own has HEAD on the base's commit, and
+     amending would rewrite that. Typing a message makes a commit instead. */
+  it('will not amend a branch that has no commit of its own', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request(), dirty: true, ahead: 0 }))
+    answerDetail(detail())
+    renderPanel()
+
+    const button = await screen.findByRole('button', { name: 'Amend commit & push' })
     expect(button).toBeDisabled()
     // And says why: a control that is simply grey is one the reader guesses at.
-    expect(button).toHaveAttribute('title', 'Write a commit message above first.')
-
-    await user.type(screen.getByRole('textbox', { name: 'Commit message' }), ' ')
-    expect(screen.getByRole('button', { name: 'Commit and push' })).toBeDisabled()
+    expect(button).toHaveAttribute(
+      'title',
+      'This branch has no commit of its own to amend yet. Write a message to make one.'
+    )
 
     await user.type(screen.getByRole('textbox', { name: 'Commit message' }), 'Something')
-    expect(screen.getByRole('button', { name: 'Commit and push' })).toBeEnabled()
+    const commit = screen.getByRole('button', { name: 'Commit & push' })
+    expect(commit).toBeEnabled()
+    expect(commit).not.toHaveAttribute('title')
+  })
+
+  it('says it is committing while the commit is under way', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request(), dirty: true }))
+    answerDetail(detail())
+    vi.mocked(octopus().workspaces.amendAndPush).mockReturnValue(new Promise(() => undefined))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Amend commit & push' }))
+
+    expect(await screen.findByRole('button', { name: 'Committing…' })).toBeDisabled()
   })
 
   it('says why the commit did not land', async () => {
@@ -1696,7 +1747,7 @@ describe('what the tab can do about a request', () => {
       await screen.findByRole('textbox', { name: 'Commit message' }),
       'Widen the schema'
     )
-    await user.click(screen.getByRole('button', { name: 'Commit and push' }))
+    await user.click(screen.getByRole('button', { name: 'Commit & push' }))
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('nothing here to commit'))
@@ -1709,7 +1760,7 @@ describe('what the tab can do about a request', () => {
     renderPanel()
 
     await screen.findByRole('button', { name: 'Review it' })
-    expect(screen.queryByRole('button', { name: 'Commit and push' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /commit & push/i })).not.toBeInTheDocument()
   })
 
   // A merged request has nothing left to do to it, and "review it" on one is a

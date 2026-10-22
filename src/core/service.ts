@@ -143,6 +143,7 @@ import {
 } from './github.js'
 import type { GitExec, GitOptions } from './git.js'
 import {
+  amendAndPush,
   commitAndPush,
   createPullRequest,
   type GhExec,
@@ -1255,6 +1256,12 @@ export interface OctopusService {
    * one does the same two steps on its way.
    */
   commitAndPushWorkspace(workspaceId: string, message: string): Promise<void>
+
+  /**
+   * Folds everything in a workspace into its branch's last commit and pushes,
+   * replacing that commit on the remote when it was already there.
+   */
+  amendAndPushWorkspace(workspaceId: string): Promise<void>
 
   /**
    * Sends what is already committed, and nothing else.
@@ -5935,6 +5942,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     commitAndPushWorkspace(workspaceId, message) {
       const workspace = requireWorkspace(workspaceId)
       return commitAndPush(message, workspace.branch, makeExec(workspace.path))
+    },
+
+    async amendAndPushWorkspace(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      return amendAndPush(workspace.branch, await baseRefOf(project), makeExec(workspace.path))
     },
 
     pushWorkspace(workspaceId) {

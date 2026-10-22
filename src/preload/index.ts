@@ -598,6 +598,10 @@ const api = {
     commitAndPush: (workspaceId: string, message: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:commitAndPush', workspaceId, message) as Promise<Result<void>>,
 
+    /** Folds everything here into the last commit and pushes, replacing it there. */
+    amendAndPush: (workspaceId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:amendAndPush', workspaceId) as Promise<Result<void>>,
+
     /** Sends what is already committed, and leaves uncommitted work alone. */
     push: (workspaceId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:push', workspaceId) as Promise<Result<void>>,

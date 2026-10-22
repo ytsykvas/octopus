@@ -599,7 +599,9 @@ export const de: Translation = {
     doReview: 'Reviewen',
     multiAgentReview: 'Multi-Agent-Review',
     resolveConflicts: 'Konflikte lösen',
-    commitAndPush: 'Committen und pushen',
+    commitAndPush: 'Committen & pushen',
+    amendAndPush: 'Commit ergänzen & pushen',
+    committing: 'Committe…',
     push: 'Pushen',
     pushing: 'Wird gepusht…',
     unpushed_one: '{{count}} Commit ist noch nicht auf GitHub.',
@@ -608,9 +610,10 @@ export const de: Translation = {
     unpushed_other: '{{count}} Commits sind noch nicht auf GitHub.',
     unpushedUnknown:
       'Was noch zu pushen ist, lässt sich von hier nicht zählen: Diesem Checkout fehlt, was GitHub für diesen Branch hat, oder HEAD steht nicht darauf. Führe zuerst im Terminal git fetch aus.',
-    commitNeedsMessage: 'Schreib zuerst oben eine Commit-Nachricht.',
+    amendNeedsCommit:
+      'Dieser Branch hat noch keinen eigenen Commit zum Ergänzen. Schreib eine Nachricht, um einen anzulegen.',
     commitAndPushHint:
-      'Committet alle Änderungen in diesem Workspace mit dieser Nachricht und pusht sie dann in den Pull Request.',
+      'Committet alle Änderungen in diesem Workspace mit dieser Nachricht und pusht sie dann in den Pull Request. Bleibt das Feld leer, kommen die Änderungen in den letzten Commit, der auf GitHub ersetzt wird.',
     sending: 'Wird gesendet…',
 
     context: 'Pull Request #{{number}} – Branch {{branch}} in {{base}}\n{{url}}',
@@ -1763,6 +1766,9 @@ export const de: Translation = {
     strayStopFailed:
       'Prozess {{pid}} ließ sich nicht stoppen. Stoppe ihn selbst und drück dann erneut „Run“.',
     nothingToCommit: 'Hier gibt es nichts zu committen.',
+    nothingToAmend: 'Dieser Branch hat keinen eigenen Commit zum Ergänzen.',
+    remoteAhead:
+      'Auf GitHub hat dieser Branch Commits, die hier noch fehlen, deshalb blieb der letzte Commit unverändert. Hol sie zuerst im Terminal.',
     commitFailed: 'Die Änderungen ließen sich nicht committen. Git meldet: {{reason}}',
     mergeFailed: 'GitHub hat #{{number}} nicht gemergt. Meldung: {{reason}}',
     requestNotOnBranch:

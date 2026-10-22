@@ -148,6 +148,7 @@ export function installOctopusStub(): Api {
         })
       ),
       commitAndPush: vi.fn(() => ok(undefined)),
+      amendAndPush: vi.fn(() => ok(undefined)),
       push: vi.fn(() => ok(undefined)),
       // A request nobody has reviewed and nothing has checked, which is what
       // one looks like for the first minute of its life.

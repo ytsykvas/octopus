@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type GitExec, gitIn } from './git.js'
 import { GitHubError } from './github.js'
 import {
+  amendAndPush,
   BRANCH_REQUEST_LIMIT,
   commitAndPush,
   pushBranch,
@@ -835,6 +836,128 @@ describe('committing an answer onto a request that exists', () => {
     await run('git', ['remote', 'set-url', 'origin', join(dir, 'nowhere.git')], { cwd: work })
 
     await expect(commitAndPush('Answer the review', branch, workExec())).rejects.toMatchObject({
+      code: 'pushFailed',
+      params: { branch }
+    })
+  })
+})
+
+describe('amending the last commit onto a request that exists', () => {
+  const work = (): string => join(dir, 'work')
+  const subjects = async (range: string): Promise<string[]> =>
+    (await run('git', ['log', '--format=%s', range], { cwd: work() })).stdout.trim().split('\n')
+  const remoteHead = async (branch: string): Promise<string> =>
+    (
+      await run('git', ['ls-remote', 'origin', `refs/heads/${branch}`], { cwd: work() })
+    ).stdout.split('\t')[0] ?? ''
+  const head = async (): Promise<string> =>
+    (await run('git', ['rev-parse', 'HEAD'], { cwd: work() })).stdout.trim()
+  const publish = (branch: string, cwd = work()): Promise<unknown> =>
+    run('git', ['push', '-q', '-u', 'origin', branch], { cwd })
+
+  it('folds the changes into the last commit and pushes a branch never pushed', async () => {
+    const branch = await branchWithCommit()
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+
+    await amendAndPush(branch, 'main', workExec())
+
+    // One commit still, under its own message, now holding the new file.
+    expect(await subjects('main..HEAD')).toEqual(['work'])
+    const files = await run('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: work() })
+    expect(files.stdout).toContain('b.txt')
+    expect(await remoteHead(branch)).toBe(await head())
+  })
+
+  /* The case a plain push refuses: the amended commit is not a descendant of
+     the one on the remote, so without the force the branch there stays old. */
+  it('replaces a last commit that was already pushed', async () => {
+    const branch = await branchWithCommit()
+    await publish(branch)
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+
+    await amendAndPush(branch, 'main', workExec())
+
+    expect(await subjects('main..HEAD')).toEqual(['work'])
+    expect(await remoteHead(branch)).toBe(await head())
+  })
+
+  /* What the force must never do: a commit pushed from somewhere else is on
+     the remote and not here, and forcing would throw it away. */
+  it('refuses, and amends nothing, when the remote holds a commit this checkout lacks', async () => {
+    const branch = await branchWithCommit()
+    await publish(branch)
+
+    const other = join(dir, 'other')
+    await run('git', ['clone', '-q', '--branch', branch, join(dir, 'origin.git'), other])
+    await writeFile(join(other, 'c.txt'), 'theirs\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: other })
+    await run('git', [...IDENTITY, 'commit', '-q', '-m', 'theirs'], { cwd: other })
+    await publish(branch, other)
+    const theirs = await remoteHead(branch)
+
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+    const before = await head()
+
+    await expect(amendAndPush(branch, 'main', workExec())).rejects.toMatchObject({
+      code: 'remoteAhead',
+      params: { branch }
+    })
+    expect(await head()).toBe(before)
+    expect(await remoteHead(branch)).toBe(theirs)
+  })
+
+  /* HEAD would be the base's own commit, and amending it rewrites work this
+     branch never made. */
+  it('refuses on a branch with no commit of its own', async () => {
+    await run('git', ['checkout', '-q', '-b', 'octopus/anna'], { cwd: work() })
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+    const before = await head()
+
+    await expect(amendAndPush('octopus/anna', 'main', workExec())).rejects.toMatchObject({
+      code: 'nothingToAmend',
+      params: { branch: 'octopus/anna' }
+    })
+    expect(await head()).toBe(before)
+  })
+
+  it('says there is nothing to commit rather than amending nothing', async () => {
+    const branch = await branchWithCommit()
+
+    await expect(amendAndPush(branch, 'main', workExec())).rejects.toMatchObject({
+      code: 'nothingToCommit'
+    })
+  })
+
+  it('refuses while HEAD is on another branch', async () => {
+    const branch = await branchWithCommit()
+    await run('git', ['checkout', '-q', '-b', 'side'], { cwd: work() })
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+
+    await expect(amendAndPush(branch, 'main', workExec())).rejects.toMatchObject({
+      code: 'headNotOnBranch'
+    })
+  })
+
+  it('says why the amend did not land', async () => {
+    const branch = await branchWithCommit()
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+    await writeFile(join(work(), '.git', 'index.lock'), '', 'utf8')
+
+    await expect(amendAndPush(branch, 'main', workExec())).rejects.toMatchObject({
+      code: 'commitFailed'
+    })
+  })
+
+  it('names the branch when the forced push is refused', async () => {
+    const branch = await branchWithCommit()
+    await publish(branch)
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+    // The remote refuses any rewrite, which a lease cannot argue with.
+    await run('git', ['config', 'receive.denyNonFastForwards', 'true'], {
+      cwd: join(dir, 'origin.git')
+    })
+
+    await expect(amendAndPush(branch, 'main', workExec())).rejects.toMatchObject({
       code: 'pushFailed',
       params: { branch }
     })

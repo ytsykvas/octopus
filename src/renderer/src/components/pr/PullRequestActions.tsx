@@ -92,8 +92,18 @@ interface PullRequestActionsProps {
    * review", so every press produced that sentence whether or not anybody had
    * reviewed anything — and it is the only description those changes will ever
    * have.
+   *
+   * An empty message is not a commit without one: it folds the work into the
+   * last commit instead, which keeps the description that commit already has.
    */
   readonly onCommitAndPush: (message: string) => void
+  /**
+   * Commits this branch has that the base does not.
+   *
+   * Zero means HEAD is the base's own commit, so there is nothing of this
+   * branch's to amend and an empty message cannot be pressed.
+   */
+  readonly ahead: number
   readonly committing: boolean
   /**
    * Sends what is already committed, without committing anything else.
@@ -143,6 +153,7 @@ export function PullRequestActions({
   onClose,
   closing,
   onCommitAndPush,
+  ahead,
   committing,
   onPush,
   pushing,
@@ -152,9 +163,12 @@ export function PullRequestActions({
   const { t } = useTranslation()
 
   /* Not stored and not defaulted. There is no title and no drafted text to fall
-     back to here, unlike the form that opens a request, so an empty field means
-     the press cannot say what it did — which is the state this replaced. */
+     back to here, unlike the form that opens a request — so an empty field is
+     read as "amend", which keeps the last commit's own description, rather than
+     as a commit under a sentence nobody chose. */
   const [message, setMessage] = useState('')
+  const amending = message.trim() === ''
+  const cannotAmend = amending && ahead === 0
 
   const conflicting = detail.mergeable === 'conflicting'
   const note = MERGE_NOTES[detail.mergeState]
@@ -257,16 +271,22 @@ export function PullRequestActions({
             onClick={() => {
               onCommitAndPush(message.trim())
             }}
-            // Dead until something is typed, rather than committing under a
-            // sentence nobody chose. git refuses an empty message too.
-            disabled={committing || message.trim() === ''}
+            // Amending a branch with no commit of its own would rewrite the
+            // base's commit instead.
+            disabled={committing || cannotAmend}
             /* And it says why. A control that is simply grey is a control the
                reader has to guess at — the prepared-message buttons above take
                the same trouble when there is no conversation to send into. */
-            {...(message.trim() === '' ? { title: t('pullRequest.commitNeedsMessage') } : {})}
+            {...(cannotAmend ? { title: t('pullRequest.amendNeedsCommit') } : {})}
           >
             <Upload aria-hidden size={12} />
-            {t(committing ? 'pullRequest.creating' : 'pullRequest.commitAndPush')}
+            {t(
+              committing
+                ? 'pullRequest.committing'
+                : amending
+                  ? 'pullRequest.amendAndPush'
+                  : 'pullRequest.commitAndPush'
+            )}
           </Button>
         )}
 
