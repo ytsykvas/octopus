@@ -164,14 +164,22 @@ function statusOf(code: string): TreeStatus {
  * after the new one, which is the opposite of the arrow git prints without
  * `-z` — and that second record is skipped: the old path is not on disk, so
  * there is no row to mark.
+ *
+ * The untracked files are taken from here too, as entries: under `-uall` the
+ * status names every one of them, and a repository nested in the worktree as
+ * `nested/`, exactly as `ls-files --others --exclude-standard` did — which was
+ * a second walk of every untracked file for a listing this one already held.
  */
 export function parseStatus(output: string): {
   statuses: Record<string, TreeStatus>
   /** The old sides of renames — paths the index may still list, gone from disk. */
   movedAway: string[]
+  /** The untracked files, and a repository nested in the worktree as a folder. */
+  untracked: TreeEntry[]
 } {
   const statuses: Record<string, TreeStatus> = {}
   const movedAway: string[] = []
+  const untracked: TreeEntry[] = []
   // One iterator, advanced by hand past the second record of a rename.
   const records = output.split('\0').values()
 
@@ -179,9 +187,11 @@ export function parseStatus(output: string): {
     if (record.length < 4) continue
 
     const code = record.slice(0, 2)
+    const path = record.slice(3)
     // A repository nested in the worktree is named `nested/`; its row is the
     // folder's.
-    statuses[record.slice(3).replace(/\/$/, '')] = statusOf(code)
+    statuses[path.replace(/\/$/, '')] = statusOf(code)
+    if (code === '??') untracked.push(entryOf(path, false))
 
     if (!/[RC]/.test(code)) continue
     const from = records.next()
@@ -189,7 +199,7 @@ export function parseStatus(output: string): {
     if (code.includes('R') && from.done !== true) movedAway.push(from.value)
   }
 
-  return { statuses, movedAway }
+  return { statuses, movedAway, untracked }
 }
 
 /** The mode of a submodule's entry in the index: a commit, where a file's is a blob. */
@@ -218,16 +228,26 @@ export function parseStaged(output: string): TreeEntry[] {
   return [...entries.values()]
 }
 
-/** A `git ls-files --others -z` listing, where a folder comes back as `name/`. */
+/**
+ * A path as git lists one: a folder comes back as `name/`.
+ *
+ * git never looks inside a repository nested in the worktree — cloned or
+ * initialised there, not added as a submodule — and names it `nested/`. Taken
+ * as a file path, that drew a folder holding a row with no name. It is a
+ * folder read from disk, the way a submodule is.
+ */
+function entryOf(path: string, ignored: boolean): TreeEntry {
+  return path.endsWith('/')
+    ? { path: path.slice(0, -1), kind: 'directory', ignored }
+    : { path, kind: 'file', ignored }
+}
+
+/** A `git ls-files --others -z` listing. */
 function othersIn(output: string, ignored: boolean): TreeEntry[] {
   return output
     .split('\0')
     .filter((path) => path !== '')
-    .map((path) =>
-      path.endsWith('/')
-        ? { path: path.slice(0, -1), kind: 'directory', ignored }
-        : { path, kind: 'file', ignored }
-    )
+    .map((path) => entryOf(path, ignored))
 }
 
 /**
@@ -239,19 +259,6 @@ function othersIn(output: string, ignored: boolean): TreeEntry[] {
  */
 export function parseIgnored(output: string): TreeEntry[] {
   return othersIn(output, true)
-}
-
-/**
- * Reads `git ls-files --others --exclude-standard -z`: the untracked files, and
- * a repository nested in the worktree as a folder.
- *
- * git never looks inside a nested repository — cloned or initialised there,
- * not added as a submodule — and names it `nested/`. Taken as a file path,
- * that drew a folder holding a row with no name. It is a folder read from disk,
- * the way a submodule is.
- */
-export function parseUntracked(output: string): TreeEntry[] {
-  return othersIn(output, false)
 }
 
 /**
@@ -272,9 +279,8 @@ export function parseUntracked(output: string): TreeEntry[] {
  * `holding`, for the tree to complete from disk when one is opened — not a walk
  * of the worktree.
  *
- * One more walk of the untracked files, run beside the others: 24ms against
- * the untracked listing's 23ms and the status's 35ms, on a checkout of 1,700
- * files (2026-10-19).
+ * One more walk of the untracked files, run beside the status: 24ms against
+ * its 35ms, on a checkout of 1,700 files (2026-10-19).
  */
 export function parseUntrackedFolders(
   output: string,
@@ -589,29 +595,31 @@ export function folderStatuses(
  * index and takes `index.lock` to write it back, and the agent runs its own git
  * in this same worktree — the two would trip over each other's lock.
  *
- * The tracked files and the untracked ones in two reads: a submodule is told
- * from a file only by its mode, and `--stage` with `--others` prints the second
- * kind without one, in a listing that cannot be read apart reliably. The mode
- * costs about fifty bytes a file, which halves how large a repository fits in
- * git's `MAX_OUTPUT_BYTES` — some 300,000 files rather than 600,000, both past
- * what the tree lists. `--format` could print the mode alone, and would make
- * git 2.38 the floor for a tab that has none.
+ * The tracked files with their mode: a submodule is told from a file only by
+ * it. The mode costs about fifty bytes a file, which halves how large a
+ * repository fits in git's `MAX_OUTPUT_BYTES` — some 300,000 files rather than
+ * 600,000, both past what the tree lists. `--format` could print the mode
+ * alone, and would make git 2.38 the floor for a tab that has none.
+ *
+ * The untracked files come from the status, which `-uall` makes name every one
+ * of them: a `ls-files --others` beside it was one more walk of the same files
+ * — 23ms against the status's 35ms on a checkout of 1,700 files (2026-10-19) —
+ * for a listing the status already held. The two `--directory` listings stay:
+ * neither the ignored folders nor the empty ones are anywhere in a status.
  *
  * `Promise.all` rather than `allOf`: `parallel.ts` reaches `node:util`, and
  * this module is one the window imports values from. Which of the git reads
  * failed first is not something anybody acts on here.
  */
 export async function readFileTree(exec: GitExec): Promise<FileTreeSnapshot> {
-  const [status, staged, others, ignored, folders] = await Promise.all([
+  const [status, staged, ignored, folders] = await Promise.all([
     exec(['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-uall']),
     exec(['ls-files', '-z', '--stage']),
-    exec(['ls-files', '-z', '--others', '--exclude-standard']),
     exec(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory']),
     exec(['ls-files', '-z', '--others', '--exclude-standard', '--directory'])
   ])
 
-  const { statuses, movedAway } = parseStatus(status)
-  const untracked = parseUntracked(others)
+  const { statuses, movedAway, untracked } = parseStatus(status)
   const ignoredEntries = parseIgnored(ignored)
   const { empty, holding } = parseUntrackedFolders(folders, untracked, ignoredEntries)
   const { entries, truncated } = collectTreeEntries(
