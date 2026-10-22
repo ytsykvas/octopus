@@ -103,6 +103,10 @@ export type GitHubErrorCode =
   // commit refused are the same kind of thing to whoever pressed the button.
   | 'noCommits'
   | 'nothingToCommit'
+  | 'nothingToAmend'
+  // Refused before an amend: the remote holds commits this checkout does not,
+  // and replacing the branch there would throw them away.
+  | 'remoteAhead'
   | 'commitFailed'
   | 'pushFailed'
   | 'createFailed'

@@ -37,7 +37,7 @@ import {
   toPullRequestState,
   toRerunPayload
 } from './pullRequestShapes.js'
-import { commitAll, hasUncommittedChanges } from './worktree.js'
+import { amendAll, commitAll, hasUncommittedChanges } from './worktree.js'
 import { allOf } from './parallel.js'
 
 const run = promisify(execFile)
@@ -422,6 +422,81 @@ export async function commitAndPush(message: string, branch: string, git: GitExe
   await requireHeadOn(branch, git)
   await commit(message, git)
   await pushBranch(branch, git)
+}
+
+/**
+ * Folds everything here into the branch's last commit and sends it.
+ *
+ * What the pane does when the message field is left empty: a fix to the commit
+ * just made rather than a new one beside it.
+ *
+ * Refused while the branch has no commit of its own. HEAD would then be the
+ * base's commit, and amending it rewrites work this branch never made.
+ *
+ * A last commit already on the remote is replaced there, so the push forces.
+ * Only over a remote tip this checkout already holds: anything else is a commit
+ * pushed from somewhere else, and forcing would throw it away. The lease is then
+ * pinned to that tip rather than left bare — bare compares against the
+ * remote-tracking ref, which a background fetch moves to whatever someone else
+ * pushed, and then it protects nothing.
+ */
+export async function amendAndPush(branch: string, base: string, git: GitExec): Promise<void> {
+  await requireHeadOn(branch, git)
+
+  if ((await countAhead(git, base, branch)) === 0) {
+    throw new GitHubError(
+      'nothingToAmend',
+      { branch },
+      'This branch has no commit of its own to amend.'
+    )
+  }
+  if (!(await hasUncommittedChanges(git))) {
+    throw new GitHubError('nothingToCommit', {}, 'There is nothing here to commit.')
+  }
+
+  const tip = await remoteTip(branch, git)
+  if (tip !== null && !(await contains(tip, git))) {
+    throw new GitHubError(
+      'remoteAhead',
+      { branch },
+      'GitHub holds commits on this branch that this checkout does not. Nothing was amended.'
+    )
+  }
+
+  try {
+    await amendAll(git)
+  } catch (error) {
+    throw new GitHubError(
+      'commitFailed',
+      { reason: reasonFrom(error) },
+      'Could not amend the last commit.'
+    )
+  }
+
+  if (tip === null) {
+    await pushBranch(branch, git)
+    return
+  }
+
+  try {
+    await git(['push', '-u', `--force-with-lease=${branch}:${tip}`, 'origin', branch])
+  } catch (error) {
+    throw new GitHubError(
+      'pushFailed',
+      { branch, reason: reasonFrom(error) },
+      'Could not push the amended branch.'
+    )
+  }
+}
+
+/** Whether HEAD already has a commit — false too where this clone lacks it. */
+async function contains(commit: string, git: GitExec): Promise<boolean> {
+  try {
+    await git(['merge-base', '--is-ancestor', commit, 'HEAD'])
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**

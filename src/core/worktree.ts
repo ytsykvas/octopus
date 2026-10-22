@@ -294,3 +294,14 @@ export async function commitAll(exec: GitExec, message: string): Promise<void> {
   await exec(['add', '-A'])
   await exec(['commit', '-m', message])
 }
+
+/**
+ * Everything in the worktree, folded into the commit HEAD already is.
+ *
+ * `commitAll`'s twin, holding none of its policy either: whether HEAD is a
+ * commit this branch may rewrite is a question `pullRequests.ts` answers.
+ */
+export async function amendAll(exec: GitExec): Promise<void> {
+  await exec(['add', '-A'])
+  await exec(['commit', '--amend', '--no-edit'])
+}

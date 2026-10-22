@@ -1995,7 +1995,7 @@ repository with no GitHub remote never gives another.
 **And a row says when its worktree is standing on some other branch.** `git
 checkout` is one command in the workspace terminal, which is a shipped tab, and
 after it the name on the row is no longer where work done there will go. The
-Changes tab says this at length and _Commit and push_ refuses outright; the list
+Changes tab says this at length and _Commit & push_ refuses outright; the list
 is the thing always on screen, and it was the one place that said nothing.
 
 A glyph beside the name, in the same shape as the request mark, with the branch
@@ -2341,15 +2341,25 @@ dropped. That note says merging is allowed anyway, which stopped being true the
 moment a check of ours took the button — two sentences contradicting each other
 under one button is worse than the quieter one going.
 
-**The commit message is typed, and the button waits for it.** The field is the
+**The commit message is typed, and an empty one amends.** The field is the
 same one the create form carries — one component, because two fields for one idea
 drift, and this app has already spent a commit deleting a second copy of a
 function for that reason. What differs is the sentence under it and the fallback:
 the form commits under the title when its field is empty, and the agent's draft
-fills that field rather than standing behind it, and here there is neither, so
-an empty field means the press cannot say what it
-did. It was fixed at "Answer the review" until this, on every press, whether or
-not anybody had reviewed anything.
+fills that field rather than standing behind it. Here there is neither, so an
+empty field does not commit under a sentence nobody chose — the button reads
+_Amend commit & push_ and folds the work into the branch's last commit, which
+keeps the description that commit already has; with text in the field it reads
+_Commit & push_. The message was fixed at "Answer the review" until the field
+existed, on every press, whether or not anybody had reviewed anything.
+
+Amending is refused where it would rewrite what is not the branch's: on a branch
+with no commit of its own the button is disabled and says why, since HEAD is
+then the base's commit. A last commit already on GitHub is replaced there with a
+forced push, but only over a remote tip this checkout already holds — a commit
+pushed from somewhere else would be thrown away, so that case is refused with a
+sentence instead — and with the lease pinned to that tip rather than left bare,
+which a background fetch would otherwise make protect nothing.
 
 **What is left to push is counted from the commit the remote just named.**
 `ls-remote` prints `<sha>\t<ref>`, and the sha was being thrown away — so the
@@ -2369,7 +2379,7 @@ path: `--heads origin anna` also finds `refs/heads/octopus/anna`. Every
 workspace branch is `<prefix>/<name>`, so a branch the remote does not have read
 as pushed whenever another prefix ended in the same segment.
 
-**Push sends what is already committed.** _Commit and push_ appears only while
+**Push sends what is already committed.** _Commit & push_ appears only while
 the worktree is dirty, so work the agent committed — or the reader committed in
 the workspace's terminal — had no way onto the request except the terminal. The
 two sit side by side rather than replacing each other, because a branch can be in
@@ -3176,7 +3186,7 @@ it — two of the three rung labels are themselves claims about GitHub.
 
 Deliberately **not** the "not on GitHub yet" sentence: the branch may well be
 there, and reusing it would trade one false statement for another. The pull
-request tab's _Commit and push_ refuses outright in the same state, which is the
+request tab's _Commit & push_ refuses outright in the same state, which is the
 half that was doing damage — committing lands on whatever is checked out while
 pushing sends a name, so apart the two put the work on one branch and send
 another, both reporting success.

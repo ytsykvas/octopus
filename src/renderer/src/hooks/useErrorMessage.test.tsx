@@ -126,6 +126,8 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   rewindUnavailable: { reason: 'No checkpoint for that message' },
   noCommits: { base: 'main' },
   nothingToCommit: null,
+  nothingToAmend: null,
+  remoteAhead: null,
   commitFailed: { reason: 'hook refused' },
   createFailed: { reason: 'no upstream' },
   draftFailed: { reason: 'the agent gave up' },

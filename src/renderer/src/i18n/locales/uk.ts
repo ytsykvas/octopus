@@ -592,7 +592,9 @@ export const uk: Translation = {
     doReview: 'Зробити ревю',
     multiAgentReview: 'Мультиагентне ревю',
     resolveConflicts: 'Розвʼязати конфлікти',
-    commitAndPush: 'Закомітити і запушити',
+    commitAndPush: 'Закомітити й запушити',
+    amendAndPush: 'Доповнити коміт і запушити',
+    committing: 'Комічу…',
     push: 'Запушити',
     pushing: 'Пушимо…',
     unpushed_one: '{{count}} коміт ще не на GitHub.',
@@ -601,9 +603,10 @@ export const uk: Translation = {
     unpushed_other: '{{count}} комітів ще не на GitHub.',
     unpushedUnknown:
       'Звідси не порахувати, що лишилось запушити: у цьому чекауті немає того, що GitHub має для цієї гілки, або HEAD не на ній. Спершу зробіть fetch у терміналі.',
-    commitNeedsMessage: 'Спершу напишіть повідомлення коміта вище.',
+    amendNeedsCommit:
+      'У цієї гілки ще немає власного коміта, який можна доповнити. Напишіть повідомлення, щоб створити його.',
     commitAndPushHint:
-      'Комітить усі зміни цього воркспейса під цим повідомленням і пушить їх у пул-реквест.',
+      'Комітить усі зміни цього воркспейса під цим повідомленням і пушить їх у пул-реквест. Якщо поле порожнє, зміни додаються до останнього коміта, і він замінюється на GitHub.',
     sending: 'Надсилаю…',
 
     context: 'Pull request #{{number}} — гілка {{branch}} у {{base}}\n{{url}}',
@@ -1739,6 +1742,9 @@ export const uk: Translation = {
     createFailed: 'Не вдалося відкрити pull request. GitHub каже: {{reason}}',
     strayStopFailed: 'Процес {{pid}} не зупиняється. Зупиніть його самі й запустіть ще раз.',
     nothingToCommit: 'Тут немає чого комітити.',
+    nothingToAmend: 'У цієї гілки немає власного коміта, який можна доповнити.',
+    remoteAhead:
+      'На GitHub у цій гілці є коміти, яких тут ще немає, тому останній коміт не змінено. Спершу підтягніть їх у терміналі.',
     commitFailed: 'Не вдалося зробити коміт. Git каже: {{reason}}',
     mergeFailed: 'GitHub не влив #{{number}}. Каже: {{reason}}',
     requestNotOnBranch:

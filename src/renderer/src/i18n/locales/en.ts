@@ -744,7 +744,9 @@ export const en = {
     doReview: 'Review it',
     multiAgentReview: 'Multi-agent review',
     resolveConflicts: 'Resolve the conflicts',
-    commitAndPush: 'Commit and push',
+    commitAndPush: 'Commit & push',
+    amendAndPush: 'Amend commit & push',
+    committing: 'Committing…',
     /* The other half of the pair: work already committed, which had no way onto
        the request short of the terminal. */
     push: 'Push',
@@ -761,9 +763,10 @@ export const en = {
     /* The twin of `commitHint`, for the request that already exists. Said
        because both halves happen to something outside this window, and the
        message is now typed rather than fixed. */
-    commitNeedsMessage: 'Write a commit message above first.',
+    amendNeedsCommit:
+      'This branch has no commit of its own to amend yet. Write a message to make one.',
     commitAndPushHint:
-      'Commits every change in this workspace under this message, then pushes it onto the request.',
+      'Commits every change in this workspace under this message, then pushes it onto the request. Left empty, the changes are added to the last commit instead, which replaces it on GitHub.',
     sending: 'Sending…',
 
     /* Appended to whichever instruction is sent, so the agent does not have to
@@ -2184,6 +2187,9 @@ export const en = {
     createFailed: 'Could not open the pull request. GitHub said: {{reason}}',
     strayStopFailed: 'Process {{pid}} would not stop. Stop it yourself, then run again.',
     nothingToCommit: 'There is nothing here to commit.',
+    nothingToAmend: 'This branch has no commit of its own to amend.',
+    remoteAhead:
+      'GitHub has commits on this branch that are not here yet, so the last commit was left alone. Pull them in the terminal first.',
     commitFailed: 'Could not commit the changes. Git said: {{reason}}',
     mergeFailed: 'GitHub would not merge #{{number}}. It said: {{reason}}',
     /* Refused before `gh` was asked to do anything. Names both branches,

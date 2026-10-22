@@ -1081,7 +1081,7 @@ Three surfaces say so, and the wording differs because the moment does. The
 project's Env section warns while there is anything in the block to expose — an
 empty block in an unignored file exposes nothing. The pull request pane warns
 beside **both** presses that commit: the form that opens a request, and
-`Commit and push` on one that already exists. Neither of those is gated on the
+`Commit & push` (or _Amend commit & push_) on one that already exists. Neither of those is gated on the
 block's contents, and gating them on it would be the wrong reading of the same
 rule: a project that carries a real env file in through the carry list and types
 nothing into the app has everything to lose and an empty block. What gates them
