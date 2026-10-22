@@ -1057,6 +1057,7 @@ export const de: Translation = {
     ended_many: '{{count}} fertig',
     ended_other: '{{count}} fertig',
     commands: 'Hintergrundbefehle',
+    clear: 'Erledigte entfernen',
     commandCount_one: '{{count}} Befehl',
     commandCount_few: '{{count}} Befehle',
     commandCount_many: '{{count}} Befehle',

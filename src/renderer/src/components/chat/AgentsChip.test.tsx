@@ -6,7 +6,7 @@ import type { TaskView } from '@core/backgroundTasks.js'
 
 import { agentsOf, task } from '../../test/tasks.js'
 import { AgentsChip } from './AgentsChip.js'
-import { AgentsContext } from './agentTasks.js'
+import { AgentsContext, createAgentsStore, snapshotOf } from './agentTasks.js'
 
 function chipOf(tasks: readonly TaskView[]): React.JSX.Element {
   return (
@@ -43,13 +43,34 @@ describe('the count of agents in the composer', () => {
     expect(chip().querySelector('.agents-chip-line')).not.toBeNull()
   })
 
-  // Once all are done it says how many there were, quietly and without moving.
-  it('says how many ran once they are all done', () => {
+  // Once all are done it says how many there were, quietly: grey, still, no dot.
+  it('says how many ran once they are all done, without a dot', () => {
     renderChip([task({ status: 'completed' }), task({ taskId: 't-2', status: 'failed' })])
 
     expect(chip()).toHaveTextContent('2 agents')
     expect(chip()).toHaveAttribute('title', 'The agents this conversation ran — show what they did')
+    expect(chip()).toHaveClass('text-ink-faint')
     expect(chip().querySelector('.agents-chip-line')).toBeNull()
+    expect(chip().querySelector('.rounded-full')).toBeNull()
+  })
+
+  it('wears the working dot while one works', () => {
+    renderChip([task()])
+    expect(chip().querySelector('.bg-accent')).not.toBeNull()
+  })
+
+  // Cleared from the map, the runs are still in the log's list — not the chip's.
+  it('is not there once everything it counted was cleared', () => {
+    const done = [task({ status: 'completed' })]
+    render(
+      <AgentsContext.Provider
+        value={agentsOf([], { store: createAgentsStore(snapshotOf(done, [])) })}
+      >
+        <AgentsChip />
+      </AgentsContext.Provider>
+    )
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('counts commands where commands are all there is', () => {

@@ -16,12 +16,13 @@ import {
 import type { WorkflowAgent, WorkflowProgress } from '@core/events.js'
 
 import { useNow } from '../../hooks/useNow.js'
+import { DisclosureButton } from '../Disclosure.js'
 import { named } from '../diff/invisible.js'
 import { shown } from '../diff/shown.js'
 import { activityOf, elapsedOf, formatElapsed, kindLabel, nameOf } from './agentFormat.js'
 import { AgentGlyph, STATUS_TONES, statusLabel } from './AgentGlyph.js'
 import { promptOf, stepsOf } from './agentSteps.js'
-import { AgentLogContext, AgentsContext, useAgentTasks, useTaskById } from './agentTasks.js'
+import { AgentLogContext, AgentsContext, useMenuTasks, useTaskById } from './agentTasks.js'
 import { formatTokens } from './format.js'
 import { Markdown } from './Markdown.js'
 import { stepText } from './toolViews.js'
@@ -44,13 +45,20 @@ const PANEL_MAX_HEIGHT = { maxHeight: `${String(PANEL_MAX_SHARE * 100)}vh` }
  * A tree, because agents start agents: each sits under the one that started
  * it, the working ones first. Commands left running in the background are
  * listed apart below, since they are not agents and nobody looks for them
- * among agents. A row opens its detail in the same panel — what it was asked,
- * its last steps, a Stop — so reading one never loses the place in the rest.
+ * among agents. Both groups open folded, their headers saying how many work
+ * and how many are done: a long conversation runs dozens, and the counts are
+ * what a glance wants. A row opens its detail in the same panel — what it was
+ * asked, its last steps, a Stop — so reading one never loses the place in the
+ * rest, nor the groups that were open.
  */
 export function AgentMap(): React.JSX.Element {
   const { t } = useTranslation()
-  const tasks = useAgentTasks()
+  const { onClear } = useContext(AgentsContext)
+  const tasks = useMenuTasks()
   const [chosen, setChosen] = useState<string | null>(null)
+  // Here rather than in each group, which the detail unmounts.
+  const [agentsOpen, setAgentsOpen] = useState(false)
+  const [commandsOpen, setCommandsOpen] = useState(false)
   const now = useNow(tasks.some(isLive))
 
   const task = useTaskById(chosen)
@@ -71,21 +79,104 @@ export function AgentMap(): React.JSX.Element {
   const tree = taskTree(tasks)
   const agents = tree.filter((node) => node.task.kind !== 'shell')
   const commands = tree.filter((node) => node.task.kind === 'shell')
-  const working = liveCount(tasks)
-  const ended = visibleTasks(tasks).length - working
-
-  const rows = (nodes: readonly TaskNode[]): React.JSX.Element => (
-    <ul className="flex flex-col">
-      {nodes.map((node) => (
-        <AgentRow key={node.task.taskId} node={node} now={now} onOpen={setChosen} />
-      ))}
-    </ul>
-  )
+  // With nothing working, finished ones ask for no look: their ticks go grey.
+  const muted = liveCount(tasks) === 0
+  const ended = visibleTasks(tasks).filter((each) => !isLive(each))
 
   return (
     <div className="flex flex-col" style={PANEL_MAX_HEIGHT}>
-      <div className="border-line flex items-baseline gap-2 border-b px-3 py-2">
-        <span className="text-ink font-medium">{t('agents.title')}</span>
+      <div className="min-h-0 overflow-auto p-1">
+        {agents.length > 0 && (
+          <TaskGroup
+            title={t('agents.title')}
+            nodes={agents}
+            open={agentsOpen}
+            onOpenChange={setAgentsOpen}
+            now={now}
+            muted={muted}
+            onOpen={setChosen}
+          />
+        )}
+
+        {commands.length > 0 && (
+          <div className={agents.length > 0 ? 'border-line mt-1 border-t pt-1' : ''}>
+            <TaskGroup
+              title={t('agents.commands')}
+              nodes={commands}
+              open={commandsOpen}
+              onOpenChange={setCommandsOpen}
+              now={now}
+              muted={muted}
+              onOpen={setChosen}
+            />
+          </div>
+        )}
+      </div>
+
+      {ended.length > 0 && (
+        <div className="border-line flex items-center border-t px-3 py-2">
+          <button
+            type="button"
+            onClick={() => {
+              onClear(ended.map((each) => each.taskId))
+            }}
+            className="text-ink-soft hover:text-ink focus-ring rounded text-[11px] hover:underline"
+          >
+            {t('agents.clear')}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Every task in a tree, the nested ones included. */
+function flatten(nodes: readonly TaskNode[]): readonly TaskView[] {
+  return nodes.flatMap((node) => [node.task, ...flatten(node.children)])
+}
+
+/**
+ * One group of the map, folded or open, its header saying how it stands — and,
+ * with a dot, that something in it is waiting on an answer, which folded would
+ * otherwise be out of sight.
+ */
+function TaskGroup({
+  title,
+  nodes,
+  open,
+  onOpenChange,
+  now,
+  muted,
+  onOpen
+}: {
+  readonly title: string
+  readonly nodes: readonly TaskNode[]
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
+  readonly now: number
+  readonly muted: boolean
+  readonly onOpen: (taskId: string) => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+  const all = flatten(nodes)
+  const working = liveCount(all)
+  const ended = all.length - working
+  const waiting = all.some((each) => each.waiting)
+
+  return (
+    <section className="flex flex-col">
+      <DisclosureButton
+        open={open}
+        onOpenChange={onOpenChange}
+        className="row focus-ring flex w-full min-w-0 items-center gap-1.5 px-2 py-1.5 text-left"
+      >
+        <span className="text-ink font-medium">{title}</span>
+        {waiting && (
+          <>
+            <span aria-hidden className="bg-warning size-1.5 shrink-0 rounded-full" />
+            <span className="sr-only">{t('agents.statusWaiting')}</span>
+          </>
+        )}
         <span className="text-ink-faint ml-auto text-[11px] tabular-nums">
           {[
             working > 0 ? t('agents.working', { count: working }) : null,
@@ -94,19 +185,16 @@ export function AgentMap(): React.JSX.Element {
             .filter((part) => part !== null)
             .join(' · ')}
         </span>
-      </div>
+      </DisclosureButton>
 
-      <div className="min-h-0 overflow-auto p-1">
-        {agents.length > 0 && rows(agents)}
-
-        {commands.length > 0 && (
-          <div className={agents.length > 0 ? 'border-line mt-1 border-t pt-1' : ''}>
-            <p className="section-label px-2 pt-1 pb-0.5">{t('agents.commands')}</p>
-            {rows(commands)}
-          </div>
-        )}
-      </div>
-    </div>
+      {open && (
+        <ul className="flex flex-col">
+          {nodes.map((node) => (
+            <AgentRow key={node.task.taskId} node={node} now={now} muted={muted} onOpen={onOpen} />
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 
@@ -114,10 +202,12 @@ export function AgentMap(): React.JSX.Element {
 function AgentRow({
   node,
   now,
+  muted,
   onOpen
 }: {
   readonly node: TaskNode
   readonly now: number
+  readonly muted: boolean
   readonly onOpen: (taskId: string) => void
 }): React.JSX.Element {
   const { t } = useTranslation()
@@ -145,7 +235,7 @@ function AgentRow({
           className="row focus-ring flex w-full min-w-0 flex-col gap-0.5 px-2 py-1.5 text-left"
         >
           <span className="flex w-full min-w-0 items-center gap-2">
-            <AgentGlyph task={task} />
+            <AgentGlyph task={task} muted={muted} />
             <span
               className={`min-w-0 flex-1 truncate ${running ? 'text-ink' : 'text-ink-soft'}`}
               title={named(name)}
@@ -199,7 +289,13 @@ function AgentRow({
       {children.length > 0 && (
         <ul className="border-line ml-[13px] flex flex-col border-l pl-1">
           {children.map((child) => (
-            <AgentRow key={child.task.taskId} node={child} now={now} onOpen={onOpen} />
+            <AgentRow
+              key={child.task.taskId}
+              node={child}
+              now={now}
+              muted={muted}
+              onOpen={onOpen}
+            />
           ))}
         </ul>
       )}

@@ -13,6 +13,11 @@ import { shortModel } from './agentFormat.js'
  */
 export interface AgentsSnapshot {
   readonly tasks: readonly TaskView[]
+  /**
+   * What the map and the count draw: the tasks without those a person cleared.
+   * Apart from `tasks` because the log keeps every row it ever drew.
+   */
+  readonly menu: readonly TaskView[]
   readonly byToolUse: ReadonlyMap<string, TaskView>
   readonly byId: ReadonlyMap<string, TaskView>
 }
@@ -50,20 +55,27 @@ export interface Agents {
   /** A model id as the picker names it, or as a person would where it does not. */
   readonly modelName: (model: string) => string
   readonly onStop: (taskId: string) => void
+  /** Takes ended tasks off the map and the count — never out of the log. */
+  readonly onClear: (taskIds: readonly string[]) => void
   /** Brings the row that started an agent into view in the log. */
   readonly onShow: (toolUseId: string) => void
 }
 
 export const NOTHING_RUNNING: AgentsSnapshot = {
   tasks: [],
+  menu: [],
   byToolUse: new Map(),
   byId: new Map()
 }
 
 /** One reading of a list, as the store holds it. */
-export function snapshotOf(tasks: readonly TaskView[]): AgentsSnapshot {
+export function snapshotOf(
+  tasks: readonly TaskView[],
+  menu: readonly TaskView[] = tasks
+): AgentsSnapshot {
   return {
     tasks,
+    menu,
     byToolUse: byToolUse(tasks),
     byId: new Map(tasks.map((task) => [task.taskId, task]))
   }
@@ -72,13 +84,13 @@ export function snapshotOf(tasks: readonly TaskView[]): AgentsSnapshot {
 /**
  * A store the pane publishes each reading into.
  *
- * Nothing is published for a list that is the same object as the last: the
- * pane publishes from an effect on every render, and the list keeps its
- * identity while nothing in it moved (`useChatTasks`).
+ * Nothing is published for lists that are the same objects as the last: the
+ * pane publishes from an effect on every render, and a list keeps its
+ * identity while nothing in it moved (`useChatTasks`, `withoutCleared`).
  */
-export function createAgentsStore(
-  initial: AgentsSnapshot = NOTHING_RUNNING
-): AgentsStore & { readonly publish: (tasks: readonly TaskView[]) => void } {
+export function createAgentsStore(initial: AgentsSnapshot = NOTHING_RUNNING): AgentsStore & {
+  readonly publish: (tasks: readonly TaskView[], menu?: readonly TaskView[]) => void
+} {
   let snapshot = initial
   const listeners = new Set<() => void>()
 
@@ -90,16 +102,16 @@ export function createAgentsStore(
       }
     },
     read: () => snapshot,
-    publish: (tasks) => {
-      if (tasks === snapshot.tasks) return
-      snapshot = snapshotOf(tasks)
+    publish: (tasks, menu = tasks) => {
+      if (tasks === snapshot.tasks && menu === snapshot.menu) return
+      snapshot = snapshotOf(tasks, menu)
       // Copied, for the reason `chatEvents.ts` gives: a reader may leave mid-call.
       for (const listener of [...listeners]) listener()
     }
   }
 }
 
-// Never called: with no tasks there is no row to stop or bring into view.
+// Never called: with no tasks there is no row to stop, bring into view or clear.
 /* v8 ignore next */
 const ignore = (): void => undefined
 
@@ -107,7 +119,8 @@ export const NO_AGENTS: Agents = {
   store: createAgentsStore(),
   modelName: shortModel,
   onStop: ignore,
-  onShow: ignore
+  onShow: ignore,
+  onClear: ignore
 }
 
 export const AgentsContext = createContext<Agents>(NO_AGENTS)
@@ -116,6 +129,12 @@ export const AgentsContext = createContext<Agents>(NO_AGENTS)
 export function useAgentTasks(): readonly TaskView[] {
   const { store } = useContext(AgentsContext)
   return useSyncExternalStore(store.subscribe, () => store.read().tasks)
+}
+
+/** The tasks the map and the count draw — those not cleared. */
+export function useMenuTasks(): readonly TaskView[] {
+  const { store } = useContext(AgentsContext)
+  return useSyncExternalStore(store.subscribe, () => store.read().menu)
 }
 
 /** The task a call started, if it started one — redrawn only when that task moves. */

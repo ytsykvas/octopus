@@ -1375,6 +1375,8 @@ export const en = {
     ended_many: '{{count}} done',
     ended_other: '{{count}} done',
     commands: 'Background commands',
+    /* Takes the ended ones off the map; the log keeps them. */
+    clear: 'Clear finished',
     commandCount_one: '{{count}} command',
     commandCount_few: '{{count}} commands',
     commandCount_many: '{{count}} commands',

@@ -2987,6 +2987,12 @@ describe('showing every step', () => {
  * the reader to the row that started an agent.
  */
 describe('the agents of a conversation', () => {
+  /** The map's agents, which open folded. */
+  const unfoldAgents = async (): Promise<void> => {
+    const map = screen.getByRole('dialog', { name: 'Agents' })
+    await userEvent.click(within(map).getByRole('button', { name: /^Agents/ }))
+  }
+
   const SENT_ONE_OFF: ChatEntry[] = [
     {
       role: 'agent',
@@ -3021,8 +3027,23 @@ describe('the agents of a conversation', () => {
     await userEvent.click(
       await screen.findByTitle('The agents this conversation ran — show what they did')
     )
+    await unfoldAgents()
 
     expect(screen.getByRole('button', { name: 'Look around, Stopped' })).toBeInTheDocument()
+  })
+
+  // Off the map and the count, which go with the last of it — not out of the log.
+  it('clears what has ended from the map, and keeps it in the log', async () => {
+    givenChat(SENT_ONE_OFF)
+    await openLoadedChat()
+    const chip = await screen.findByTitle('The agents this conversation ran — show what they did')
+
+    await userEvent.click(chip)
+    await userEvent.click(screen.getByRole('button', { name: 'Clear finished' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Agents' })).not.toBeInTheDocument()
+    expect(chip).not.toBeInTheDocument()
+    expect(document.querySelector('[data-tool-use-id="call-1"]')).not.toBeNull()
   })
 
   it('takes the reader from the map to the row that started the agent', async () => {
@@ -3040,6 +3061,7 @@ describe('the agents of a conversation', () => {
     await openLoadedChat()
 
     await userEvent.click(await screen.findByTitle('1 agent working — show what it is doing'))
+    await unfoldAgents()
     await userEvent.click(screen.getByRole('button', { name: 'Audit route handlers, Working' }))
     await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
 
@@ -3089,6 +3111,7 @@ describe('the agents of a conversation', () => {
     expect(nested()).toBeNull()
 
     await userEvent.click(await screen.findByTitle('2 agents working — show what they are doing'))
+    await unfoldAgents()
     await userEvent.click(screen.getByRole('button', { name: 'Look deeper, Working' }))
     await userEvent.click(screen.getByRole('button', { name: 'Show in conversation' }))
 

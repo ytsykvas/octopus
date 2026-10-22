@@ -1038,6 +1038,7 @@ export const uk: Translation = {
     ended_many: '{{count}} завершили',
     ended_other: '{{count}} завершили',
     commands: 'Фонові команди',
+    clear: 'Очистити завершені',
     commandCount_one: '{{count}} команда',
     commandCount_few: '{{count}} команди',
     commandCount_many: '{{count}} команд',

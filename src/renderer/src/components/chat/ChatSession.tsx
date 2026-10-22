@@ -11,7 +11,7 @@ import {
   type PlanExecutionMode,
   type WorkingMode
 } from '@core/chats.js'
-import { callsAbove } from '@core/backgroundTasks.js'
+import { callsAbove, withoutCleared } from '@core/backgroundTasks.js'
 import type { FormValues } from '@core/elicitation.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { PermissionAnswer } from '@core/service.js'
@@ -25,6 +25,7 @@ import { Placeholder } from '../Placeholder.js'
 import { useAttachments } from '../../hooks/useAttachments.js'
 import { onChatEvent } from '../../hooks/chatEvents.js'
 import { stopTask, useChatTasks } from '../../hooks/backgroundTasks.js'
+import { clearTasks, useClearedTasks } from '../../hooks/clearedTasks.js'
 import { useChat } from '../../hooks/useChat.js'
 import type { ChatTab } from '../../hooks/useChatTabs.js'
 import type { AttachedFileController } from '../../hooks/useAttachedFiles.js'
@@ -385,6 +386,9 @@ export function ChatSession({
    */
   const chatId = chat.chat?.id ?? tab.id ?? ''
   const tasks = useChatTasks(chatId, chat.entries)
+  // The map and the count leave out what was cleared; the log keeps it all.
+  const cleared = useClearedTasks(chatId)
+  const menu = useMemo(() => withoutCleared(tasks, cleared), [tasks, cleared])
 
   /*
    * "Show in conversation": the agent's row is opened up to — a nested one is
@@ -418,8 +422,8 @@ export function ChatSession({
   // Published before the paint, so a row never shows a reading one commit old.
   const [agentsStore] = useState(createAgentsStore)
   useLayoutEffect(() => {
-    agentsStore.publish(tasks)
-  }, [agentsStore, tasks])
+    agentsStore.publish(tasks, menu)
+  }, [agentsStore, tasks, menu])
   const agentTasks = useMemo<Agents>(
     () => ({
       store: agentsStore,
@@ -429,7 +433,10 @@ export function ChatSession({
       onStop: (taskId) => {
         stopTask(chatId, taskId)
       },
-      onShow: showAgent
+      onShow: showAgent,
+      onClear: (taskIds) => {
+        clearTasks(chatId, taskIds)
+      }
     }),
     [agentsStore, models, chatId, showAgent]
   )

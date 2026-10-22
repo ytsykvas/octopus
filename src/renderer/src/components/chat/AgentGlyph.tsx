@@ -33,12 +33,16 @@ export const STATUS_TONES: Record<TaskStatus, string> = {
  * while it waits on an answer, and a tick, a cross or a square once it is over.
  *
  * Always the same box, so a list of them keeps its names in one column whatever
- * each is doing.
+ * each is doing. `muted` greys the tick, for a list where nothing is working
+ * any more and a column of green would only ask for a look nobody owes it; a
+ * failure keeps its red.
  */
 export function AgentGlyph({
-  task
+  task,
+  muted = false
 }: {
   readonly task: Pick<TaskView, 'status' | 'waiting'>
+  readonly muted?: boolean
 }): React.JSX.Element {
   return (
     <span aria-hidden className="inline-flex size-3 shrink-0 items-center justify-center">
@@ -47,7 +51,7 @@ export function AgentGlyph({
       ) : task.status === 'running' ? (
         <span className="agent-arc" />
       ) : task.status === 'completed' ? (
-        <Check size={11} strokeWidth={2.5} className="text-success" />
+        <Check size={11} strokeWidth={2.5} className={muted ? 'text-ink-faint' : 'text-success'} />
       ) : task.status === 'failed' ? (
         <X size={11} strokeWidth={2.5} className="text-danger" />
       ) : (
