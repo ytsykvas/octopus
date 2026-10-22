@@ -7,6 +7,7 @@ import type { Project } from '@core/store.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { AddTile } from './AddTile.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
 
@@ -114,9 +115,11 @@ export function Sidebar({
 
           <nav className="flex-1 overflow-auto px-2 py-2">
             {workspaces.length === 0 ? (
-              <p className="text-ink-faint px-2 py-2 leading-relaxed">
-                {t('workspaces.emptyForProject')}
-              </p>
+              <FirstWorkspaceButton
+                baseBranch={project.baseBranch}
+                creating={creating}
+                onCreate={onCreateWorkspace}
+              />
             ) : (
               <ul className="space-y-1.5">
                 {workspaces.map((workspace) => (
@@ -178,7 +181,7 @@ function ProjectHeader({
   // wash, where the ordinary border — chosen against a neutral surface — all
   // but disappears.
   return (
-    <div className="border-line-strong flex items-start gap-1 border-b px-3 pt-2 pb-2.5">
+    <div className="border-line-strong flex items-center gap-2 border-b px-3 pt-2 pb-2.5">
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium" title={project.repoPath}>
           {project.name}
@@ -196,23 +199,60 @@ function ProjectHeader({
         </p>
       </div>
 
-      <button
-        type="button"
-        onClick={onCreateWorkspace}
-        disabled={creating}
+      {/* The strip's own "+", not a glyph of its own: adding a workspace and
+          adding a repository are the same gesture one level apart. Creation
+          fetches first, hence the busy mark. */}
+      <AddTile
         title={t('workspaces.create')}
-        className="text-ink-faint hover:text-ink focus-ring shrink-0 rounded p-1 transition-colors disabled:cursor-default disabled:opacity-60"
-      >
-        {/* A turning mark rather than a dimmed plus: creation now fetches
-            first, and a still icon on a button that stopped responding reads
-            as the app having hung rather than as it working. */}
-        {creating ? (
-          <LoaderCircle aria-hidden className="animate-spin" size={14} />
-        ) : (
-          <Plus aria-hidden size={14} />
-        )}
-      </button>
+        disabled={creating}
+        busy={creating}
+        onClick={onCreateWorkspace}
+      />
     </div>
+  )
+}
+
+/**
+ * Where the first row will be, while there is none.
+ *
+ * The header's "+" alone was easy to miss on a list with nothing else in it, and
+ * a sentence pointing at it is one step further from the action than a button.
+ * A dashed card in a row's exact slot reads as the empty place the workspace
+ * will take, and names the branch it will start from.
+ */
+function FirstWorkspaceButton({
+  baseBranch,
+  creating,
+  onCreate
+}: {
+  baseBranch: string
+  creating: boolean
+  onCreate: () => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <button
+      type="button"
+      onClick={onCreate}
+      disabled={creating}
+      className="workspace-card focus-ring text-ink-soft hover:text-ink border-line-strong flex w-full items-center gap-2.5 border-dashed p-1.5 text-left transition-colors disabled:cursor-default disabled:opacity-60"
+    >
+      <span className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-md">
+        {creating ? (
+          <LoaderCircle aria-hidden className="animate-spin" size={15} />
+        ) : (
+          <Plus aria-hidden size={15} />
+        )}
+      </span>
+
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate font-medium">{t('workspaces.createFirst')}</span>
+        <span className="text-ink-faint truncate text-[11px]">
+          {t('workspaces.createFirstHint', { branch: shortBranchName(baseBranch) })}
+        </span>
+      </span>
+    </button>
   )
 }
 

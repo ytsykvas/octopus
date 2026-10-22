@@ -84,7 +84,8 @@ export const en = {
     requestMerged: 'Pull request #{{number}} — merged',
     requestClosed: 'Pull request #{{number}} — closed without merging',
     create: 'New workspace',
-    emptyForProject: 'No workspaces yet. Add one with the + above.',
+    createFirst: 'Create the first workspace',
+    createFirstHint: 'Its own branch from {{branch}}',
     rename: 'Rename',
     remove: 'Remove workspace',
     missing: 'Directory is gone',
@@ -931,7 +932,8 @@ export const en = {
       send: 'Ask',
       answering: 'Answering…',
       empty: 'The agent had no answer for this one.',
-      unread: 'An answer is waiting'
+      unread: 'An answer is waiting',
+      fork: 'Continue from this answer in a new conversation'
     },
     /* What a tab says aloud, and what its tooltip shows. Takes the resolved
        name — the one the user gave it, or the automatic one above — because a

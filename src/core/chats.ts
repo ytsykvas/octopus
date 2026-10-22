@@ -12,6 +12,7 @@
 
 import { z } from 'zod'
 import { CodedError } from './codedError.js'
+import { type SideExchange, SideExchangeSchema } from './sideQuestions.js'
 
 /**
  * Which agent runs a chat.
@@ -637,6 +638,16 @@ function isCommand(text: string, command: string, commands: readonly AgentComman
 }
 
 /**
+ * Whether a message opens with any command the agent listed, under any name.
+ *
+ * Text put in front of such a message would stop it being the command, so this
+ * is what decides whether something may be.
+ */
+export function isKnownCommand(text: string, commands: readonly AgentCommand[]): boolean {
+  return commands.some((command) => isCommand(text, bareName(command.name), commands))
+}
+
+/**
  * Whether this message is the user asking for the conversation to be forgotten.
  *
  * Asked before the message is sent, and remembered, because the event that
@@ -914,7 +925,17 @@ export const ChatSchema = z.object({
    * Defaulted rather than migrated, the convention `StateSchema` states: a
    * record written before the field existed was open.
    */
-  closedAt: z.iso.datetime().nullable().default(null)
+  closedAt: z.iso.datetime().nullable().default(null),
+  /**
+   * A side question and its answer this conversation was forked off, not yet
+   * told to the agent.
+   *
+   * The fork copies the session as it stood, and the exchange was never part
+   * of it, so it rides here until the first message that reaches the agent as
+   * a prompt carries it (`formatAside`). Defaulted: a record written before
+   * this existed was forked off nothing.
+   */
+  aside: SideExchangeSchema.nullable().default(null)
 })
 
 export type Chat = z.infer<typeof ChatSchema>
@@ -1033,6 +1054,7 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     // for the project after this chat was opened is off here too.
     skillOverrides: {},
     closedAt: null,
+    aside: null,
     createdAt: options.createdAt
   }
 }
@@ -1048,6 +1070,8 @@ export interface ForkChatOptions {
    */
   readonly sessionId: string
   readonly createdAt: string
+  /** The side exchange forked off, when the fork came from a `/btw` answer. */
+  readonly aside?: SideExchange
 }
 
 /**
@@ -1075,7 +1099,10 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     // Not the source's name either, and for the same reason as `planMode`: the
     // fork is a divergence, and two tabs called "auth refactor" is a strip that
     // cannot be read. It takes the automatic name until it is given one.
-    title: null,
+    //
+    // A fork off a side answer is named after its question, as the CLI names
+    // its own: that question is what the new conversation is about.
+    title: options.aside === undefined ? null : asideTitle(options.aside.question),
     sessionId: options.sessionId,
     // The fork was cut where the source was waiting to be, so it has nothing
     // left to apply.
@@ -1098,6 +1125,14 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     // fork is the same work in the same place, and a skill switched off
     // because it was getting in the way is still in the way.
     skillOverrides: source.skillOverrides,
+    aside: options.aside ?? null,
     createdAt: options.createdAt
   }
+}
+
+/** `btw: <question>` on one line, cut to what a tab name may hold. */
+function asideTitle(question: string): string {
+  const title = `btw: ${question.replace(/\s+/g, ' ').trim()}`
+
+  return title.length > MAX_CHAT_TITLE ? `${title.slice(0, MAX_CHAT_TITLE - 1)}…` : title
 }

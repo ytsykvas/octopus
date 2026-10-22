@@ -31,7 +31,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
 import { ABANDONED, CWD_WATCH_SETTINGS, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
-import { MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
+import { type Chat, MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
@@ -55,6 +55,7 @@ import { POOL_START } from './ports.js'
 import type { ChatEntry } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
+import { formatAside } from './sideQuestions.js'
 import { listWorktrees } from './worktree.js'
 import { WorkspaceError } from './workspaces.js'
 
@@ -12861,6 +12862,91 @@ describe('the agent chat', () => {
       const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
 
       await expect(service.forkChat('chat-nowhere')).rejects.toBeInstanceOf(WorkspaceError)
+    })
+
+    describe('off a side answer', () => {
+      const aside = { question: 'why  this\nway?', response: 'Because of the cache.' }
+
+      interface Forked {
+        readonly service: OctopusService
+        readonly sourceId: string
+        readonly forkId: string
+        /** The fork's record as it stands now. */
+        readonly record: () => Chat | undefined
+      }
+
+      /** A fork off `aside` of a conversation that ran, with `/deploy` among its commands. */
+      async function forkedOff(): Promise<Forked> {
+        offeredCommands = () =>
+          Promise.resolve([
+            { name: 'deploy', description: '', aliases: [] } as unknown as SlashCommand
+          ])
+        const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+        const { workspaceId, chatId } = await started(service)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.knownCommands).toHaveLength(1)
+        })
+        const forked = await service.forkChat(chatId, aside)
+
+        return {
+          service,
+          sourceId: chatId,
+          forkId: forked.id,
+          record: () => service.listChats(workspaceId).find((chat) => chat.id === forked.id)
+        }
+      }
+
+      it('is named after the question and remembers the exchange', async () => {
+        const { record } = await forkedOff()
+
+        expect(record()).toMatchObject({ title: 'btw: why this way?', aside })
+      })
+
+      // What the CLI's own fork shows: the exchange as the last thing said.
+      it('ends its history with the question and the answer', async () => {
+        const { service, sourceId, forkId } = await forkedOff()
+
+        const source = await service.chatHistory(sourceId)
+        const history = await service.chatHistory(forkId)
+
+        expect(history.slice(0, source.length)).toEqual(source)
+        expect(history.slice(source.length)).toEqual([
+          { role: 'user', at: expect.any(String), text: aside.question },
+          { role: 'agent', at: expect.any(String), event: { type: 'text', text: aside.response } }
+        ])
+      })
+
+      it('tells the agent with the first message, and only that one', async () => {
+        const { service, forkId, record } = await forkedOff()
+
+        await service.sendToChat(forkId, 'go on')
+        await service.sendToChat(forkId, 'and then')
+
+        expect(agents.at(-1)?.sent).toEqual([formatAside(aside, 'go on'), 'and then'])
+        expect(record()?.aside).toBeNull()
+        // The screen keeps what was typed.
+        expect((await service.chatHistory(forkId)).at(-1)).toMatchObject({ text: 'and then' })
+      })
+
+      it('forgets it on a /clear, which goes as typed', async () => {
+        const { service, forkId, record } = await forkedOff()
+
+        await service.sendToChat(forkId, '/clear')
+
+        expect(agents.at(-1)?.sent).toEqual(['/clear'])
+        expect(record()?.aside).toBeNull()
+      })
+
+      // Text in front of a command would stop it being one.
+      it('keeps it past another command', async () => {
+        const { service, forkId, record } = await forkedOff()
+
+        await service.sendToChat(forkId, '/deploy prod')
+        expect(record()?.aside).toEqual(aside)
+        await service.sendToChat(forkId, 'go on')
+
+        expect(agents.at(-1)?.sent).toEqual(['/deploy prod', formatAside(aside, 'go on')])
+      })
     })
   })
 

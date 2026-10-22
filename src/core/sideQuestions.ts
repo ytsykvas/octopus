@@ -6,7 +6,7 @@
  */
 import { z } from 'zod'
 
-const SideExchangeSchema = z.object({
+export const SideExchangeSchema = z.object({
   question: z.string(),
   response: z.string()
 })
@@ -39,4 +39,23 @@ export function parseBtw(text: string): { question: string } | null {
   if (match === null) return null
 
   return { question: (match[1] ?? '').trim() }
+}
+
+/**
+ * A message for a conversation forked off a side answer, with that exchange in
+ * front of it.
+ *
+ * The CLI writes the exchange into the forked session file as a turn of its
+ * own. That file's format is the CLI's and undocumented, so the fork carries
+ * the exchange on its record instead and hands it over with the first message
+ * — the agent learns it one message later, and nothing here breaks when the
+ * format moves.
+ */
+export function formatAside(aside: SideExchange, text: string): string {
+  return [
+    'Before this message, I asked you a side question about this conversation, and you answered it without tools. That exchange is part of the conversation now.',
+    `## My side question\n\n${aside.question}`,
+    `## Your answer\n\n${aside.response}`,
+    `## My message\n\n${text}`
+  ].join('\n\n')
 }

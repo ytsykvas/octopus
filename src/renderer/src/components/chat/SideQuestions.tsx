@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ChevronRight, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, GitBranch, Trash2, X } from 'lucide-react'
+
+import type { SideExchange } from '@core/sideQuestions.js'
 
 import { useDismiss } from '../../hooks/useDismiss.js'
 import type { SideItem, SideThread } from '../../hooks/useSideQuestions.js'
@@ -16,6 +18,8 @@ interface SideQuestionsProps {
   readonly onOpenChange: (open: boolean) => void
   readonly onAsk: (question: string) => void
   readonly onClear: () => void
+  /** Continues the conversation from an answer in a new tab; settles once it is open or refused. */
+  readonly onFork: (exchange: SideExchange) => Promise<void>
 }
 
 /**
@@ -28,7 +32,8 @@ export function SideQuestions({
   visible,
   onOpenChange,
   onAsk,
-  onClear
+  onClear,
+  onFork
 }: SideQuestionsProps): React.JSX.Element {
   const { t } = useTranslation()
   const container = useRef<HTMLDivElement | null>(null)
@@ -45,7 +50,15 @@ export function SideQuestions({
 
   return (
     <div ref={container} className="pointer-events-none absolute inset-0 z-20">
-      {open && <Drawer items={thread.items} onAsk={onAsk} onClear={onClear} onClose={dismiss} />}
+      {open && (
+        <Drawer
+          items={thread.items}
+          onAsk={onAsk}
+          onClear={onClear}
+          onClose={dismiss}
+          onFork={onFork}
+        />
+      )}
 
       <button
         type="button"
@@ -81,15 +94,20 @@ function Drawer({
   items,
   onAsk,
   onClear,
-  onClose
+  onClose,
+  onFork
 }: {
   items: readonly SideItem[]
   onAsk: (question: string) => void
   onClear: () => void
   onClose: () => void
+  onFork: (exchange: SideExchange) => Promise<void>
 }): React.JSX.Element {
   const { t } = useTranslation()
   const [draft, setDraft] = useState('')
+  // One fork at a time: a second click while the first is out would open a
+  // second tab continuing the same answer.
+  const [forking, setForking] = useState(false)
   const section = useRef<HTMLElement | null>(null)
   const field = useRef<HTMLTextAreaElement | null>(null)
   const list = useRef<HTMLDivElement | null>(null)
@@ -122,6 +140,13 @@ function Drawer({
     scroller.scrollTop = scroller.scrollHeight
   }, [items.length, last?.state])
 
+  const fork = (exchange: SideExchange): void => {
+    setForking(true)
+    void onFork(exchange).finally(() => {
+      setForking(false)
+    })
+  }
+
   const submit = (): void => {
     const question = draft.trim()
     if (question === '') return
@@ -153,7 +178,7 @@ function Drawer({
         ) : (
           <ol className="flex flex-col gap-4">
             {items.map((item) => (
-              <Exchange key={item.id} item={item} />
+              <Exchange key={item.id} item={item} forking={forking} onFork={fork} />
             ))}
           </ol>
         )}
@@ -190,7 +215,15 @@ function Drawer({
   )
 }
 
-function Exchange({ item }: { item: SideItem }): React.JSX.Element {
+function Exchange({
+  item,
+  forking,
+  onFork
+}: {
+  item: SideItem
+  forking: boolean
+  onFork: (exchange: SideExchange) => void
+}): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
@@ -206,6 +239,21 @@ function Exchange({ item }: { item: SideItem }): React.JSX.Element {
       {item.state === 'answered' && (
         <div className={item.synthetic ? 'text-ink-faint' : 'text-ink'}>
           <Markdown text={item.answer} />
+        </div>
+      )}
+      {/* Not on a synthetic answer: the CLI wrote it, and there is nothing in
+          it to continue from. */}
+      {item.state === 'answered' && !item.synthetic && (
+        <div className="-mt-1 flex justify-end">
+          <IconButton
+            label={t('chat.side.fork')}
+            disabled={forking}
+            onClick={() => {
+              onFork({ question: item.question, response: item.answer })
+            }}
+          >
+            <GitBranch aria-hidden size={13} />
+          </IconButton>
         </div>
       )}
       {item.state === 'empty' && <p className="text-ink-faint">{t('chat.side.empty')}</p>}

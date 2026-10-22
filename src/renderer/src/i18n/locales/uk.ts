@@ -75,7 +75,8 @@ export const uk: Translation = {
     requestMerged: 'Pull request #{{number}} — влитий',
     requestClosed: 'Pull request #{{number}} — закритий без злиття',
     create: 'Новий воркспейс',
-    emptyForProject: 'Поки жодного воркспейсу. Створіть його кнопкою + вище.',
+    createFirst: 'Створити перший воркспейс',
+    createFirstHint: 'Окрема гілка від {{branch}}',
     rename: 'Перейменувати',
     remove: 'Видалити воркспейс',
     missing: 'Теки немає',
@@ -720,7 +721,8 @@ export const uk: Translation = {
       send: 'Спитати',
       answering: 'Відповідає…',
       empty: 'Агент не мав відповіді на це питання.',
-      unread: 'На вас чекає відповідь'
+      unread: 'На вас чекає відповідь',
+      fork: 'Продовжити з цієї відповіді в новій розмові'
     },
     tabStatus: '{{name}}: {{state}}',
     tabStatusIdle: 'ще нічого не написано',

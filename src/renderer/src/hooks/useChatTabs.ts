@@ -9,6 +9,7 @@ import {
   MAX_CHATS_PER_WORKSPACE
 } from '@core/chats.js'
 import { formatHandoff } from '@core/handoff.js'
+import type { SideExchange } from '@core/sideQuestions.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
 
@@ -55,7 +56,11 @@ export interface ChatTabsController {
   /** Whether another conversation may be opened here; false at the cap. */
   readonly canCreate: boolean
   readonly create: () => Promise<void>
-  readonly fork: (chatId: string) => Promise<void>
+  /**
+   * Opens a conversation continuing this one, from a side answer when `aside`
+   * is given, and moves to it. Says whether it did.
+   */
+  readonly fork: (chatId: string, aside?: SideExchange) => Promise<boolean>
   /**
    * Puts the conversation on the clipboard as text another one can start from.
    *
@@ -408,22 +413,23 @@ export function useChatTabs(
   }, [tabs, load, select, describeFailure])
 
   const fork = useCallback(
-    async (chatId: string) => {
+    async (chatId: string, aside?: SideExchange) => {
       const id = shown.current
       /* v8 ignore next */
-      if (id === null) return
+      if (id === null) return false
 
       report.current(null)
-      const forked = await window.octopus.chats.fork(chatId)
-      if (shown.current !== id) return
+      const forked = await window.octopus.chats.fork(chatId, aside)
+      if (shown.current !== id) return false
 
       if (!forked.ok) {
         report.current(describeFailure(forked))
-        return
+        return false
       }
 
       await load(id, () => shown.current !== id)
       select(forked.value.id)
+      return true
     },
     [load, select, describeFailure]
   )

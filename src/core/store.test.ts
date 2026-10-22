@@ -111,6 +111,7 @@ function storedChat(overrides: Partial<Chat> = {}): Chat {
     knownAgents: [],
     skillOverrides: {},
     closedAt: null,
+    aside: null,
     createdAt: '2026-08-07T12:00:00.000Z',
     ...overrides
   }
@@ -678,6 +679,7 @@ describe('chats', () => {
       knownAgents: [],
       skillOverrides: {},
       closedAt: null,
+      aside: null,
       createdAt: '2026-08-11T09:00:00.000Z',
       ...overrides
     }
@@ -987,6 +989,17 @@ describe('the remembered model list', () => {
     expect(state.chats[0]?.interrupted).toBe(false)
   })
 
+  // Written before a fork could start from a side answer: it was forked off
+  // nothing — and the file must still open.
+  it('loads a chat written before a fork could carry a side answer', async () => {
+    const { aside, ...older } = storedChat()
+    expect(aside).toBeNull()
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [older] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.aside).toBeNull()
+  })
+
   // Written before the `@` list offered agents: it knows none until the next
   // session says — and the file must still open.
   it('loads a chat written before agents were remembered', async () => {
@@ -1048,6 +1061,7 @@ describe('the commands a chat remembers', () => {
     knownAgents: [],
     skillOverrides: {},
     closedAt: null,
+    aside: null,
     createdAt: '2026-08-11T09:00:00.000Z'
   }
 

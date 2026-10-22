@@ -1,4 +1,4 @@
-import { CloudDownload, FolderOpen, Pencil, Plus, Puzzle, Trash2 } from 'lucide-react'
+import { CloudDownload, FolderOpen, Pencil, Puzzle, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -8,6 +8,7 @@ import type { Project } from '@core/store.js'
 import type { Mark } from '../attention.js'
 import { DONE_TONE } from './agentStatus.js'
 
+import { AddTile } from './AddTile.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import { LETTERS, TILE_WASH } from './projectTint.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
@@ -126,15 +127,12 @@ export function ProjectTabs({
         <DropdownMenu
           align="left"
           trigger={({ onClick }) => (
-            <button
-              type="button"
+            <AddTile
+              title={t('sidebar.addProject')}
               disabled={busy}
               onClick={onClick}
-              title={t('sidebar.addProject')}
-              className="text-ink-faint hover:border-ink-faint hover:text-ink focus-ring border-line mt-1 flex size-10 items-center justify-center rounded-[10px] border border-dashed transition-colors disabled:opacity-50"
-            >
-              <Plus aria-hidden size={16} />
-            </button>
+              className="mt-1"
+            />
           )}
           actions={[
             {

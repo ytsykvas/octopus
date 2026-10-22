@@ -52,6 +52,7 @@ import {
   EXIT_PLAN_MODE,
   forkChat as forkChatRecord,
   isClearCommand,
+  isKnownCommand,
   isUsageCommand,
   isOpenChat,
   MAX_CHATS_PER_WORKSPACE,
@@ -230,7 +231,7 @@ import {
 } from './skills.js'
 import { describeSessionSkill, withholdable } from './sessionSkills.js'
 import { skillsInFiles } from './settingsFiles.js'
-import { parseBtw, type SideAnswer, type SideExchange } from './sideQuestions.js'
+import { formatAside, parseBtw, type SideAnswer, type SideExchange } from './sideQuestions.js'
 import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
@@ -1348,8 +1349,12 @@ export interface OctopusService {
    *
    * The agent keeps what it remembers; the two then diverge. Refuses a chat
    * that has never run, since there is nothing to continue.
+   *
+   * With `aside`, the fork continues from a side answer: the exchange is
+   * added to the end of its history and told to the agent with the first
+   * message sent there.
    */
-  forkChat(chatId: string): Promise<Chat>
+  forkChat(chatId: string, aside?: SideExchange): Promise<Chat>
   /**
    * Gives a conversation a name of its own, or takes it back.
    *
@@ -2505,6 +2510,47 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   function copyHistory(from: Chat, to: Chat): Promise<void> {
     return transcriptWrites(() => copyTranscript(from.id, to.id, dataRoot))
+  }
+
+  /**
+   * The message as the agent should get it, with the side exchange a fork was
+   * made off in front of it if the agent has not been told that yet.
+   *
+   * Read from the record as it is now, not as `sendToChat` found it: the
+   * awaits between could have let another message take the exchange first.
+   * A command is sent as typed, since text in front would stop it being one;
+   * `/clear` drops the exchange with everything else, and any other command
+   * leaves it for the next message.
+   */
+  async function withAside(chatId: string, text: string): Promise<string> {
+    const chat = requireChat(chatId)
+    const { aside } = chat
+    if (aside === null) return text
+
+    const clears = isClearCommand(text, chat.knownCommands)
+    if (!clears && isKnownCommand(text, chat.knownCommands)) return text
+
+    await commit((current) => updateChat(current, chatId, { aside: null }))
+    return clears ? text : formatAside(aside, text)
+  }
+
+  /**
+   * Writes a side exchange onto the end of a fork's history, as the question
+   * the user asked and the answer the agent gave.
+   *
+   * The question has no `uuid`: the agent never received it as a turn of its
+   * own, so there is no point in its session to rewind to.
+   */
+  function appendAside(chat: Chat, aside: SideExchange): Promise<void> {
+    return transcriptWrites(async () => {
+      const at = now()
+      await appendEntry(chat.id, { role: 'user', at, text: aside.question }, dataRoot)
+      await appendEntry(
+        chat.id,
+        { role: 'agent', at, event: { type: 'text', text: aside.response } },
+        dataRoot
+      )
+    })
   }
 
   /**
@@ -6027,7 +6073,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return chat
     },
 
-    async forkChat(chatId) {
+    async forkChat(chatId, aside) {
       const source = requireChat(chatId)
       const workspace = requireWorkspace(source.workspaceId)
 
@@ -6065,7 +6111,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const chat = forkChatRecord(source, {
         id: uuid(),
         sessionId: forked.sessionId,
-        createdAt: now()
+        createdAt: now(),
+        ...(aside !== undefined && { aside })
       })
 
       await addChatCapped(chat)
@@ -6074,6 +6121,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // screen draws. Without it the new tab opens empty above an agent that
       // remembers all of it.
       await copyHistory(source, chat)
+      if (aside !== undefined) await appendAside(chat, aside)
       return chat
     },
 
@@ -6346,6 +6394,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         return null
       }
 
+      // Before the check below rather than inside the send: nothing may wait
+      // between deciding this is the clear and sending it.
+      const prompted = await withAside(chatId, text)
+
       /*
        * Whether this message is the one that throws the conversation away.
        *
@@ -6367,7 +6419,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (sessions.get(chatId) === session && isClearCommand(text, chat.knownCommands)) {
         clearRequests.add(chatId)
       }
-      session.send(text, messageId)
+      session.send(prompted, messageId)
       if (pushTo !== null) publishAfterTurn.set(chatId, pushTo)
 
       openTurn(chatId)

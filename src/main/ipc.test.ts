@@ -2563,6 +2563,25 @@ describe('the agent chat', () => {
     })
   })
 
+  // The exchange becomes a prompt in the fork, so its shape is checked here; a
+  // well-formed one gets through to the service, which refuses for its own reason.
+  it('checks the side exchange a fork is made off', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = (await invoke('chats:open', workspace.id)) as { ok: true; value: { id: string } }
+
+    await expect(
+      invoke('chats:fork', opened.value.id, { question: 'why?' })
+    ).resolves.not.toMatchObject({ code: 'nothingToFork' })
+    await expect(
+      invoke('chats:fork', opened.value.id, { question: 'why?', response: 'because' })
+    ).resolves.toMatchObject({ ok: false, code: 'nothingToFork' })
+    await expect(invoke('chats:fork', opened.value.id, null)).resolves.toMatchObject({
+      ok: false,
+      code: 'nothingToFork'
+    })
+  })
+
   it('reads back an empty history for a chat that has said nothing', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
