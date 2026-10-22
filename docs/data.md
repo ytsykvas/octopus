@@ -1053,10 +1053,12 @@ the four that fail silently: a line that is not an assignment, a key no parser
 accepts, a key written twice — only the last counts — and a mistyped
 `$OCTOPUS_…`, which reaches the file as literal text. The lines inside a quoted
 value spanning several are that value's, and are not checked one by one. A line
-ending in base64's padding — `…Q==` or `…Q=` — straight after a line of a key
-pasted without its quotes (base64 alone, 40 characters or more) is that key's
-end, and counts as no assignment rather than as a name set to `=` or to nothing;
-anywhere else `SEP==` and `EMPTY=` are what they say. They are warnings and
+ending in base64's padding — `…Q==` or `…Q=` — straight after a line that is no
+assignment is the end of a key pasted without its quotes when that line is one of
+the key (base64 alone, 40 characters or more) or the name is in mixed case, as
+base64 almost always is and a variable's name almost never. It counts as no
+assignment rather than as a name set to `=` or to nothing; anywhere else `SEP==`
+and `EMPTY=` are what they say. They are warnings and
 never a refusal: the file is read by somebody else's parser, and ours cannot be
 the authority on what that one accepts.
 

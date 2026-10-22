@@ -194,26 +194,26 @@ interface Opening {
  */
 function envLines(body: string): EnvLine[] {
   let open: Opening | null = null
-  let afterKeyLine = false
+  let before: EnvLine | null = null
 
   return body.split('\n').map((raw) => {
     if (open !== null) {
       const inside = readInside(raw, open)
       if (raw.includes(open.quote)) open = null
-      afterKeyLine = false
+      before = inside
       return inside
     }
 
-    const read = readLine(raw, afterKeyLine)
+    const read = readLine(raw, before)
     if (read.kind === 'assignment' && read.spans) {
       open = { quote: read.value.charAt(0), owner: read.named ? read.name : null }
     }
-    afterKeyLine = read.kind === 'loose' && KEY_LINE.test(read.text)
+    before = read
     return read
   })
 }
 
-function readLine(raw: string, afterKeyLine: boolean): EnvLine {
+function readLine(raw: string, before: EnvLine | null): EnvLine {
   const text = raw.trim().replace(EXPORT, '')
 
   // Before the comments, which our markers would otherwise pass for.
@@ -223,10 +223,10 @@ function readLine(raw: string, afterKeyLine: boolean): EnvLine {
   const equals = text.indexOf('=')
   if (equals === -1) return { kind: 'loose', text }
 
-  const value = text.slice(equals + 1).trim()
-  if (afterKeyLine && /^=*$/.test(value)) return { kind: 'loose', text }
-
   const name = text.slice(0, equals).trim()
+  const value = text.slice(equals + 1).trim()
+  if (isPadding(name, value, before)) return { kind: 'loose', text }
+
   const quote = value.charAt(0)
   return {
     kind: 'assignment',
@@ -257,14 +257,26 @@ function readInside(raw: string, { quote, owner }: Opening): EnvLine {
 }
 
 /**
- * A line of a key pasted without its quotes: base64 and nothing else, as long
- * as the shortest width keys are wrapped at (PEM 64, OpenSSH 70, MIME 76) comes
- * nowhere near — and longer than any typo.
+ * Whether the `=` on a line ends base64 rather than starting a value.
  *
- * The line after one can end in padding: `…Q==` reads as the name `…Q` set to
- * `=`, and `…Q=` as one set to nothing — a piece of the key that would be
- * listed as a name. Only there: anywhere else `SEP==` and `EMPTY=` are what
+ * A key pasted without its quotes puts its lines in the block one by one, and
+ * the last can end in padding: `…Q==` reads as the name `…Q` set to `=`, and
+ * `…Q=` as one set to nothing — a piece of the key that would be listed as a
+ * name, and never masked. Read as padding only after a line that is no
+ * assignment, and only where that line is one of a key or the name is in mixed
+ * case, as base64 almost always is and a variable's name almost never: a key
+ * wrapped short still ends there. Anywhere else `SEP==` and `EMPTY=` are what
  * they say.
+ */
+function isPadding(name: string, value: string, before: EnvLine | null): boolean {
+  if (!/^=*$/.test(value) || before?.kind !== 'loose') return false
+  return KEY_LINE.test(before.text) || (/[a-z]/.test(name) && /[A-Z]/.test(name))
+}
+
+/**
+ * A line of a key: base64 and nothing else, as long as the shortest width keys
+ * are wrapped at (PEM 64, OpenSSH 70, MIME 76) comes nowhere near — and longer
+ * than any typo.
  */
 const KEY_LINE = /^[A-Za-z0-9+/]{40,}$/
 

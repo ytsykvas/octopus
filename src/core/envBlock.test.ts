@@ -192,11 +192,12 @@ describe('parseEnvBody', () => {
   })
 
   it('still reads an empty value after an assignment, a comment or the first line', () => {
-    expect(parseEnvBody('SENTRY_DSN=\nA=1\nB=\n# note\nC=')).toEqual({
+    expect(parseEnvBody('SENTRY_DSN=\nA=1\nB=\n# note\nC=\nsentryDsn=')).toEqual({
       SENTRY_DSN: '',
       A: '1',
       B: '',
-      C: ''
+      C: '',
+      sentryDsn: ''
     })
   })
 
@@ -210,6 +211,13 @@ describe('parseEnvBody', () => {
   it('reads an empty value after a value spanning lines', () => {
     const pem = `KEY="-----BEGIN KEY-----\n${KEY_LINE}\n-----END KEY-----"\nEMPTY=\nNEXT=1`
     expect(parseEnvBody(pem)).toEqual({ EMPTY: '', NEXT: '1' })
+  })
+
+  // A key wrapped short still ends in a name base64 writes and a variable does not: mixed case.
+  it('leaves out the padding of a key wrapped in short lines', () => {
+    const short = 'KEY=-----BEGIN KEY-----\nMIIEvQIBADAN\nq3ZxYpabcDEFgh==\n-----END KEY-----'
+    expect(parseEnvBody(short)).toEqual({ KEY: '-----BEGIN KEY-----' })
+    expect(parseEnvBody('oops\nEMPTY=\nnote\nlower_case=')).toEqual({ EMPTY: '', lower_case: '' })
   })
 
   it('takes a line of base64 for a key from 40 characters, short of any width keys wrap at', () => {
