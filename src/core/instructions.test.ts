@@ -211,11 +211,11 @@ describe('the two Help asks for', () => {
   })
 
   // A variable a script is given and the prompt never names is one no agent uses.
-  it('name every variable a script is given', () => {
+  it.each(HELP_KINDS)('name every variable a script is given: %s', (kind) => {
     const given = Object.keys(
       scriptEnv('run', { rootPath: '/r', workspaceName: 'w', port: 3100, profile: 'default' })
     )
-    const prompt = instructionTemplate('setupScripts')
+    const prompt = instructionTemplate(kind)
     const named = (name: string): boolean => new RegExp(`\\$${name}(?![0-9A-Z_])`).test(prompt)
 
     // The ten ports are written as a range, `_1` … `_9`, so the ends stand for the middle.
@@ -259,5 +259,39 @@ describe('the two Help asks for', () => {
     expect(instructionTemplate('setupScripts')).toContain(
       '**Values in the env set may use those names.**'
     )
+  })
+
+  // The agent's session is given none of them, and would otherwise read an
+  // empty `$OCTOPUS_PORT` as "no port".
+  it("send the diagnosis to the facts for a script's values", () => {
+    expect(instructionTemplate('diagnoseRun')).toContain('Your own session has none of them')
+  })
+
+  // Sent at once, the ask carries no description of the symptom.
+  it('ask what the person sees when the runs look healthy', () => {
+    expect(instructionTemplate('diagnoseRun')).toContain('ask what they see')
+  })
+
+  // The three cases with nothing to diagnose still send.
+  it('send a workspace without scripts to the setup ask', () => {
+    expect(instructionTemplate('diagnoseRun')).toContain('Help → "Set this project up to run"')
+  })
+
+  // A server on `::1` looks down to octopus and up to the person's browser.
+  it('name the address the port probe cannot see', () => {
+    const prompt = instructionTemplate('diagnoseRun')
+    expect(prompt).toContain('Octopus probes 127.0.0.1 only')
+    expect(prompt).toContain('`::1`')
+  })
+
+  it('keep the diagnosis to checks that change nothing', () => {
+    expect(instructionTemplate('diagnoseRun')).toContain(
+      'You may not kill a process, install anything, run a migration'
+    )
+  })
+
+  // An edited script disables Run until it is allowed again.
+  it('say that a script it changes waits to be allowed', () => {
+    expect(instructionTemplate('diagnoseRun')).toContain('Run is gated again')
   })
 })

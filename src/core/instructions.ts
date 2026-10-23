@@ -276,19 +276,36 @@ Octopus does not read it; it is translated once. \`[scripts] setup/run/archive\`
 
   diagnoseRun: `# Why does Run not work?
 
-Run in octopus is two scripts in order: \`.octopus/scripts/setup.sh\` (the build), then \`.octopus/scripts/run.sh\` (the server) on \`$OCTOPUS_PORT\`. A failed build stops there. Below this message octopus has put what it knows: which scripts are in effect and where they come from, the env set and the names of its variables, the files it carries, any problems in the env set, and the last lines of the most recent build and server with their exit codes.
+Run in octopus is two scripts in order: \`.octopus/scripts/setup.sh\` (the build), then \`.octopus/scripts/run.sh\` (the server) on \`$OCTOPUS_PORT\`. A failed build stops there. Restart runs only \`run.sh\` again, on the build it has. Below this message octopus has put what it knows: the checkout, this workspace's name, slug and port, whether anything is listening on that port right now, which scripts are in effect and where they come from, the env set and the names of its variables, the files it carries, any problems in the env set, and the last lines of the most recent build and server with their exit codes.
+
+Every script is given \`$OCTOPUS_ROOT_PATH\`, \`$OCTOPUS_WORKSPACE_NAME\`, \`$OCTOPUS_WORKSPACE_SLUG\` and \`$OCTOPUS_ENV_PROFILE\`, plus the env set's variables; \`run.sh\` also gets \`$OCTOPUS_PORT\` and \`$OCTOPUS_PORT_1\` … \`$OCTOPUS_PORT_9\`. Your own session has none of them: take their values from the facts below, not from your environment.
 
 Find out why before changing anything.
 
-1. **Read the output first.** The last error is usually not the first thing printed; find the line that actually failed.
+## First, which case this is
+
+- **Nothing has run yet.** Octopus says so below. Ask the person to press Run on the Scripts tab and ask again, unless Run is disabled, which is one of the next two.
+- **There are no scripts.** Nothing can run. Say so and point to Help → "Set this project up to run", which writes them; do not write them from here.
+- **The scripts are not allowed yet.** Run stays disabled until the person presses "Allow these" on the Scripts tab or turns on "Trust this repository" in Project settings. Say that; there is nothing else to diagnose.
+- **The last runs look healthy:** the build exited 0, the server is still running and something is listening on the port. Then the failure is what the person sees, and you have not seen it: ask what they see (a blank page, an error in the browser, another workspace's page, an old build) before guessing.
+
+## Then, in order
+
+1. **Read the output first.** The last error is usually not the first thing printed; find the line that actually failed. Only the last lines are kept, so the first error may be gone; say so rather than inventing it.
 2. **Check what the script was given.** A run most often stops on a variable the script could not read, and that is almost never the script. The env set is written into the workspace's env file before every script, last and winning; a script that appends its own \`KEY=value\` is overwritten. The variable names are listed below; the values are not, and you must not ask for them to be pasted here.
 3. **Check what is missing from the worktree.** A worktree holds what git tracks. A file the app reads at boot (\`.env\`, \`master.key\`) that is not in the files carried into the workspace is simply absent.
-4. **Check the port and the slug.** The server must bind \`$OCTOPUS_PORT\` exactly, not a literal and not the next free port: a dev server that moved on is running where the app's link does not look. A database or directory named without \`$OCTOPUS_WORKSPACE_SLUG\` is shared with every other workspace.
-5. **Check how the script is started.** It runs by path through the login shell, as a fresh process with nothing to answer a prompt: a build that hangs is usually waiting on a question or opening a browser, and \`nvm\` or SDKMAN, being shell functions, are not there unless the script loads them. Setup runs on every Run, so a step that only works the first time fails the second.
-6. **Check what the last run left behind.** Stop reaches the server's process group and nothing else: a Docker container, a Gradle daemon or a stale pidfile (\`tmp/pids/server.pid\`) from before can hold the port or refuse the boot.
-7. **Check the gate.** A repository's scripts do not run until they are allowed on the Scripts tab, and a script runs by path, so it must be executable (\`test -x\`) and start with a shebang.
+4. **Check the port.** The server must bind \`$OCTOPUS_PORT\` exactly, not a literal and not the next free port: a dev server that moved on is running where the app's link does not look. Octopus probes 127.0.0.1 only, so a server bound to \`localhost\` that resolved to \`::1\`, or to \`::1\` itself, is running and still "not listening" to octopus: bind 127.0.0.1 or 0.0.0.0. \`lsof -nP -iTCP:<port> -sTCP:LISTEN\` shows who holds the port and on which address.
+5. **Check the slug.** A database, a container or a directory named without \`$OCTOPUS_WORKSPACE_SLUG\` is shared with every other workspace, and whichever ran last wins.
+6. **Check how the script is started.** It runs by path through the login shell, as a fresh process with nothing to answer a prompt: a build that hangs is usually waiting on a question or opening a browser, and \`nvm\` or SDKMAN, being shell functions, are not there unless the script loads them. Setup runs on every Run, so a step that only works the first time fails the second.
+7. **Check what the last run left behind.** Stop reaches the server's process group and nothing else: a Docker container, a Gradle daemon or a stale pidfile (\`tmp/pids/server.pid\`) from before can hold the port or refuse the boot.
+8. **Check what is outside octopus.** A Postgres or Redis that is not running (\`pg_isready\`, \`docker ps\`); a runtime version that \`.nvmrc\` or \`.tool-versions\` names and the machine has not got; a migration a branch switch brought in that \`setup.sh\` does not run. Octopus starts none of those: say the command the person should run.
+9. **Check the gate.** A repository's scripts do not run until they are allowed on the Scripts tab, and a script runs by path, so it must be executable (\`test -x\`) and start with a shebang.
 
-Then say, in order: what failed, why, and the smallest change that fixes it. Propose the change; if it is in a script, write it and \`chmod +x\`. Do not run the scripts yourself and never write a variable's value anywhere.
+## What you may run, and what you may not
+
+You may run checks that change nothing: \`lsof -nP -iTCP:<port> -sTCP:LISTEN\`, \`pg_isready\`, \`docker ps\`, \`bash -n\` or \`sh -n\` on a script, \`test -f\` and \`test -x\` on a path, and \`command -v <tool>\` through \`$SHELL -i -c\`, since that is how a script is started. You may not kill a process, install anything, run a migration, or run \`setup.sh\` or \`run.sh\` yourself: the person presses Run.
+
+Then say, in order: what failed, why, and the smallest change that fixes it. Propose the change; if it is in a script, write it and \`chmod +x\`, and say that Run is gated again until the person presses "Allow these". Never write a variable's value anywhere.
 `
 }
 
