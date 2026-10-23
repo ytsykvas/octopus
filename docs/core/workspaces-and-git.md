@@ -4,7 +4,7 @@
 
 Before rejecting a duplicate, ask what it is unique **within**. A workspace name
 and its branch are unique per project; the id is unique across the app. See the
-table in [data.md](../data.md).
+table in [data/state.md](../data/state.md).
 
 ## git is asked about git
 

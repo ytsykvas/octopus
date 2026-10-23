@@ -501,7 +501,7 @@ disagree with what the person wrote — the agent's prose is output to render, t
 user's message is their own words to quote.
 
 Text streams in as it is written. The finished block replaces the fragments when
-it arrives; only the finished one is stored (see [data.md](data.md)).
+it arrives; only the finished one is stored (see [data/transcripts-and-ports.md](data/transcripts-and-ports.md)).
 
 **The line closing a turn** carries how long it took, the tokens the whole
 exchange took — prompt and reply as one figure, since the question and its answer
@@ -3106,7 +3106,7 @@ where none of the files on screen has a writer, where every chip would empty the
 pane. A file nobody here is recorded as having written — edited by hand, or
 written before any of this was recorded — carries no mark and is never hidden by
 the filter. The record itself is `writers` on the workspace, described in
-[data.md](data.md): by file rather than by line, because a line number recorded
+[data/state.md](data/state.md): by file rather than by line, because a line number recorded
 now points somewhere else by the time the pane draws it.
 
 **What is measured against what.** The left-hand side is the merge base of the

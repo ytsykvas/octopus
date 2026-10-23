@@ -182,7 +182,7 @@ mangled; the `code` is what lets the UI show a localised message instead.
 `git` is the source of truth about git. `~/.octopus/state.json` holds only what
 git cannot know: the chats and their agent sessions, the port, the label. When the two disagree —
 a worktree directory deleted by hand — the app reports the workspace as missing
-rather than quietly agreeing with either side. See [data.md](data.md).
+rather than quietly agreeing with either side. See [data/README.md](data/README.md).
 
 ## What is deliberately absent
 

@@ -51,7 +51,7 @@ CLI's: a command it refuses in its reply still leaves the split in the panel.
 
 A conversation holds two: `model` for writing the code and `planModel` for
 planning. `sessionModel` folds them into the one the SDK takes — see
-`docs/data.md` for why the two nulls mean different things — and nothing but its
+`docs/data/state.md` for why the two nulls mean different things — and nothing but its
 return value is ever handed to `setModel` or to `SessionOptions.model`.
 
 Which means the effective model can move without anyone naming one, at exactly

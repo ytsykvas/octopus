@@ -766,12 +766,12 @@ That is not tidying: the tree here used to name thirteen of them and describe
 application's records had become the zod inferences in `store.ts`. A reader who
 followed it landed on hand-written interfaces eight fields out of date, one of
 which documented the dev-server port as a hash of the workspace id — the exact
-behaviour `docs/data.md` records as a bug that was fixed by allocating ports
+behaviour `docs/data/state.md` records as a bug that was fixed by allocating ports
 instead.
 
 The layer boundaries are §11.1. What each core module does is
 [`docs/core/`](core/README.md); how the window is put together is
-[`docs/ui.md`](ui.md); what is written to disk is [`docs/data.md`](data.md).
+[`docs/ui.md`](ui.md); what is written to disk is [`docs/data/`](data/README.md).
 
 ---
 

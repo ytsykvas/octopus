@@ -158,7 +158,7 @@ The reasons, and the other traps of a development copy, are in
 Everything lives under `~/.octopus`: `config.json`, `state.json`, one JSONL
 transcript per conversation, the per-project scripts and env, and the worktrees
 themselves. Nothing is written inside your repository except the worktree and its
-branch — see [docs/data.md](docs/data.md). Removing a workspace offers to delete
+branch — see [docs/data/](docs/data/README.md). Removing a workspace offers to delete
 that branch with it, ticked by default.
 
 ## Development

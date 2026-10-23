@@ -45,7 +45,7 @@ Then compare against the claims each document makes:
 | `architecture.md` | a layer gains or loses a responsibility; a boundary rule changes              |
 | `core/`           | a core module is added, removed or renamed; an invariant changes              |
 | `ipc.md`          | **any** channel is added, removed or renamed, or its validation changes       |
-| `data.md`         | a stored field appears; a migration is added; a path under `~/.octopus` moves |
+| `data/`           | a stored field appears; a migration is added; a path under `~/.octopus` moves |
 | `ui.md`           | the window layout changes; a token or shared component is added               |
 | `testing.md`      | the two vitest configs, the coverage threshold or the exclusions change       |
 

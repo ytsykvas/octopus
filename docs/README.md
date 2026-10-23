@@ -10,7 +10,7 @@ as they are; the code says what they do, and stays the authority on that.
 | [architecture.md](architecture.md) | you are adding anything and need to know which layer it belongs to                                     |
 | [core/](core/README.md)            | you are touching `src/core` — the modules, their contracts, the invariants                             |
 | [ipc.md](ipc.md)                   | you are adding a channel or wondering where a call ends up                                             |
-| [data.md](data.md)                 | you are changing what lives in `~/.octopus`, or adding a stored field                                  |
+| [data/](data/README.md)            | you are changing what lives in `~/.octopus`, or adding a stored field                                  |
 | [repo-config.md](repo-config.md)   | you are looking at `.octopus/` in a repository, or wondering how settings survive a wiped installation |
 | [ui.md](ui.md)                     | you are building a component, picking a colour, or laying something out                                |
 | [testing.md](testing.md)           | you are writing tests, or a test is failing and you doubt the test                                     |
