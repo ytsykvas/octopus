@@ -23,6 +23,7 @@ import {
 } from '../../hooks/useDiffComments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import type { FileRevertController } from '../../hooks/useFileRevert.js'
+import { useLatest } from '../../hooks/useLatest.js'
 import { useWorkspaceDiff } from '../../hooks/useWorkspaceDiff.js'
 import { Button } from '../Button.js'
 import { DiffFile, PublishBadge } from './DiffFile.js'
@@ -284,16 +285,16 @@ export function DiffPanel({
    * every render of the window, and handed to the rows as it came it would
    * redraw every file each time.
    */
-  const opener = useRef(onOpenFile)
-  useEffect(() => {
-    opener.current = onOpenFile
-  }, [onOpenFile])
+  const opener = useLatest(onOpenFile)
 
   // Kept rather than previewed: a file asked for from a menu is not a glance,
   // and the next one-click file in the tree must not take its place.
-  const openFile = useCallback((path: string) => {
-    opener.current(path, true)
-  }, [])
+  const openFile = useCallback(
+    (path: string) => {
+      opener.current(path, true)
+    },
+    [opener]
+  )
 
   /*
    * The note being typed, and the place it belongs to.

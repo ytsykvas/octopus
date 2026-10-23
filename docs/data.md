@@ -9,7 +9,7 @@ else joins a home directory by hand.
   config.json                        settings
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
-  instructions/*.md                  seven prompts every project falls back to
+  instructions/*.md                  the prompts every project falls back to
   skills/                            an extra working-directory root: what every project gets, made at the first message
     .claude/skills/<folder>/SKILL.md one skill, in Claude Code's own format
     .claude/commands/<name>.md       one command, typed as /<name>; the file is the whole prompt
@@ -715,7 +715,8 @@ in `readEffectiveInstruction`, which is what the panel and the prompts ask.
 
 There is one per button on the pull request tab — `pull-request.md`,
 `commit-message.md`, `fix-checks.md`, `address-review.md`, `review.md`,
-`multi-agent-review.md` and `resolve-conflicts.md`. Which kind lives in which
+`multi-agent-review.md` and `resolve-conflicts.md` — and one per item of the
+Help menu: `setup-scripts.md` and `diagnose-run.md`. Which kind lives in which
 file is a `Record<InstructionKind, string>` in `instructions.ts`, so a new one
 without a home is a compile error — and a test iterates the enum to catch the thing the
 compiler cannot see, two kinds pointing at one file.
@@ -1055,7 +1056,14 @@ silently. Anything unrecognised is left exactly as typed.
 The block is **checked as it is typed**, and the four things it looks for are
 the four that fail silently: a line that is not an assignment, a key no parser
 accepts, a key written twice — only the last counts — and a mistyped
-`$OCTOPUS_…`, which reaches the file as literal text. They are warnings and
+`$OCTOPUS_…`, which reaches the file as literal text. The lines inside a quoted
+value spanning several are that value's, and are not checked one by one. A line
+ending in base64's padding — `…Q==` or `…Q=` — straight after a line that is no
+assignment is the end of a key pasted without its quotes when that line is one of
+the key (base64 alone, 40 characters or more) or the name is in mixed case, as
+base64 almost always is and a variable's name almost never. It counts as no
+assignment rather than as a name set to `=` or to nothing; anywhere else `SEP==`
+and `EMPTY=` are what they say. They are warnings and
 never a refusal: the file is read by somebody else's parser, and ours cannot be
 the authority on what that one accepts.
 

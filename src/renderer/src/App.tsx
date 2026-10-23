@@ -44,6 +44,7 @@ import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
 import { useFileTabs } from './hooks/useFileTabs.js'
+import { useHelp } from './hooks/useHelp.js'
 import { usePlugins } from './hooks/usePlugins.js'
 import { useProjects } from './hooks/useProjects.js'
 import { useServerControls } from './hooks/useServerControls.js'
@@ -339,6 +340,8 @@ export function App(): React.JSX.Element {
   const keepDraft = useCallback((workspaceId: string, tabKey: string, text: string) => {
     setDrafts((current) => new Map(current).set(`${workspaceId}#${tabKey}`, text))
   }, [])
+
+  const startHelp = useHelp(selectedWorkspaceId, chatTabs.create, keepDraft, setError)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -722,7 +725,8 @@ export function App(): React.JSX.Element {
     workspaces.flat.map((workspace) => workspace.id),
     // A settings dialog closing is where a script is first written, so the
     // answer can change without the list changing.
-    editingProjectId
+    editingProjectId,
+    selectedWorkspaceId
   )
 
   /*
@@ -1048,6 +1052,8 @@ export function App(): React.JSX.Element {
                 onEditingWorkspaceChange={workspaces.setEditingId}
                 width={sidebarWidth}
                 onWidthChange={(next) => void updateConfig({ sidebarWidth: next })}
+                onHelp={startHelp}
+                canStartChat={chatTabs.canCreate}
               />
             )}
           </div>

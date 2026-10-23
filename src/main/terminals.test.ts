@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { TAIL_CHARS } from '../core/runLog.js'
+
 /**
  * `node-pty` is a native module that spawns a real shell. Loading it here would
  * test the operating system rather than this class, so a stand-in records what
@@ -1069,5 +1071,145 @@ describe('what is still running', () => {
     await ending
 
     expect(manager.list()).toEqual([])
+  })
+})
+
+describe('the last runs of a workspace', () => {
+  const ANNA = 'planner/anna'
+
+  function started(
+    purpose: 'shell' | 'setup' | 'run',
+    workspaceId: string | null = ANNA
+  ): InstanceType<typeof FakePty> {
+    manager.create({ ...RUN, owner: { workspaceId, purpose } }, renderer as never)
+    const pty = spawned.at(-1)
+    if (!pty) throw new Error('nothing spawned')
+    return pty
+  }
+
+  it('keeps a build’s output as it was sent, with its exit code and when it ended', () => {
+    manager = new TerminalManager(groupKill, () => new Date('2026-10-22T09:41:00.000Z'))
+    const pty = started('setup')
+    pty.emit('\u001b[32minstalling\u001b[0m\r\n')
+    pty.emit('error: no database\r\n')
+    pty.end({ exitCode: 2 })
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      {
+        purpose: 'setup',
+        outcome: { kind: 'exited', at: '2026-10-22T09:41:00.000Z', exitCode: 2 },
+        raw: '\u001b[32minstalling\u001b[0m\r\nerror: no database\r\n'
+      }
+    ])
+  })
+
+  it('keeps no more than twice TAIL_CHARS of what a run printed, the last of it', () => {
+    const pty = started('run')
+    pty.emit('lost'.padEnd(2 * TAIL_CHARS, '.'))
+    pty.emit('kept')
+
+    const [run] = manager.lastRuns(ANNA)
+    expect(run?.raw).toHaveLength(TAIL_CHARS)
+    expect(run?.raw.endsWith('kept')).toBe(true)
+    expect(run?.raw).not.toContain('lost')
+  })
+
+  it('answers with a run still going, with no end and no code', () => {
+    started('run').emit('listening')
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'run', outcome: { kind: 'running' }, raw: 'listening' }
+    ])
+  })
+
+  it('reports no code for a run a signal ended', () => {
+    started('run').end({ exitCode: 0, signal: 15 })
+
+    expect(manager.lastRuns(ANNA)).toMatchObject([
+      { outcome: { kind: 'exited', at: expect.any(String), exitCode: null } }
+    ])
+  })
+
+  it('gives the build before the server', () => {
+    started('setup')
+    started('run')
+
+    expect(manager.lastRuns(ANNA).map((run) => run.purpose)).toEqual(['setup', 'run'])
+  })
+
+  it('drops the last server when a new build starts', () => {
+    started('run').end({ exitCode: 0 })
+    started('setup').emit('building')
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'setup', outcome: { kind: 'running' }, raw: 'building' }
+    ])
+  })
+
+  it('keeps a start the Scripts tab refused, and why', () => {
+    manager.refuse(ANNA, 'run', 'Port 3110 is taken.')
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'run', outcome: { kind: 'refused', reason: 'Port 3110 is taken.' }, raw: '' }
+    ])
+  })
+
+  it('keeps the build beside a refused server, and drops the server for a refused build', () => {
+    started('setup').end({ exitCode: 0 })
+    started('run').end({ exitCode: 1 })
+
+    manager.refuse(ANNA, 'run', 'no port')
+    expect(manager.lastRuns(ANNA).map(({ outcome }) => outcome.kind)).toEqual(['exited', 'refused'])
+
+    manager.refuse(ANNA, 'setup', 'env file escapes')
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'setup', outcome: { kind: 'refused', reason: 'env file escapes' }, raw: '' }
+    ])
+  })
+
+  it('keeps nothing of a terminal tab, of a sign-in, or of another workspace', () => {
+    started('shell').emit('ls')
+    started('run', null).emit('signing in')
+    started('run', 'planner/bob').emit('bob')
+
+    expect(manager.lastRuns(ANNA)).toEqual([])
+  })
+
+  it('answers with the newest run, not the one it replaced', () => {
+    const first = started('run')
+    first.emit('first')
+    started('run').emit('second')
+    // The old one ending late must not write over the new one's record.
+    first.end({ exitCode: 1 })
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      { purpose: 'run', outcome: { kind: 'running' }, raw: 'second' }
+    ])
+  })
+
+  it('outlives the session and the window it ran in', () => {
+    started('setup').emit('built')
+
+    renderer.close()
+    spawned[0]?.end({ exitCode: 0, signal: 15 })
+
+    expect(manager.lastRuns(ANNA)).toEqual([
+      {
+        purpose: 'setup',
+        outcome: { kind: 'exited', at: expect.any(String), exitCode: null },
+        raw: 'built'
+      }
+    ])
+  })
+
+  it('forgets a workspace’s runs once it is removed, and only that one’s', () => {
+    started('setup')
+    started('run')
+    started('run', 'planner/bob')
+
+    manager.forgetRuns(ANNA)
+
+    expect(manager.lastRuns(ANNA)).toEqual([])
+    expect(manager.lastRuns('planner/bob')).toHaveLength(1)
   })
 })

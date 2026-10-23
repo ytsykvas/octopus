@@ -15,6 +15,7 @@ import type { SideExchange } from '@core/sideQuestions.js'
 import type { Result } from '../../../preload/index.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
+import { useLatest } from './useLatest.js'
 
 /**
  * One tab of the chat pane.
@@ -58,7 +59,17 @@ export interface ChatTabsController {
   readonly selectIn: (workspaceId: string, key: string) => void
   /** Whether another conversation may be opened here; false at the cap. */
   readonly canCreate: boolean
-  readonly create: () => Promise<void>
+  /**
+   * Opens another conversation and moves to it.
+   *
+   * `beforeShown` is told the new conversation's id once its record exists and
+   * before its tab is drawn — the one moment a draft can be put down for it,
+   * since the composer reads its draft once, as it mounts — and is told even
+   * when the workspace changed meanwhile. A conversation made here is keyed by
+   * its chat id (an unwritten first tab is made real before it, and keeps
+   * `first`), so the id is the key the draft is filed under.
+   */
+  readonly create: (beforeShown?: (id: string) => void) => Promise<void>
   /**
    * Opens a conversation continuing this one, from a side answer when `aside`
    * is given, and moves to it. Says whether it did.
@@ -224,11 +235,7 @@ export function useChatTabs(
 
   // The workspace on screen, for the callbacks to check against. Updated in an
   // effect and read only inside a callback, never during render.
-  const shown = useRef(workspaceId)
-
-  useEffect(() => {
-    shown.current = workspaceId
-  }, [workspaceId])
+  const shown = useLatest(workspaceId)
 
   /*
    * The strip as it stands, for the callbacks that rebuild it.
@@ -346,7 +353,7 @@ export function useChatTabs(
 
         void load(announced.workspaceId, () => shown.current !== announced.workspaceId)
       }),
-    [load]
+    [load, shown]
   )
 
   useEffect(
@@ -369,28 +376,36 @@ export function useChatTabs(
             : current
         )
       }),
-    []
+    [shown]
   )
 
-  const bind = useCallback((key: string, chat: Chat) => {
-    const id = shown.current
-    /* v8 ignore next */
-    if (id === null) return
+  const bind = useCallback(
+    (key: string, chat: Chat) => {
+      const id = shown.current
+      /* v8 ignore next */
+      if (id === null) return
 
-    const next = latestTabs.current.map((tab) => (tab.key === key ? { ...tabOf(chat), key } : tab))
+      const next = latestTabs.current.map((tab) =>
+        tab.key === key ? { ...tabOf(chat), key } : tab
+      )
 
-    latestTabs.current = next
-    setTabs(next)
-    publish.current(id, next)
-  }, [])
+      latestTabs.current = next
+      setTabs(next)
+      publish.current(id, next)
+    },
+    [shown]
+  )
 
-  const select = useCallback((key: string) => {
-    const id = shown.current
-    /* v8 ignore next */
-    if (id === null) return
+  const select = useCallback(
+    (key: string) => {
+      const id = shown.current
+      /* v8 ignore next */
+      if (id === null) return
 
-    setActiveByWorkspace((current) => new Map(current).set(id, key))
-  }, [])
+      setActiveByWorkspace((current) => new Map(current).set(id, key))
+    },
+    [shown]
+  )
 
   const selectIn = useCallback((workspaceId: string, key: string) => {
     setActiveByWorkspace((current) => new Map(current).set(workspaceId, key))
@@ -414,33 +429,40 @@ export function useChatTabs(
    * tab nobody has written to yet — and since the array's order is what numbers
    * the tabs, creating the second first would put the older conversation second.
    */
-  const create = useCallback(async () => {
-    const id = shown.current
-    /* v8 ignore next */
-    if (id === null) return
+  const create = useCallback(
+    async (beforeShown?: (id: string) => void) => {
+      const id = shown.current
+      /* v8 ignore next */
+      if (id === null) return
 
-    if (tabs.some((tab) => tab.id === null)) {
-      const opened = await window.octopus.chats.open(id)
+      if (tabs.some((tab) => tab.id === null)) {
+        const opened = await window.octopus.chats.open(id)
+        if (shown.current !== id) return
+
+        if (!opened.ok) {
+          report.current(describeFailure(opened))
+          return
+        }
+      }
+
+      report.current(null)
+      const created = await window.octopus.chats.create(id)
+      // Whatever is on screen by now: the conversation exists and holds a
+      // place, and a draft is filed under its own workspace, so the text is
+      // there when that workspace is opened again.
+      if (created.ok) beforeShown?.(created.value.id)
       if (shown.current !== id) return
 
-      if (!opened.ok) {
-        report.current(describeFailure(opened))
+      if (!created.ok) {
+        report.current(describeFailure(created))
         return
       }
-    }
 
-    report.current(null)
-    const created = await window.octopus.chats.create(id)
-    if (shown.current !== id) return
-
-    if (!created.ok) {
-      report.current(describeFailure(created))
-      return
-    }
-
-    await load(id, () => shown.current !== id)
-    select(created.value.id)
-  }, [tabs, load, select, describeFailure])
+      await load(id, () => shown.current !== id)
+      select(created.value.id)
+    },
+    [tabs, load, select, describeFailure, shown]
+  )
 
   /*
    * Forks, then optionally starts the fork on something before showing it.
@@ -478,7 +500,7 @@ export function useChatTabs(
       select(forked.value.id)
       return started?.ok ?? true
     },
-    [load, select, describeFailure]
+    [load, select, describeFailure, shown]
   )
 
   const fork = useCallback(
@@ -523,7 +545,7 @@ export function useChatTabs(
 
     if (closed.ok) setHistory(closed.value)
     else report.current(describeFailure(closed))
-  }, [describeFailure])
+  }, [describeFailure, shown])
 
   /*
    * No confirmation. Closing used to discard the conversation, and asking was
@@ -550,7 +572,7 @@ export function useChatTabs(
       // what the menu does, and each entry costs a read of its transcript.
       await load(id, () => shown.current !== id)
     },
-    [load, describeFailure]
+    [load, describeFailure, shown]
   )
 
   const reopen = useCallback(
@@ -571,7 +593,7 @@ export function useChatTabs(
       await load(id, () => shown.current !== id)
       select(reopened.value.id)
     },
-    [load, select, describeFailure]
+    [load, select, describeFailure, shown]
   )
 
   const reopenLast = useCallback(async () => {
@@ -591,7 +613,7 @@ export function useChatTabs(
 
     const [latest] = closed.value
     if (latest) await reopen(latest.chat.id)
-  }, [reopen, describeFailure])
+  }, [reopen, describeFailure, shown])
 
   const rename = useCallback(
     async (chatId: string, title: string) => {
@@ -612,7 +634,7 @@ export function useChatTabs(
 
       await load(id, () => shown.current !== id)
     },
-    [load, describeFailure]
+    [load, describeFailure, shown]
   )
 
   return {

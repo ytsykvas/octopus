@@ -2,7 +2,7 @@
  * A project's settings as its repository can carry them: `.octopus/`.
  *
  * Everything a project knows about itself — the three scripts, the carry list,
- * the seven instructions, its base branch and env file — lives under
+ * the instructions, its base branch and env file — lives under
  * `~/.octopus/projects/<id>/`. That directory is a single point of failure:
  * wipe it, or move to another machine, and it is all gone with no trace in the
  * repository the settings describe. A repository may therefore carry a copy,
@@ -87,7 +87,9 @@ const ITEM_PATHS: Record<RepoItemId, string> = {
   'instruction.addressReview': join(INSTRUCTIONS, INSTRUCTION_FILES.addressReview),
   'instruction.review': join(INSTRUCTIONS, INSTRUCTION_FILES.review),
   'instruction.multiAgentReview': join(INSTRUCTIONS, INSTRUCTION_FILES.multiAgentReview),
-  'instruction.resolveConflicts': join(INSTRUCTIONS, INSTRUCTION_FILES.resolveConflicts)
+  'instruction.resolveConflicts': join(INSTRUCTIONS, INSTRUCTION_FILES.resolveConflicts),
+  'instruction.setupScripts': join(INSTRUCTIONS, INSTRUCTION_FILES.setupScripts),
+  'instruction.diagnoseRun': join(INSTRUCTIONS, INSTRUCTION_FILES.diagnoseRun)
 }
 
 /**

@@ -31,6 +31,7 @@ import type { ChatTab, ForkedPlan } from '../../hooks/useChatTabs.js'
 import type { AttachedFileController } from '../../hooks/useAttachedFiles.js'
 import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
+import { useLatest } from '../../hooks/useLatest.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { type ChatNote, mergeNotes } from './attachments.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
@@ -213,13 +214,13 @@ export function ChatSession({
    * function on every render — which would redraw every tool row for every
    * token the answer streams in.
    */
-  const opener = useRef(onOpenFile)
-  useEffect(() => {
-    opener.current = onOpenFile
-  }, [onOpenFile])
-  const openFile = useCallback((path: string, pinned: boolean) => {
-    opener.current(path, pinned)
-  }, [])
+  const opener = useLatest(onOpenFile)
+  const openFile = useCallback(
+    (path: string, pinned: boolean) => {
+      opener.current(path, pinned)
+    },
+    [opener]
+  )
 
   /* An attachment that could not be taken — a paste too large, a dialog that
      failed — shown in the conversation's own banner rather than a second one:

@@ -57,6 +57,7 @@ export function installOctopusStub(): Api {
       // a restart waits on that.
       dispose: vi.fn(() => Promise.resolve()),
       list: vi.fn(() => ok([])),
+      refused: vi.fn(() => ok(undefined)),
       onData: vi.fn(subscription),
       onExit: vi.fn(subscription)
     },
@@ -159,6 +160,19 @@ export function installOctopusStub(): Api {
       replyToReviewThread: vi.fn(() => ok(undefined)),
       setReviewThreadResolved: vi.fn(() => ok(undefined)),
       instruction: vi.fn(() => ok('Describe what changed and why.')),
+      helpContext: vi.fn(() =>
+        ok({
+          rootPath: '/tmp/planner',
+          envFile: '.env',
+          profile: 'default',
+          variableNames: [],
+          envProblems: [],
+          carry: [],
+          scripts: {},
+          scriptsApproved: true,
+          lastRuns: []
+        })
+      ),
       prepare: vi.fn(() => ok({ written: [], missing: [], profile: 'default', variables: {} })),
       env: vi.fn(() => ok('')),
       trust: vi.fn(() => ok({ approved: true, digest: '', files: [] })),

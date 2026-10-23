@@ -8,6 +8,8 @@ import {
   effectiveInstruction,
   InstructionKindSchema,
   instructionPath,
+  instructionTemplate,
+  PUBLISHES_AFTER,
   readInstruction,
   writeInstruction
 } from './instructions.js'
@@ -167,5 +169,41 @@ describe('the installation-wide instruction', () => {
     await writeInstruction('pullRequest', null, 'Say why.', root)
 
     expect(await readInstruction('pullRequest', null, root)).toBe('Say why.')
+  })
+})
+
+const HELP_KINDS = ['setupScripts', 'diagnoseRun'] as const
+
+describe('the two Help asks for', () => {
+  it('push nothing after the turn', () => {
+    expect(PUBLISHES_AFTER.setupScripts).toBe(false)
+    expect(PUBLISHES_AFTER.diagnoseRun).toBe(false)
+  })
+
+  // A template literal reads `${…}` as its own; the guard line must survive as shell.
+  it('keep the shell in the setup template as written', () => {
+    expect(instructionTemplate('setupScripts')).toContain(
+      ': "${OCTOPUS_WORKSPACE_SLUG:?refusing to run without a workspace slug}"'
+    )
+  })
+
+  // A line continues a paragraph when it follows a non-blank line and starts no
+  // block — list item, table row, heading, fence.
+  it.each(HELP_KINDS)('keep each paragraph and list item on one line: %s', (kind) => {
+    const block = /^\s*(?:[-*]|\d+\.|\||#|```)/
+    const lines = instructionTemplate(kind).split('\n')
+    const continued = lines.filter(
+      (line, index) =>
+        index > 0 &&
+        line.trim() !== '' &&
+        !block.test(line) &&
+        (lines[index - 1] ?? '').trim() !== '' &&
+        !/^\s*(?:\||#|```)/.test(lines[index - 1] ?? '')
+    )
+    expect(continued).toEqual([])
+  })
+
+  it.each(HELP_KINDS)('never ask for a value to be written: %s', (kind) => {
+    expect(instructionTemplate(kind)).toMatch(/never write a (?:value|variable's value)/i)
   })
 })

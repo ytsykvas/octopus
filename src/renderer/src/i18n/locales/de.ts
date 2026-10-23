@@ -491,7 +491,55 @@ export const de: Translation = {
       'Wird gesendet, wenn du ein Review durch mehrere Subagenten zugleich anforderst, von denen jeder auf eine Sache achtet.',
     resolveConflicts: 'Konflikte lösen',
     resolveConflictsHint:
-      'Wird gesendet, wenn der Pull Request mit seinem Basis-Branch kollidiert und du den Agenten bittest, das zu lösen.'
+      'Wird gesendet, wenn der Pull Request mit seinem Basis-Branch kollidiert und du den Agenten bittest, das zu lösen.',
+    setupScripts: 'Das Projekt startklar machen',
+    setupScriptsHint:
+      'Wird ungesendet in ein neues Gespräch gelegt, wenn du Hilfe → „Dieses Projekt startklar machen“ wählst. Octopus fügt darunter den Checkout, die geltenden Skripte, die mitgenommenen Dateien und die Namen der Variablen an — nie ihre Werte.',
+    diagnoseRun: 'Einen fehlgeschlagenen Lauf untersuchen',
+    diagnoseRunHint:
+      'Wird ungesendet in ein neues Gespräch gelegt, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.'
+  },
+
+  help: {
+    setup: 'Dieses Projekt startklar machen',
+    setupHint:
+      'Der Agent liest das Repository und schreibt die Skripte für Build, Server und Aufräumen',
+    diagnose: 'Warum funktioniert Run nicht?',
+    diagnoseHint:
+      'Der Agent liest die Ausgabe des letzten Laufs, die Skripte und die Variablennamen',
+    failed: 'Die Hilfe konnte diesen Workspace nicht lesen: {{reason}}',
+    context: {
+      heading: '\u2014 Was octopus über diesen Workspace weiß \u2014',
+      checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',
+      envFile: 'Env-Datei, in die das Variablen-Set geschrieben wird: {{name}}',
+      profile: 'Geltendes Variablen-Set: {{name}}',
+      variables:
+        'Variablen, die es den Skripten gibt (nur Namen; die Werte bleiben in octopus): {{names}}',
+      noVariables: 'Das geltende Set setzt keine Variablen.',
+      scripts: 'Geltende Skripte:',
+      script: '- {{kind}}: {{from}}',
+      scriptMissing: '- {{kind}}: keins',
+      unapproved:
+        'Die Skripte des Repositorys sind noch nicht erlaubt, deshalb bleibt Run deaktiviert, bis sie es sind.',
+      carry: 'Dateien, die vor einem Lauf in den Workspace mitgenommen werden:',
+      noCarry: 'Es werden keine Dateien in den Workspace mitgenommen.',
+      problems: 'Probleme im Variablen-Set:',
+      problemNoAssignment: '- Zeile {{line}} ist keine Zuweisung',
+      problemBadName:
+        '- Zeile {{line}}: was vor „=“ steht, ist kein Name, den ein Parser akzeptiert',
+      problemDuplicate:
+        '- Zeile {{line}}: {{subject}} ist doppelt gesetzt, und nur der letzte zählt',
+      problemUnknownVariable:
+        '- Zeile {{line}}: ${{subject}} ist keine Variable, die octopus setzt',
+      problemMarker: '- Zeile {{line}}: hier wurde eine octopus-Markierung eingefügt',
+      lastRun: '{{stage}}: um {{at}} mit Exit-Code {{code}} beendet. Die letzten Zeilen:',
+      lastRunStopped: '{{stage}}: um {{at}} durch ein Signal beendet. Die letzten Zeilen:',
+      lastRunRunning: '{{stage}}: läuft noch. Die letzten Zeilen bisher:',
+      lastRunRefused: '{{stage}}: nicht gestartet. Der Tab Skripte meldete: {{reason}}',
+      noOutput: '(keine Ausgabe)',
+      noRun:
+        'Seit octopus gestartet wurde, ist in diesem Workspace nichts gelaufen. Drück Run im Tab Skripte und frag dann noch einmal.'
+    }
   },
 
   pullRequest: {

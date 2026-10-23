@@ -21,7 +21,7 @@
  * the files.
  */
 
-import { readFile, rm } from 'node:fs/promises'
+import { readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { z } from 'zod'
@@ -55,12 +55,28 @@ export async function readWorkspaceEnv(
   workspacePath: string,
   envFile: string
 ): Promise<string | null> {
+  /*
+   * Through no link, as every writer here: a tracked `.env.local` pointing at
+   * `~/.ssh/id_rsa` would show a file from outside the worktree, and one at
+   * `/dev/zero` would read until `main` ran out of memory.
+   */
+  if (!(await unlinkedInside(workspacePath, envFile))) return null
+
+  const path = join(workspacePath, envFile)
   try {
-    return await readFile(join(workspacePath, envFile), 'utf8')
+    const facts = await stat(path)
+    if (!facts.isFile() || facts.size > MAX_ENV_BYTES) return null
+    return await readFile(path, 'utf8')
   } catch {
     return null
   }
 }
+
+/**
+ * How much of an env file is read: far past any real one, which is a few
+ * kilobytes, and short of a size that would hold `main` up reading it.
+ */
+const MAX_ENV_BYTES = 256 * 1024
 
 /**
  * Refuses a path a link would redirect out of the worktree.

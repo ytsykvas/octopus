@@ -75,8 +75,8 @@ describe('readSources', () => {
       root
     )
 
-    expect(views.map((view) => view.id)).toHaveLength(13)
-    expect(new Set(views.map((view) => view.id)).size).toBe(13)
+    expect(views.map((view) => view.id)).toHaveLength(15)
+    expect(new Set(views.map((view) => view.id)).size).toBe(15)
   })
 
   describe('a script', () => {

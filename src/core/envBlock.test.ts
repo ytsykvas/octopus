@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   checkEnvBody,
+  envSecrets,
   parseEnvBody,
   substituteEnv,
   withoutMarkers,
@@ -88,6 +89,12 @@ describe('substituteEnv', () => {
   })
 })
 
+/** A full line of a key as PEM wraps it: base64, 64 characters. */
+const KEY_LINE = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj'
+
+/** A key pasted without its quotes, its last line ending in base64's padding. */
+const UNQUOTED_KEY = `KEY=-----BEGIN KEY-----\n${KEY_LINE}\nq3ZxYpabcDEFgh==`
+
 describe('parseEnvBody', () => {
   it('reads one name and value per line', () => {
     expect(parseEnvBody('DUMP_URL=s3://staging/latest.sql\nMYSQL_HOST=dev.example')).toEqual({
@@ -172,6 +179,50 @@ describe('parseEnvBody', () => {
 
   it('leaves out a line that is not an assignment or has a name no parser accepts', () => {
     expect(parseEnvBody('just words\n1BAD=x\nGOOD=y')).toEqual({ GOOD: 'y' })
+  })
+
+  /*
+   * The last line of a key pasted without its quotes, ending in base64's
+   * padding, reads as a name with `=` or nothing after it — and would be listed
+   * as a variable while being a piece of the key.
+   */
+  it('leaves out a line of base64 that ends in padding', () => {
+    expect(parseEnvBody(UNQUOTED_KEY)).toEqual({ KEY: '-----BEGIN KEY-----' })
+    expect(parseEnvBody(`${KEY_LINE}\nr4Zx=`)).toEqual({})
+  })
+
+  it('still reads an empty value after an assignment, a comment or the first line', () => {
+    expect(parseEnvBody('SENTRY_DSN=\nA=1\nB=\n# note\nC=\nsentryDsn=')).toEqual({
+      SENTRY_DSN: '',
+      A: '1',
+      B: '',
+      C: '',
+      sentryDsn: ''
+    })
+  })
+
+  // Padding follows a line of a key and nothing else: these are what they say.
+  it('reads a value of equals signs, or none, anywhere else', () => {
+    expect(parseEnvBody('SEP==')).toEqual({ SEP: '=' })
+    expect(parseEnvBody('oops\nEMPTY=')).toEqual({ EMPTY: '' })
+    expect(parseEnvBody('my-var=1\nEMPTY=')).toEqual({ EMPTY: '' })
+  })
+
+  it('reads an empty value after a value spanning lines', () => {
+    const pem = `KEY="-----BEGIN KEY-----\n${KEY_LINE}\n-----END KEY-----"\nEMPTY=\nNEXT=1`
+    expect(parseEnvBody(pem)).toEqual({ EMPTY: '', NEXT: '1' })
+  })
+
+  // A key wrapped short still ends in a name base64 writes and a variable does not: mixed case.
+  it('leaves out the padding of a key wrapped in short lines', () => {
+    const short = 'KEY=-----BEGIN KEY-----\nMIIEvQIBADAN\nq3ZxYpabcDEFgh==\n-----END KEY-----'
+    expect(parseEnvBody(short)).toEqual({ KEY: '-----BEGIN KEY-----' })
+    expect(parseEnvBody('oops\nEMPTY=\nnote\nlower_case=')).toEqual({ EMPTY: '', lower_case: '' })
+  })
+
+  it('takes a line of base64 for a key from 40 characters, short of any width keys wrap at', () => {
+    expect(parseEnvBody(`${'A'.repeat(39)}\nab=`)).toEqual({ ab: '' })
+    expect(parseEnvBody(`${'A'.repeat(40)}\nab=`)).toEqual({})
   })
 
   it('reads lines that end in a carriage return', () => {
@@ -271,6 +322,102 @@ describe('checkEnvBody', () => {
       { line: 1, reason: 'badName', subject: 'MY KEY' },
       { line: 2, reason: 'badName', subject: 'MY KEY' }
     ])
+  })
+})
+
+describe('base64 padding in a block', () => {
+  it('is not an assignment, so its text is never taken for a name', () => {
+    expect(checkEnvBody(UNQUOTED_KEY)).toEqual([
+      { line: 2, reason: 'noAssignment', subject: KEY_LINE },
+      { line: 3, reason: 'noAssignment', subject: 'q3ZxYpabcDEFgh==' }
+    ])
+  })
+
+  it('is not read after a typo or a bad name, where an empty value is one', () => {
+    expect(checkEnvBody('oops\nEMPTY=')).toEqual([
+      { line: 1, reason: 'noAssignment', subject: 'oops' }
+    ])
+    expect(checkEnvBody('my-var=1\nEMPTY=')).toEqual([
+      { line: 1, reason: 'badName', subject: 'my-var' }
+    ])
+  })
+})
+
+describe('a value spanning lines', () => {
+  const pem = `KEY="-----BEGIN KEY-----\n${KEY_LINE}\nq3ZxYpabcDEFgh==\n-----END KEY-----"\nEMPTY=`
+
+  // Its lines are the value's: no `=`, or a `+` before one, is right in there.
+  it('is checked as one assignment', () => {
+    expect(checkEnvBody(pem)).toEqual([])
+    expect(checkEnvBody("A='x\nab+cd=\n'")).toEqual([])
+  })
+
+  it('still has a marker inside it warned about', () => {
+    expect(checkEnvBody('A="x\n# <<< octopus\ny"')).toEqual([
+      { line: 2, reason: 'marker', subject: '# <<< octopus' }
+    ])
+  })
+})
+
+describe('envSecrets', () => {
+  const secretValues = (body: string): string[] => [
+    ...new Set(envSecrets(body).map(({ value }) => value))
+  ]
+
+  it('names every value, as written and as dotenv reads it', () => {
+    expect(envSecrets('DB_PASSWORD=Pa$$w0rd123 # rotated\nexport TOKEN=abc')).toEqual([
+      { name: 'DB_PASSWORD', value: 'Pa$$w0rd123 # rotated' },
+      { name: 'DB_PASSWORD', value: 'Pa$$w0rd123' },
+      { name: 'TOKEN', value: 'abc' },
+      { name: 'TOKEN', value: 'abc' }
+    ])
+  })
+
+  // Each of these is one `parseEnvBody` leaves to the file — and the file is what a script prints.
+  it('keeps the values the parse leaves out', () => {
+    expect(secretValues('A="sk-live\\nabc123456"')).toEqual([
+      'sk-live\\nabc123456',
+      'sk-live',
+      'abc123456'
+    ])
+    expect(secretValues('B=`backtick-secret`')).toEqual(['backtick-secret'])
+    expect(secretValues("C='single-quoted' # note")).toEqual(['single-quoted'])
+  })
+
+  it('keeps every line of a value spanning several, under the name that opened it', () => {
+    expect(
+      envSecrets('KEY="-----BEGIN KEY-----\nMIIEvQIBADAN\n-----END KEY-----"\nAFTER=1')
+    ).toEqual([
+      { name: 'KEY', value: '-----BEGIN KEY-----' },
+      { name: 'KEY', value: 'MIIEvQIBADAN' },
+      { name: 'KEY', value: '-----END KEY-----' },
+      { name: 'AFTER', value: '1' },
+      { name: 'AFTER', value: '1' }
+    ])
+  })
+
+  it('keeps a value spanning lines under no name where its name is not one', () => {
+    expect(envSecrets('my-key="first-line\nsecond-line"')).toEqual([
+      { name: null, value: 'my-key="first-line' },
+      { name: null, value: 'first-line' },
+      { name: null, value: 'second-line' }
+    ])
+  })
+
+  it('keeps a line that is no assignment whole, under no name', () => {
+    expect(
+      envSecrets(`${KEY_LINE}\nq3ZxYpabcDEFgh==\nDATABASE_URL: postgres://u:pw@db?ssl=on`)
+    ).toEqual([
+      { name: null, value: KEY_LINE },
+      { name: null, value: 'q3ZxYpabcDEFgh==' },
+      { name: null, value: 'DATABASE_URL: postgres://u:pw@db?ssl=on' },
+      { name: null, value: 'on' },
+      { name: null, value: 'on' }
+    ])
+  })
+
+  it('skips blank lines, comments and our markers', () => {
+    expect(envSecrets('\n# a comment\n# >>> octopus: project overrides\n# <<< octopus')).toEqual([])
   })
 })
 

@@ -213,6 +213,76 @@ describe('opening another conversation', () => {
     expect(result.current.activeKey).toBe('chat-2')
   })
 
+  it('names the new conversation before its tab is drawn', async () => {
+    givenChats([chat()])
+    vi.mocked(octopus().chats.create).mockResolvedValue({
+      ok: true,
+      value: chat({ id: 'chat-2' })
+    })
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    vi.mocked(octopus().chats.list).mockResolvedValue({
+      ok: true,
+      value: [chat(), chat({ id: 'chat-2' })]
+    })
+    const beforeShown = vi.fn()
+    await act(async () => {
+      await result.current.create(beforeShown)
+    })
+
+    // Ordered against the `chats.list` that draws the tab: inside `act` the
+    // callback would see the old tabs either way, so reading them proves nothing.
+    expect(beforeShown).toHaveBeenCalledExactlyOnceWith('chat-2')
+    const created = vi.mocked(octopus().chats.create).mock.invocationCallOrder[0] ?? 0
+    const drawn = vi
+      .mocked(octopus().chats.list)
+      .mock.invocationCallOrder.find((order) => order > created)
+    expect(beforeShown.mock.invocationCallOrder[0]).toBeLessThan(drawn ?? 0)
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
+  // Help in a workspace nobody has spoken to: the first tab is made real, and
+  // the text goes to the second.
+  it('names the second conversation when the first had not been written yet', async () => {
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: chat() })
+    vi.mocked(octopus().chats.create).mockImplementation(() => {
+      givenChats([chat(), chat({ id: 'chat-2' })])
+      return Promise.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
+    })
+    const { result } = open()
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalled()
+    })
+
+    const beforeShown = vi.fn()
+    await act(async () => {
+      await result.current.create(beforeShown)
+    })
+
+    expect(beforeShown).toHaveBeenCalledExactlyOnceWith('chat-2')
+    expect(result.current.tabs.map((tab) => tab.key)).toEqual(['first', 'chat-2'])
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
+  it('names nothing when the conversation could not be created', async () => {
+    givenChats([chat()])
+    vi.mocked(octopus().chats.create).mockResolvedValue({ ok: false, error: 'full' })
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    const beforeShown = vi.fn()
+    await act(async () => {
+      await result.current.create(beforeShown)
+    })
+
+    expect(beforeShown).not.toHaveBeenCalled()
+  })
+
   it('stops offering at the cap', async () => {
     givenChats([chat(), chat({ id: 'chat-2' }), chat({ id: 'chat-3' })])
     const { result } = open()
@@ -402,6 +472,30 @@ describe('an answer that arrives after the workspace has been left', () => {
     })
 
     expect(onChats).not.toHaveBeenCalledWith(WORKSPACE, expect.anything())
+  })
+
+  // The conversation exists and takes a place: Help's text has to be on it
+  // when its workspace is opened again.
+  it('still names a conversation created for a workspace no longer shown', async () => {
+    givenChats([chat()])
+    const creating = held<{ ok: true; value: Chat }>()
+    vi.mocked(octopus().chats.create).mockReturnValue(creating.promise)
+
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    const beforeShown = vi.fn()
+    const adding = result.current.create(beforeShown)
+    rerender({ id: 'planner/bob' })
+
+    await act(async () => {
+      creating.settle({ ok: true, value: chat({ id: 'chat-2' }) })
+      await adding
+    })
+
+    expect(beforeShown).toHaveBeenCalledExactlyOnceWith('chat-2')
   })
 
   it('drops a fork answered for a workspace no longer shown', async () => {

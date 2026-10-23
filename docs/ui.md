@@ -140,7 +140,40 @@ dragged, and gone with the list when it is folded. It wears the composer's
 colour ring in rules of its own (`.help-button`) — a faint line and glow at
 rest, the line turning and the glow brightening only under the pointer or
 keyboard focus, paused rather than reset when they leave, so nothing moves while
-nobody is near it. It is a stub for now: pressing it does nothing.
+nobody is near it.
+
+**Pressing it opens a menu of two** (`HelpMenu`, a `DropdownMenu` whose trigger
+is the same button, so nothing changes at rest): _Set this project up to run_
+and _Why does Run not work?_. Each opens a **new conversation** in the selected
+workspace with a text already in its composer and **sends nothing**: the
+instruction of that kind (`setupScripts`, `diagnoseRun` — edited in Settings
+like the pull request's, and overridden from `.octopus/instructions/`), then a
+block of what octopus knows that the agent cannot find for itself —
+`workspaces:helpContext`: the checkout, the env file, the set in effect and its
+variables **by name only**, the scripts in effect and where they come from,
+whether the repository's still wait for _Allow these_, the carried paths and the
+set's problems. _Why does Run not work?_ adds the last build and server from
+the same answer, each with how it ended and its last lines — the env set's
+values masked out of them, in a fence longer than any backticks they hold, so a
+fence of their own cannot end it — or, for a start the Scripts tab refused, the reason
+it showed, masked the same way; or it asks for a run where there has been none.
+`helpMessage.ts` assembles it; `useHelp` reads all of it before creating
+anything, so a failed read opens nothing — a rejected one, from a main that has
+gone or lacks the channel, says so too — and a second press while the first is
+reading is ignored rather than opening a second conversation.
+
+A new tab, where the pull request pane refuses to start one, because here the
+person pressed Help and a conversation is what they asked for — and because a
+draft cannot be put into a composer already drawn: it reads its draft once, as
+it mounts. So `useChatTabs.create` takes a `beforeShown` callback, told the new
+id once the record exists and before its tab is drawn — even when the workspace
+changed meanwhile, since the conversation exists and takes a place — and the
+text is filed as that tab's draft then. Put down rather than sent (§4): the reader sees every
+word the agent will get, edits it, and presses Send. The chat starts in
+whatever mode a new conversation starts in. At the cap of three conversations
+both items are shown and disabled, saying a tab has to be closed first
+(`chat.historyFull`). A script the agent writes appears on the Scripts tab once
+its turn ends, and waits for _Allow these_ like any other.
 
 **The rail ends in a tile of its own**: a puzzle piece the size of a project
 tab, in a **foot** under the list rather than at the end of it. The list
@@ -1633,6 +1666,21 @@ A workspace whose directory has gone loses all of them, `Run` included.
 disposes the session — so the server is already dead while the stage still says
 it is serving, and a control left up would point at a refused port.
 
+**Which scripts a workspace has is read again in five moments**
+(`useWorkspaceScripts`): when the list of workspaces changes, when Project
+settings close — that is where a script is first written by hand — after an
+approval, once a turn of any chat in the selected workspace has ended and
+settled (`useTurnSettled`, the same 300ms the diff pane waits), and when another
+workspace is opened. The turn is the third way a script appears: an agent asked
+to set the project up writes `.octopus/scripts/`, which changes neither the list
+nor a settings dialog, and the tab went on saying there was no build script
+until something else happened to re-read it. A turn is heard only for the
+workspace on screen, so one that ended in another is read when that one is
+opened.
+The first three read every workspace; a turn and a switch read the one on screen
+alone and keep the other answers, since nothing else can have moved — unless the
+whole read they follow had not finished, which is then made again whole.
+
 **`Stop` reaches only what is still going.** Both halves watch one token, since
 stopping means stopping this workspace rather than guessing which half is busy —
 but a half that has already exited keeps its terminal. The build's log is what a
@@ -2239,13 +2287,12 @@ run rspec, rubocop and brakeman", could not — the tools are read-only — and
 spent its turn on that, answering with no title in it. The failure looked like
 the agent being broken and was the prompt failing to say which job this was.
 
-**Ask the agent to describe it** sends that instruction — the project's, or the
-global one in Settings where a project has written none — to the workspace's
-conversation, as an ordinary message. Not a call behind the reader's back: §4
-leaves no room for the app prompting the agent invisibly, and the answer has to
-appear in the conversation anyway. With no conversation open the button says so
-rather than starting one, since a conversation created by a button pressed for
-something else is a surprise.
+**Ask the agent to describe it** is that one-shot draft (`draftPullRequest`),
+not a message to the workspace's conversation: the instruction — the
+repository's, the project's, or the global one in Settings — goes to a query of
+its own, and the answer comes back into the form's fields, where it is read,
+changed or thrown away before anything is opened. Nothing is added to a
+conversation, so none is started for it either.
 
 It asks `gh` nothing while another tab is showing. The diff follows the same
 rule, and it matters more here: this leaves the machine, so a hidden tab would be
@@ -3830,6 +3877,7 @@ field styling had already drifted by a few pixels of height.
 | `SkillsSection`                                        | the same list in both settings dialogs, given the store as a prop — they differ only in reach, and two copies would drift into looking like different features. Its switch is about **new** conversations; the panel above is about the one in hand. The project one also lists the checkout's own, and those rows carry the same switch: the **file** is read-only, since editing it from a settings dialog would be octopus writing inside somebody's checkout, but whether the agent may reach for it is our record and writes nothing into the repository                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `SkillEditor`                                          | a form for the two fields anybody writing a skill is actually choosing, and the document itself one click away. The raw mode is not an afterthought — `allowed-tools` and `when_to_use` live in that frontmatter, and the form's save keeps every key it does not know about. The name is disabled after creation: it is the key every stored answer uses — the default marks, each conversation's overrides — so changing it is a migration rather than an edit, and it has a task file of its own. It is **not** the folder, though it is for a skill the app itself created: a folder placed by hand may name something else, and the editor addresses the directory the listing found                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `useAnchoredPanel`                                     | where the composer's three panels are drawn: `fixed` against the window the way `DropdownMenu` does it and for the same reason, flipped above the chip when it would run off the bottom — and then pinned by its **bottom** edge, so a panel shorter than its estimate, or one that grows once open, still meets the chip instead of floating free or running down over it — clamped when it would run off the right, closed on a scroll of something the chip sits inside. The size is given per opening, since a panel's height can depend on how many rows it is about to hold; give the most it can grow to, because erring high only flips it sooner                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `useLatest`                                            | a ref holding a value as of the last commit, for a listener, a callback or a late answer to read without resubscribing. `react-hooks/exhaustive-deps` cannot see that the ref it returns is stable as it can for `useRef`'s, so it goes in the dependency lists that read it — harmless, since it never changes. Read in an effect's cleanup it draws a warning `useRef` does not, which is why `Terminal`'s handlers stay on `useRef`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `selectionAnchor`                                      | how a browser selection becomes a review note: the rows carry a `data-line` address and this reduces the ones a range touched to a file, a side and two line numbers. Pure and string-only, so the awkward cases — two files, both sides, a path with a colon in it — are tested without a layout engine                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `Markdown`, `CodeBlock`                                | how the agent's own output is drawn. A fenced block gets a frame and a copy button in its own row, never floating over code that scrolls sideways. The block/inline distinction is taken from `pre`, not from the language class: a fence with no language hands the `code` override exactly what inline code does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `Settings`                                             | `initialSection` opens it where the caller needs it. Read once, on mount — correct only because `App` renders the dialog conditionally, so a close unmounts it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |

@@ -1,23 +1,11 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { AgentEvent } from '@core/events.js'
-
-import { emitAgentEvent } from '../test/chat.js'
+import { emitAgentEvent, TURN_DONE } from '../test/chat.js'
 import { octopus } from '../test/octopus.js'
 import { SETTLE_MS, useTurnSettled } from './useTurnSettled.js'
 
 const WORKSPACE = 'planner/anna'
-
-const DONE: AgentEvent = {
-  type: 'result',
-  ok: true,
-  costUsd: null,
-  durationMs: 1,
-  inputTokens: null,
-  outputTokens: null,
-  terminalReason: null
-}
 
 function setHidden(hidden: boolean): void {
   vi.spyOn(document, 'hidden', 'get').mockReturnValue(hidden)
@@ -39,7 +27,7 @@ describe('useTurnSettled', () => {
     })
 
     emitAgentEvent({ type: 'error', message: 'failed' })
-    emitAgentEvent(DONE)
+    emitAgentEvent(TURN_DONE)
     act(() => {
       vi.advanceTimersByTime(SETTLE_MS - 1)
     })
@@ -61,7 +49,7 @@ describe('useTurnSettled', () => {
     emitAgentEvent({ type: 'text', text: 'hello' })
     const [subscriber] = vi.mocked(octopus().chats.onEvent).mock.calls.at(-1) ?? []
     act(() => {
-      subscriber?.({ chatId: 'chat-1', workspaceId: 'planner/bob', event: DONE })
+      subscriber?.({ chatId: 'chat-1', workspaceId: 'planner/bob', event: TURN_DONE })
       vi.advanceTimersByTime(SETTLE_MS)
     })
 
@@ -90,7 +78,7 @@ describe('useTurnSettled', () => {
       { initialProps: { enabled: true } }
     )
 
-    emitAgentEvent(DONE)
+    emitAgentEvent(TURN_DONE)
     rerender({ enabled: false })
     act(() => {
       vi.advanceTimersByTime(SETTLE_MS)
@@ -111,7 +99,7 @@ describe('useTurnSettled', () => {
     )
 
     rerender({ callback: second })
-    emitAgentEvent(DONE)
+    emitAgentEvent(TURN_DONE)
     act(() => {
       vi.advanceTimersByTime(SETTLE_MS)
     })
@@ -134,11 +122,11 @@ describe('useTurnSettled', () => {
     })
     setHidden(true)
 
-    emitAgentEvent(DONE)
+    emitAgentEvent(TURN_DONE)
     act(() => {
       vi.advanceTimersByTime(SETTLE_MS)
     })
-    emitAgentEvent(DONE)
+    emitAgentEvent(TURN_DONE)
     act(() => {
       vi.advanceTimersByTime(SETTLE_MS * 10)
     })
@@ -155,7 +143,7 @@ describe('useTurnSettled', () => {
       useTurnSettled(WORKSPACE, true, settled)
     })
     setHidden(true)
-    emitAgentEvent(DONE)
+    emitAgentEvent(TURN_DONE)
     act(() => {
       vi.advanceTimersByTime(SETTLE_MS)
     })

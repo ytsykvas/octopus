@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEvent } from '@core/events.js'
 import type { PullRequestView } from '@core/pullRequests.js'
 
-import { refuseSilence } from '../test/chat.js'
+import { refuseSilence, TURN_DONE } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { usePullRequest } from './usePullRequest.js'
@@ -33,16 +33,6 @@ function emit(event: AgentEvent, workspaceId = WORKSPACE): void {
   })
 }
 
-const DONE: AgentEvent = {
-  type: 'result',
-  ok: true,
-  costUsd: null,
-  durationMs: 1,
-  inputTokens: null,
-  outputTokens: null,
-  terminalReason: null
-}
-
 const answering = (view: PullRequestView): void => {
   vi.mocked(octopus().workspaces.pullRequest).mockResolvedValue({ ok: true, value: view })
 }
@@ -66,7 +56,7 @@ describe('a pull request pane kept in step with the agent', () => {
     })
 
     answering({ ...VIEW, ahead: 1 })
-    emit(DONE)
+    emit(TURN_DONE)
     await act(async () => {
       await vi.runAllTimersAsync()
     })
@@ -100,7 +90,7 @@ describe('a pull request pane kept in step with the agent', () => {
       expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(1)
     })
 
-    emit(DONE, 'planner/bob')
+    emit(TURN_DONE, 'planner/bob')
     await act(async () => {
       await vi.runAllTimersAsync()
     })

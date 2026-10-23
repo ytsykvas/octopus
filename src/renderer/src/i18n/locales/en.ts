@@ -594,7 +594,52 @@ export const en = {
       'Sent when you ask for a review run by several subagents at once, each reading for one thing.',
     resolveConflicts: 'Resolving conflicts',
     resolveConflictsHint:
-      'Sent when the pull request conflicts with its base branch and you ask the agent to settle it.'
+      'Sent when the pull request conflicts with its base branch and you ask the agent to settle it.',
+    setupScripts: 'Setting the project up to run',
+    setupScriptsHint:
+      'Put in a new conversation, unsent, when you choose Help → “Set this project up to run”. Octopus adds the checkout, the scripts in effect, the files it carries and the names of the variables below it — never their values.',
+    diagnoseRun: 'Diagnosing a run that failed',
+    diagnoseRunHint:
+      'Put in a new conversation, unsent, when you choose Help → “Why does Run not work?”. Octopus adds the same facts and the last lines of the latest build and server, with their exit codes.'
+  },
+
+  help: {
+    setup: 'Set this project up to run',
+    setupHint: 'The agent reads the repository and writes the build, server and cleanup scripts',
+    diagnose: 'Why does Run not work?',
+    diagnoseHint: 'The agent reads the last run\u2019s output, the scripts and the variable names',
+    failed: 'Help could not read this workspace: {{reason}}',
+    /* The facts octopus writes under the instruction, in the composer of a new
+       conversation. Read by the agent, so plain and literal. */
+    context: {
+      heading: '\u2014 What octopus knows about this workspace \u2014',
+      checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',
+      envFile: 'Env file the env set is written into: {{name}}',
+      profile: 'Env set in effect: {{name}}',
+      variables:
+        'Variables it gives the scripts (names only; the values stay in octopus): {{names}}',
+      noVariables: 'The env set in effect defines no variables.',
+      scripts: 'Scripts in effect:',
+      script: '- {{kind}}: {{from}}',
+      scriptMissing: '- {{kind}}: none',
+      unapproved:
+        'The repository\u2019s scripts have not been allowed yet, so Run stays disabled until they are.',
+      carry: 'Files carried into the workspace before a run:',
+      noCarry: 'No files are carried into the workspace.',
+      problems: 'Problems in the env set:',
+      problemNoAssignment: '- line {{line}} is not an assignment',
+      problemBadName: '- line {{line}}: what comes before "=" is not a name a parser accepts',
+      problemDuplicate: '- line {{line}}: {{subject}} is set twice, and only the last one counts',
+      problemUnknownVariable: '- line {{line}}: ${{subject}} is not a variable octopus sets',
+      problemMarker: '- line {{line}}: an octopus marker was pasted in',
+      lastRun: '{{stage}} ended at {{at}} with exit code {{code}}. Its last lines:',
+      lastRunStopped: '{{stage}} was ended by a signal at {{at}}. Its last lines:',
+      lastRunRunning: '{{stage}} is still running. Its last lines so far:',
+      lastRunRefused: '{{stage}} did not start. The Scripts tab said: {{reason}}',
+      noOutput: '(it printed nothing)',
+      noRun:
+        'Nothing has been run in this workspace since octopus started. Press Run on the Scripts tab, then ask again.'
+    }
   },
 
   pullRequest: {

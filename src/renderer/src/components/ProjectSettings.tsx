@@ -125,6 +125,8 @@ const ITEM_LABELS = {
   'instruction.review': 'instructions.review',
   'instruction.multiAgentReview': 'instructions.multiAgentReview',
   'instruction.resolveConflicts': 'instructions.resolveConflicts',
+  'instruction.setupScripts': 'instructions.setupScripts',
+  'instruction.diagnoseRun': 'instructions.diagnoseRun',
   'project.baseBranch': 'project.baseBranch',
   'project.envFile': 'project.envFile',
   'project.carry': 'project.files'

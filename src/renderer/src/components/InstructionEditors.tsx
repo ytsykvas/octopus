@@ -22,6 +22,8 @@ export const INSTRUCTION_KINDS: readonly {
     | 'instructions.review'
     | 'instructions.multiAgentReview'
     | 'instructions.resolveConflicts'
+    | 'instructions.setupScripts'
+    | 'instructions.diagnoseRun'
   readonly hintKey:
     | 'instructions.pullRequestHint'
     | 'instructions.commitMessageHint'
@@ -30,6 +32,8 @@ export const INSTRUCTION_KINDS: readonly {
     | 'instructions.reviewHint'
     | 'instructions.multiAgentReviewHint'
     | 'instructions.resolveConflictsHint'
+    | 'instructions.setupScriptsHint'
+    | 'instructions.diagnoseRunHint'
 }[] = [
   {
     kind: 'pullRequest',
@@ -57,6 +61,16 @@ export const INSTRUCTION_KINDS: readonly {
     kind: 'resolveConflicts',
     labelKey: 'instructions.resolveConflicts',
     hintKey: 'instructions.resolveConflictsHint'
+  },
+  {
+    kind: 'setupScripts',
+    labelKey: 'instructions.setupScripts',
+    hintKey: 'instructions.setupScriptsHint'
+  },
+  {
+    kind: 'diagnoseRun',
+    labelKey: 'instructions.diagnoseRun',
+    hintKey: 'instructions.diagnoseRunHint'
   }
 ]
 

@@ -17,7 +17,7 @@ import type { ScriptKind } from './scripts.js'
 /** The three scripts, in the order they run. Mirrors `ScriptKindSchema`. */
 export const SOURCE_SCRIPT_KINDS: readonly ScriptKind[] = ['setup', 'run', 'archive']
 
-/** The seven instructions, in the order the editors show them. Mirrors `InstructionKindSchema`. */
+/** The instructions, in the order the editors show them. Mirrors `InstructionKindSchema`. */
 export const SOURCE_INSTRUCTION_KINDS: readonly InstructionKind[] = [
   'pullRequest',
   'commitMessage',
@@ -25,7 +25,9 @@ export const SOURCE_INSTRUCTION_KINDS: readonly InstructionKind[] = [
   'addressReview',
   'review',
   'multiAgentReview',
-  'resolveConflicts'
+  'resolveConflicts',
+  'setupScripts',
+  'diagnoseRun'
 ]
 
 /**
@@ -53,6 +55,8 @@ export const SOURCE_ITEM_IDS = [
   'instruction.review',
   'instruction.multiAgentReview',
   'instruction.resolveConflicts',
+  'instruction.setupScripts',
+  'instruction.diagnoseRun',
   'project.baseBranch',
   'project.envFile',
   'project.carry'

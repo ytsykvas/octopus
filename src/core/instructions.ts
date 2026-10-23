@@ -36,7 +36,9 @@ export const InstructionKindSchema = z.enum([
   'addressReview',
   'review',
   'multiAgentReview',
-  'resolveConflicts'
+  'resolveConflicts',
+  'setupScripts',
+  'diagnoseRun'
 ])
 export type InstructionKind = z.infer<typeof InstructionKindSchema>
 
@@ -55,7 +57,12 @@ export const PUBLISHES_AFTER: Readonly<Record<InstructionKind, boolean>> = {
   addressReview: true,
   review: false,
   multiAgentReview: false,
-  resolveConflicts: true
+  resolveConflicts: true,
+  // Never read: Help's text is sent from the composer, not as an instruction.
+  // False should that change — they write scripts at most, and nobody asked
+  // for a push.
+  setupScripts: false,
+  diagnoseRun: false
 }
 
 /** How a message is sent, as accepted from the renderer: the prompt a pane button sent, if any. */
@@ -185,6 +192,75 @@ This branch conflicts with its base. Merge the base in and settle it.
   wrong once both changes are in it.
 - Commit the merge and stop. Do not push: Octopus pushes the branch once you are
   done, and the request stops showing a conflict then.
+`,
+
+  /*
+   * Help's two are put into a composer to be read before they are sent, rather
+   * than sent straight into the log, so their paragraphs are not wrapped: in a
+   * field narrower than eighty columns every hard break wrapped a second time.
+   */
+  setupScripts: `# Setting this project up to run
+
+Octopus runs every workspace in its own git worktree, on its own port, and starts it with three scripts kept in \`.octopus/scripts/\` inside the repository:
+
+- \`setup.sh\` — on Run, before the server: dependencies, the database, dumps, migrations.
+- \`run.sh\` — on Run, on \`$OCTOPUS_PORT\`: the dev server, and nothing else.
+- \`archive.sh\` — when the workspace is deleted: giving back exactly what setup took.
+
+Your job is to write them for this repository, in this worktree, and to say what else octopus needs. Octopus reads the scripts live from \`.octopus/scripts/\` in the worktree, ahead of anything in its own settings.
+
+## Do this in order
+
+1. **Look at the repository.** Which stack, which package manager, which services (database, cache, queue), how the dev server is started today, which files are gitignored but needed (\`.env\`, \`config/master.key\`, \`.env.local\`). If there is a \`.conductor/\` directory, read it: it is the same arrangement under older names (see the end).
+2. **Answer, for every resource, "what must this workspace not share with the others?"**
+   - **Private** — created by \`setup.sh\` under a name derived from \`$OCTOPUS_WORKSPACE_SLUG\`, dropped by \`archive.sh\`. A database, a tmp directory, a cache namespace.
+   - **Shared** — taken from the checkout at \`$OCTOPUS_ROOT_PATH\` and never dropped. A dump, a dependency cache.
+   - **Pinned** — a value every workspace must see, such as the database name pattern. That is a variable in the project's env set, never a line in a script.
+
+   Write the three lists down in your reply before writing any shell.
+
+3. **The files to carry.** A worktree holds what git tracks. Every gitignored file the app needs must be listed in Project settings → Files carried into a workspace, one path per line; octopus copies them into each workspace before a run. List only paths git ignores. If this checkout has not got a file either, say where it may be found (a sibling checkout, a password manager) rather than inventing one.
+4. **The variables.** Read variable _names_ from the code, the \`.env.example\` and the existing \`.env\`, and list the ones the project's env set must define. **Never write a value, never print one, never commit one.** Values go into Project settings by hand. A \`KEY=value\` appended to \`.env\` by a script loses: octopus writes its own block last, on every run.
+5. **The scripts.** Write the three files, \`chmod +x\` each, and verify with \`sh -n\` and \`test -x\`. Do not run them: the person reading your reply presses Run.
+6. **Say what happens next.** The Scripts tab shows a repository's scripts in full and Run stays disabled until the person presses "Allow these" or turns on "Trust this repository" in Project settings. A \`git pull\` that changes a script asks again.
+
+## What a script is given
+
+Every script gets \`$OCTOPUS_ROOT_PATH\` (the checkout), \`$OCTOPUS_WORKSPACE_NAME\`, \`$OCTOPUS_WORKSPACE_SLUG\` and \`$OCTOPUS_ENV_PROFILE\`, plus every variable of the env set in effect. \`run.sh\` also gets \`$OCTOPUS_PORT\` and \`$OCTOPUS_PORT_1\` … \`$OCTOPUS_PORT_9\` for a stack that is more than one process. The server binds \`$OCTOPUS_PORT\`, never a literal.
+
+The slug is the workspace name lowercased, every other character an underscore, cut to 30 characters, so a prefix still fits inside Postgres' 63. It is the **only** source of a per-workspace name. The name itself may hold spaces.
+
+## Rules
+
+- Nothing shared is touched without the slug, and an empty slug stops the script: \`: "\${OCTOPUS_WORKSPACE_SLUG:?refusing to run without a workspace slug}"\` is the first line of \`setup.sh\` and \`archive.sh\`.
+- \`archive.sh\` never uses \`set -e\`: nothing may stop a workspace being removed, and the script must get as far as it can.
+- \`run.sh\` is only the server, started with \`exec\` so a Stop reaches it.
+- Scripts never write \`.env\` and never echo credentials.
+- Do not write \`.octopus/project.json\` from here: name, base branch and env file are set in Project settings, and that file is read from the checkout rather than the worktree.
+- Keep the scripts short. Dependencies that a fresh checkout needs go in \`setup.sh\`; anything already in \`$OCTOPUS_ROOT_PATH\` is linked or copied, not rebuilt.
+
+## Verify, without running anything
+
+\`sh -n\` on each script; \`test -x\` on each; \`command -v\` for every tool they call; \`git check-ignore -v\` for every path to carry. Then read them once more for: the slug on every destructive line, no \`set -e\` in \`archive.sh\`, \`$OCTOPUS_PORT\` bound, nothing shared deleted, no \`CONDUCTOR_\` names left. Report what each check answered.
+
+## If the repository has \`.conductor/\`
+
+\`[scripts] setup/run/archive\` → the three files; \`file_include_globs\` → the files to carry; \`$CONDUCTOR_PORT\` → \`$OCTOPUS_PORT\`; \`$CONDUCTOR_ROOT_PATH\` → \`$OCTOPUS_ROOT_PATH\`; \`$CONDUCTOR_WORKSPACE_NAME\` → \`$OCTOPUS_WORKSPACE_SLUG\` (their name was already a slug; ours is not); \`[prompts]\` → \`.octopus/instructions/\`. Drop any \`cp\` of secrets (that is the carry list now) and anything that pins the environment (that is the env set).
+`,
+
+  diagnoseRun: `# Why does Run not work?
+
+Run in octopus is two scripts in order: \`.octopus/scripts/setup.sh\` (the build), then \`.octopus/scripts/run.sh\` (the server) on \`$OCTOPUS_PORT\`. A failed build stops there. Below this message octopus has put what it knows: which scripts are in effect and where they come from, the env set and the names of its variables, the files it carries, any problems in the env set, and the last lines of the most recent build and server with their exit codes.
+
+Find out why before changing anything.
+
+1. **Read the output first.** The last error is usually not the first thing printed; find the line that actually failed.
+2. **Check what the script was given.** A run most often stops on a variable the script could not read, and that is almost never the script. The env set is written into the workspace's env file on every run, last and winning; a script that appends its own \`KEY=value\` is overwritten. The variable names are listed below; the values are not, and you must not ask for them to be pasted here.
+3. **Check what is missing from the worktree.** A worktree holds what git tracks. A file the app reads at boot (\`.env\`, \`master.key\`) that is not in the files carried into the workspace is simply absent.
+4. **Check the port and the slug.** The server must bind \`$OCTOPUS_PORT\`, not a literal. A database or directory named without \`$OCTOPUS_WORKSPACE_SLUG\` is shared with every other workspace.
+5. **Check the gate.** A repository's scripts do not run until they are allowed on the Scripts tab, and a script runs by path, so it must be executable (\`test -x\`).
+
+Then say, in order: what failed, why, and the smallest change that fixes it. Propose the change; if it is in a script, write it and \`chmod +x\`. Do not run the scripts yourself and never write a variable's value anywhere.
 `
 }
 
@@ -207,7 +283,9 @@ export const INSTRUCTION_FILES: Record<InstructionKind, string> = {
   addressReview: 'address-review.md',
   review: 'review.md',
   multiAgentReview: 'multi-agent-review.md',
-  resolveConflicts: 'resolve-conflicts.md'
+  resolveConflicts: 'resolve-conflicts.md',
+  setupScripts: 'setup-scripts.md',
+  diagnoseRun: 'diagnose-run.md'
 }
 
 /**
