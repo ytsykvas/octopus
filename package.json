@@ -90,5 +90,11 @@
   "homepage": "https://github.com/ytsykvas/octopus#readme",
   "bugs": {
     "url": "https://github.com/ytsykvas/octopus/issues"
+  },
+  "allowScripts": {
+    "node-pty": true,
+    "esbuild": true,
+    "electron-winstaller": false,
+    "fsevents": false
   }
 }
