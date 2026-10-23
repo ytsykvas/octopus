@@ -192,13 +192,10 @@ function Tile({
          the title holds the whole of it. */
       aria-label={name}
       title={name}
-      /* The pressed tile carries a bar in the project's colour as well as the
-         card's own selection, which on its own is a border a shade off the
-         others — too faint to say which view is showing. */
+      // The card's own selection, the same 1px edge all round: a thicker side
+      // would read as one more control rather than the chosen one.
       className={`workspace-card focus-ring flex min-w-0 flex-col items-start px-2.5 py-1.5 text-left ${
-        pressed
-          ? 'workspace-card-selected shadow-[inset_0_-2px_0_var(--project-color,var(--accent))]'
-          : ''
+        pressed ? 'workspace-card-selected' : ''
       }`}
     >
       <span className="text-ink flex w-full min-w-0 items-center gap-1.5 text-[12px] font-semibold">

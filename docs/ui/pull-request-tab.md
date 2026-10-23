@@ -12,7 +12,8 @@ control that reads again, a link out, the title as a heading and `branch → bas
 pill, the Merge tile and the Merge view's closing card. Under it a request that
 exists has three tiles — Checks, Review, Merge — each a value ("1 failed",
 "Changes", "Waiting") and the view's name; they are also what picks the view
-below them, and the one picked carries a bar in the project's colour.
+below them, and the one picked takes the card's own selection — the same 1px
+edge all round, never a thicker side.
 Buttons with `aria-pressed`, the way `Segmented` draws a choice, rather than a tab
 list, which would promise arrow keys and a panel each controls. A branch with no
 request has the form instead, or the sentence saying there is nothing to open. Two things
