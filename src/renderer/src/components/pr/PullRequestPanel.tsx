@@ -24,6 +24,7 @@ import { CommentList } from './CommentList.js'
 import { NewPullRequestForm } from './NewPullRequestForm.js'
 import { PullRequestActions } from './PullRequestActions.js'
 import { PullRequestSummary } from './PullRequestSummary.js'
+import { requestStatus } from './requestStatus.js'
 
 interface PullRequestPanelProps {
   readonly workspace: WorkspaceView | null
@@ -163,10 +164,23 @@ export function PullRequestPanel({
     onError(describeFailure(failure))
   }
 
+  /* Read once for every part of the pane, beside the detail it is read from, so
+     no part can be drawn from one without the other. */
+  const read =
+    detail.detail === null
+      ? null
+      : {
+          detail: detail.detail,
+          status: requestStatus(detail.detail, {
+            dirty: view.dirty,
+            unpushedCommits: view.unpushedCommits
+          })
+        }
+
   /* The checks that went red, which is what the fix prompt is about. Empty
      where the detail could not be read — which is also where the button that
      sends it is not drawn. */
-  const failed = (detail.detail?.checks ?? []).filter((check) => check.state === 'failed')
+  const failed = read?.status.failedChecks ?? []
 
   /**
    * Sends the instruction that applies here, with a line naming the request.
@@ -365,7 +379,7 @@ export function PullRequestPanel({
               what is missing rather than blanking the pane. */}
           {detail.error !== null && <p className="text-danger leading-relaxed">{detail.error}</p>}
 
-          {detail.detail !== null && (
+          {read !== null && (
             <>
               <Section
                 title={t('pullRequest.checks')}
@@ -397,12 +411,12 @@ export function PullRequestPanel({
                   )
                 }
               >
-                <ChecksList checks={detail.detail.checks} />
+                <ChecksList checks={read.detail.checks} />
               </Section>
 
               <Section title={t('pullRequest.review')}>
                 <CommentList
-                  comments={detail.detail.comments}
+                  comments={read.detail.comments}
                   onAddToChat={(comment: PullRequestComment) => {
                     quotes.add(toQuote(comment, request.number))
                   }}
@@ -441,13 +455,14 @@ export function PullRequestPanel({
                     a longer page — so what is owed is saying that what is here
                     is not all there is. Only when a read came back full, or the
                     line would be an apology on every request. */}
-                {detail.detail.capped && (
+                {read.detail.capped && (
                   <p className="text-ink-faint mt-2 leading-relaxed">{t('pullRequest.capped')}</p>
                 )}
               </Section>
 
               <PullRequestActions
-                detail={detail.detail}
+                detail={read.detail}
+                status={read.status}
                 base={view.base}
                 dirty={view.dirty}
                 exposedEnvFile={envIgnored ? null : envFile}
@@ -475,7 +490,6 @@ export function PullRequestPanel({
                 committing={committing}
                 onPush={push}
                 pushing={pushing}
-                unpushedCommits={view.unpushedCommits}
                 onRemoveWorkspace={() => {
                   onRemoveWorkspace(workspace.id)
                 }}

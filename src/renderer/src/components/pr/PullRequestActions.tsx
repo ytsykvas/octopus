@@ -4,52 +4,40 @@ import { useTranslation } from 'react-i18next'
 
 import type { InstructionKind } from '@core/instructions.js'
 import type { MergeMethod } from '@core/pullRequests.js'
-import type { MergeState, PullRequestDetail } from '@core/pullRequestShapes.js'
+import type { PullRequestDetail } from '@core/pullRequestShapes.js'
 
 import { Button } from '../Button.js'
 import { CommitMessageField } from './CommitMessageField.js'
 import { DropdownMenu } from '../DropdownMenu.js'
 import { MERGE_METHODS } from './mergeMethods.js'
+import type { Attention, GitHubNote, RequestStatus } from './requestStatus.js'
 
 /**
- * The prompts the pane can send, the conditional ones first.
- *
- * A word per row rather than a flag per condition: two booleans would allow a
- * row that is both, which is a state nothing here means, and a third condition
- * would make it three flags and eight states for four rows.
+ * The prompts drawn as a row, with their labels.
  *
  * `resolveConflicts` is not here: it appears only against a conflict, beside
  * the sentence saying there is one, where it reads as the answer to that rather
  * than as one more thing one might do.
  */
-const PROMPTS: readonly {
-  readonly kind: InstructionKind
-  readonly labelKey:
+const PROMPTS: Partial<
+  Record<
+    InstructionKind,
     | 'pullRequest.fixChecks'
     | 'pullRequest.addressReview'
     | 'pullRequest.doReview'
     | 'pullRequest.multiAgentReview'
-  /** What has to be true of the request before this one is worth offering. */
-  readonly when: 'always' | 'failed' | 'reviewed'
-}[] = [
-  { kind: 'fixChecks', labelKey: 'pullRequest.fixChecks', when: 'failed' },
-  { kind: 'addressReview', labelKey: 'pullRequest.addressReview', when: 'reviewed' },
-  { kind: 'review', labelKey: 'pullRequest.doReview', when: 'always' },
-  { kind: 'multiAgentReview', labelKey: 'pullRequest.multiAgentReview', when: 'always' }
-]
-
-/**
- * Why GitHub would not merge, where it is worth saying.
- *
- * `clean`, `hasHooks` and `unknown` say nothing: the first two are fine and the
- * third is a state GitHub is still working out, which a sentence about would
- * turn into a problem the reader cannot act on.
- */
-const MERGE_NOTES: Partial<
-  Record<
-    MergeState,
-    'pullRequest.mergeBlocked' | 'pullRequest.mergeBehind' | 'pullRequest.mergeUnstable'
   >
+> = {
+  fixChecks: 'pullRequest.fixChecks',
+  addressReview: 'pullRequest.addressReview',
+  review: 'pullRequest.doReview',
+  multiAgentReview: 'pullRequest.multiAgentReview'
+}
+
+/** GitHub's reasons, in the pane's words. */
+const NOTES: Record<
+  GitHubNote,
+  'pullRequest.mergeBlocked' | 'pullRequest.mergeBehind' | 'pullRequest.mergeUnstable'
 > = {
   blocked: 'pullRequest.mergeBlocked',
   behind: 'pullRequest.mergeBehind',
@@ -58,6 +46,8 @@ const MERGE_NOTES: Partial<
 
 interface PullRequestActionsProps {
   readonly detail: PullRequestDetail
+  /** What the pane has decided about the request, read once for every part of it. */
+  readonly status: RequestStatus
   readonly base: string
   /** Uncommitted work here, which is what makes committing worth offering. */
   readonly dirty: boolean
@@ -115,15 +105,6 @@ interface PullRequestActionsProps {
   readonly onPush: () => void
   readonly pushing: boolean
   /**
-   * Commits the remote's copy of this branch lacks; zero hides the button.
-   *
-   * Null is a third answer: the commit the count would be measured from is on
-   * the remote and not in this checkout, or HEAD is standing on another branch.
-   * Neither can be counted here, and neither can be pushed past — so the button
-   * goes with the number, and a sentence takes their place.
-   */
-  readonly unpushedCommits: number | null
-  /**
    * Removes the workspace, asking first — the sidebar's own flow.
    *
    * Offered off the request's **state** rather than off the press that merged
@@ -143,6 +124,7 @@ interface PullRequestActionsProps {
  */
 export function PullRequestActions({
   detail,
+  status,
   base,
   dirty,
   exposedEnvFile,
@@ -157,7 +139,6 @@ export function PullRequestActions({
   committing,
   onPush,
   pushing,
-  unpushedCommits,
   onRemoveWorkspace
 }: PullRequestActionsProps): React.JSX.Element {
   const { t } = useTranslation()
@@ -170,49 +151,13 @@ export function PullRequestActions({
   const amending = message.trim() === ''
   const cannotAmend = amending && ahead === 0
 
-  const conflicting = detail.mergeable === 'conflicting'
-  const note = MERGE_NOTES[detail.mergeState]
-
-  /* Read once and used twice: it decides both whether the fix prompt is worth
-     offering and whether merging is allowed at all, and two spellings of the
-     same question are two things that can drift apart. */
-  const failed = detail.checks.filter((check) => check.state === 'failed').length
-
-  /* Still going, and merging waits for them. `gh` would accept the press and
-     turn it into auto-merge, which is a reasonable thing for `gh` to do and the
-     wrong thing to offer here: the reader is looking at a list that says
-     "running" and a button that would merge anyway.
-
-     Counted rather than derived from `mergeState`, which is GitHub's summary of
-     whether *required* checks are settled — a repository that marks none
-     required reports itself perfectly mergeable while its whole suite is still
-     going. The list is what the reader can see. */
-  const running = detail.checks.filter((check) => check.state === 'pending').length
-
-  /* A repository that runs nothing has no checks at all, and waiting for checks
-     that will never arrive would leave it unable to merge from here for ever.
-     Only what is actually reported holds the button. */
-  const waiting = failed > 0 || running > 0
-
-  /* Looked up rather than tested at each row: a table keyed by the same word the
-     row carries cannot disagree with it, and there is no chain of conditions for
-     a fourth case to be left out of. */
-  const offered: Record<'always' | 'failed' | 'reviewed', boolean> = {
-    always: true,
-    failed: failed > 0,
-    reviewed: detail.decision === 'changesRequested' || hasRemarks(detail)
-  }
-
-  /* A request that is merged or closed has nothing left to do to it. The
-     prompts would still run, but "review it" on a merged branch is a reading of
-     history rather than of a change, and the button implies otherwise. */
-  const open = detail.state === 'open'
+  const { open } = status
+  const unpushed = status.attention.find(
+    (item): item is Extract<Attention, { kind: 'unpushed' }> => item.kind === 'unpushed'
+  )
 
   return (
     <div className="flex flex-col gap-2">
-      {conflicting && (
-        <p className="text-warning leading-relaxed">{t('pullRequest.conflicting', { base })}</p>
-      )}
       {/* The same condition as the button below, so the warning is there for
           exactly the press it is about — and gone with it when there is
           nothing to commit or the request is no longer open. */}
@@ -221,40 +166,9 @@ export function PullRequestActions({
           {t('pullRequest.envNotIgnoredPush', { file: exposedEnvFile })}
         </p>
       )}
-      {/* GitHub's own reasons, and only where this pane is not already giving
-          one of its own: `unstable` says merging is allowed anyway, which stops
-          being true the moment a check of ours holds the button, and two
-          sentences contradicting each other is worse than the quieter one. */}
-      {!conflicting && !waiting && note !== undefined && (
-        <p className="text-ink-faint leading-relaxed">{t(note, { base })}</p>
-      )}
-      {detail.draft && (
-        <p className="text-ink-faint leading-relaxed">{t('pullRequest.mergeDraft')}</p>
-      )}
-      {/* Not a refusal GitHub would make — it merges over a check nobody marked
-          required — so this says outright that the app is the one refusing, and
-          the button below is disabled to match. */}
-      {failed > 0 && open && (
-        <p className="text-danger leading-relaxed">
-          {t('pullRequest.mergeChecksFailed', { count: failed })}
-        </p>
-      )}
-      {running > 0 && open && (
-        <p className="text-ink-faint leading-relaxed">
-          {t('pullRequest.mergeChecksRunning', { count: running })}
-        </p>
-      )}
-      {unpushedCommits !== null && unpushedCommits > 0 && open && (
-        <p className="text-ink-faint leading-relaxed">
-          {t('pullRequest.unpushed', { count: unpushedCommits })}
-        </p>
-      )}
-      {/* Said rather than left blank. A pushed branch with no count and no
-          button, and nothing accounting for either, reads as the pane having
-          given up — and the remedy is one command away. */}
-      {unpushedCommits === null && open && (
-        <p className="text-ink-faint leading-relaxed">{t('pullRequest.unpushedUnknown')}</p>
-      )}
+      {status.attention.map((item) => (
+        <AttentionNote key={item.kind} item={item} base={base} />
+      ))}
 
       {dirty && open && (
         <CommitMessageField
@@ -293,25 +207,29 @@ export function PullRequestActions({
         {/* Beside it rather than instead of it: the two answer different
             states, and a branch can be in both at once — something committed
             and not sent, something else not committed at all. */}
-        {unpushedCommits !== null && unpushedCommits > 0 && open && (
+        {unpushed !== undefined && (
           <Button size="sm" onClick={onPush} disabled={pushing}>
             <ArrowUpFromLine aria-hidden size={12} />
             {t(pushing ? 'pullRequest.pushing' : 'pullRequest.push')}
           </Button>
         )}
 
-        {open &&
-          PROMPTS.filter((prompt) => offered[prompt.when]).map((prompt) => (
-            <PromptButton
-              key={prompt.kind}
-              kind={prompt.kind}
-              label={t(prompt.labelKey)}
-              onPrompt={onPrompt}
-              sending={sending}
-            />
-          ))}
+        {status.offered.map((kind) => {
+          const labelKey = PROMPTS[kind]
+          return (
+            labelKey !== undefined && (
+              <PromptButton
+                key={kind}
+                kind={kind}
+                label={t(labelKey)}
+                onPrompt={onPrompt}
+                sending={sending}
+              />
+            )
+          )
+        })}
 
-        {conflicting && open && (
+        {status.offered.includes('resolveConflicts') && (
           <PromptButton
             kind="resolveConflicts"
             label={t('pullRequest.resolveConflicts')}
@@ -364,7 +282,7 @@ export function PullRequestActions({
                 // keeps rather than a refusal it is predicting — and it is a
                 // hard one: the way past it is to fix the check, or to merge in
                 // the browser, where nobody can do it by reflex.
-                disabled={merging || conflicting || detail.draft || waiting}
+                disabled={merging || !status.canMerge}
               >
                 <GitMerge aria-hidden size={12} />
                 {t(merging ? 'pullRequest.merging' : 'pullRequest.merge')}
@@ -430,16 +348,55 @@ function PromptButton({
 }
 
 /**
- * Whether anybody has reviewed this.
+ * One line about the request, in the colour of what it means.
  *
- * Not `decision === 'changesRequested'` alone, which is what the button was
- * nearly gated on: on a repository with no required reviewers GitHub sends an
- * empty decision essentially always, so that alone would hide the button on
- * exactly the projects this app is for. A resolved thread does not count —
- * somebody has already dealt with it.
+ * Uncommitted work says nothing here: the commit field below is what says it.
  */
-function hasRemarks(detail: PullRequestDetail): boolean {
-  return detail.comments.some(
-    (comment) => comment.kind === 'review' || (comment.kind === 'inline' && !comment.resolved)
-  )
+function AttentionNote({
+  item,
+  base
+}: {
+  readonly item: Attention
+  readonly base: string
+}): React.JSX.Element | null {
+  const { t } = useTranslation()
+
+  switch (item.kind) {
+    case 'uncommitted':
+      return null
+    case 'conflict':
+      return (
+        <p className="text-warning leading-relaxed">{t('pullRequest.conflicting', { base })}</p>
+      )
+    case 'githubNote':
+      return <p className="text-ink-faint leading-relaxed">{t(NOTES[item.note], { base })}</p>
+    case 'draft':
+      return <p className="text-ink-faint leading-relaxed">{t('pullRequest.mergeDraft')}</p>
+    /* Not a refusal GitHub would make — it merges over a check nobody marked
+       required — so this says outright that the app is the one refusing, and
+       the button is disabled to match. */
+    case 'failed':
+      return (
+        <p className="text-danger leading-relaxed">
+          {t('pullRequest.mergeChecksFailed', { count: item.count })}
+        </p>
+      )
+    case 'running':
+      return (
+        <p className="text-ink-faint leading-relaxed">
+          {t('pullRequest.mergeChecksRunning', { count: item.count })}
+        </p>
+      )
+    case 'unpushed':
+      return (
+        <p className="text-ink-faint leading-relaxed">
+          {t('pullRequest.unpushed', { count: item.count })}
+        </p>
+      )
+    /* Said rather than left blank. A pushed branch with no count and no
+       button, and nothing accounting for either, reads as the pane having
+       given up — and the remedy is one command away. */
+    case 'unpushedUnknown':
+      return <p className="text-ink-faint leading-relaxed">{t('pullRequest.unpushedUnknown')}</p>
+  }
 }
