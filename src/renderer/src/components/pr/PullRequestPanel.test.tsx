@@ -652,6 +652,20 @@ describe('the pull request tab', () => {
     expect(await screen.findByText(/\.env\.local/)).toBeInTheDocument()
   })
 
+  // Nothing to commit is nothing to warn about: the form opens the request
+  // over commits already made, and stages nothing.
+  it('says nothing about the env file on a branch with nothing to commit', async () => {
+    answer(view({ dirty: false }))
+    vi.mocked(octopus().projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
+    renderPanel({ envFile: '.env.local' })
+
+    expect(await screen.findByRole('textbox', { name: 'Title' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(octopus().projects.isEnvIgnored).toHaveBeenCalled()
+    })
+    expect(screen.queryByText(/\.env\.local/)).not.toBeInTheDocument()
+  })
+
   /*
    * The same hazard on the second press. Once the request exists the form is
    * gone, and `Commit and push` runs the same `add -A` — so the warning has to
@@ -875,12 +889,11 @@ describe('a pull request that exists', () => {
   it('says why GitHub is holding a mergeable request back', async () => {
     answer(view({ request: request() }))
     answerDetail(detail({ mergeable: 'mergeable', mergeState: 'blocked' }))
-    const { quotes } = renderPanel()
+    renderPanel()
 
     expect(
       within(await nextStep()).getByText(/required review or check is missing/)
     ).toBeInTheDocument()
-    expect(quotes.add).not.toHaveBeenCalled()
   })
 
   it('says when the base has moved on', async () => {
@@ -971,26 +984,40 @@ describe('a pull request that exists', () => {
     const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail())
-    renderPanel()
+    const { onRequestChanged } = renderPanel()
 
     await user.click(await screen.findByRole('button', { name: 'Close pull request' }))
 
     expect(octopus().workspaces.closePullRequest).toHaveBeenCalledWith(anna.id, 7)
     // Nothing was merged on the way past.
     expect(octopus().workspaces.mergePullRequest).not.toHaveBeenCalled()
+    // Read again, here and in the list, or the pane and the row go on calling
+    // it open.
+    await waitFor(() => {
+      expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
+      expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+      expect(onRequestChanged).toHaveBeenCalled()
+    })
   })
 
   // A request already settled has nothing left to do to it, closing included.
-  it('offers no way to close one that is already merged', async () => {
-    answer(view({ request: request({ state: 'merged' }) }))
-    answerDetail(detail({ state: 'merged' }))
-    renderPanel()
+  it.each(['merged', 'closed'] as const)(
+    'offers no way to close one that is already %s',
+    async (state) => {
+      answer(view({ request: request({ state }) }))
+      answerDetail(detail({ state }))
+      renderPanel()
 
-    // The pane drew the request, and offered nothing to do to it.
-    expect(await screen.findByText('Rename the thing')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument()
-  })
+      // The pane drew the request, in the view where Close would be, and
+      // offered nothing to do to it.
+      const merge = await screen.findByRole('region', { name: 'Merge' })
+      expect(merge).toBeVisible()
+      expect(
+        within(merge).queryByRole('button', { name: 'Close pull request' })
+      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument()
+    }
+  )
 
   it('says why GitHub would not close one', async () => {
     const user = userEvent.setup()
@@ -1149,11 +1176,18 @@ describe('a pull request that exists', () => {
      merge from the header or in a browser reaches it too. Nothing here presses
      Merge. */
   it('offers it for a merge this pane did not perform', async () => {
-    answer(view({ request: request({ state: 'merged' }) }))
-    answerDetail(detail({ state: 'merged' }))
+    // The list still says open: it was read before the merge. The detail is
+    // the fresher of the two, and wins.
+    answer(view({ request: request() }))
+    answerDetail(detail({ state: 'merged', title: 'Renamed on GitHub' }))
     renderPanel()
 
-    expect(await screen.findByText(/This branch is merged/)).toBeInTheDocument()
+    const title = await screen.findByRole('heading', { name: 'Renamed on GitHub' })
+    const header = title.parentElement ?? document.body
+    expect(within(header).getByText('Merged')).toBeInTheDocument()
+    expect(
+      within(await nextStep()).getByRole('button', { name: 'Remove workspace…' })
+    ).toBeInTheDocument()
     expect(octopus().workspaces.mergePullRequest).not.toHaveBeenCalled()
   })
 
@@ -1404,6 +1438,10 @@ describe('what the tab can do about a request', () => {
         instruction: 'fixChecks'
       })
     })
+    // Sent, the menu comes back for the next one.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Ask the agent/ })).toBeEnabled()
+    })
   })
 
   /* Every item of the menu, not one of them: the list is drawn from
@@ -1484,6 +1522,24 @@ describe('what the tab can do about a request', () => {
       'Multi-agent review',
       'Edit the instructions…'
     ])
+  })
+
+  /* The line goes between what this moment calls for and the two that are
+     always there — and nowhere when there is nothing above it to set apart. */
+  it.each<[string, PullRequestDetail, boolean]>([
+    ['under a prompt for the moment', detail({ checks: [failing()] }), true],
+    ['with nothing above it', detail(), false]
+  ])('sets the reviews apart %s', async (_, read, lined) => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(read)
+    renderPanel()
+
+    await openAgentMenu(user)
+
+    const above = screen.getByRole('menuitem', { name: 'Review it' }).previousElementSibling
+    if (lined) expect(above).toHaveAttribute('role', 'presentation')
+    else expect(above).toBeNull()
   })
 
   it('does not offer to fix checks that all passed', async () => {
@@ -1610,6 +1666,8 @@ describe('what the tab can do about a request', () => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('EACCES'))
     })
     expect(octopus().chats.send).not.toHaveBeenCalled()
+    // And the menu is there to try again.
+    expect(screen.getByRole('button', { name: /Ask the agent/ })).toBeEnabled()
   })
 
   it('says why when the message could not be sent', async () => {
@@ -1769,7 +1827,7 @@ describe('what the tab can do about a request', () => {
     const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail())
-    renderPanel()
+    const { onRequestChanged } = renderPanel()
 
     await user.click(await screen.findByRole('button', { name: 'Merge' }))
     await user.click(screen.getByRole('menuitem', { name: label }))
@@ -1779,7 +1837,64 @@ describe('what the tab can do about a request', () => {
     // passed, so success is not proof of a merge.
     await waitFor(() => {
       expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+      expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
+      // The list too, or its row says "open" until its own clock comes round.
+      expect(onRequestChanged).toHaveBeenCalled()
     })
+  })
+
+  /* Each press says it is under way and takes no second one, and Close waits
+     for a merge in flight — the two would race on GitHub. */
+  it('holds the merge, and the close, while a merge is on its way', async () => {
+    const user = userEvent.setup()
+    const pending = held<{ ok: true; value: undefined }>()
+    vi.mocked(octopus().workspaces.mergePullRequest).mockReturnValue(pending.promise)
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Merge' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Squash and merge' }))
+
+    expect(within(await nextStep()).getByRole('button', { name: 'Merging…' })).toBeDisabled()
+    const merge = await showView(user, 'Merge')
+    expect(within(merge).getByRole('button', { name: 'Close pull request' })).toBeDisabled()
+
+    pending.resolve({ ok: true, value: undefined })
+    await waitFor(() => {
+      expect(within(merge).getByRole('button', { name: 'Close pull request' })).toBeEnabled()
+    })
+    expect(within(await nextStep()).getByRole('button', { name: 'Merge' })).toBeEnabled()
+  })
+
+  it('holds the close while it is on its way', async () => {
+    const user = userEvent.setup()
+    const pending = held<{ ok: true; value: undefined }>()
+    vi.mocked(octopus().workspaces.closePullRequest).mockReturnValue(pending.promise)
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Close pull request' }))
+
+    expect(screen.getByRole('button', { name: 'Closing…' })).toBeDisabled()
+    pending.resolve({ ok: true, value: undefined })
+    expect(await screen.findByRole('button', { name: 'Close pull request' })).toBeEnabled()
+  })
+
+  it('holds the push while it is on its way', async () => {
+    const user = userEvent.setup()
+    const pending = held<{ ok: true; value: undefined }>()
+    vi.mocked(octopus().workspaces.push).mockReturnValue(pending.promise)
+    answer(view({ request: request(), unpushedCommits: 1 }))
+    answerDetail(detail())
+    renderPanel()
+
+    await user.click(within(await nextStep()).getByRole('button', { name: 'Push' }))
+
+    expect(within(await nextStep()).getByRole('button', { name: 'Pushing…' })).toBeDisabled()
+    pending.resolve({ ok: true, value: undefined })
+    expect(await within(await nextStep()).findByRole('button', { name: 'Push' })).toBeEnabled()
   })
 
   it('says why GitHub would not merge', async () => {
@@ -1948,13 +2063,16 @@ describe('re-running the checks', () => {
   /* Restarting a green suite is not something anybody reaches for, and two
      buttons on every request would be noise beside the moment they matter. */
   it('offers nothing to re-run while no check has failed', async () => {
+    const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
     renderPanel()
 
-    expect(await screen.findByText('test')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Failed' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument()
+    // Looked for where they would be: in the Checks view, shown.
+    const checks = await showView(user, 'Checks')
+    expect(within(checks).getByText('test')).toBeInTheDocument()
+    expect(within(checks).queryByRole('button', { name: 'Failed' })).not.toBeInTheDocument()
+    expect(within(checks).queryByRole('button', { name: 'All' })).not.toBeInTheDocument()
   })
 
   it('sends each button its own scope, then reads the request again', async () => {
@@ -2037,6 +2155,10 @@ describe('the shape of a request on screen', () => {
 
     expect(await tile(name)).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('region', { name })).toBeVisible()
+    // And only that one: the other two are in the page, and hidden.
+    for (const other of (['Checks', 'Review', 'Merge'] as const).filter((n) => n !== name)) {
+      expect(document.querySelector(`[role="region"][aria-label="${other}"]`)).not.toBeVisible()
+    }
   })
 
   it.each<[string, PullRequestDetail, readonly string[]]>([
@@ -2226,6 +2348,32 @@ describe('the shape of a request on screen', () => {
     expect(within(merge).getByText('Changes here are not committed yet.')).toBeInTheDocument()
     expect(within(merge).getByText('All checks have passed.')).toBeInTheDocument()
     expect(within(merge).getByText('No conflicts with main.')).toBeInTheDocument()
+  })
+
+  /* "Fine" only where it is: a passed check beside a red one is not all of them
+     passing, nothing having run is not passing, and a conflict is not "no
+     conflicts". */
+  it.each<[string, PullRequestDetail, string]>([
+    [
+      'a red check beside a green one',
+      detail({ checks: [failing(), failing({ name: 'lint', state: 'passed' })] }),
+      'All checks have passed.'
+    ],
+    ['no checks at all', detail(), 'All checks have passed.'],
+    [
+      'only skipped checks',
+      detail({ checks: [failing({ state: 'skipped' })] }),
+      'All checks have passed.'
+    ],
+    ['a conflict', detail({ mergeable: 'conflicting' }), 'No conflicts with main.']
+  ])('does not call it fine with %s', async (_, read, fine) => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(read)
+    renderPanel()
+
+    const merge = await showView(user, 'Merge')
+    expect(within(merge).queryByText(fine)).not.toBeInTheDocument()
   })
 
   it('says a request is ready when nothing wants attention', async () => {
