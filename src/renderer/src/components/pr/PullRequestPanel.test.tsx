@@ -1360,6 +1360,29 @@ describe('what the tab can do about a request', () => {
     })
   })
 
+  /* Every item of the menu, not one of them: the list is drawn from
+     `offered`, and an item whose kind went astray on the way would send
+     another prompt under its name. */
+  it.each([
+    ['Fix the checks', 'fixChecks', detail({ checks: [failing()] })],
+    ['Address the review', 'addressReview', detail({ comments: [inline()] })],
+    ['Resolve the conflicts', 'resolveConflicts', detail({ mergeable: 'conflicting' })],
+    ['Review it', 'review', detail()],
+    ['Multi-agent review', 'multiAgentReview', detail()]
+  ])('sends “%s” as its own prompt', async (name, kind, read) => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(read)
+    renderPanel()
+
+    await choosePrompt(user, name)
+
+    expect(octopus().workspaces.instruction).toHaveBeenCalledWith(anna.id, kind)
+    await vi.waitFor(() => {
+      expect(vi.mocked(octopus().chats.send).mock.calls[0]?.[2]).toEqual({ instruction: kind })
+    })
+  })
+
   it('offers each of the reviews it can ask for', async () => {
     const user = userEvent.setup()
     answer(view({ request: request() }))
@@ -1670,16 +1693,20 @@ describe('what the tab can do about a request', () => {
     expect(screen.queryByText(/This branch conflicts with/)).not.toBeInTheDocument()
   })
 
-  it('merges by the method that was chosen, and reads the state again', async () => {
+  it.each([
+    ['Merge commit', 'merge'],
+    ['Squash and merge', 'squash'],
+    ['Rebase and merge', 'rebase']
+  ])('merges by %s when that is chosen, and reads the state again', async (label, method) => {
     const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail())
     renderPanel()
 
     await user.click(await screen.findByRole('button', { name: 'Merge' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Squash and merge' }))
+    await user.click(screen.getByRole('menuitem', { name: label }))
 
-    expect(octopus().workspaces.mergePullRequest).toHaveBeenCalledWith(anna.id, 7, 'squash')
+    expect(octopus().workspaces.mergePullRequest).toHaveBeenCalledWith(anna.id, 7, method)
     // `gh` enables auto-merge rather than merging when a required check has not
     // passed, so success is not proof of a merge.
     await waitFor(() => {
