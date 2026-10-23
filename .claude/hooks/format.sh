@@ -10,6 +10,11 @@
 # below mirror `.prettierrc` and `format:check` fails when they drift), and
 # only the prettier this project installed is used: the same binary
 # `npm run check` runs, so the hook adds no code path the gate lacks.
+#
+# The prettier it runs lives in node_modules, which an agent could replace;
+# that is accepted. `Edit(node_modules/**)` is denied in settings.json, and
+# an agent that can run Bash can run that binary itself — the deny guards the
+# file tools, which is the path an agent without Bash has.
 set -eu
 
 command -v jq >/dev/null 2>&1 || exit 0

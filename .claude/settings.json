@@ -1,6 +1,27 @@
 {
   "permissions": {
-    "deny": ["Edit(node_modules/**)", "Write(node_modules/**)", "Edit(.git/**)", "Write(.git/**)"]
+    "allow": [
+      "Bash(npm run check:*)",
+      "Bash(npm run test:race:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run format:check:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx prettier:*)",
+      "Bash(npx eslint:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Edit(node_modules/**)",
+      "Edit(.git/**)",
+      "Edit(.claude/hooks/**)",
+      "Edit(.claude/settings.json)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
+    ]
   },
   "hooks": {
     "PostToolUse": [
