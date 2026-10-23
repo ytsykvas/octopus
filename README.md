@@ -104,6 +104,25 @@ counts — are in [docs/](docs/README.md).
 
 How the four layers divide the work is under [Development](#development).
 
+## Working with agents
+
+The repository carries its own Claude Code setup, and it is part of what is
+being shown here:
+
+- [CLAUDE.md](CLAUDE.md) is a short root that links out, and the invariants of
+  each layer live in [.claude/rules/](.claude/rules), loaded only when a file
+  there is touched.
+- [.claude/skills/](.claude/skills) hold the techniques — core modules, the
+  interface, the Agent SDK — and the workflows: `/check`, `/ship`,
+  `/docs-check`, `/test-check`.
+- A reviewer subagent holds a change to the same list, a hook formats every
+  file an agent edits, and the permissions allow the gate and nothing wider.
+- The reference documentation under [docs/](docs/README.md) is split by
+  subject, so a question about one pane reads one file.
+
+octopus opens a repository's settings and hooks to the person before any of
+them run, this one included.
+
 ## Installing
 
 **What you need first:**
