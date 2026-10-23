@@ -2326,7 +2326,8 @@ describe('workspaces of a real project', () => {
               isDraft: false,
               mergeable: 'MERGEABLE',
               mergeStateStatus: 'CLEAN',
-              reviewDecision: ''
+              reviewDecision: '',
+              headRefOid: 'abc123'
             }
           ])
         )

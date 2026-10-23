@@ -1629,7 +1629,8 @@ const REVIEW_FIELDS = {
   isDraft: false,
   mergeable: 'MERGEABLE',
   mergeStateStatus: 'CLEAN',
-  reviewDecision: ''
+  reviewDecision: '',
+  headRefOid: ABSENT
 }
 
 describe('every branch of a project at once', () => {
@@ -1652,7 +1653,7 @@ describe('every branch of a project at once', () => {
   it('asks once for every branch, not once per branch', async () => {
     const { gh, calls } = fakeGh({ list: LIST })
 
-    const answer = await readBranchRequests([], gh)
+    const answer = await readBranchRequests([], gh, workExec())
 
     expect(answer.requests).toEqual([
       {
@@ -1676,7 +1677,7 @@ describe('every branch of a project at once', () => {
   it('takes a smaller limit when one is given', async () => {
     const { gh, calls } = fakeGh({ list: LIST })
 
-    await readBranchRequests([], gh, 5)
+    await readBranchRequests([], gh, workExec(), 5)
 
     expect(calls[0]?.[calls[0].indexOf('--limit') + 1]).toBe('5')
   })
@@ -1684,19 +1685,86 @@ describe('every branch of a project at once', () => {
   it('says GitHub could not be asked when it refuses', async () => {
     const { gh } = fakeGh({ list: new Error('gh: no remote') })
 
-    await expect(readBranchRequests([], gh)).rejects.toMatchObject({ code: 'notConnected' })
+    await expect(readBranchRequests([], gh, workExec())).rejects.toMatchObject({
+      code: 'notConnected'
+    })
   })
 
   it('reports an answer it cannot read, and one shaped like something else', async () => {
     const unreadable = fakeGh({ list: 'not json' })
-    await expect(readBranchRequests([], unreadable.gh)).rejects.toMatchObject({
+    await expect(readBranchRequests([], unreadable.gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
     })
 
     const unexpected = fakeGh({ list: JSON.stringify({ pullRequests: [] }) })
-    await expect(readBranchRequests([], unexpected.gh)).rejects.toMatchObject({
+    await expect(readBranchRequests([], unexpected.gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
     })
+  })
+
+  /** One request on `branch`, as the project-wide list answers, ending at `head`. */
+  const listedFor = (branch: string, state: string, head: string): string =>
+    JSON.stringify([
+      {
+        headRefName: branch,
+        number: 7,
+        state,
+        url: 'https://e.test/7',
+        ...REVIEW_FIELDS,
+        headRefOid: head
+      }
+    ])
+
+  /* The row and the pane agree on one rule. A merged mark beside a branch that
+     has work again said it was finished, which the pane had stopped saying. */
+  it('drops the mark of a branch that moved past its merged request', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await mergeIntoMain(branch)
+    await commitOn('b.txt')
+
+    const answer = await readBranchRequests(
+      [owner(branch)],
+      fakeGh({ list: listedFor(branch, 'MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(answer.requests).toEqual([])
+  })
+
+  it('keeps the mark of a branch where it was merged', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await mergeIntoMain(branch)
+
+    const answer = await readBranchRequests(
+      [owner(branch)],
+      fakeGh({ list: listedFor(branch, 'MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(answer.requests.map((request) => request.state)).toEqual(['merged'])
+  })
+
+  /* A hundred requests come back, most of them long merged on branches no
+     workspace holds. Asking git about each would be a hundred processes a
+     minute for marks nobody draws. */
+  it('asks git only about a finished request on a workspace branch', async () => {
+    const asked: string[][] = []
+    const git: GitExec = (args) => {
+      asked.push([...args])
+      return Promise.resolve('0')
+    }
+    const { gh } = fakeGh({
+      list: JSON.stringify([
+        { headRefName: 'mine', number: 7, state: 'OPEN', url: 'u', ...REVIEW_FIELDS },
+        { headRefName: 'theirs', number: 8, state: 'MERGED', url: 'u', ...REVIEW_FIELDS }
+      ])
+    })
+
+    await readBranchRequests([owner('mine')], gh, git)
+
+    expect(asked).toEqual([])
   })
 })
 
@@ -1773,7 +1841,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    await expect(readBranchRequests([], gh, 2)).resolves.toMatchObject({ capped: true })
+    await expect(readBranchRequests([], gh, workExec(), 2)).resolves.toMatchObject({ capped: true })
   })
 
   it('says nothing of the sort when it came back short', async () => {
@@ -1784,7 +1852,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    const answer = await readBranchRequests([], gh, 2)
+    const answer = await readBranchRequests([], gh, workExec(), 2)
 
     expect(answer.capped).toBe(false)
     expect(answer.requests).toHaveLength(1)
@@ -1803,7 +1871,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    const answer = await readBranchRequests([], gh, 2)
+    const answer = await readBranchRequests([], gh, workExec(), 2)
 
     expect(answer.requests).toHaveLength(1)
     expect(answer.capped).toBe(true)

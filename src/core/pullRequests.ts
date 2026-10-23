@@ -19,6 +19,7 @@ import { shortBranchName } from './branches.js'
 import { GitHubError } from './github.js'
 import { countAhead, currentBranch, type GitExec, reasonFrom } from './git.js'
 import {
+  type BranchListPayload,
   type BranchOwner,
   type BranchRequest,
   BranchListSchema,
@@ -957,6 +958,7 @@ export interface BranchRequestList {
 export async function readBranchRequests(
   owners: readonly BranchOwner[],
   gh: GhExec,
+  git: GitExec,
   limit: number = BRANCH_REQUEST_LIMIT
 ): Promise<BranchRequestList> {
   const payload = shaped(
@@ -971,13 +973,15 @@ export async function readBranchRequests(
           '--limit',
           String(limit),
           '--json',
-          'headRefName,number,state,url,createdAt,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision'
+          'headRefName,number,state,url,createdAt,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision,headRefOid'
         ])
       )
     )
   )
 
-  const requests = toBranchRequests(ownRequests(payload, owners))
+  const own = ownRequests(payload, owners)
+  const passed = await branchesMovedPast(own, owners, git)
+  const requests = toBranchRequests(own).filter((request) => !passed.has(request.branch))
 
   /*
    * Whether the answer came back full, decided here rather than by counting
@@ -990,6 +994,31 @@ export async function readBranchRequests(
    * which it is. The same reasoning, and the same field, as `listRepositories`.
    */
   return { requests, capped: payload.length >= limit }
+}
+
+/**
+ * The workspace branches whose newest request they have moved past.
+ *
+ * The newest only, as `toBranchRequests` picks it: an older request moved past
+ * says nothing about the mark, which is drawn from the newest. And only on a
+ * workspace's branch, because the answer holds a hundred requests, most of them
+ * long merged on branches nothing draws a mark for — a `git` process each, a
+ * minute apart, for nothing.
+ */
+async function branchesMovedPast(
+  payload: BranchListPayload,
+  owners: readonly BranchOwner[],
+  git: GitExec
+): Promise<Set<string>> {
+  // `gh` lists most recent first, so the first entry per branch is the newest.
+  const newest = new Map<string, BranchListPayload[number]>()
+  for (const entry of payload) {
+    if (!newest.has(entry.headRefName)) newest.set(entry.headRefName, entry)
+  }
+
+  const held = owners.flatMap((owner) => newest.get(owner.branch) ?? [])
+  const answers = await allOf(held.map((entry) => movedPast(entry, entry.headRefName, git)))
+  return new Set(held.filter((_, index) => answers[index]).map((entry) => entry.headRefName))
 }
 
 /** `gh` refusing to answer, which is a different failure from an odd answer. */
