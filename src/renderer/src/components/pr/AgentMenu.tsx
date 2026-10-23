@@ -82,7 +82,14 @@ export function AgentMenu({
         }
       ]}
       trigger={({ onClick, open }) => (
-        <Button size="sm" variant="agent" onClick={onClick} aria-expanded={open} disabled={sending}>
+        <Button
+          size="sm"
+          variant="agent"
+          onClick={onClick}
+          aria-expanded={open}
+          disabled={sending}
+          className="whitespace-nowrap"
+        >
           <Sparkles aria-hidden size={12} />
           {t(sending ? 'pullRequest.sending' : 'pullRequest.askAgent')}
           <ChevronUp aria-hidden size={12} />

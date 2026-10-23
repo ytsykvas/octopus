@@ -184,12 +184,12 @@ export function NewPullRequestForm({
       </div>
 
       <PaneFooter>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {/* `choice` paints the box and sizes it, so it belongs on the input.
               On the label it made the label 0.875rem wide, and the words
               wrapped inside a square the size of a tick and spilled over the
               button. */}
-          <label className="flex items-center gap-2">
+          <label className="mr-auto flex items-center gap-2 whitespace-nowrap">
             <input
               type="checkbox"
               checked={draft}
@@ -201,20 +201,24 @@ export function NewPullRequestForm({
             <span>{t('pullRequest.draft')}</span>
           </label>
 
-          <span className="flex-1" />
-
           {/* Never disabled for an empty title: empty means "you write it", and
               a disabled button would be the app refusing the thing it is
               offering. Still disabled while either half is in flight. Handing
               the writing to the agent is a different act from opening the
               request, so it looks like one: the composer's ring. */}
           {untitled && !drafting && !creating ? (
-            <Button type="submit" size="sm" variant="agent">
+            <Button type="submit" size="sm" variant="agent" className="whitespace-nowrap">
               <Sparkles aria-hidden size={12} />
               {t('pullRequest.ask')}
             </Button>
           ) : (
-            <Button type="submit" size="sm" variant="success" disabled={creating || drafting}>
+            <Button
+              type="submit"
+              size="sm"
+              variant="success"
+              disabled={creating || drafting}
+              className="whitespace-nowrap"
+            >
               <GitPullRequest aria-hidden size={12} />
               {t(
                 drafting

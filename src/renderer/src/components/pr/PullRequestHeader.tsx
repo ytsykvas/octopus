@@ -45,6 +45,8 @@ export function PullRequestHeader({
   const { t, i18n } = useTranslation()
 
   const pill = FACES[faceOf(request, detail)]
+  const title =
+    request === null ? t('pullRequest.newPullRequest') : (detail?.title ?? request.title)
 
   return (
     <div className="flex flex-col gap-1 px-3 pt-3 pb-2.5">
@@ -100,9 +102,11 @@ export function PullRequestHeader({
         )}
       </div>
 
-      <p className="text-ink line-clamp-2 text-[14px] leading-snug font-semibold">
-        {request === null ? t('pullRequest.newPullRequest') : (detail?.title ?? request.title)}
-      </p>
+      {/* A heading, so the pane can be reached by one; the whole title in a
+          tooltip, since a long one is cut at two lines. */}
+      <h2 className="text-ink line-clamp-2 text-[14px] leading-snug font-semibold" title={title}>
+        {title}
+      </h2>
 
       <p className="text-ink-faint flex min-w-0 items-center gap-1.5 font-mono text-[11px]">
         <GitBranch aria-hidden size={11} className="shrink-0" />
@@ -110,7 +114,9 @@ export function PullRequestHeader({
           {shortBranchName(branch)}
         </span>
         <ArrowRight aria-hidden size={10} className="shrink-0" />
-        <span className="shrink-0">{base}</span>
+        <span className="min-w-0 truncate" title={base}>
+          {base}
+        </span>
       </p>
     </div>
   )

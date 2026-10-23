@@ -46,7 +46,13 @@ export function CommitMessageField({
           onChange={(event) => {
             onChange(event.target.value)
           }}
-          placeholder={t('pullRequest.commitMessagePlaceholder')}
+          // Without a name drawn above it, the placeholder is what says what
+          // the field is for — and that leaving it empty amends.
+          placeholder={t(
+            hint === undefined
+              ? 'pullRequest.commitMessageAmends'
+              : 'pullRequest.commitMessagePlaceholder'
+          )}
           className="input"
         />
       </label>

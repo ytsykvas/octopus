@@ -139,29 +139,36 @@ export function PullRequestFooter({
       {/* The env warning takes the line rather than adding a block: it is the
           most important thing to say about this press, and it is there for
           exactly the press it is about. */}
-      {dirty && exposedEnvFile !== null ? (
-        <Warning>{t('pullRequest.envNotIgnoredPush', { file: exposedEnvFile })}</Warning>
-      ) : dirty && cannotAmend ? (
-        // Said here rather than in the disabled button's title, which a
-        // disabled button never shows.
-        <Warning>{t('pullRequest.amendNeedsCommit')}</Warning>
-      ) : replacing ? (
-        <Warning>{t('pullRequest.amendReplaces')}</Warning>
-      ) : (
-        <AttentionLine item={status.attention[0]} base={base} />
-      )}
+      {/* Polite and always present, so a line that changes after a press —
+          committed, pushed, merged — is read out rather than only redrawn. */}
+      <div aria-live="polite">
+        {dirty && exposedEnvFile !== null ? (
+          <Warning>{t('pullRequest.envNotIgnoredPush', { file: exposedEnvFile })}</Warning>
+        ) : dirty && cannotAmend ? (
+          // Said here rather than in the disabled button's title, which a
+          // disabled button never shows.
+          <Warning>{t('pullRequest.amendNeedsCommit')}</Warning>
+        ) : replacing ? (
+          <Warning>{t('pullRequest.amendReplaces')}</Warning>
+        ) : (
+          <AttentionLine item={status.attention[0]} base={base} />
+        )}
+      </div>
 
       {/* The field and the press it is for share a row: an empty field
           amends, and the label beside it is what says so. */}
       {dirty && (
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Wraps rather than squeezing: in a narrow pane, or a language with
+              longer words, the press drops under the field instead of leaving
+              the field a few letters wide. */}
+          <div className="min-w-40 flex-1">
             <CommitMessageField value={message} onChange={setMessage} />
           </div>
 
           <Button
             variant="success"
-            className="shrink-0"
+            className="ml-auto shrink-0 whitespace-nowrap"
             onClick={() => {
               onCommitAndPush(message.trim())
             }}
@@ -182,15 +189,15 @@ export function PullRequestFooter({
         </div>
       )}
 
-      <div className="flex items-center gap-2">
-        <AgentMenu
-          offered={status.offered}
-          onPrompt={onPrompt}
-          sending={sending}
-          onEditInstructions={onEditInstructions}
-        />
-
-        <span className="flex-1" />
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="mr-auto">
+          <AgentMenu
+            offered={status.offered}
+            onPrompt={onPrompt}
+            sending={sending}
+            onEditInstructions={onEditInstructions}
+          />
+        </div>
 
         {/* Quiet beside a commit, which is the green press while there is
             work to commit. */}
@@ -200,6 +207,7 @@ export function PullRequestFooter({
             variant={dirty ? 'quiet' : 'success'}
             onClick={onPush}
             disabled={pushing}
+            className="whitespace-nowrap"
           >
             <ArrowUpFromLine aria-hidden size={12} />
             {t(pushing ? 'pullRequest.pushing' : 'pullRequest.push')}

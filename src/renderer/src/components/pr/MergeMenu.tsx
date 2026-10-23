@@ -46,6 +46,7 @@ export function MergeMenu({
           variant={variant}
           onClick={onClick}
           aria-expanded={open}
+          className="whitespace-nowrap"
           disabled={merging || disabled}
         >
           <GitMerge aria-hidden size={12} />

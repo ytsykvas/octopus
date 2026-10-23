@@ -12,6 +12,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Failure } from '../../../../preload/index.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
+import { useFocusKeeper } from '../../hooks/useFocusKeeper.js'
 import { usePullRequest } from '../../hooks/usePullRequest.js'
 import { usePullRequestDetail } from '../../hooks/usePullRequestDetail.js'
 import { type PullRequestQuoteController, toQuote } from '../../hooks/usePullRequestQuotes.js'
@@ -119,6 +120,9 @@ export function PullRequestPanel({
    * worth saying when it is true, not worth guessing at.
    */
   const [envIgnored, setEnvIgnored] = useState(true)
+
+  const pane = useRef<HTMLDivElement>(null)
+  useFocusKeeper(pane)
 
   useEffect(() => {
     if (!visible || !workspace) return
@@ -390,11 +394,11 @@ export function PullRequestPanel({
             </div>
 
             <PaneFooter>
-              <div className="flex items-center gap-2">
-                <p className="text-ink-faint min-w-0 flex-1 text-[12px] leading-snug">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-ink-faint min-w-40 flex-1 text-[12px] leading-snug">
                   {t('pullRequest.nothingToOpen', { base: view.base })}
                 </p>
-                <Button size="sm" variant="success" disabled>
+                <Button size="sm" variant="success" disabled className="ml-auto whitespace-nowrap">
                   <GitPullRequest aria-hidden size={12} />
                   {t('pullRequest.create')}
                 </Button>
@@ -443,7 +447,9 @@ export function PullRequestPanel({
         }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Focusable only from code, so a press that removes its own button leaves
+    // focus here rather than at the top of the window (`useFocusKeeper`).
+    <div ref={pane} tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none">
       {header}
 
       {/* The detail failing is not the branch failing: the number, the title

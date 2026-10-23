@@ -1653,6 +1653,26 @@ describe('what the tab can do about a request', () => {
     })
   })
 
+  /* The pushed button goes away with what it pushed, and focus with it would
+     land at the top of the window; it stays in the pane, so Tab carries on
+     from there. */
+  it('keeps focus in the pane when the push it pressed goes away', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request(), unpushedCommits: 2 }))
+    answerDetail(detail())
+    renderPanel()
+
+    const footer = await nextStep()
+    answer(view({ request: request(), unpushedCommits: 0 }))
+    await user.click(within(footer).getByRole('button', { name: 'Push' }))
+
+    await waitFor(() => {
+      expect(within(footer).queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
+    })
+    expect(document.body).not.toHaveFocus()
+    expect(document.activeElement?.contains(footer)).toBe(true)
+  })
+
   /* A merged or closed request has nothing left to do to it, and a workspace
      outlives its merge — so the agent committing anything afterwards leaves
      commits the remote has not got. Without the guard the pane offered to push

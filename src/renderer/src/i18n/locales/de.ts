@@ -575,6 +575,7 @@ export const de: Translation = {
     createShortcut: 'PR erstellen',
     commitMessage: 'Commit-Nachricht',
     commitMessagePlaceholder: 'Das Ding umbenennen',
+    commitMessageAmends: 'Nachricht (leer ergänzt)',
     commitHint:
       'Committet alle Änderungen in diesem Workspace mit dieser Nachricht und öffnet dann den Pull Request.',
     envNotIgnored:

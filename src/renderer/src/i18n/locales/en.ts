@@ -694,6 +694,9 @@ export const en = {
     createShortcut: 'Create PR',
     commitMessage: 'Commit message',
     commitMessagePlaceholder: 'Rename the thing',
+    /* The footer's field, which has no name drawn above it: the placeholder
+       names it, and says what leaving it empty does. */
+    commitMessageAmends: 'Message (empty amends)',
     commitHint:
       'Commits every change in this workspace under this message, then opens the request.',
     /* Said beside the field rather than found out afterwards: octopus writes

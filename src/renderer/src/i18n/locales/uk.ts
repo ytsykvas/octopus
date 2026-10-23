@@ -562,6 +562,7 @@ export const uk: Translation = {
     createShortcut: 'Створити PR',
     commitMessage: 'Повідомлення коміту',
     commitMessagePlaceholder: 'Перейменувати те саме',
+    commitMessageAmends: 'Повідомлення (порожнє доповнює)',
     commitHint:
       'Закомітить усі зміни в цьому воркспейсі під цим повідомленням, а тоді відкриє request.',
     envNotIgnored:
