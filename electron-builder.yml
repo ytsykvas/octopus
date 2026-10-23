@@ -5,7 +5,7 @@
 # credentials, not configuration — see docs/releasing.md.
 appId: com.ytsykvas.octopus
 productName: Octopus
-copyright: Copyright © 2026 octopus
+copyright: Copyright © 2026 Yurii Tsykvas
 
 directories:
   output: dist

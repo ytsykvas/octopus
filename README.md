@@ -8,7 +8,6 @@
 worktree — with its own branch, agent conversations and dev server on a
 dedicated port.
 
-[![check](https://github.com/ytsykvas/octopus/actions/workflows/check.yml/badge.svg)](https://github.com/ytsykvas/octopus/actions/workflows/check.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 ![macOS, Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-111111)
 
@@ -87,6 +86,23 @@ local-only, and is built to one person's taste.
 The details behind each of these — the port pool, the env block, what a diff
 counts — are in [docs/](docs/README.md).
 
+## Built with
+
+- **Electron** and **electron-vite**, for a desktop app whose logic never
+  touches Electron: everything under `src/core/` runs headless and is tested
+  without a window.
+- **React 19**, **Tailwind 4** and **i18next**, with the interface in English,
+  Ukrainian and German.
+- **TypeScript** in strict mode, with **zod** parsing every value that crosses
+  a boundary — IPC, files on disk, the output of `git` and `gh`.
+- The **Claude Agent SDK** for the conversations, **node-pty** and **xterm**
+  for the terminals.
+- **Vitest**, with coverage held at 100% across `src` by a threshold that
+  fails the build, and a second run that makes React's scheduler lose every
+  race the suite could otherwise win by luck.
+
+How the four layers divide the work is under [Development](#development).
+
 ## Installing
 
 **What you need first:**
@@ -104,7 +120,8 @@ The agent itself is not one of these: the Claude Code binary comes down with
 
 Then follow the [quick start](#quick-start). To run it in development instead,
 use `npm run dev`. Only one copy runs at a time: it takes Electron's
-single-instance lock.
+single-instance lock. A second copy with a data directory of its own runs
+beside it — see [CONTRIBUTING.md](CONTRIBUTING.md#running-a-development-copy).
 
 ### Why there are no downloads
 
@@ -164,8 +181,8 @@ docs/             why things are shaped as they are — start at docs/README.md
 ```
 
 English is the default language and the source of truth for the interface;
-Ukrainian ships alongside it, in `src/renderer/src/i18n/locales/`. TypeScript
-requires every locale to carry every key.
+Ukrainian and German ship alongside it, in `src/renderer/src/i18n/locales/`.
+TypeScript requires every locale to carry every key.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the conventions the repository keeps.
 [docs/PROJECT.md](docs/PROJECT.md) holds the original intent and decisions.

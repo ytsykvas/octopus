@@ -161,16 +161,15 @@ Never lower the coverage threshold or disable a lint rule to make the gate pass.
 
 ## Git
 
-`origin` is `ytsykvas/octopus`, MIT-licensed and, since 2026-10-21,
-**private**. `CLAUDE.md`,
+`origin` is `ytsykvas/octopus`, MIT-licensed and public. `CLAUDE.md`,
 `.claude/` and `docs/tasks/` are gitignored: they are this maintainer's local
 Claude Code setup and never reach the remote, so nothing a contributor reads may
 depend on them. `AGENTS.md`, `.agents/` and `.codex/` are the tracked,
 shared equivalent for other agents.
 
-**Nothing on the server guards `main` now.** Branch protection is not
-available to a private repository on this plan, and the `check` workflow is
-switched off by hand, so a pull request merges without a single check. The
+**Nothing on the server guards `main`.** Branch protection is not configured
+and the `check` workflow is switched off by hand, so a pull request merges
+without a single check. The
 gate is therefore local, and it is run on what will land: before merging, merge
 fresh `origin/main` into the branch and pass `npm run check` and
 `npm run test:race` there. Every change, a one-line fix included, still goes
@@ -208,8 +207,8 @@ everything else here:
   last two as the person using the app sees it. The five-sentence limit is not
   this section's.
 - Nothing that lives only in the maintainer's setup — `docs/tasks/`,
-  `CLAUDE.md`, `.claude/`: the reader cannot follow it, and the repository may
-  be public again.
+  `CLAUDE.md`, `.claude/`: the reader cannot follow it, and the repository is
+  public.
 
 **Hard rule: never `git push`, open a pull request or merge one unless the
 maintainer asked for that, in words, in the current conversation.** Finishing a

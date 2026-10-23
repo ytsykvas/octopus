@@ -489,7 +489,7 @@ Further rules:
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — a readable history and a basis for changelog automation later.
 - Atomic commits: one logical change each.
-- Every substantial change reaches `main` through a branch and a pull request. The repository is private for now, so `main` has no branch protection, and the `check` workflow is switched off: the gate is `npm run check` and `npm run test:race`, run locally on the branch merged with fresh `main` before it merges.
+- Every substantial change reaches `main` through a branch and a pull request. `main` has no branch protection and the `check` workflow is switched off: the gate is `npm run check` and `npm run test:race`, run locally on the branch merged with fresh `main` before it merges.
 
 ---
 
