@@ -15,7 +15,8 @@ const VIEW: PullRequestView = {
   dirty: false,
   ahead: 1,
   unpushedCommits: 0,
-  base: 'main'
+  base: 'main',
+  previous: null
 }
 
 const DRAFT = { title: 'Rename', body: '', draft: false, commitMessage: null }

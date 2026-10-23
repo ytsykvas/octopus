@@ -679,6 +679,19 @@ export const en = {
     /* Said before the button rather than after it fails. Pushing is a thing
        that happens to somebody else's machine, and it should not be a surprise. */
     willPush: 'This branch is not on GitHub yet. Opening will push it.',
+    /* A branch committed to after its request was merged or closed reads as
+       having none; this says why, above the form offered again. */
+    previousMerged:
+      '#{{number}} was merged. What was committed since can go on a new pull request.',
+    previousClosed:
+      '#{{number}} was closed. What was committed since can go on a new pull request.',
+    openPrevious: 'Open #{{number}} on GitHub',
+    needsBaseWarning:
+      'This branch still has the commits of #{{number}}, which {{base}} took in another form, so a new pull request would show those changes again. Bring {{base}} in first.',
+    updateNeedsClean:
+      'Commit or set aside the uncommitted work first: {{base}} only comes into a clean branch.',
+    updateFromBase: 'Update from {{base}}',
+    updatingFromBase: 'Updating from {{base}}…',
     dirty:
       'There are uncommitted changes here. They are committed with the request, under the message above or one the agent writes.',
     title: 'Title',
@@ -2308,6 +2321,11 @@ export const en = {
        the number alone cannot answer it. */
     requestNotOnBranch:
       'Pull request #{{number}} is on {{head}}, not on this workspace\u2019s {{branch}}. Nothing was done.',
+    // Undone rather than left mid-merge, and said so where it could not be.
+    updateFailed:
+      '{{base}} could not be merged into {{branch}}, so nothing was changed. Git said: {{reason}}',
+    updateLeftMerging:
+      '{{base}} could not be merged into {{branch}}, and the merge could not be undone: the workspace is mid-merge. Resolve it, or run git merge --abort in its terminal. Git said: {{reason}}',
     /* Refused before anything was committed. Committing lands on whatever the
        worktree has checked out while pushing sends a name, so apart the two put
        the work on one branch and send another — and both report success. */

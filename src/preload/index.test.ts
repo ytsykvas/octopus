@@ -297,6 +297,11 @@ describe('channel names', () => {
     ],
     ['workspaces.push', () => method('workspaces', 'push')('w' as never), 'workspaces:push'],
     [
+      'workspaces.updateFromBase',
+      () => method('workspaces', 'updateFromBase')('w' as never),
+      'workspaces:updateFromBase'
+    ],
+    [
       'workspaces.pullRequestDetail',
       () => method('workspaces', 'pullRequestDetail')('w' as never, 7 as never),
       'workspaces:pullRequestDetail'

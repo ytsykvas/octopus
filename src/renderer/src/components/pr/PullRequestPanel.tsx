@@ -25,6 +25,7 @@ import { CommentList } from './CommentList.js'
 import { MergeConditions } from './MergeConditions.js'
 import { NewPullRequestForm } from './NewPullRequestForm.js'
 import { PaneFooter, PullRequestFooter } from './PullRequestFooter.js'
+import { PreviousRequestNote } from './PreviousRequestNote.js'
 import { PullRequestHeader } from './PullRequestHeader.js'
 import { type PromptKind, type RequestView, requestStatus } from './requestStatus.js'
 import { StatusTiles } from './StatusTiles.js'
@@ -108,6 +109,7 @@ export function PullRequestPanel({
   const [rerunning, setRerunning] = useState<RerunScope | null>(null)
   const [committing, setCommitting] = useState(false)
   const [pushing, setPushing] = useState(false)
+  const [updating, setUpdating] = useState(false)
   /** The view showing, and which request it was settled for — see `shown` below. */
   const [chosen, setChosen] = useState<{ key: string; view: RequestView } | null>(null)
 
@@ -357,6 +359,22 @@ export function PullRequestPanel({
     })()
   }
 
+  /*
+   * Brings the base in, after a squash left the branch carrying what the base
+   * took as one. Read again either way, as after a push: the count of commits
+   * ahead is what changed, and the fresh reading is what the pane believes.
+   */
+  const updateFromBase = (): void => {
+    setUpdating(true)
+    void (async () => {
+      const result = await window.octopus.workspaces.updateFromBase(workspace.id)
+      setUpdating(false)
+      if (!result.ok) report(result)
+
+      refresh()
+    })()
+  }
+
   const attached = new Set(quotes.pending.map((quote) => quote.key))
   const exposedEnvFile = envIgnored ? null : envFile
 
@@ -378,6 +396,16 @@ export function PullRequestPanel({
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {header}
+
+        {view.previous !== null && (
+          <PreviousRequestNote
+            previous={view.previous}
+            base={view.base}
+            dirty={view.dirty}
+            updating={updating}
+            onUpdate={updateFromBase}
+          />
+        )}
 
         {view.ahead === 0 && !view.dirty ? (
           <>

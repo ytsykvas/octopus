@@ -140,6 +140,16 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   resolveFailed: { reason: 'not found' },
   mergeFailed: { number: '42', reason: 'checks failing' },
   requestNotOnBranch: { number: '42', head: 'octopus/bo', branch: 'octopus/anna' },
+  updateFailed: {
+    base: 'origin/main',
+    branch: 'octopus/anna',
+    reason: 'CONFLICT (content): a.txt'
+  },
+  updateLeftMerging: {
+    base: 'origin/main',
+    branch: 'octopus/anna',
+    reason: 'CONFLICT (content): a.txt'
+  },
   headNotOnBranch: { branch: 'octopus/anna' },
   pushTargetChanged: { branch: 'octopus/anna', current: 'https://example.com/r.git' },
   repoConfigSymlink: { path: '.octopus/scripts/setup.sh' },

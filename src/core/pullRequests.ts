@@ -38,7 +38,8 @@ import {
   toPullRequestState,
   toRerunPayload
 } from './pullRequestShapes.js'
-import { amendAll, commitAll, hasUncommittedChanges } from './worktree.js'
+import { amendAll, commitAll, hasUncommittedChanges, isBranchMerged } from './worktree.js'
+import { freshBase, WorkspaceError } from './workspaces.js'
 import { allOf } from './parallel.js'
 
 const run = promisify(execFile)
@@ -100,6 +101,34 @@ export interface PullRequestView {
    * message as an empty string for as long as the message existed.
    */
   readonly base: string
+  /**
+   * The request the branch has moved past, or null where it has not.
+   *
+   * `request` is null then, and the pane offers the form again — this is what
+   * lets it say why a branch that had a request reads as having none.
+   */
+  readonly previous: PreviousRequest | null
+}
+
+/** A merged or closed request the branch has since been committed to past. */
+export interface PreviousRequest {
+  readonly number: number
+  readonly state: 'merged' | 'closed'
+  readonly url: string
+  /**
+   * Whether the base has to come into the branch before a new request's diff
+   * shows only the new work.
+   *
+   * True after a squash or a rebase merge, which lands the content and not the
+   * commits: the branch still carries every commit the request did. Asked as
+   * "is the base already in the branch" as well as "are the request's commits
+   * on the base", because the second alone never changes after a squash — the
+   * offer outlived the update that answered it — and the base here is a
+   * tracking ref nothing fetches after a merge on GitHub, so an ordinary merge
+   * read as a squash. Always false for a closed request, none of whose commits
+   * reached the base to come back.
+   */
+  readonly needsBase: boolean
 }
 
 /**
@@ -179,10 +208,9 @@ export async function readPullRequest(
   // One too old to be the workspace's means everything older is too, and one
   // the branch has moved past leaves it with none until another is opened.
   const newest = remote[0]
-  const current =
-    newest !== undefined && openedFor(newest, owner) && !(await movedPast(newest, branch, git))
-      ? newest
-      : undefined
+  const own = newest !== undefined && openedFor(newest, owner) ? newest : undefined
+  const passed = own !== undefined && (await movedPast(own, branch, git)) ? own : undefined
+  const current = passed === undefined ? own : undefined
 
   return {
     request:
@@ -198,7 +226,28 @@ export async function readPullRequest(
     dirty,
     ahead,
     unpushedCommits,
-    base
+    base,
+    previous: passed === undefined ? null : await previousOf(passed, branch, base, git)
+  }
+}
+
+/** A request the branch moved past, as the pane names it. */
+async function previousOf(
+  request: z.infer<typeof RemotePullRequestSchema>,
+  branch: string,
+  base: string,
+  git: GitExec
+): Promise<PreviousRequest> {
+  const merged = request.state === 'MERGED'
+
+  return {
+    number: request.number,
+    state: merged ? 'merged' : 'closed',
+    url: request.url,
+    needsBase:
+      merged &&
+      !(await isBranchMerged(git, request.headRefOid, base)) &&
+      !(await isBranchMerged(git, base, branch))
   }
 }
 
@@ -391,6 +440,83 @@ export async function createPullRequest(
   // `gh` prints the URL and nothing else worth keeping. Trimmed rather than
   // parsed: there is no `--json` on `pr create`.
   return raw.trim()
+}
+
+/**
+ * Brings the base into the branch, so a request opened next has a diff of only
+ * the new work.
+ *
+ * What a squash or a rebase merge leaves for: the branch still carries the
+ * commits the base took as one, and without this a second request's diff would
+ * show them all again. Their commits stay in its list either way — they are
+ * still not the base's — but the changes are. A merge rather than a rebase,
+ * because the branch is already on the remote and a rebase would have to be
+ * forced over it.
+ *
+ * Refused while there is uncommitted work, before the remote is asked
+ * anything: git would refuse a merge touching it anyway, after the fetch. The
+ * base is fetched first because its tracking ref is stale exactly when somebody
+ * merged on GitHub — which, after a squash, is when this is pressed.
+ *
+ * A merge that fails is undone rather than left in the worktree. Left, it is a
+ * half-finished merge in a directory an agent is about to work in, with nothing
+ * in the pane saying so — and where it cannot be undone, the reader is told that
+ * instead of being told the branch is as it was.
+ */
+export async function updateFromBase(
+  branch: string,
+  base: string,
+  git: GitExec,
+  fetchGit: GitExec
+): Promise<void> {
+  await requireHeadOn(branch, git)
+
+  if (await hasUncommittedChanges(git)) {
+    throw new WorkspaceError(
+      'uncommittedChanges',
+      { name: branch },
+      `${branch} has uncommitted changes.`
+    )
+  }
+
+  const ref = await freshBase(base, git, fetchGit)
+
+  try {
+    await git(['merge', '--no-edit', ref])
+  } catch (error) {
+    const params = { base: ref, branch, reason: reasonFrom(error) }
+    if (await abortMerge(git)) {
+      throw new GitHubError('updateFailed', params, `Could not merge ${ref} into ${branch}.`)
+    }
+    throw new GitHubError(
+      'updateLeftMerging',
+      params,
+      `Could not merge ${ref} into ${branch}, nor undo the merge.`
+    )
+  }
+}
+
+/**
+ * Undoes a merge that failed, and answers whether the worktree is out of one.
+ *
+ * Never throws: it runs while the failure is being reported, and may not
+ * replace it. Answered from `MERGE_HEAD` rather than from the abort, because a
+ * merge that never started — an unknown committer, a refusing hook — leaves
+ * nothing to abort, and the abort's refusal then says nothing about the tree.
+ */
+async function abortMerge(git: GitExec): Promise<boolean> {
+  try {
+    await git(['merge', '--abort'])
+  } catch {
+    // Nothing to abort, or nothing git can do about it; MERGE_HEAD says which.
+  }
+
+  try {
+    await git(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])
+    return false
+  } catch {
+    return true
+  }
 }
 
 /**

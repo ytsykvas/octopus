@@ -290,6 +290,34 @@ form again. A last commit this clone does not have cannot show that, so the
 request stays — the same "cannot say" that keeps the push count from rounding to
 zero.
 
+**The request moved past is named above the form** (`PreviousRequestNote`),
+with a link to it: without a word about it, a branch that had a request read as
+one that never did, and the merge looked forgotten. **Where the base has to come
+in first, it offers _Update from main_.** A squash or rebase lands the content
+and not the commits, so the branch still carries every commit the base took in
+another form, and a second request's diff would show those changes again beside
+the new work. The button fetches the base and merges it in — a merge rather than
+a rebase, because the branch is already on GitHub and a rebase would have to
+force over it. Afterwards the diff holds only the new work; the old commits
+stay in the request's list, since they are still not the base's.
+
+The offer is `needsBase`: the request's commits are not on the base **and** the
+base is not in the branch. The first half alone never changes after a squash,
+so the warning and its button outlived the update that answered them; and the
+base the pane reads is a tracking ref nothing fetches after a merge on GitHub,
+so an ordinary merge read as a squash. A base the branch already holds, however
+stale, needs nothing. It is a merged request's question only — none of a closed
+one's commits reached the base to come back — and the button waits for a clean
+worktree, saying so, because git refuses to merge into a dirty one.
+
+A merge that fails is aborted rather than left in the worktree, where it would
+be a half-finished merge in a directory an agent is about to work in with
+nothing in the pane saying so: the reader is told git's reason, under
+`updateFailed` rather than a word for a conflict, since an unknown committer or
+a refusing hook fails it too. Where the abort itself fails, `MERGE_HEAD` says
+so, and `updateLeftMerging` tells the reader the workspace is mid-merge instead
+of claiming the branch is as it was.
+
 **Resolve goes both ways.** Undoing one is a single click on GitHub, and a pane
 that can do a thing but not undo it sends the reader to the browser for the half
 it kept, which is the failure the whole tab exists to avoid.

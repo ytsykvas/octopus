@@ -553,6 +553,17 @@ export const uk: Translation = {
     nothingToOpen:
       'Поки нічого відкривати. У цій гілці немає комітів, яких немає в {{base}}, — зробіть спершу коміт.',
     willPush: 'Цієї гілки ще немає на GitHub. Відкриття запушить її.',
+    previousMerged:
+      '#{{number}} влито. Те, що закомічено відтоді, можна винести в новий pull request.',
+    previousClosed:
+      '#{{number}} закрито. Те, що закомічено відтоді, можна винести в новий pull request.',
+    openPrevious: 'Відкрити #{{number}} на GitHub',
+    needsBaseWarning:
+      'Ця гілка досі має коміти #{{number}}, які {{base}} прийняв в іншому вигляді, тож новий pull request показав би ці зміни знову. Спершу підтягніть {{base}}.',
+    updateNeedsClean:
+      'Спершу закомітьте або відкладіть незакомічені зміни: {{base}} підтягується лише в чисту гілку.',
+    updateFromBase: 'Оновити з {{base}}',
+    updatingFromBase: 'Оновлення з {{base}}…',
     dirty:
       'Тут є незакомічені зміни. Вони підуть у request разом із рештою — під повідомленням вище або тим, яке напише агент.',
     title: 'Заголовок',
@@ -1836,6 +1847,10 @@ export const uk: Translation = {
     mergeFailed: 'GitHub не влив #{{number}}. Каже: {{reason}}',
     requestNotOnBranch:
       'Запит #{{number}} у гілці {{head}}, а не в {{branch}} цього воркспейсу. Нічого не зроблено.',
+    updateFailed:
+      'Не вдалося влити {{base}} у {{branch}}, тож нічого не змінено. Git каже: {{reason}}',
+    updateLeftMerging:
+      'Не вдалося влити {{base}} у {{branch}} і скасувати злиття: воркспейс посеред merge. Розв\u2019яжіть його або виконайте git merge --abort у його терміналі. Git каже: {{reason}}',
     headNotOnBranch:
       'HEAD не на гілці {{branch}} цього воркспейсу. Нічого не закомічено й не запушено — спершу перемкніться на неї в терміналі.',
     closeFailed: 'GitHub не закрив #{{number}}. Каже: {{reason}}',

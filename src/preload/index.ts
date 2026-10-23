@@ -612,6 +612,10 @@ const api = {
     push: (workspaceId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:push', workspaceId) as Promise<Result<void>>,
 
+    /** Merges the base into the branch, so the next request shows only new work. */
+    updateFromBase: (workspaceId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:updateFromBase', workspaceId) as Promise<Result<void>>,
+
     /** The checks, the review and the mergeability of a request that exists. */
     pullRequestDetail: (workspaceId: string, number: number): Promise<Result<PullRequestDetail>> =>
       ipcRenderer.invoke('workspaces:pullRequestDetail', workspaceId, number) as Promise<
