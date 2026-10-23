@@ -43,7 +43,7 @@ window's business, not the hook's.
   render (`if (activeId !== lastActiveId) { … }`, the official pattern); state
   that follows an event is set in the handler.
 - **No reading a ref during render.** A ref is not an escape hatch from the
-  rule above; both were rejected in turn while writing `WorkspaceTerminals`.
+  rule above; the linter rejects both.
 
 ## The content comes first
 
@@ -78,8 +78,7 @@ over its own content.
 - `.choice` — **every** checkbox and radio, with `.choice-danger` for the tick
   inside a destructive confirmation. Not optional and not replaceable by
   `accent-color`: that colours the checked fill and leaves the empty box a
-  white square on the dark canvas. Three of six inputs were left without it
-  because this list did not name it;
+  white square on the dark canvas;
 - `.section-label` — section heading (11px, weight 600, muted);
 - `.focus-ring` — visible keyboard focus;
 - `.titlebar-drag` — window drag region.
@@ -109,10 +108,10 @@ forces scrolling.
 
 ## Components
 
-`Button` has four variants: `accent` (primary action), `quiet` (secondary),
-`danger` (subdued destructive), `destructive` (filled, for the action a
-confirmation is asking about). Extend it rather than adding new button
-components.
+`Button` has five variants: `accent` (primary action), `success` (one that
+starts something running), `quiet` (secondary), `danger` (subdued destructive),
+`destructive` (filled, for the action a confirmation is asking about). Extend
+it rather than adding new button components.
 
 Existing pieces, worth checking before writing another: `Modal`,
 `DropdownMenu`, `Combobox` (a select with search), `Field`, `NameEditor`,

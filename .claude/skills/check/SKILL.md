@@ -12,7 +12,7 @@ Run the full quality gate and explain the outcome.
 
 ## What to do
 
-1. Run `npm run check`.
+1. Run `npm run check`, then `npm run test:race`.
 
 2. If everything passes, confirm briefly: how many tests, what coverage.
    Do not reproduce the whole output.
@@ -22,7 +22,8 @@ Run the full quality gate and explain the outcome.
 
 ## Reading the failures
 
-The gate has four stages, each failing differently:
+`npm run check` has four stages, each failing differently, and `test:race`
+runs after it:
 
 | Stage           | What a failure means                                      | Usual fix                          |
 | --------------- | --------------------------------------------------------- | ---------------------------------- |
@@ -30,6 +31,7 @@ The gate has four stages, each failing differently:
 | `lint`          | a code-quality rule was broken                            | `npx eslint . --fix`, rest by hand |
 | `typecheck`     | types do not line up — a real defect, not a formality     | investigate properly               |
 | `test:coverage` | a test failed **or** coverage of `src` dropped below 100% | fix the code or add the test       |
+| `test:race`     | a renderer test read a component before its effects ran   | wait for the state, never a timer  |
 
 **Never lower the coverage threshold to make the gate pass.** The threshold in
 `vitest.shared.ts` is a safety net, not an obstacle. A drop means new untested

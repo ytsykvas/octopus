@@ -60,10 +60,10 @@ grep -n "thresholds" -A 5 vitest.shared.ts          # testing.md quotes the thre
 ```
 
 The palette needs care — counting `--project-` in the stylesheet does not give
-the number of colours, and that count has now been wrong twice: each colour is
-declared once per theme, so the total is doubled, and the wash rules name
-`--project-color` on a dozen further lines besides. Do not correct the number,
-do not quote one. The list in the core is the answer:
+the number of colours: each colour is declared once per theme, so the total is
+doubled, and the wash rules name `--project-color` on a dozen further lines
+besides. Do not quote a number taken from the stylesheet. The list in the core
+is the answer:
 
 ```bash
 node -e "const s=require('fs').readFileSync('src/core/colors.ts','utf8');

@@ -60,10 +60,8 @@ Read variable **names** to know what is needed.
 
 Not because the file cannot be written: a set is an ordinary file under
 `~/.octopus/projects/<id>/envs/`, read from disk at every run, and `state.json`
-holds only which set is chosen. This once said the running app caches the
-contents and would overwrite them, which is untrue and was worth checking before
-being written down. `state.json` itself is the file to leave alone while the app
-is running.
+holds only which set is chosen. `state.json` itself is the file to leave alone
+while the app is running.
 
 ## The question that produces the scripts
 
@@ -195,7 +193,7 @@ cloned — from GitHub, from anywhere — then it has _no_ gitignored file in it
 all. They were never pushed. A carry list naming `.env` there copies nothing, and
 copies nothing **silently**: the workspace comes up without it and the first sign
 is the build failing on a variable, which reads as a script problem and is not
-one. This has already cost an afternoon.
+one.
 
 The answer is on the same line. A carry entry may say where its file comes from:
 

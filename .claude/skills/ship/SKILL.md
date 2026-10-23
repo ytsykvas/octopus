@@ -10,8 +10,8 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
 
 ## Steps
 
-1. **Gate.** Run `npm run check`. If it fails, fix it first — broken code is
-   not committed.
+1. **Gate.** Run `npm run check`, then `npm run test:race`. If either fails,
+   fix it first — broken code is not committed.
 
 2. **Review.** Run `git status` and `git diff`. Make sure nothing unwanted
    slipped in: temporary files, debug `console.log`, commented-out code,
