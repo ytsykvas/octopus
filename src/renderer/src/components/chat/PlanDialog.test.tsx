@@ -141,6 +141,23 @@ describe('the two ways out', () => {
     expect(onKeepPlanning).not.toHaveBeenCalled()
   })
 
+  // Beside the long hint, the footer squeezed the fork button until its label
+  // broke onto a second line past the button's height. jsdom draws no layout,
+  // so what is pinned is the rule that prevents it: the hint gives way, the
+  // buttons do not, and executing is the one filled action.
+  it('lets the hint wrap rather than the buttons, with executing as the one filled action', () => {
+    renderDialog()
+
+    const fork = screen.getByRole('button', { name: 'Fork in new chat' })
+    const execute = screen.getByRole('button', { name: 'Execute' })
+    for (const button of [fork, execute]) {
+      expect(button).toHaveClass('shrink-0', 'whitespace-nowrap')
+    }
+    expect(screen.getByText(/Runs with Accept edits on/)).toHaveClass('min-w-0', 'flex-1')
+    expect(fork).not.toHaveClass('bg-accent')
+    expect(execute).toHaveClass('bg-success')
+  })
+
   // A second click while the first fork is out would open a second tab, and
   // approving behind it would start the same work twice.
   it('holds both ways of carrying it out while a fork is on its way', async () => {
