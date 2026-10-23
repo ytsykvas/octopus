@@ -115,8 +115,8 @@ it rather than adding new button components.
 
 Existing pieces, worth checking before writing another: `Modal`,
 `DropdownMenu`, `Combobox` (a select with search), `Field`, `NameEditor`,
-`ResizeHandle`, `Terminal`, and `Disclosure` for anything that folds —
-`DisclosureButton` for the toggle, `DisclosureChevron` alone where the control
+`ResizeHandle`, `Terminal`, and the pair in `Disclosure.tsx` for anything that
+folds — `DisclosureButton` for the toggle, `DisclosureChevron` alone where the control
 is not a plain button (a `Button`, a tree row, a `<summary>`).
 
 A mounted `Terminal` that is not on screen is hidden with `.offstage` inside a

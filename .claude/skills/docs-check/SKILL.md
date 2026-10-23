@@ -24,7 +24,7 @@ file that was renamed is the cheapest kind of rot to find and the most certain
 to mislead.
 
 ```bash
-grep -oE '\(\.\./[^)]+\)|`src/[^`]+`' docs/*.md
+grep -oE '\((\.\./)+[^)]+\)|`src/[^`]+`' docs/*.md docs/*/*.md
 ```
 
 Check each one resolves. Report the ones that do not.

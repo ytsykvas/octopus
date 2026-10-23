@@ -101,4 +101,5 @@ applies always), and never what the code, tests or `docs/` already say.
 
 ## Out of scope for now
 
-Monaco diff, notifications, Linux and Windows builds, an auth service.
+The list is §15 of [docs/PROJECT.md](docs/PROJECT.md); check it before
+proposing a feature it names.
