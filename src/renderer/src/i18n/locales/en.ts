@@ -713,7 +713,8 @@ export const en = {
     readAt: 'Read at {{time}}',
     isDraft: 'Draft',
     /* Where the request stands, as one word in a coloured pill at the top of
-       the pane. Draft is `isDraft` above. */
+       the pane. Draft is `isDraft` above. Merged and closed are also the Merge
+       tile's value, which is the same word for the same state. */
     pillOpen: 'Open',
     pillMerged: 'Merged',
     pillClosed: 'Closed',
@@ -747,8 +748,9 @@ export const en = {
     tileMergeReady: 'Ready',
     tileMergeWaiting: 'Waiting',
     tileMergeConflict: 'Conflict',
-    /* The rows of the Merge view that say something is fine, beside the ones
-       that say what is not. */
+    /* The Merge view and the footer: the rows that say something is fine, the
+       footer's line when nothing wants attention, the one row about this
+       checkout's own work, and the press that ends a request unmerged. */
     checksPassedAll: 'All checks have passed.',
     noConflicts: 'No conflicts with {{base}}.',
     readyToMerge: 'Ready to merge into {{base}}.',
@@ -760,7 +762,7 @@ export const en = {
        is already on GitHub: the one consequence of that press worth more than
        a tooltip. */
     amendReplaces:
-      'Left empty, the changes go into the last commit, which then replaces it on GitHub.',
+      'Left empty, the changes go into the last commit, and the amended commit replaces the one on GitHub.',
     /* The menu of prepared messages at the foot of the pane. */
     askAgent: 'Ask the agent',
     editInstructionsItem: 'Edit the instructions…',
@@ -865,7 +867,7 @@ export const en = {
     amendNeedsCommit:
       'This branch has no commit of its own to amend yet. Write a message to make one.',
     commitAndPushHint:
-      'Commits every change in this workspace under this message, then pushes it onto the request. Left empty, the changes are added to the last commit instead, which replaces it on GitHub.',
+      'Commits every change in this workspace under this message, then pushes it onto the request. Left empty, the changes are added to the last commit instead, and the amended commit replaces the one on GitHub.',
     sending: 'Sending…',
 
     /* Appended to whichever instruction is sent, so the agent does not have to

@@ -64,15 +64,16 @@ interface PullRequestFooterProps {
 /**
  * The next step, pinned under the views.
  *
- * At most three rows — the one line saying what matters most, the commit
- * message while there is work to commit, and the buttons — so it never eats the
- * pane it sits under. The line and the press sit together because the line is
- * what the press is about.
+ * The one line saying what matters most, the commit message while there is
+ * work to commit, and the buttons — kept that short so it never eats the pane
+ * it sits under, and wrapping rather than squeezing where the pane is narrow.
+ * The line and the press sit together because the line is what the press is
+ * about.
  *
  * Green is the press that finishes something: committing and pushing, pushing,
- * merging. Merging stays beside the push rather than waiting behind it — the
- * two answer different states, and the request on GitHub can be ready while
- * this checkout has more to send.
+ * merging. Pushing and merging stay beside the commit rather than waiting
+ * behind it — they answer different states, and the request on GitHub can be
+ * ready while this checkout has more to send.
  */
 export function PullRequestFooter({
   status,

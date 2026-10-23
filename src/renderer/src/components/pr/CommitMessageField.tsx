@@ -22,8 +22,8 @@ export function CommitMessageField({
    * comes from the caller.
    *
    * Absent in the pane's footer, where the button beside the field already
-   * names the consequence and the footer is held to three rows: the field is
-   * then one row, its name read aloud rather than drawn above it.
+   * names the consequence and the footer is kept short: the field is then one
+   * row, its name read aloud and its placeholder saying that empty amends.
    */
   hint
 }: {

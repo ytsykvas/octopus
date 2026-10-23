@@ -385,8 +385,6 @@ export function PullRequestPanel({
               <span className="bg-muted text-ink-soft flex size-9 items-center justify-center rounded-full">
                 <GitCommitHorizontal aria-hidden size={16} />
               </span>
-              {/* The instruction is the project's own, edited where it lives
-                  rather than in a second editor here that could disagree. */}
               <Button size="sm" onClick={onEditInstructions}>
                 <SlidersHorizontal aria-hidden size={12} />
                 {t('pullRequest.editInstructions')}

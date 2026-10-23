@@ -621,7 +621,7 @@ export const de: Translation = {
     closePullRequest: 'Pull Request schließen',
     nextStep: 'Nächster Schritt',
     amendReplaces:
-      'Leer gelassen, kommen die Änderungen in den letzten Commit, der ihn dann auf GitHub ersetzt.',
+      'Leer gelassen, kommen die Änderungen in den letzten Commit, und der geänderte Commit ersetzt den auf GitHub.',
     askAgent: 'Den Agenten fragen',
     editInstructionsItem: 'Anweisungen bearbeiten…',
 
@@ -697,7 +697,7 @@ export const de: Translation = {
     amendNeedsCommit:
       'Dieser Branch hat noch keinen eigenen Commit zum Ergänzen. Schreib eine Nachricht, um einen anzulegen.',
     commitAndPushHint:
-      'Committet alle Änderungen in diesem Workspace mit dieser Nachricht und pusht sie dann in den Pull Request. Bleibt das Feld leer, kommen die Änderungen in den letzten Commit, der auf GitHub ersetzt wird.',
+      'Committet alle Änderungen in diesem Workspace mit dieser Nachricht und pusht sie dann in den Pull Request. Bleibt das Feld leer, kommen die Änderungen in den letzten Commit, und der geänderte Commit ersetzt den auf GitHub.',
     sending: 'Wird gesendet…',
 
     context: 'Pull Request #{{number}} – Branch {{branch}} in {{base}}\n{{url}}',

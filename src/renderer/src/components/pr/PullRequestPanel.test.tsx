@@ -2461,7 +2461,7 @@ describe('the shape of a request on screen', () => {
      line; amending one still local, or committing anew, rewrites nothing. */
   describe('the line about amending a pushed commit', () => {
     const REPLACES =
-      'Left empty, the changes go into the last commit, which then replaces it on GitHub.'
+      'Left empty, the changes go into the last commit, and the amended commit replaces the one on GitHub.'
 
     it('is said while an empty field would amend a pushed commit', async () => {
       const user = userEvent.setup()
