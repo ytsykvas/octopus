@@ -516,8 +516,8 @@ export const de: Translation = {
       workspace:
         'Workspace ($OCTOPUS_WORKSPACE_NAME): {{name}}; sein Slug ($OCTOPUS_WORKSPACE_SLUG): {{slug}}',
       port: 'Port ($OCTOPUS_PORT): {{port}}; run.sh bekommt außerdem $OCTOPUS_PORT_1 \u2026 $OCTOPUS_PORT_9, also {{next}}\u2013{{last}}',
-      listening: 'Auf 127.0.0.1:{{port}} lauscht gerade etwas.',
-      notListening: 'Auf 127.0.0.1:{{port}} lauscht gerade nichts.',
+      listening: 'Auf Port {{port}} lauscht gerade etwas.',
+      notListening: 'Auf Port {{port}} lauscht gerade nichts.',
       envFile: 'Env-Datei, in die das Variablen-Set geschrieben wird: {{name}}',
       profile: 'Geltendes Variablen-Set: {{name}}',
       variables:

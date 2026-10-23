@@ -507,8 +507,8 @@ export const uk: Translation = {
       workspace:
         'Воркспейс ($OCTOPUS_WORKSPACE_NAME): {{name}}; його слаг ($OCTOPUS_WORKSPACE_SLUG): {{slug}}',
       port: 'Порт ($OCTOPUS_PORT): {{port}}; run.sh також отримує $OCTOPUS_PORT_1 \u2026 $OCTOPUS_PORT_9 \u2014 це {{next}}\u2013{{last}}',
-      listening: 'На 127.0.0.1:{{port}} зараз щось слухає.',
-      notListening: 'На 127.0.0.1:{{port}} зараз ніхто не слухає.',
+      listening: 'На порту {{port}} зараз щось слухає.',
+      notListening: 'На порту {{port}} зараз ніхто не слухає.',
       envFile: 'Env-файл, у який пишеться набір змінних: {{name}}',
       profile: 'Чинний набір змінних: {{name}}',
       variables:

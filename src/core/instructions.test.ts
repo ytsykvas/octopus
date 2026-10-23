@@ -277,11 +277,12 @@ describe('the two Help asks for', () => {
     expect(instructionTemplate('diagnoseRun')).toContain('Help → "Set this project up to run"')
   })
 
-  // A server on `::1` looks down to octopus and up to the person's browser.
-  it('name the address the port probe cannot see', () => {
-    const prompt = instructionTemplate('diagnoseRun')
-    expect(prompt).toContain('Octopus probes 127.0.0.1 only')
-    expect(prompt).toContain('`::1`')
+  // "Not listening" is a fact about both families, so the agent need not
+  // suspect the address before the port.
+  it('say that both loopback addresses are asked', () => {
+    expect(instructionTemplate('diagnoseRun')).toContain(
+      'both loopback addresses, 127.0.0.1 and `::1`'
+    )
   })
 
   it('keep the diagnosis to checks that change nothing', () => {

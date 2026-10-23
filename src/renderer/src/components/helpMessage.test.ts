@@ -58,7 +58,7 @@ describe('helpMessage', () => {
           'Checkout ($OCTOPUS_ROOT_PATH): /Users/someone/planner',
           'Workspace ($OCTOPUS_WORKSPACE_NAME): Fix login bug; its slug ($OCTOPUS_WORKSPACE_SLUG): fix_login_bug',
           'Port ($OCTOPUS_PORT): 3110; run.sh also gets $OCTOPUS_PORT_1 … $OCTOPUS_PORT_9, which are 3111–3119',
-          'Nothing is listening on 127.0.0.1:3110 right now.',
+          'Nothing is listening on port 3110 right now.',
           'Env file the env set is written into: .env',
           'Env set in effect: default',
           'Variables it gives the scripts (names only; the values stay in octopus): API_KEY, DB_NAME',
@@ -80,7 +80,7 @@ describe('helpMessage', () => {
   it('says when something already answers on the port', () => {
     const message = helpMessage('diagnoseRun', 'x', context({ portListening: true }), t)
 
-    expect(message).toContain('Something is listening on 127.0.0.1:3110 right now.')
+    expect(message).toContain('Something is listening on port 3110 right now.')
     expect(message).not.toContain('Nothing is listening')
   })
 

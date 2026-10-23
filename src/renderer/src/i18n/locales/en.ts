@@ -618,8 +618,8 @@ export const en = {
       workspace:
         'Workspace ($OCTOPUS_WORKSPACE_NAME): {{name}}; its slug ($OCTOPUS_WORKSPACE_SLUG): {{slug}}',
       port: 'Port ($OCTOPUS_PORT): {{port}}; run.sh also gets $OCTOPUS_PORT_1 \u2026 $OCTOPUS_PORT_9, which are {{next}}\u2013{{last}}',
-      listening: 'Something is listening on 127.0.0.1:{{port}} right now.',
-      notListening: 'Nothing is listening on 127.0.0.1:{{port}} right now.',
+      listening: 'Something is listening on port {{port}} right now.',
+      notListening: 'Nothing is listening on port {{port}} right now.',
       envFile: 'Env file the env set is written into: {{name}}',
       profile: 'Env set in effect: {{name}}',
       variables:

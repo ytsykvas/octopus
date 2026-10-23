@@ -1655,7 +1655,10 @@ would be telling the reader something two other things on screen already say.
 `$OCTOPUS_PORT` and links to it, and a script is free to ignore all of that: a
 `run.sh` of `rails s` binds 3000 whatever it was told, and the link then opens on
 nothing. Five attempts a second apart — long enough that a slow boot is not
-called a mistake — and then a line saying nothing is listening there. Nothing is
+called a mistake — and then a line saying nothing is listening there. Each
+attempt asks both 127.0.0.1 and `::1`: `localhost` resolves to either, and a
+server bound to `::1` alone once answered in the browser while this line said
+it was silent. Nothing is
 disabled and the link stays: §4 says the layer is thin, and being wrong about
 somebody's script must not block them.
 
