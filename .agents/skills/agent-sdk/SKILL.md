@@ -28,7 +28,7 @@ agent that knows less here than in a terminal is a defect.
 
 **This reverses what this skill used to say.** Until 2026-08-19 it read "do not
 change this value", because loading nothing was taken to be the answer to
-Conductor. It was not: the objection is to material **we** add that nobody wrote,
+what other tools inject. It was not: the objection is to material **we** add that nobody wrote,
 not to the instructions a user wrote for their own agent. If you find that
 argument still standing anywhere, it is stale — fix it.
 

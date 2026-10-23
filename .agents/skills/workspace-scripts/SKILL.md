@@ -1,7 +1,7 @@
 ---
 name: workspace-scripts
-description: Sets a project up to build and run in octopus — the carried files, the variables, and the build, server and cleanup scripts, in that order. Use when a project runs nowhere yet, when Run does nothing useful, when a workspace comes up missing its .env or master.key, or when a repository still carries Conductor's setup.
-when_to_use: On "set up the scripts for this project", "make this project work in octopus", "why does Run do nothing", "the workspace has no .env", or when a checkout has a .conductor/ that should become an .octopus/.
+description: Sets a project up to build and run in octopus — the carried files, the variables, and the build, server and cleanup scripts, in that order. Use when a project runs nowhere yet, when Run does nothing useful, when a workspace comes up missing its .env or master.key.
+when_to_use: On "set up the scripts for this project", "make this project work in octopus", "why does Run do nothing", "the workspace has no .env".
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(ls:*), Bash(cat:*), Bash(git check-ignore:*), Bash(git status:*), Bash(git ls-files:*), Bash(sh -n:*), Bash(bash -n:*), Bash(command -v:*), Bash(test:*)
 ---
 
@@ -252,7 +252,6 @@ rm`, `DROP DATABASE` mentions `$OCTOPUS_WORKSPACE_SLUG`, and the script that
   contains one opens with the `:?` guard;
 - **`archive.sh` has no `set -e`**;
 - **`run.sh` binds `$OCTOPUS_PORT`** and no literal port anywhere;
-- **no `CONDUCTOR_` left** in anything under `.octopus/`;
 - **nothing shared is deleted in cleanup** — check each `rm` against the shared
   list from the question above;
 - **every carried path is genuinely ignored** — `git check-ignore` exits 1 for a
@@ -268,10 +267,9 @@ about.
 
 Open the one whose trigger is present. They are small and each has an expiry.
 
-| File                       | Open when                        |
-| -------------------------- | -------------------------------- |
-| `references/conversion.md` | the checkout has a `.conductor/` |
-| `references/rails.md`      | the checkout has a `Gemfile`     |
+| File                  | Open when                    |
+| --------------------- | ---------------------------- |
+| `references/rails.md` | the checkout has a `Gemfile` |
 
 Rails leads because it is the stack these were worked out against, and that is
 the reason to read `rails.md` rather than to assume any project resembles it.
