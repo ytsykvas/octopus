@@ -149,6 +149,9 @@ A terminal that will not open points at the native build of `node-pty`:
 npx electron-builder install-app-deps
 ```
 
+The reasons, and the other traps of a development copy, are in
+[docs/development.md](docs/development.md).
+
 ## Where things are kept
 
 Everything lives under `~/.octopus`: `config.json`, `state.json`, one JSONL
@@ -170,7 +173,8 @@ npm run build      # typecheck and build
 across `src`** by a threshold that fails the build when it drops.
 
 `src/main/`, `src/preload/` and anything in `src/core/` they import **do not hot
-reload** — a change there reaches the app only after `npm run dev` is restarted.
+reload** — a change there reaches the app only after `npm run dev` is restarted
+([docs/development.md](docs/development.md)).
 
 ```
 src/core/         application logic, headless, no Electron

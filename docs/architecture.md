@@ -20,7 +20,7 @@ src/renderer/  the interface.
 
 ### `core/` must not import `electron`
 
-Enforced by an ESLint rule (`no-restricted-imports` in `eslint.config.js`), so `npm run check` fails on it — and CI, while the `check` workflow is on.
+Enforced by an ESLint rule (`no-restricted-imports` in `eslint.config.js`), so `npm run check` fails on it.
 
 Without it the core could not be tested without launching an application, and
 `npm test` would need a display. It also keeps the door open to a CLI or a

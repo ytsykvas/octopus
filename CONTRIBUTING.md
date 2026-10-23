@@ -42,31 +42,23 @@ sent back.
 
 ## Conventions
 
-- **Everything in the repository is English** — code, comments, test names,
-  error messages, documentation and commit messages. User-facing strings are the
-  exception in that they never appear inline: they live in
-  `src/renderer/src/i18n/locales/`, English first.
-- **Conventional Commits.** The subject says what changed; the body says why.
-- **No `any`**, no non-null assertions. External data is validated with zod at
-  the boundary, and types come from `z.infer`.
-- **External processes go through `execFile`, never `exec`.**
-- **Comments explain why, not what.**
+They are in [CLAUDE.md](CLAUDE.md) — the same list the agents and the
+`octopus-reviewer` subagent hold a change to, so a person and an agent are
+reviewed against one text. The rules for one layer are under
+`.claude/rules/`.
 
 ## Running a development copy
 
-Only one copy of the app may use a data directory: two on `~/.octopus` would
-each write `state.json` whole and the last would win. That is why `npm run dev`
-quits without a window when another Octopus is already open. Give the copy a
-directory of its own and the two do not meet:
+Only one copy of the app may use a data directory, so `npm run dev` quits
+without a window while another Octopus is open. Give the copy a directory of
+its own:
 
 ```bash
 OCTOPUS_DATA_DIR=/some/absolute/dir npm run dev
 ```
 
-The copy starts empty — no projects, no settings — and keeps everything there,
-so it is also the safe place to reproduce a bug. The path must be absolute. If
-you run octopus from octopus itself, the Run button does this for you
-(`.octopus/scripts/run.sh`).
+[docs/development.md](docs/development.md) has the rest: what hot-reloads and
+what does not, how to stop the old copy, and the native modules.
 
 ## Where to start reading
 
