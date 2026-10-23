@@ -4,7 +4,7 @@
  * Pure, with nothing behind it, because the renderer reads the tuple below as a
  * value to order its groups, and a value reached out of a module that pulls in
  * Node has broken the window at runtime while every check stayed green
- * (`CLAUDE.md`; listed in `docs/core.md`'s first table). The one import is a
+ * (`CLAUDE.md`; listed in `docs/core/modules.md`'s first table). The one import is a
  * type, and types are erased.
  */
 

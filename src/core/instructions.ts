@@ -211,7 +211,7 @@ Your job is to write the ones this repository needs, in this worktree, and to sa
 
 ## Do this in order
 
-1. **Look at the repository.** Stack, package manager, services (database, cache, queue), and how it is started today: \`package.json\` scripts, a \`Procfile\`, a \`Makefile\`, \`docker-compose*.yml\`, \`.github/workflows\` (the most honest record of how to install and run it), \`.nvmrc\` or \`.tool-versions\`, \`.env.example\`, and the framework's own config (\`settings.py\`, \`config/database.yml\`, \`config/dev.exs\`, \`launchSettings.json\`) for every literal port and database name. Note which files are gitignored but needed (\`.env\`, \`config/master.key\`, \`.env.local\`). If there is a \`.conductor/\` directory, read it: it is the same arrangement under older names (see the end).
+1. **Look at the repository.** Stack, package manager, services (database, cache, queue), and how it is started today: \`package.json\` scripts, a \`Procfile\`, a \`Makefile\`, \`docker-compose*.yml\`, \`.github/workflows\` (the most honest record of how to install and run it), \`.nvmrc\` or \`.tool-versions\`, \`.env.example\`, and the framework's own config (\`settings.py\`, \`config/database.yml\`, \`config/dev.exs\`, \`launchSettings.json\`) for every literal port and database name. Note which files are gitignored but needed (\`.env\`, \`config/master.key\`, \`.env.local\`).
 2. **Answer, for every resource, "what must this workspace not share with the others?"**
    - **Private** — created by \`setup.sh\` under a name built from \`$OCTOPUS_WORKSPACE_SLUG\`, dropped by \`archive.sh\`. The development database, the **test database** too (agents run suites in several workspaces at once), a Compose project, a cache namespace.
    - **Shared** — read from the checkout at \`$OCTOPUS_ROOT_PATH\` or from the machine, never dropped. A dump, fixtures, a running Postgres, the package manager's cache.
@@ -267,11 +267,7 @@ The slug is the workspace name lowercased, every other character an underscore, 
 
 ## Verify, without running anything
 
-For each script: a shebang on line 1; \`bash -n\` or \`sh -n\` as the shebang says; \`test -x\`; \`command -v\` for every tool it calls, asked through \`$SHELL -i -c\` since that is how the script is started; \`git check-ignore -v\` for every path to carry. Then read them once more for: the guard after the shebang, a prefix and the slug on every destructive line, no \`set -e\` in \`archive.sh\`, \`$OCTOPUS_PORT\` bound exactly and no literal port, nothing that prompts or opens a browser, nothing shared deleted, nothing that writes the env file, no \`CONDUCTOR_\` names left. Report what each check answered.
-
-## If the repository has \`.conductor/\`
-
-Octopus does not read it; it is translated once. \`[scripts] setup/run/archive\` → the three files; \`file_include_globs\` → the files to carry, one exact path per line; \`$CONDUCTOR_PORT\` → \`$OCTOPUS_PORT\`; \`$CONDUCTOR_ROOT_PATH\` → \`$OCTOPUS_ROOT_PATH\`; \`$CONDUCTOR_WORKSPACE_NAME\` → \`$OCTOPUS_WORKSPACE_SLUG\` (their name was already a slug; ours is not); \`[prompts]\` → \`.octopus/instructions/\`. Drop any \`cp\` of secrets (that is the carry list now), any pipeline that builds a slug (it is given) and anything that pins the environment (that is the env set).
+For each script: a shebang on line 1; \`bash -n\` or \`sh -n\` as the shebang says; \`test -x\`; \`command -v\` for every tool it calls, asked through \`$SHELL -i -c\` since that is how the script is started; \`git check-ignore -v\` for every path to carry. Then read them once more for: the guard after the shebang, a prefix and the slug on every destructive line, no \`set -e\` in \`archive.sh\`, \`$OCTOPUS_PORT\` bound exactly and no literal port, nothing that prompts or opens a browser, nothing shared deleted, nothing that writes the env file. Report what each check answered.
 `,
 
   diagnoseRun: `# Why does Run not work?

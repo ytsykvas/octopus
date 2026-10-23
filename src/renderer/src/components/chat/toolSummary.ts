@@ -64,7 +64,7 @@ export type WorktreeMove =
   | { readonly kind: 'exit'; readonly removed: boolean }
 
 /**
- * The agent moving into another worktree, or back out of it (`docs/ui.md`).
+ * The agent moving into another worktree, or back out of it (`docs/ui/chat-log.md`).
  *
  * The target is the call's, not the result's: without a name or a path the CLI
  * makes one up, and only its result says which.

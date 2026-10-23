@@ -6,10 +6,9 @@ before writing rather than after.
 
 ## How a change lands
 
-Everything arrives as a pull request from a branch. The repository is private
-for now, which leaves `main` without branch protection, and the `check`
-workflow is switched off, so a pull request merges once the gate below passes
-locally on the branch merged with fresh `main`.
+Everything arrives as a pull request from a branch. The `check` workflow runs
+the gate below on every pull request, and `main` accepts a merge only once it is
+green on the branch brought up to date with `main`.
 
 ```bash
 git checkout -b fix/short-description
@@ -28,8 +27,8 @@ npm run test:race
 commit. `test:race` runs the interface's tests again with React's scheduler
 made to lose a race the suite otherwise wins only most of the time — a test that
 reads a component before its effects have run fails there every time
-(`docs/testing.md`). The `check` workflow is switched off for now, so nothing on the server runs them; a red local
-run is a change that cannot merge, not a note to consider.
+(`docs/testing.md`). Run both locally before pushing: the server runs them
+too, but on a macOS runner and last, and a red run there is a round trip.
 
 **Coverage is 100% across `src`,** enforced by a threshold that fails the build.
 This is not aspirational: a change arrives with its tests. Never lower the
@@ -42,31 +41,23 @@ sent back.
 
 ## Conventions
 
-- **Everything in the repository is English** — code, comments, test names,
-  error messages, documentation and commit messages. User-facing strings are the
-  exception in that they never appear inline: they live in
-  `src/renderer/src/i18n/locales/`, English first.
-- **Conventional Commits.** The subject says what changed; the body says why.
-- **No `any`**, no non-null assertions. External data is validated with zod at
-  the boundary, and types come from `z.infer`.
-- **External processes go through `execFile`, never `exec`.**
-- **Comments explain why, not what.**
+They are in [CLAUDE.md](CLAUDE.md) — the same list the agents and the
+`octopus-reviewer` subagent hold a change to, so a person and an agent are
+reviewed against one text. The rules for one layer are under
+`.claude/rules/`.
 
 ## Running a development copy
 
-Only one copy of the app may use a data directory: two on `~/.octopus` would
-each write `state.json` whole and the last would win. That is why `npm run dev`
-quits without a window when another Octopus is already open. Give the copy a
-directory of its own and the two do not meet:
+Only one copy of the app may use a data directory, so `npm run dev` quits
+without a window while another Octopus is open. Give the copy a directory of
+its own:
 
 ```bash
 OCTOPUS_DATA_DIR=/some/absolute/dir npm run dev
 ```
 
-The copy starts empty — no projects, no settings — and keeps everything there,
-so it is also the safe place to reproduce a bug. The path must be absolute. If
-you run octopus from octopus itself, the Run button does this for you
-(`.octopus/scripts/run.sh`).
+[docs/development.md](docs/development.md) has the rest: what hot-reloads and
+what does not, how to stop the old copy, and the native modules.
 
 ## Where to start reading
 

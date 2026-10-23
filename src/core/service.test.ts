@@ -7296,7 +7296,7 @@ describe('the agent chat', () => {
 
     /*
      * A reachable state, and not a corner: the composer is deliberately not
-     * disabled while the agent works (`docs/ui.md`), so this is one stray
+     * disabled while the agent works (`docs/ui/composer.md`), so this is one stray
      * `/usage` away at any moment. The turn must survive it — nothing is sent,
      * so there is nothing to interrupt, and the status belongs to the turn
      * rather than to the command.
