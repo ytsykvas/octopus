@@ -58,7 +58,7 @@ export const PUBLISHES_AFTER: Readonly<Record<InstructionKind, boolean>> = {
   review: false,
   multiAgentReview: false,
   resolveConflicts: true,
-  // Never read: Help's text is sent from the composer, not as an instruction.
+  // Never read: Help sends its text without naming an instruction kind.
   // False should that change — they write scripts at most, and nobody asked
   // for a push.
   setupScripts: false,
@@ -195,9 +195,9 @@ This branch conflicts with its base. Merge the base in and settle it.
 `,
 
   /*
-   * Help's two are put into a composer to be read before they are sent, rather
-   * than sent straight into the log, so their paragraphs are not wrapped: in a
-   * field narrower than eighty columns every hard break wrapped a second time.
+   * Help's two are read in the log as a message, and in a composer when their
+   * send fails, so their paragraphs are not wrapped: in a field narrower than
+   * eighty columns every hard break wrapped a second time.
    */
   setupScripts: `# Setting this project up to run
 

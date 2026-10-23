@@ -244,6 +244,35 @@ describe('opening another conversation', () => {
     expect(result.current.activeKey).toBe('chat-2')
   })
 
+  // Help sends its message from here; the pane drawn before the send landed
+  // would read a history without it.
+  it('draws the new conversation only once what it was handed has finished', async () => {
+    givenChats([chat()])
+    vi.mocked(octopus().chats.create).mockResolvedValue({
+      ok: true,
+      value: chat({ id: 'chat-2' })
+    })
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    const sending = held<undefined>()
+    const listed = vi.mocked(octopus().chats.list).mock.calls.length
+    let adding: Promise<void> = Promise.resolve()
+    await act(async () => {
+      adding = result.current.create(() => sending.promise)
+      await Promise.resolve()
+    })
+    expect(octopus().chats.list).toHaveBeenCalledTimes(listed)
+
+    await act(async () => {
+      sending.settle(undefined)
+      await adding
+    })
+    expect(vi.mocked(octopus().chats.list).mock.calls.length).toBeGreaterThan(listed)
+  })
+
   // Help in a workspace nobody has spoken to: the first tab is made real, and
   // the text goes to the second.
   it('names the second conversation when the first had not been written yet', async () => {

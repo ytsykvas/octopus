@@ -104,11 +104,11 @@ function factsPart(context: HelpContext, t: TFunction): string {
 }
 
 /**
- * The message Help puts in the composer: the instruction, then what octopus
- * knows that the agent could not find for itself.
+ * The message Help sends: the instruction, then what octopus knows that the
+ * agent could not find for itself.
  *
  * One message, as the pull request pane sends its prompts, so the whole of
- * what the agent is told is one thing the reader sees before sending it (§4).
+ * what the agent is told is one thing the reader sees in the log (§4).
  * An instruction emptied in the settings leaves the facts alone.
  */
 export function helpMessage(
