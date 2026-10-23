@@ -9,6 +9,7 @@ import {
   SLUG_MAX_LENGTH,
   blockPorts,
   scriptEnv,
+  workspaceEnv,
   workspaceSlug
 } from './scriptEnv.js'
 
@@ -68,6 +69,16 @@ describe('blockPorts', () => {
   it('answers with the workspace port and the nine after it', () => {
     expect(blockPorts(3100)).toEqual([3100, 3101, 3102, 3103, 3104, 3105, 3106, 3107, 3108, 3109])
     expect(blockPorts(3100)).toHaveLength(BLOCK)
+  })
+})
+
+describe('workspaceEnv', () => {
+  // The agent may start the server, so it needs the ports the server gets.
+  it('is what the server gets, the whole block of ports included', () => {
+    const values = { rootPath: '/r', workspaceName: 'Fix login', port: 3110, profile: 'dev' }
+
+    expect(workspaceEnv(values)).toEqual(scriptEnv('run', values))
+    expect(workspaceEnv(values)).toMatchObject({ OCTOPUS_PORT_9: '3119' })
   })
 })
 

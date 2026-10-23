@@ -278,7 +278,7 @@ Octopus does not read it; it is translated once. \`[scripts] setup/run/archive\`
 
 Run in octopus is two scripts in order: \`.octopus/scripts/setup.sh\` (the build), then \`.octopus/scripts/run.sh\` (the server) on \`$OCTOPUS_PORT\`. A failed build stops there. Restart runs only \`run.sh\` again, on the build it has. Below this message octopus has put what it knows: the checkout, this workspace's name, slug and port, whether anything is listening on that port right now, which scripts are in effect and where they come from, the env set and the names of its variables, the files it carries, any problems in the env set, and the last lines of the most recent build and server with their exit codes.
 
-Every script is given \`$OCTOPUS_ROOT_PATH\`, \`$OCTOPUS_WORKSPACE_NAME\`, \`$OCTOPUS_WORKSPACE_SLUG\` and \`$OCTOPUS_ENV_PROFILE\`, plus the env set's variables; \`run.sh\` also gets \`$OCTOPUS_PORT\` and \`$OCTOPUS_PORT_1\` … \`$OCTOPUS_PORT_9\`. Your own session has none of them: take their values from the facts below, not from your environment.
+Every script is given \`$OCTOPUS_ROOT_PATH\`, \`$OCTOPUS_WORKSPACE_NAME\`, \`$OCTOPUS_WORKSPACE_SLUG\` and \`$OCTOPUS_ENV_PROFILE\`, plus the env set's variables; \`run.sh\` also gets \`$OCTOPUS_PORT\` and \`$OCTOPUS_PORT_1\` … \`$OCTOPUS_PORT_9\`. Your own session has the same variables, set when it started; the facts below are octopus's reading now, and win where the two differ.
 
 Find out why before changing anything.
 

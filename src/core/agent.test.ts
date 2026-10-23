@@ -205,6 +205,7 @@ function fakeAgent(
       allowedTools: [...READ_ONLY_TOOLS],
       additionalDirectories: [],
       pushTargets: [],
+      env: {},
       skillOverrides: {},
       autoCompactWindow: null,
       ...overrides
@@ -2131,6 +2132,7 @@ describe('a session that will not close', () => {
         allowedTools: [],
         additionalDirectories: [],
         pushTargets: [],
+        env: {},
         skillOverrides: {},
         autoCompactWindow: null
       },
@@ -2309,6 +2311,13 @@ describe('publishLocked', () => {
 
   it('starts from the app’s own environment when given none', () => {
     expect(publishLocked(undefined, []).env).toEqual(agentEnv(process.env, []))
+  })
+
+  // The workspace's variables reach the agent, and the guard still sits on top.
+  it('starts a session with the workspace variables it is given, under the guard', () => {
+    const { env } = fakeAgent({ env: { OCTOPUS_PORT: '3110' } }).agent.options()
+
+    expect(env).toEqual(agentEnv({ ...process.env, OCTOPUS_PORT: '3110' }, []))
   })
 
   it('reaches every session, with its push targets, with or without a branch guard', () => {

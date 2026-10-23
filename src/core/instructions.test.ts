@@ -261,10 +261,9 @@ describe('the two Help asks for', () => {
     )
   })
 
-  // The agent's session is given none of them, and would otherwise read an
-  // empty `$OCTOPUS_PORT` as "no port".
-  it("send the diagnosis to the facts for a script's values", () => {
-    expect(instructionTemplate('diagnoseRun')).toContain('Your own session has none of them')
+  // The session's copy is from when it started; the facts are read now.
+  it("say the session has a script's values, and the facts win", () => {
+    expect(instructionTemplate('diagnoseRun')).toContain('Your own session has the same variables')
   })
 
   // Sent at once, the ask carries no description of the symptom.

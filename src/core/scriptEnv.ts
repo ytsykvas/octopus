@@ -151,3 +151,12 @@ export function scriptEnv(kind: ScriptKind, values: ScriptValues): Record<string
 
   return env
 }
+
+/**
+ * What a conversation's session is started with: everything a script gets,
+ * the ports included, since the agent may start the server to look at a page.
+ * Its own name because a session is not a script, and `'run'` would say it was.
+ */
+export function workspaceEnv(values: ScriptValues): Record<string, string> {
+  return scriptEnv('run', values)
+}

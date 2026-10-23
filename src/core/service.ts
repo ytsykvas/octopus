@@ -127,7 +127,7 @@ import {
   writeProfile
 } from './envProfiles.js'
 import { runArchiveScript } from './archive.js'
-import { type ScriptValues, workspaceSlug } from './scriptEnv.js'
+import { type ScriptValues, workspaceEnv, workspaceSlug } from './scriptEnv.js'
 import { type UsageReport, type UsageWindows, windowsFrom } from './usage.js'
 import {
   type Config,
@@ -1842,7 +1842,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       readonly shedding: number | null
     }
   >()
-  /** The stray a restart starts a chat's next session to shed — `restartForWindow`. */
+  /**
+   * The workspace's variables each conversation's session was started with —
+   * the record itself, so what is compared is what the session got.
+   */
+  const startedEnv = new Map<string, Readonly<Record<string, string>>>()
+  /** The stray a restart starts a chat's next session to shed — `restartIfStale`. */
   const shedOnStart = new Map<string, number | null>()
   /** What each model holds, as any session's turns have said; outlives the sessions. */
   const modelWindows = new Map<string, number>()
@@ -3591,18 +3596,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
   /**
    * Starts an idle conversation's session again when it was started with
-   * another compaction window than the one now chosen.
+   * another compaction window than the one now chosen, or with other
+   * workspace variables than the workspace has now — a rename, a port
+   * `ensureWorkspacePort` moved, another env set.
    *
    * Again rather than told: measured, `applyFlagSettings` accepts the window
-   * and the session keeps the one it began with. The history survives —
-   * `resume` carries it into the new session — and the caller makes sure the
-   * agent is not mid-turn, since a turn in progress and a message queued behind
-   * it would both go with the process.
+   * and the session keeps the one it began with, and the SDK reads `env` only
+   * as a session starts. The history survives — `resume` carries it into the
+   * new session — and the caller makes sure the agent is not mid-turn, since a
+   * turn in progress and a message queued behind it would both go with the
+   * process. A chat mid-turn therefore keeps its variables until it rests, as
+   * it keeps its window.
    *
    * `recheck` is a choice made in the menu, which may start it again on the
    * same window — see below.
    */
-  async function restartForWindow(chatId: string, recheck = false): Promise<void> {
+  async function restartIfStale(chatId: string, recheck = false): Promise<void> {
     const chat = findChat(state, chatId)
     const started = compaction.get(chatId)
     if (!chat || !started || !sessions.has(chatId)) return
@@ -3613,7 +3622,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // by a choice in the menu and never by a message, or a variable left in
     // place would start the session over before every one of them.
     const recheckStart = recheck && (started.override !== null || started.strayed !== null)
-    if (started.startedWith === chat.autoCompactWindow && !recheckStart) return
+    if (
+      started.startedWith === chat.autoCompactWindow &&
+      !recheckStart &&
+      sameEnv(startedEnv.get(chatId), sessionEnvFor(chat.workspaceId))
+    ) {
+      return
+    }
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
 
     await closeOneChat(chat)
@@ -3622,6 +3637,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // session reading the same value proves the same thing.
     shedOnStart.set(chatId, started.strayed)
     await sessionFor(chat, requireWorkspace(chat.workspaceId))
+  }
+
+  /** Whether two flat records hold the same keys with the same values. */
+  function sameEnv(
+    a: Readonly<Record<string, string>> | undefined,
+    b: Readonly<Record<string, string>>
+  ): boolean {
+    const keys = Object.keys(b)
+    return (
+      a !== undefined &&
+      Object.keys(a).length === keys.length &&
+      keys.every((key) => a[key] === b[key])
+    )
   }
 
   /**
@@ -3678,6 +3706,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function releaseSession(chatId: string, session: AgentSession): Promise<void> {
     sessions.delete(chatId)
     compaction.delete(chatId)
+    startedEnv.delete(chatId)
     lastActivity.delete(chatId)
     await session.close().catch(() => undefined)
   }
@@ -3707,6 +3736,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const session = sessions.get(chat.id)
     sessions.delete(chat.id)
     compaction.delete(chat.id)
+    startedEnv.delete(chat.id)
     lastActivity.delete(chat.id)
     lastUsage.delete(chat.id)
     // Its queue goes with its process, and so does a push promised for a turn
@@ -4045,6 +4075,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return (await isIgnored(makeExec(workspace.path), envFile)) ? envFile : project.envFile
   }
 
+  /** The workspace as a script sees it — and as a conversation's session does. */
+  function scriptValuesFor(project: Project, workspace: Workspace): ScriptValues {
+    return {
+      rootPath: project.repoPath,
+      workspaceName: workspace.name,
+      port: workspace.port,
+      profile: effectiveProfile(project, workspace)
+    }
+  }
+
+  /**
+   * What a conversation's session in this workspace is started with, from the
+   * record as it is now: a rename while a session was starting is the name it
+   * should get.
+   */
+  function sessionEnvFor(workspaceId: string): Record<string, string> {
+    const workspace = requireWorkspace(workspaceId)
+    return workspaceEnv(scriptValuesFor(requireProject(workspace.projectId), workspace))
+  }
+
   /**
    * The workspace as its scripts see it, and the set of variables behind it.
    *
@@ -4061,12 +4111,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       readonly stored: string
     }
   > {
-    const values: ScriptValues = {
-      rootPath: project.repoPath,
-      workspaceName: workspace.name,
-      port: workspace.port,
-      profile: effectiveProfile(project, workspace)
-    }
+    const values = scriptValuesFor(project, workspace)
     const stored = await readEffectiveEnv(project, workspace, dataRoot)
 
     return { values, stored, variables: parseEnvBody(substituteEnv(stored, values)) }
@@ -4704,6 +4749,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         allowedTools: [],
         additionalDirectories: [],
         pushTargets: [],
+        // It runs one command about the account, not about the workspace.
+        env: {},
         skillOverrides: {},
         autoCompactWindow: null
       },
@@ -4810,6 +4857,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // this session cannot clear a cut a later rewind put there.
     const cut = chat.resumeAt
 
+    const env = sessionEnvFor(workspace.id)
+
     const session = startSession(
       {
         cwd: workspace.path,
@@ -4829,6 +4878,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         allowedTools: [...READ_ONLY_TOOLS],
         additionalDirectories: [...roots, attachments],
         pushTargets: targets,
+        env,
         skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow
       },
@@ -4864,6 +4914,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       strayed: null,
       shedding: shedOnStart.get(chat.id) ?? null
     })
+    startedEnv.set(chat.id, env)
     shedOnStart.delete(chat.id)
 
     // Fire-and-forget, and the two failures go different ways. A list that
@@ -6517,7 +6568,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        */
       // Before anything is sent, so the message goes to the session the window
       // was chosen for. A choice made mid-turn waited for this.
-      await restartForWindow(chatId)
+      await restartIfStale(chatId)
 
       const running = sessions.get(chatId)
       if (running) {
@@ -6648,7 +6699,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async setChatAutoCompact(chatId, window) {
       requireChat(chatId)
       await commit((current) => updateChat(current, chatId, { autoCompactWindow: window }))
-      await restartForWindow(chatId, true)
+      await restartIfStale(chatId, true)
     },
 
     async setChatModels(chatId, models) {

@@ -2932,8 +2932,8 @@ describe('what Help is told about a workspace', () => {
     expect(JSON.stringify(context)).not.toContain('app_')
   })
 
-  // The agent's session is given none of a script's values, so these are the
-  // only way it learns which port and which per-workspace names to look for.
+  // The session's own copy of these is from when it started; Help's is read
+  // when it is pressed, and says whether anything answers.
   it('names the workspace, its slug and its port, and whether the port answers', async () => {
     const { projectId, workspaceId } = await withWorkspace()
     await service.renameWorkspaceById(workspaceId, 'fix auth')
@@ -6312,6 +6312,68 @@ describe('the agent chat', () => {
         context: { modelWindow: null },
         autoCompact: { modelWindow: 200_000 }
       })
+    })
+  })
+
+  /*
+   * The agent may run the app, its tests or `curl` against it, and without
+   * these it guessed port 3000 and the shared database.
+   */
+  describe('what a session is started with', () => {
+    async function sessionIn(): Promise<{
+      service: OctopusService
+      projectId: string
+      chatId: string
+    }> {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      return { service, projectId, chatId: chat.id }
+    }
+
+    it("carries the workspace's variables, under the publish guard", async () => {
+      const { service, projectId } = await sessionIn()
+      const [workspace] = await service.listWorkspaces(projectId)
+      const project = service.listProjects().find((item) => item.id === projectId)
+      const port = workspace?.port ?? 0
+
+      expect(agent().options().env).toMatchObject({
+        OCTOPUS_ROOT_PATH: project?.repoPath,
+        OCTOPUS_WORKSPACE_NAME: workspace?.name,
+        OCTOPUS_ENV_PROFILE: 'default',
+        OCTOPUS_PORT: String(port),
+        OCTOPUS_PORT_9: String(port + 9)
+      })
+      expect(agent().options().env).toHaveProperty('GIT_CONFIG_COUNT')
+    })
+
+    // The SDK reads `env` once, so a session started before the rename would
+    // name the old database for the rest of its life.
+    it('starts the session again, carrying its history, once the workspace is renamed', async () => {
+      const { service, projectId, chatId } = await sessionIn()
+      const [workspace] = await service.listWorkspaces(projectId)
+      await service.renameWorkspaceById(workspace?.id ?? '', 'fix auth')
+
+      await service.sendToChat(chatId, 'again')
+
+      expect(agents).toHaveLength(2)
+      expect(agents[0]?.closed()).toBe(1)
+      expect(agents[1]?.options().resume).toBe('sess-1')
+      expect(agents[1]?.options().env).toMatchObject({ OCTOPUS_WORKSPACE_SLUG: 'fix_auth' })
+    })
+
+    it('keeps the session while nothing moved', async () => {
+      const { service, chatId } = await sessionIn()
+
+      await service.sendToChat(chatId, 'again')
+
+      expect(agents).toHaveLength(1)
     })
   })
 
