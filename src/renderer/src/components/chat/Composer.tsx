@@ -23,7 +23,7 @@ import type { ChatMode } from '../../hooks/useChat.js'
 
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { useLatest } from '../../hooks/useLatest.js'
-import { type ChatNote, withNotes } from './attachments.js'
+import { type ChatNote, insertPaths, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { EffortPicker } from './EffortPicker.js'
@@ -78,15 +78,17 @@ interface ComposerProps {
   /** Where the conversation compacts itself; the choice lives in the context menu. */
   readonly onAutoCompact: (window: AutoCompactWindow | null) => void
   /**
-   * Paths the next message will name.
+   * Paths waiting to be written into the field, at the caret.
    *
    * Never copies of the files. What goes out is where they are, which is the
    * plainest form §4's rule that nothing implicit reaches the agent can take —
-   * and what the chips above the field make checkable before it is sent.
+   * and written into the text, it is in front of the reader, editable, before
+   * it is sent.
    */
   readonly files: readonly string[]
-  readonly onRemoveFile: (path: string) => void
-  /** The paperclip. One of three ways in, and the only visible one. */
+  /** The waiting paths have been written in; the next ones start a new list. */
+  readonly onFilesTaken: () => void
+  /** The paperclip. One of four ways in, and the only visible one. */
   readonly onAttachFiles: () => void
   /** Files dropped on the composer, whose paths the window cannot read itself. */
   readonly onDropFiles: (files: readonly File[]) => void
@@ -232,7 +234,7 @@ export function Composer({
   onEfforts,
   onAutoCompact,
   files,
-  onRemoveFile,
+  onFilesTaken,
   onAttachFiles,
   onDropFiles,
   onPasteImage,
@@ -296,6 +298,8 @@ export function Composer({
   /** Where the caret goes once the next value has been written, or null. */
   const caretAfterWrite = useRef<number | null>(null)
   const [caret, setCaret] = useState(initialDraft.length)
+  /** The caret as last rendered, for the effect that writes a path at it. */
+  const caretRef = useLatest(caret)
 
   useEffect(() => {
     if (focusOnMount) textarea.current?.focus()
@@ -329,6 +333,24 @@ export function Composer({
     setCaret(text.length)
     textarea.current?.focus()
   }, [seed])
+
+  // A file pointed at — dropped, chosen, pasted, or sent over from the Files
+  // tab — is written into the text where the caret is, the way a path typed
+  // there would be, rather than riding along on a chip under a heading of its
+  // own. Taken as it arrives and handed back as taken, so the next one starts a
+  // new list rather than writing this one again.
+  useEffect(() => {
+    if (files.length === 0) return
+
+    const next = insertPaths(latest.current, caretRef.current, files)
+    latest.current = next.draft
+    caretAfterWrite.current = next.caret
+    setDraft(next.draft)
+    setCaret(next.caret)
+    textarea.current?.focus()
+    onFilesTaken()
+  }, [files, onFilesTaken, caretRef])
+
   /** Which suggestion Enter would take. */
   const [active, setActive] = useState(0)
   /**
@@ -478,17 +500,11 @@ export function Composer({
      * disk, which left nowhere at all to get it back from.
      */
     void (async () => {
-      const message = withNotes(
-        trimmed,
-        notes,
-        {
-          diff: t('diff.commentIntro'),
-          pullRequest: t('pullRequest.quoteIntro'),
-          oldSide: t('diff.noteOldSide'),
-          files: t('chat.attachIntro')
-        },
-        files
-      )
+      const message = withNotes(trimmed, notes, {
+        diff: t('diff.commentIntro'),
+        pullRequest: t('pullRequest.quoteIntro'),
+        oldSide: t('diff.noteOldSide')
+      })
 
       if (!(await onSend(message))) return
 
@@ -588,12 +604,7 @@ export function Composer({
           onAutoCompact={onAutoCompact}
         />
 
-        <ComposerAttachments
-          notes={notes}
-          onRemove={onRemoveNote}
-          files={files}
-          onRemoveFile={onRemoveFile}
-        />
+        <ComposerAttachments notes={notes} onRemove={onRemoveNote} />
 
         <textarea
           ref={textarea}

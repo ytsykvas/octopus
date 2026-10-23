@@ -1750,6 +1750,7 @@ describe('reading one request in full', () => {
     id: 'PR_kwDODKw3uc8AAAABATwpjg',
     state: 'OPEN',
     title: 'Rename the thing',
+    body: '',
     url: 'https://github.com/o/p/pull/7',
     isDraft: false,
     mergeable: 'MERGEABLE',

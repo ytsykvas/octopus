@@ -550,6 +550,7 @@ export const de: Translation = {
   },
 
   pullRequest: {
+    description: 'Beschreibung',
     capped:
       'GitHub wurde nach den neuesten hundert Kommentaren und fünfzig Threads gefragt und hat genau so viele geliefert – es kann also ältere geben, die hier fehlen. Auf GitHub sind alle zu sehen.',
     noWorkspaceTitle: 'Noch nichts vorzuschlagen',
@@ -991,9 +992,6 @@ export const de: Translation = {
     skillsEmptyNote: 'Füge einen in den Einstellungen hinzu, dann erscheint er hier in jedem Chat.',
     skillsSettings: 'Einstellungen öffnen',
     attach: 'Dateien anhängen',
-    attachRemove: 'Diese Datei wieder entfernen',
-    attachIntro: 'Dateien, auf die ich dich hinweise:',
-    attachDrop: 'Zum Anhängen ablegen',
     tabWithNotes: '{{described}}, {{waiting}}',
     notesWaiting_one: '{{count}} Notiz wartet',
     notesWaiting_few: '{{count}} Notizen warten',

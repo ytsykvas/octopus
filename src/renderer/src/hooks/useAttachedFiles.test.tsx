@@ -53,17 +53,12 @@ describe('the files each conversation will name', () => {
     expect(result.current.filesFor('first')).toEqual(['/w/a.ts', '/w/b.ts', '/w/c.ts'])
   })
 
-  it('removes one file, and clears one conversation only', () => {
+  it('clears one conversation only', () => {
     const { result } = renderHook(() => useAttachedFiles(ANNA))
     act(() => {
       result.current.add('first', ['/w/a.ts', '/w/b.ts'])
       result.current.add('chat-2', ['/w/a.ts'])
     })
-
-    act(() => {
-      result.current.remove('first', '/w/a.ts')
-    })
-    expect(result.current.filesFor('first')).toEqual(['/w/b.ts'])
 
     act(() => {
       result.current.clear('first')

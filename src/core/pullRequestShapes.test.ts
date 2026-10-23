@@ -69,6 +69,7 @@ function view(overrides: Record<string, unknown> = {}): DetailPayload {
     id: 'PR_kwDODKw3uc8AAAABATwpjg',
     state: 'OPEN',
     title: 'Fix the thing',
+    body: '',
     url: 'https://github.com/o/p/pull/12',
     isDraft: false,
     mergeable: 'MERGEABLE',
@@ -655,6 +656,12 @@ describe('where a pull request stands', () => {
       url: 'https://github.com/o/p/pull/12',
       draft: true
     })
+  })
+
+  it("carries the author's description as written", () => {
+    const body = '## Why\n\nBecause.\n<!-- the template -->'
+
+    expect(toPullRequestDetail(view({ body }), NO_THREADS).description).toBe(body)
   })
 
   it('reads a review decision, and has none where GitHub sends none', () => {

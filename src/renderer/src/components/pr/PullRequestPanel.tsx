@@ -28,6 +28,7 @@ import { PaneFooter, PullRequestFooter } from './PullRequestFooter.js'
 import { PreviousRequestNote } from './PreviousRequestNote.js'
 import { PullRequestHeader } from './PullRequestHeader.js'
 import { type PromptKind, type RequestView, requestStatus } from './requestStatus.js'
+import { RequestDescription } from './RequestDescription.js'
 import { StatusTiles } from './StatusTiles.js'
 
 interface PullRequestPanelProps {
@@ -597,6 +598,8 @@ export function PullRequestPanel({
                 merging={merging}
               />
             </div>
+
+            <RequestDescription body={read.detail.description} />
           </div>
 
           <PullRequestFooter

@@ -46,6 +46,7 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
   return {
     state: 'open',
     title: 'Rename the thing',
+    description: '',
     url: 'https://github.com/o/p/pull/7',
     draft: false,
     checks: [],
@@ -946,6 +947,48 @@ describe('a pull request that exists', () => {
 
     await screen.findByText('#7')
     expect(screen.queryByText(/not showing/)).not.toBeInTheDocument()
+  })
+
+  /* The description fills the room the views leave above the footer. It is
+     the request's rather than a view's, so it stays as the views change. */
+  it("shows the author's description under whichever view is chosen", async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ description: 'Renames the thing **everywhere**.' }))
+    renderPanel()
+
+    const card = await screen.findByRole('region', { name: 'Description' })
+    expect(within(card).getByText('everywhere').tagName).toBe('STRONG')
+
+    const views = screen.getByRole('group', { name: 'What the request needs' })
+    for (const name of [/^Review:/, /^Merge:/, /^Checks:/]) {
+      await user.click(within(views).getByRole('button', { name }))
+      expect(screen.getByRole('region', { name: 'Description' })).toBeVisible()
+    }
+  })
+
+  // A template's notes to its author are not the description, and drawn as
+  // text — raw HTML is off — they would read as though they were.
+  it('leaves out the notes a template leaves for the author', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ description: '<!-- Say why. -->\nBecause it was wrong.' }))
+    renderPanel()
+
+    const card = await screen.findByRole('region', { name: 'Description' })
+    expect(card).toHaveTextContent('Because it was wrong.')
+    expect(card).not.toHaveTextContent('Say why')
+  })
+
+  it.each([
+    ['nothing was written', ''],
+    ['only the template is left', '<!-- What changed,\n     and why -->\n  ']
+  ])('draws no description where %s', async (_, description) => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ description }))
+    renderPanel()
+
+    await screen.findByText('#7')
+    expect(screen.queryByRole('region', { name: 'Description' })).not.toBeInTheDocument()
   })
 
   it('names the state on the link out to GitHub', async () => {

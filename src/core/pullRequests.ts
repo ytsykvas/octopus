@@ -892,6 +892,7 @@ const DETAIL_FIELDS = [
   'id',
   'state',
   'title',
+  'body',
   'url',
   'isDraft',
   'mergeable',

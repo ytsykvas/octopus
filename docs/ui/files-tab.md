@@ -128,9 +128,10 @@ when it comes back from under the filter.
 
 **A row's path is copied the way an editor's explorer copies it.** `⌥⌘C` puts
 the whole path on the clipboard, `⌥⇧⌘C` the one relative to the worktree, and
-a right-click offers both beside **Add to chat**, which attaches the whole path
-to the conversation in front — the paperclip's attachment, brought forward so
-the chip is seen landing. Folders as well as files. The keys are read from
+a right-click offers both beside **Add to chat**, which writes the whole path
+into the conversation in front, at the caret its field last had — the
+paperclip's way in, brought forward so the path is seen landing. Folders as
+well as files. The keys are read from
 `code`, because ⌥ turns the `c` into `ç` on macOS. What the copy did is said on
 a line under the toolbar for two seconds: the menu that asked has closed, and a
 refused clipboard is worth saying. Neither the menu nor the keys are on the

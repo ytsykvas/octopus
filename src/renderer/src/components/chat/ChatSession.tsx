@@ -940,10 +940,9 @@ export function ChatSession({
                 comments.clear()
                 quotes.clear()
                 codeNotes.clear(tab.key)
-                attachments.clear()
               }}
               files={attachments.files}
-              onRemoveFile={attachments.remove}
+              onFilesTaken={attachments.clear}
               onAttachFiles={() => {
                 setNotice(null)
                 void attachments.choose(t('chat.attach'))

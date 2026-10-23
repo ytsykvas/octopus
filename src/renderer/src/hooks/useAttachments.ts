@@ -4,7 +4,7 @@ import type { AttachedFileController } from './useAttachedFiles.js'
 import { useErrorMessage } from './useErrorMessage.js'
 
 export interface AttachmentController {
-  /** The paths riding out with the next message, in the order they were added. */
+  /** Paths waiting to be written into the field, in the order they were added. */
   readonly files: readonly string[]
   /**
    * Opens the system dialog. Cancelling adds nothing, which is a choice.
@@ -17,12 +17,12 @@ export interface AttachmentController {
   readonly drop: (files: readonly File[]) => void
   /** Writes a pasted image and adds where it landed. */
   readonly paste: (item: Blob) => Promise<void>
-  readonly remove: (path: string) => void
+  /** The waiting paths have been written into the field. */
   readonly clear: () => void
 }
 
 /**
- * Files the next message carries a path to.
+ * Files pointed at from the composer, by their paths.
  *
  * The whole of an attachment is its **path**. A file dragged in or chosen from
  * disk is never copied: the message says where it is, which is the plainest
@@ -42,7 +42,7 @@ export function useAttachments(
   tabKey: string
 ): AttachmentController {
   const describeFailure = useErrorMessage()
-  const { filesFor, add: addTo, remove: removeFrom, clear: clearFrom } = store
+  const { filesFor, add: addTo, clear: clearFrom } = store
 
   const add = useCallback(
     (paths: readonly string[]) => {
@@ -86,16 +86,9 @@ export function useAttachments(
     [add, onError, describeFailure]
   )
 
-  const remove = useCallback(
-    (path: string) => {
-      removeFrom(tabKey, path)
-    },
-    [removeFrom, tabKey]
-  )
-
   const clear = useCallback(() => {
     clearFrom(tabKey)
   }, [clearFrom, tabKey])
 
-  return { files: filesFor(tabKey), choose, drop, paste, remove, clear }
+  return { files: filesFor(tabKey), choose, drop, paste, clear }
 }

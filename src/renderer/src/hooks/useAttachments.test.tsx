@@ -137,16 +137,13 @@ describe('files the next message points at', () => {
     expect(result.current.files).toEqual([])
   })
 
-  it('takes one back, and takes them all back when a message goes', () => {
+  it('lets them go once they are written into the field', () => {
     const { result } = attachments(vi.fn())
 
     act(() => {
       result.current.drop([dropped('one.png'), dropped('two.png')])
     })
-    act(() => {
-      result.current.remove('/dropped/one.png')
-    })
-    expect(result.current.files).toEqual(['/dropped/two.png'])
+    expect(result.current.files).toEqual(['/dropped/one.png', '/dropped/two.png'])
 
     act(() => {
       result.current.clear()

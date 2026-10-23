@@ -388,6 +388,8 @@ export interface PullRequestDetail {
   /** Carried here as well as on the summary, so a poll notices a merge by somebody else. */
   readonly state: PullRequestState
   readonly title: string
+  /** The author's own text, as written — `""` where they wrote none. */
+  readonly description: string
   readonly url: string
   readonly draft: boolean
   readonly checks: readonly PullRequestCheck[]
@@ -423,6 +425,8 @@ export const DetailPayloadSchema = z.object({
   id: z.string(),
   state: RemoteStateSchema,
   title: z.string(),
+  /** `""` where the author wrote nothing, never null. */
+  body: z.string(),
   url: z.string(),
   isDraft: z.boolean(),
   mergeable: z.string(),
@@ -573,6 +577,7 @@ export function toPullRequestDetail(
   return {
     state: STATES[view.state],
     title: view.title,
+    description: view.body,
     url: view.url,
     draft: view.isDraft,
     checks: toChecks(view.statusCheckRollup),
