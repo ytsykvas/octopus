@@ -8,6 +8,7 @@
 worktree — with its own branch, agent conversations and dev server on a
 dedicated port.
 
+[![check](https://github.com/ytsykvas/octopus/actions/workflows/check.yml/badge.svg)](https://github.com/ytsykvas/octopus/actions/workflows/check.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 ![macOS, Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-111111)
 

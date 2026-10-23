@@ -68,8 +68,7 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
   `origin` is public, and a public commit is mirrored and indexed within
   minutes and not retractable by a later commit.
 - Merge your own pull request unless the user asked. A green gate means it is
-  ready, not that it was wanted — and with CI off, the gate is the local one on
-  the branch merged with fresh `main`.
+  ready, not that it was wanted.
 - Pass `--no-verify`.
 - Commit `.env`, keys or tokens. If you spot one in the diff, stop and warn.
 

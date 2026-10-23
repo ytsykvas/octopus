@@ -7,8 +7,9 @@ npm run check      # format, lint, types, tests with coverage
 npm run test:race  # the renderer suite with React's scheduler made to lose
 ```
 
-`check` must pass before every commit. The `check` workflow is switched off for now, so nothing on the server runs them: run both
-before a merge, on the branch merged with fresh `main`. Coverage is **100% across
+`check` must pass before every commit. The `check` workflow runs both on every
+pull request, and `main` requires it to be green on a branch up to date with
+`main`; run both locally first, since the server's run is slow and comes last. Coverage is **100% across
 `src`**, enforced by a threshold that fails the build. Never lower it and never
 disable a lint rule to get past — if coverage drops, there is untested code.
 

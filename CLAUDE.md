@@ -61,8 +61,8 @@ The rules for one part of the tree load when you touch it:
 ## Git
 
 - Every change, a one-line fix included, lands through a branch and a pull
-  request. The gate runs locally on the branch merged with fresh
-  `origin/main`; nothing on the server checks it.
+  request. Run the gate locally before pushing; the `check` workflow runs it
+  again, and `main` requires it green on a branch up to date with `main`.
 - **Inside an Octopus workspace, do not `git checkout -b`.** One workspace is
   one branch (`octopus/<name>`) and one pull request; commit on it.
 - **Never `git push`, open, merge or close a pull request unless the

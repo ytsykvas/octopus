@@ -6,9 +6,9 @@ before writing rather than after.
 
 ## How a change lands
 
-Everything arrives as a pull request from a branch. `main` has no branch
-protection and the `check` workflow is switched off, so a pull request merges
-once the gate below passes locally on the branch merged with fresh `main`.
+Everything arrives as a pull request from a branch. The `check` workflow runs
+the gate below on every pull request, and `main` accepts a merge only once it is
+green on the branch brought up to date with `main`.
 
 ```bash
 git checkout -b fix/short-description
@@ -27,9 +27,8 @@ npm run test:race
 commit. `test:race` runs the interface's tests again with React's scheduler
 made to lose a race the suite otherwise wins only most of the time — a test that
 reads a component before its effects have run fails there every time
-(`docs/testing.md`). The `check` workflow is switched off, so nothing on the
-server runs them; a red local run is a change that cannot merge, not a note to
-consider.
+(`docs/testing.md`). Run both locally before pushing: the server runs them
+too, but on a macOS runner and last, and a red run there is a round trip.
 
 **Coverage is 100% across `src`,** enforced by a threshold that fails the build.
 This is not aspirational: a change arrives with its tests. Never lower the
