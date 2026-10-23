@@ -11,11 +11,15 @@ Some files, a set of variables, and three scripts. That is the whole of what a
 project needs before its workspaces do anything — and the scripts, which look
 like the job, are the last part of it.
 
-| Script       | When it runs                  | What belongs in it                            |
-| ------------ | ----------------------------- | --------------------------------------------- |
-| `setup.sh`   | on Run, before the server     | dependencies, the database, dumps, migrations |
-| `run.sh`     | on Run, on `$OCTOPUS_PORT`    | the dev server, and nothing else              |
-| `archive.sh` | when the workspace is deleted | giving back exactly what setup took           |
+| Script       | When it runs                    | What belongs in it                            |
+| ------------ | ------------------------------- | --------------------------------------------- |
+| `setup.sh`   | on every Run, before the server | dependencies, the database, dumps, migrations |
+| `run.sh`     | on Run, on `$OCTOPUS_PORT`      | the dev server, and nothing else              |
+| `archive.sh` | when the workspace is deleted   | giving back exactly what setup took           |
+
+**Setup runs on every Run**, not once, so it has to be idempotent and quick the
+second time: create only what is absent, install without wiping (`npm install`,
+not `npm ci`), never re-seed. Restart runs the server alone.
 
 They go in `.octopus/scripts/` **inside the repository**, so a clone works with
 nothing configured and a second machine needs no setting up. The app reads them
@@ -76,10 +80,17 @@ search index, queue — and each answer is one of three:
 **Private.** Created in `setup.sh`, named through the slug, dropped in
 `archive.sh`. A database is the usual one.
 
-**Shared.** Symlinked or copied from `$OCTOPUS_ROOT_PATH`, and **never** dropped
-in cleanup. A `node_modules` cache, a downloaded model, a vendor directory.
-Deleting one of these in `archive.sh` breaks every other workspace and the main
-checkout with it.
+**Shared.** Read from `$OCTOPUS_ROOT_PATH` or from the machine, and **never**
+dropped in cleanup. A dump, a downloaded model, a running Postgres, the package
+manager's own cache. Deleting one of these in `archive.sh` breaks every other
+workspace and the main checkout with it.
+
+Dependencies are **not** shared, though they look it. Linking `node_modules`, a
+virtualenv or `vendor/` to the checkout lets tool caches inside them race
+between workspaces, a virtualenv holds absolute paths, Composer's autoloader
+then loads the checkout's code, and a branch's install rewrites the checkout.
+Install per worktree: the package manager's cache makes it fast. Copy only what
+never changes in place, with `cp -c`.
 
 **Pinned.** Shared, but must never be the production one. This is the answer
 that gets missed and the one that costs the most. It is an **env set** and never
@@ -97,7 +108,9 @@ Each of these is a failure that has already happened here.
 **1. Nothing shared is touched without the slug, and an empty slug stops the
 script.** `$OCTOPUS_WORKSPACE_SLUG` unset expands to nothing, and
 `dropdb "myapp_development_"` — or worse, a `rm -rf "$ROOT/$SLUG"` — then names
-something real. Every script that drops or deletes opens with:
+something real. Every script that drops or deletes has this as the first line
+**after the shebang** — `archive.sh` is started without a shell, so a file whose
+shebang was displaced does not start at all:
 
 ```sh
 : "${OCTOPUS_WORKSPACE_SLUG:?refusing to run without a workspace slug}"
@@ -109,7 +122,8 @@ name. Delete it. The app's slug is lowercase, every non-alphanumeric character
 becomes `_`, and it is cut to 30 characters — chosen so a Postgres identifier
 with a prefix in front still fits under the 63 Postgres silently truncates at.
 Two pipelines that disagree by one character are a database created under one
-name and dropped under another.
+name and dropped under another. The slug may begin with a digit or an
+underscore, so a name built from it always has a prefix.
 
 **3. The environment has one authority, and it is not a script.** A `KEY=value`
 appended to `.env` by `setup.sh` wins while setup runs and loses on the next
@@ -162,7 +176,17 @@ for what a value cannot say.
 
 `run.sh` also gets `$OCTOPUS_PORT` and `$OCTOPUS_PORT_1` … `$OCTOPUS_PORT_9` —
 ten ports, so a stack that is more than one process has somewhere to put the
-rest. The server binds `$OCTOPUS_PORT` and never a literal.
+rest. The server binds `$OCTOPUS_PORT` **exactly** and never a literal: Vite,
+Next and `artisan serve` move to the next free port when theirs is taken, and
+the app's link then opens nothing (`--strictPort`, an explicit `-p`).
+
+**How they are started.** `setup.sh` and `run.sh` by path through the user's
+login shell, in the worktree, as a fresh process: PATH shims (rbenv, asdf, mise)
+work, shell functions (nvm, SDKMAN) do not, and nothing can answer a prompt.
+`archive.sh` through `execFile` — no shell, the login PATH only, 30 seconds,
+output not shown. Stop signals the server's process group, so a Docker
+container or a Gradle daemon's JVM outlives it; containers go up detached in
+`setup.sh` and come down in `archive.sh`.
 
 `$OCTOPUS_ROOT_PATH` is the one that is not obvious. A worktree is a copy of the
 repository, so anything gitignored is missing from it and there is no way to
@@ -170,7 +194,9 @@ work out the path back — `../../` is the app's data directory, not the user's
 code. Anything that has to be fetched from the main checkout goes through it.
 
 The same names work inside the **env set**, where `$OCTOPUS_PORT` and
-`$OCTOPUS_WORKSPACE_SLUG` are substituted per workspace on the way in. Only
+`$OCTOPUS_WORKSPACE_SLUG` are substituted per workspace on the way in — into
+the env file **and** into every script's environment, so `DB_PORT=$OCTOPUS_PORT_2`
+reaches `setup.sh` although setup is given no port of its own. Only
 `OCTOPUS_*` names are substituted; every other `$` is left alone, because a
 password with a `$` in it must survive.
 
@@ -236,7 +262,8 @@ Work through all of these before handing the scripts back. Each has caught
 something real.
 
 ```sh
-sh -n .octopus/scripts/setup.sh          # and run.sh, archive.sh
+head -1 .octopus/scripts/setup.sh        # a shebang, on all three
+bash -n .octopus/scripts/setup.sh        # or sh -n — as the shebang says
 test -x .octopus/scripts/setup.sh        # the executable bit, on all three
 command -v createdb                      # every command the scripts name
 git check-ignore -v .env                 # every path in the carry list
@@ -249,7 +276,8 @@ And by reading:
 rm`, `DROP DATABASE` mentions `$OCTOPUS_WORKSPACE_SLUG`, and the script that
   contains one opens with the `:?` guard;
 - **`archive.sh` has no `set -e`**;
-- **`run.sh` binds `$OCTOPUS_PORT`** and no literal port anywhere;
+- **`run.sh` binds `$OCTOPUS_PORT` exactly** and no literal port anywhere;
+- **nothing prompts or opens a browser** — `--no-interaction`, `BROWSER=none`;
 - **nothing shared is deleted in cleanup** — check each `rm` against the shared
   list from the question above;
 - **every carried path is genuinely ignored** — `git check-ignore` exits 1 for a

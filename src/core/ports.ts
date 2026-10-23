@@ -8,14 +8,22 @@
  *
  * Asking is the only way to tell. It is a fact about the machine, not about our
  * state, which is why it is read on demand rather than remembered.
+ *
+ * Both loopback addresses are asked. `localhost` resolves to `::1` as readily
+ * as to 127.0.0.1 — Node 17 and later on macOS often pick the first — and a
+ * server bound there answers in the browser while a probe of 127.0.0.1 alone
+ * called it silent.
  */
 
 import { createConnection, type Socket } from 'node:net'
 
 import { BLOCK } from './scriptEnv.js'
 
-/** Loopback only: a workspace's dev server is not somebody else's to reach. */
-const HOST = '127.0.0.1'
+/**
+ * Loopback only, on both families: a workspace's dev server is not somebody
+ * else's to reach, and `localhost` resolves to either.
+ */
+const HOSTS = ['127.0.0.1', '::1'] as const
 
 /**
  * Where the blocks live.
@@ -42,12 +50,24 @@ export type Connect = (port: number, host: string) => Socket
 /** Whether something answers on a port; `isListening` is the real one. */
 export type PortProbe = (port: number) => Promise<boolean>
 
-export async function isListening(
-  port: number,
-  connect: Connect = (target, host) => createConnection({ port: target, host })
-): Promise<boolean> {
+const realConnect: Connect = (target, host) => createConnection({ port: target, host })
+
+/**
+ * Whether anything answers on either loopback address.
+ *
+ * Both at once, so the worst case is one `TIMEOUT_MS` rather than two. And all
+ * of them rather than a race to the first yes: a refusal on loopback is
+ * immediate, so a race would save nothing and add a second way to tear down.
+ */
+export async function isListening(port: number, connect: Connect = realConnect): Promise<boolean> {
+  const answers = await Promise.all(HOSTS.map((host) => answersAt(port, host, connect)))
+  return answers.some(Boolean)
+}
+
+/** Whether anything answers on one address. */
+export async function answersAt(port: number, host: string, connect: Connect): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = connect(port, HOST)
+    const socket = connect(port, host)
 
     /*
      * Answered once, however it ends.

@@ -25,8 +25,11 @@ const run = promisify(execFile)
  * Dropping a database is seconds; anything past this is waiting on something
  * that will not arrive, and a workspace that cannot be removed is worse than
  * one that left something behind.
+ *
+ * Exported because Help's setup prompt tells the agent how long it has, and a
+ * test holds the two to the same number.
  */
-const TIMEOUT_MS = 30_000
+export const ARCHIVE_TIMEOUT_MS = 30_000
 
 /** How the script is run, injected so tests never spawn a shell. */
 export type RunScript = (
@@ -71,7 +74,7 @@ export async function runArchiveScript(
       // Ours last, so a set that names `OCTOPUS_ROOT_PATH` cannot point the
       // cleanup at somebody else's checkout.
       env: { ...values.variables, ...scriptEnv('archive', values) },
-      timeout: TIMEOUT_MS
+      timeout: ARCHIVE_TIMEOUT_MS
     })
     return null
   } catch (error) {

@@ -142,12 +142,15 @@ can move between runs, and a stored number would be yesterday's. This is why a
 run **settles the port first and prepares second**: preparing first would write
 the number the run is about to move away from.
 
-**Appended, and nothing else.** These do not reach the process environment: the
-terminal and the agent see them only through whatever loads `.env` from the
-workspace directory. `bin/rails console` will; a bare `psql` in the Terminal tab
-will not, because nothing exported them into the shell. That is the price of
-appending, and it is the right price — appending is what works when the app
-reads `.env` and the process environment does not reach it.
+**Appended, and exported only to the scripts.** The three scripts start with
+the set in their environment (above); nothing else does. The terminal and the
+agent see the set only through whatever loads `.env` from the workspace
+directory — the agent's session is started with the `$OCTOPUS_*` names alone,
+never the set's own variables, which are credentials. `bin/rails console` will
+read them; a bare `psql` in the Terminal tab will not, because nothing exported
+them into the shell. That is the price of appending, and it is the right price —
+appending is what works when the app reads `.env` and the process environment
+does not reach it.
 
 **git has to be ignoring that file.** octopus writes credentials into a
 directory the agent commits from freely, so a repository whose `.gitignore` does

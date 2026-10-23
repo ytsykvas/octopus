@@ -20,9 +20,8 @@ function open(initial: Shown = { id: WORKSPACE }): {
   readonly report: ReturnType<typeof vi.fn>
   readonly rerender: (props: Shown) => void
 } {
-  const create = vi.fn((beforeShown?: (id: string) => void) => {
-    beforeShown?.('chat-9')
-    return Promise.resolve()
+  const create = vi.fn(async (beforeShown?: (id: string) => void | Promise<void>) => {
+    await beforeShown?.('chat-9')
   })
   const keepDraft = vi.fn()
   const report = vi.fn()
@@ -36,9 +35,78 @@ function open(initial: Shown = { id: WORKSPACE }): {
 }
 
 describe('useHelp', () => {
-  it('puts the setup instruction and the facts down as a new conversation’s draft', async () => {
+  it('sends the setup instruction and the facts as a new conversation’s first message', async () => {
     vi.mocked(octopus().workspaces.instruction).mockResolvedValue({ ok: true, value: 'Set up.' })
-    const { ask, create, keepDraft } = open()
+    const { ask, create, keepDraft, report } = open()
+
+    act(() => {
+      ask()('setupScripts')
+    })
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledOnce()
+    })
+    expect(octopus().workspaces.instruction).toHaveBeenCalledWith(WORKSPACE, 'setupScripts')
+    expect(octopus().workspaces.helpContext).toHaveBeenCalledWith(WORKSPACE)
+    expect(create).toHaveBeenCalledOnce()
+
+    const [chatId, text] = vi.mocked(octopus().chats.send).mock.calls[0] ?? []
+    expect(chatId).toBe('chat-9')
+    expect(text).toMatch(/^Set up\.\n\n— What octopus knows/)
+    expect(text).toContain('/tmp/planner')
+    expect(keepDraft).not.toHaveBeenCalled()
+    expect(report).not.toHaveBeenCalled()
+  })
+
+  // The tab is drawn once `create` is done; a send still in flight then would
+  // race the pane that reads the history.
+  it('has sent before the conversation is shown', async () => {
+    const sending = held<Result<string | null>>()
+    vi.mocked(octopus().chats.send).mockReturnValue(sending.promise)
+    const { ask, create } = open()
+
+    act(() => {
+      ask()('setupScripts')
+    })
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledOnce()
+    })
+    const shown = vi.fn()
+    void (create.mock.results[0]?.value as Promise<void>).then(shown)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(shown).not.toHaveBeenCalled()
+
+    await act(async () => {
+      sending.resolve({ ok: true, value: null })
+      await Promise.resolve()
+    })
+    await waitFor(() => {
+      expect(shown).toHaveBeenCalledOnce()
+    })
+  })
+
+  // Lost text would have to be asked for again; in the composer it is one press.
+  it.each<[string, () => void, string]>([
+    [
+      'refused',
+      () => {
+        vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'agent is busy' })
+      },
+      'Something went wrong: agent is busy'
+    ],
+    [
+      'rejected',
+      () => {
+        vi.mocked(octopus().chats.send).mockRejectedValue(new Error('main is gone'))
+      },
+      'Error: main is gone'
+    ]
+  ])('puts a message whose send was %s in the composer, and says so', async (_, fail, reason) => {
+    vi.mocked(octopus().workspaces.instruction).mockResolvedValue({ ok: true, value: 'Set up.' })
+    fail()
+    const { ask, create, keepDraft, report } = open()
 
     act(() => {
       ask()('setupScripts')
@@ -47,18 +115,18 @@ describe('useHelp', () => {
     await waitFor(() => {
       expect(keepDraft).toHaveBeenCalledOnce()
     })
-    expect(octopus().workspaces.instruction).toHaveBeenCalledWith(WORKSPACE, 'setupScripts')
-    expect(octopus().workspaces.helpContext).toHaveBeenCalledWith(WORKSPACE)
-    expect(create).toHaveBeenCalledOnce()
-
     const [workspaceId, tabKey, text] = keepDraft.mock.calls[0] ?? []
     expect(workspaceId).toBe(WORKSPACE)
     expect(tabKey).toBe('chat-9')
-    expect(text).toMatch(/^Set up\.\n\n— What octopus knows/)
-    expect(text).toContain('/tmp/planner')
+    expect(text).toMatch(/^Set up\./)
+    expect(report).toHaveBeenCalledExactlyOnceWith(
+      `Help could not send its message, so it is waiting in the composer: ${reason}`
+    )
+    // Caught inside, so `create` goes on to show the conversation that exists.
+    await expect(create.mock.results[0]?.value as Promise<void>).resolves.toBeUndefined()
   })
 
-  it('puts the last runs down as well when asked why Run does not work', async () => {
+  it('sends the last runs as well when asked why Run does not work', async () => {
     const context = await octopus().workspaces.helpContext(WORKSPACE)
     if (!context.ok) throw new Error('the stub answers')
     vi.mocked(octopus().workspaces.helpContext).mockResolvedValue({
@@ -68,17 +136,17 @@ describe('useHelp', () => {
         lastRuns: [{ purpose: 'setup', outcome: { kind: 'running' }, output: 'bundling' }]
       }
     })
-    const { ask, keepDraft } = open()
+    const { ask } = open()
 
     act(() => {
       ask()('diagnoseRun')
     })
 
     await waitFor(() => {
-      expect(keepDraft).toHaveBeenCalledOnce()
+      expect(octopus().chats.send).toHaveBeenCalledOnce()
     })
     expect(octopus().workspaces.instruction).toHaveBeenCalledWith(WORKSPACE, 'diagnoseRun')
-    expect(keepDraft.mock.calls[0]?.[2]).toContain('bundling')
+    expect(vi.mocked(octopus().chats.send).mock.calls[0]?.[1]).toContain('bundling')
   })
 
   it.each([

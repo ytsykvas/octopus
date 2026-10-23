@@ -60,6 +60,7 @@ const session = startSession(
     allowedTools: ['Bash'],
     additionalDirectories: [],
     pushTargets: [],
+    env: {},
     skillOverrides: {},
     autoCompactWindow: null
   },

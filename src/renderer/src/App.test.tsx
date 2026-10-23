@@ -2414,7 +2414,7 @@ describe('App', () => {
     })
   })
 
-  it('opens Help’s ask as a new conversation with the text in its composer, unsent', async () => {
+  it('opens Help’s ask as a new conversation and sends it there', async () => {
     givenTwoProjects()
     givenChats([chat({ id: 'chat-1' })])
     vi.mocked(window.octopus.workspaces.instruction).mockResolvedValue({
@@ -2433,8 +2433,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('menuitem', { name: /Set this project up to run/ }))
     await waitFor(() => {
-      expect(screen.getByRole('textbox')).toHaveProperty(
-        'value',
+      expect(window.octopus.chats.send).toHaveBeenCalledExactlyOnceWith(
+        'chat-2',
         expect.stringMatching(
           /^Write the scripts for this repository\.\n\n[\s\S]*Checkout \(\$OCTOPUS_ROOT_PATH\): \/tmp\/planner/
         )
@@ -2450,7 +2450,8 @@ describe('App', () => {
       'planner/anna',
       'setupScripts'
     )
-    expect(window.octopus.chats.send).not.toHaveBeenCalled()
+    // Sent, so nothing is left behind to send a second time.
+    expect(screen.getByRole('textbox')).toHaveProperty('value', '')
   })
 
   it('offers Help’s items disabled while the workspace has three conversations', async () => {
