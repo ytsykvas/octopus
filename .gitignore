@@ -9,8 +9,8 @@ coverage/
 .env.*
 !.env.example
 
-# The maintainer's agent setup and task notes: personal workflow, not project
-# configuration. They stay on disk and out of the repository.
-CLAUDE.md
-.claude/
+# Personal agent settings and task notes stay on this machine; the shared
+# instructions under .claude/ are tracked.
+.claude/settings.local.json
+CLAUDE.local.md
 docs/tasks/

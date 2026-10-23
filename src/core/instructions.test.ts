@@ -187,6 +187,12 @@ describe('the two Help asks for', () => {
     )
   })
 
+  // The templates are what the app sends in the user's name, so they describe
+  // octopus alone rather than translating from another tool's layout.
+  it.each(HELP_KINDS)('name no other tool: %s', (kind) => {
+    expect(instructionTemplate(kind)).not.toMatch(/conductor/i)
+  })
+
   // A line continues a paragraph when it follows a non-blank line and starts no
   // block — list item, table row, heading, fence.
   it.each(HELP_KINDS)('keep each paragraph and list item on one line: %s', (kind) => {

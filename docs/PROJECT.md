@@ -207,7 +207,7 @@ moment to reconsider — not before.
 **Animation is CSS.** `motion` sat in this table the same way, and nothing
 imported it either: every animation is CSS, so one rule in `styles.css` stops
 them all under Reduce motion — a JavaScript library would slip past it
-(`docs/ui.md`, "Motion").
+(`docs/ui/motion.md`).
 
 **Native modules.** Stage 1 started without them to avoid a build step, and that held until the embedded terminal arrived: `node-pty` is native. A `postinstall` script runs `electron-builder install-app-deps` — the same tool that packages the app, so the two cannot disagree — and `npm install` remains a single step. The binding is built through Node-API rather than against V8 directly, so it is not tied to Electron's ABI: the same binary loads under plain Node and under Electron.
 
@@ -489,7 +489,7 @@ Further rules:
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`) — a readable history and a basis for changelog automation later.
 - Atomic commits: one logical change each.
-- Every substantial change reaches `main` through a branch and a pull request. The repository is private for now, so `main` has no branch protection, and the `check` workflow is switched off: the gate is `npm run check` and `npm run test:race`, run locally on the branch merged with fresh `main` before it merges.
+- Every change reaches `main` through a branch and a pull request. The gate is `npm run check` and `npm run test:race`: run locally before pushing, and again by the `check` workflow, which `main` requires to be green on a branch up to date with it.
 
 ---
 
@@ -625,7 +625,7 @@ checkout's are, they **follow `settingSources`**: under "load nothing" the
 panel is empty and the agent has none of them, which is the honest reading of
 that setting.
 
-**Plugins are installed, switched and removed through Claude Code's own CLI.** The SDK reloads plugins but cannot install one, so octopus runs the bundled `claude plugin … --json` and never writes Claude Code's files itself. The store offers the official marketplace only, installs into the `user` scope as `/plugin` does, and every write reloads the conversations already open (`core.md`, "Plugins go through Claude Code's CLI").
+**Plugins are installed, switched and removed through Claude Code's own CLI.** The SDK reloads plugins but cannot install one, so octopus runs the bundled `claude plugin … --json` and never writes Claude Code's files itself. The store offers the official marketplace only, installs into the `user` scope as `/plugin` does, and every write reloads the conversations already open (`core/skills-and-plugins.md`, "Plugins go through Claude Code's CLI").
 
 **Two slash commands are answered here rather than by the CLI.** A harness does not filter what reaches the agent, and this is not that: `/usage` asks the local process to print figures it already holds structured, and the CLI prints them as prose. `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET` is documented as "the structured data behind the `/usage` command", so the service recognises the command, reads the report and draws a card of bars — plan windows and when they reset, what the session spent, and the local scan of what has been eating the limit. `/btw` is the second: the CLI answers a side question only through its control channel, so the window routes it to the service's `askSideQuestion` and draws the answer in a drawer, out of the transcript. Everything else, `/clear` included, goes to the agent as ordinary message text. The card is the only surface in the app that shows a session's cost in dollars, for the reason given in §16.
 
@@ -633,8 +633,8 @@ Session control: `interrupt()`, `stopTask()`, `setModel()`, `setPermissionMode()
 
 **Agents a conversation sends off are shown while they work.** A subagent started in the background answers its call at once and works on for minutes; so do a background command and an ultracode workflow. The SDK reports each as a task — `task_started`, `task_progress`, `task_notification`/`task_updated`, and `background_tasks_changed`, the CLI's own list of what is alive — and the core folds them into one registry per conversation (`backgroundTasks.ts`), kept in memory because a task dies with its process. A workflow's agents raise no task events of their own; its progress carries them in an untyped `workflow_progress` array, read leniently. The session is started with `agentProgressSummaries`, so each running subagent has a one-line status written from a fork of its own context every thirty seconds or so — cheap, since it reuses the subagent's cache, but not free — and with `perTaskStopAffordance`, which makes the conversation's Stop end the **turn** only: background agents go on, and are stopped one by one from the agent map. Without it the CLI kills every background agent on an interrupt.
 
-A conversation is **working while its agents are**, not only while its main agent is: the turn's result leaves it running when any task is live, and it rests once the last one ends with no turn open (`core.md`, "A workspace's status is derived"). A question an agent asks belongs to that agent and outlives the turn that launched it; it goes when the agent does. An end the CLI never announces — a task that simply drops off its list of the living — is recorded all the same.
-The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart, and after a session let go for resting ten minutes (`core.md`): a CLI process is kept only while its conversation is doing something or has just done it. It is stored on the **chat**, not the workspace: one session per workspace would make a second agent in the same worktree a migration, while one per chat makes it another record. That is exactly how it played out — three conversations per workspace shipped as a widened interface over the shape that was already there (§10.8).
+A conversation is **working while its agents are**, not only while its main agent is: the turn's result leaves it running when any task is live, and it rests once the last one ends with no turn open (`core/conversations.md`, "A workspace's status is derived"). A question an agent asks belongs to that agent and outlives the turn that launched it; it goes when the agent does. An end the CLI never announces — a task that simply drops off its list of the living — is recorded all the same.
+The `sessionId` from `SDKSystemMessage` is persisted — that is what enables resuming after a restart, and after a session let go for resting ten minutes (`core/models-and-effort.md`): a CLI process is kept only while its conversation is doing something or has just done it. It is stored on the **chat**, not the workspace: one session per workspace would make a second agent in the same worktree a migration, while one per chat makes it another record. That is exactly how it played out — three conversations per workspace shipped as a widened interface over the shape that was already there (§10.8).
 
 Forking a conversation goes through the SDK's own `forkSession(sessionId, { dir })`, never by copying the id: a plain `resume` continues a session **in place and keeps its id**, so two records holding one would be two agent processes appending to a single session file, each reading the other's turns as part of its own. The SDK's fork returns a new id, and copies what the model remembers; our own transcript is copied beside it, because that is what the screen draws.
 
@@ -759,7 +759,7 @@ octopus/
 
 **The modules inside `src/core/` are not listed here.** There are dozens and a
 new one arrives with most features, so a copy in this section is a copy that
-falls behind. [`docs/core.md`](core.md) carries them, a row each, and is
+falls behind. [`docs/core/modules.md`](core/modules.md) carries them, a row each, and is
 maintained alongside the code.
 
 That is not tidying: the tree here used to name thirteen of them and describe
@@ -767,12 +767,12 @@ That is not tidying: the tree here used to name thirteen of them and describe
 application's records had become the zod inferences in `store.ts`. A reader who
 followed it landed on hand-written interfaces eight fields out of date, one of
 which documented the dev-server port as a hash of the workspace id — the exact
-behaviour `docs/data.md` records as a bug that was fixed by allocating ports
+behaviour `docs/data/state.md` records as a bug that was fixed by allocating ports
 instead.
 
 The layer boundaries are §11.1. What each core module does is
-[`docs/core.md`](core.md); how the window is put together is
-[`docs/ui.md`](ui.md); what is written to disk is [`docs/data.md`](data.md).
+[`docs/core/`](core/README.md); how the window is put together is
+[`docs/ui/`](ui/README.md); what is written to disk is [`docs/data/`](data/README.md).
 
 ---
 

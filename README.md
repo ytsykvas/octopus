@@ -87,6 +87,42 @@ local-only, and is built to one person's taste.
 The details behind each of these — the port pool, the env block, what a diff
 counts — are in [docs/](docs/README.md).
 
+## Built with
+
+- **Electron** and **electron-vite**, for a desktop app whose logic never
+  touches Electron: everything under `src/core/` runs headless and is tested
+  without a window.
+- **React 19**, **Tailwind 4** and **i18next**, with the interface in English,
+  Ukrainian and German.
+- **TypeScript** in strict mode, with **zod** parsing every value that crosses
+  a boundary — IPC, files on disk, the output of `git` and `gh`.
+- The **Claude Agent SDK** for the conversations, **node-pty** and **xterm**
+  for the terminals.
+- **Vitest**, with coverage held at 100% across `src` by a threshold that
+  fails the build, and a second run that makes React's scheduler lose every
+  race the suite could otherwise win by luck.
+
+How the four layers divide the work is under [Development](#development).
+
+## Working with agents
+
+The repository carries its own Claude Code setup, and it is part of what is
+being shown here:
+
+- [CLAUDE.md](CLAUDE.md) is a short root that links out, and the invariants of
+  each layer live in [.claude/rules/](.claude/rules), loaded only when a file
+  there is touched.
+- [.claude/skills/](.claude/skills) hold the techniques — core modules, the
+  interface, the Agent SDK — and the workflows: `/check`, `/ship`,
+  `/docs-check`, `/test-check`.
+- A reviewer subagent holds a change to the same list, a hook formats every
+  file an agent edits, and the permissions allow the gate and nothing wider.
+- The reference documentation under [docs/](docs/README.md) is split by
+  subject, so a question about one pane reads one file.
+
+octopus opens a repository's settings and hooks to the person before any of
+them run, this one included.
+
 ## Installing
 
 **What you need first:**
@@ -104,7 +140,8 @@ The agent itself is not one of these: the Claude Code binary comes down with
 
 Then follow the [quick start](#quick-start). To run it in development instead,
 use `npm run dev`. Only one copy runs at a time: it takes Electron's
-single-instance lock.
+single-instance lock. A second copy with a data directory of its own runs
+beside it — see [CONTRIBUTING.md](CONTRIBUTING.md#running-a-development-copy).
 
 ### Why there are no downloads
 
@@ -132,12 +169,15 @@ A terminal that will not open points at the native build of `node-pty`:
 npx electron-builder install-app-deps
 ```
 
+The reasons, and the other traps of a development copy, are in
+[docs/development.md](docs/development.md).
+
 ## Where things are kept
 
 Everything lives under `~/.octopus`: `config.json`, `state.json`, one JSONL
 transcript per conversation, the per-project scripts and env, and the worktrees
 themselves. Nothing is written inside your repository except the worktree and its
-branch — see [docs/data.md](docs/data.md). Removing a workspace offers to delete
+branch — see [docs/data/](docs/data/README.md). Removing a workspace offers to delete
 that branch with it, ticked by default.
 
 ## Development
@@ -153,7 +193,8 @@ npm run build      # typecheck and build
 across `src`** by a threshold that fails the build when it drops.
 
 `src/main/`, `src/preload/` and anything in `src/core/` they import **do not hot
-reload** — a change there reaches the app only after `npm run dev` is restarted.
+reload** — a change there reaches the app only after `npm run dev` is restarted
+([docs/development.md](docs/development.md)).
 
 ```
 src/core/         application logic, headless, no Electron
@@ -164,8 +205,8 @@ docs/             why things are shaped as they are — start at docs/README.md
 ```
 
 English is the default language and the source of truth for the interface;
-Ukrainian ships alongside it, in `src/renderer/src/i18n/locales/`. TypeScript
-requires every locale to carry every key.
+Ukrainian and German ship alongside it, in `src/renderer/src/i18n/locales/`.
+TypeScript requires every locale to carry every key.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the conventions the repository keeps.
 [docs/PROJECT.md](docs/PROJECT.md) holds the original intent and decisions.

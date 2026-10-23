@@ -20,7 +20,7 @@ src/renderer/  the interface.
 
 ### `core/` must not import `electron`
 
-Enforced by an ESLint rule (`no-restricted-imports` in `eslint.config.js`), so `npm run check` fails on it — and CI, while the `check` workflow is on.
+Enforced by an ESLint rule (`no-restricted-imports` in `eslint.config.js`), so `npm run check` fails on it.
 
 Without it the core could not be tested without launching an application, and
 `npm test` would need a display. It also keeps the door open to a CLI or a
@@ -45,7 +45,7 @@ externalises Node built-ins and the window had no `homedir`.
 Safe to import as values are the modules that depend on nothing but zod —
 `colors.ts` and `initials.ts` among them, and the renderer already imports
 `turnOutcome` from `events.ts` this way. The list is the first table in
-[`core.md`](core.md), named there rather than repeated here so that a module
+[`core/modules.md`](core/modules.md), named there rather than repeated here so that a module
 joining it is written down once; every module the renderer takes a value from
 is in it, and a new one has to be added there before the import is written.
 Anything reaching `paths.ts`, `persist.ts` or `node:*` is not safe, whatever the
@@ -182,7 +182,7 @@ mangled; the `code` is what lets the UI show a localised message instead.
 `git` is the source of truth about git. `~/.octopus/state.json` holds only what
 git cannot know: the chats and their agent sessions, the port, the label. When the two disagree —
 a worktree directory deleted by hand — the app reports the workspace as missing
-rather than quietly agreeing with either side. See [data.md](data.md).
+rather than quietly agreeing with either side. See [data/README.md](data/README.md).
 
 ## What is deliberately absent
 
