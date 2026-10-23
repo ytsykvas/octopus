@@ -666,6 +666,7 @@ export const de: Translation = {
     mergeBlocked: 'GitHub mergt das noch nicht – ein erforderliches Review oder ein Check fehlt.',
     mergeBehind: '{{base}} hat sich weiterentwickelt, seit dieser Branch abgezweigt wurde.',
     mergeUnstable: 'Ein Check ist nicht bestanden, aber Mergen ist trotzdem erlaubt.',
+    mergeSettling: 'GitHub prüft noch, ob sich das mergen lässt.',
     mergeDraft: 'Ein Entwurf kann nicht gemergt werden. Markiere ihn zuerst auf GitHub als bereit.',
     mergeChecksRunning_one: '{{count}} Check läuft noch.',
     mergeChecksRunning_few: '{{count}} Checks laufen noch.',

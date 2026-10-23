@@ -903,7 +903,6 @@ export function App(): React.JSX.Element {
           {openRequest?.state === 'open' && selectedWorkspace !== null && (
             <>
               <MergeMenu
-                align="right"
                 // Green, like every press that finishes the work.
                 variant="success"
                 onMerge={(method) => {

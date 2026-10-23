@@ -19,23 +19,20 @@ export function MergeMenu({
   onMerge,
   disabled,
   merging = false,
-  variant,
-  align = 'left',
-  className = ''
+  variant
 }: {
   readonly onMerge: (method: MergeMethod) => void
   readonly disabled: boolean
   /** A merge in flight, which the button says rather than only greying out. */
   readonly merging?: boolean
   readonly variant: ButtonVariant
-  readonly align?: 'left' | 'right'
-  readonly className?: string
 }): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
     <DropdownMenu
-      align={align}
+      // Both places it is drawn sit at the right edge, so it opens leftwards.
+      align="right"
       actions={MERGE_METHODS.map(({ method, labelKey }) => ({
         id: method,
         label: t(labelKey),
@@ -49,7 +46,6 @@ export function MergeMenu({
           variant={variant}
           onClick={onClick}
           aria-expanded={open}
-          className={className}
           disabled={merging || disabled}
         >
           <GitMerge aria-hidden size={12} />

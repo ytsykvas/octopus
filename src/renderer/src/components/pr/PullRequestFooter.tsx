@@ -2,15 +2,14 @@ import { AlertTriangle, ArrowUpFromLine, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { InstructionKind } from '@core/instructions.js'
 import type { MergeMethod } from '@core/pullRequests.js'
 
 import { Button } from '../Button.js'
 import { AgentMenu } from './AgentMenu.js'
 import { CommitMessageField } from './CommitMessageField.js'
-import { AttentionLine } from './MergeConditions.js'
+import { AttentionLine, FooterLine } from './MergeConditions.js'
 import { MergeMenu } from './MergeMenu.js'
-import type { RequestStatus } from './requestStatus.js'
+import type { PromptKind, RequestStatus } from './requestStatus.js'
 
 interface PullRequestFooterProps {
   readonly status: RequestStatus
@@ -26,8 +25,9 @@ interface PullRequestFooterProps {
    */
   readonly exposedEnvFile: string | null
   /** Sends a prepared message, or null where there is no conversation. */
-  readonly onPrompt: ((kind: InstructionKind) => void) | null
-  readonly sending: InstructionKind | null
+  readonly onPrompt: ((kind: PromptKind) => void) | null
+  /** A prepared message on its way, which the menu's trigger says. */
+  readonly sending: boolean
   readonly onEditInstructions: () => void
   readonly onMerge: (method: MergeMethod) => void
   readonly merging: boolean
@@ -115,7 +115,7 @@ export function PullRequestFooter({
   }
   // A closed request has nothing left to press; the header links to GitHub,
   // which is where one is reopened.
-  if (!status.open) return null
+  if (status.state !== 'open') return null
 
   /* Committing pushes too, so a push of its own is offered only where there is
      nothing to commit. */
@@ -199,7 +199,6 @@ export function PullRequestFooter({
             or a push it stays quiet, so one green button says what comes
             first. */}
         <MergeMenu
-          align="right"
           variant={dirty || pushable ? 'quiet' : 'success'}
           onMerge={onMerge}
           merging={merging}
@@ -213,12 +212,9 @@ export function PullRequestFooter({
 /** The footer's line when it is a warning about the press below it. */
 function Warning({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
   return (
-    <p className="text-ink-soft flex items-start gap-1.5 text-[12px] leading-snug">
-      <span className="text-warning flex h-[1lh] shrink-0 items-center">
-        <AlertTriangle aria-hidden size={12} />
-      </span>
-      <span className="min-w-0">{children}</span>
-    </p>
+    <FooterLine tone="warning" mark={<AlertTriangle aria-hidden size={12} />}>
+      {children}
+    </FooterLine>
   )
 }
 

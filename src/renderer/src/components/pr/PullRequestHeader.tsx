@@ -1,13 +1,4 @@
-import {
-  ArrowRight,
-  ExternalLink,
-  GitBranch,
-  GitMerge,
-  GitPullRequest,
-  GitPullRequestClosed,
-  GitPullRequestDraft,
-  RotateCw
-} from 'lucide-react'
+import { ArrowRight, ExternalLink, GitBranch, RotateCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { shortBranchName } from '@core/branches.js'
@@ -15,53 +6,9 @@ import type { PullRequest } from '@core/pullRequests.js'
 import type { PullRequestDetail } from '@core/pullRequestShapes.js'
 
 import { IconButton } from '../paneControls.js'
+import { FACES, type RequestFace, TONES } from './requestFaces.js'
 
-type Pill = 'open' | 'draft' | 'merged' | 'closed' | 'none'
-
-/**
- * The word, the glyph and the colour of each state.
- *
- * The colours are the sidebar's (`RequestMark.tsx`), so the row beside the pane
- * and the pane itself say the same thing about one request; only the paired
- * `*-bg` is a ground, never the status colour itself.
- */
-const PILLS: Record<
-  Pill,
-  {
-    readonly Icon: typeof GitPullRequest
-    readonly tone: string
-    readonly labelKey:
-      | 'pullRequest.pillOpen'
-      | 'pullRequest.isDraft'
-      | 'pullRequest.pillMerged'
-      | 'pullRequest.pillClosed'
-      | 'pullRequest.pillNotOpened'
-  }
-> = {
-  open: {
-    Icon: GitPullRequest,
-    tone: 'bg-success-bg text-success',
-    labelKey: 'pullRequest.pillOpen'
-  },
-  draft: {
-    Icon: GitPullRequestDraft,
-    tone: 'bg-muted text-ink-soft',
-    labelKey: 'pullRequest.isDraft'
-  },
-  merged: { Icon: GitMerge, tone: 'bg-danger-bg text-danger', labelKey: 'pullRequest.pillMerged' },
-  closed: {
-    Icon: GitPullRequestClosed,
-    tone: 'bg-muted text-ink-soft',
-    labelKey: 'pullRequest.pillClosed'
-  },
-  none: {
-    Icon: GitPullRequest,
-    tone: 'bg-muted text-ink-soft',
-    labelKey: 'pullRequest.pillNotOpened'
-  }
-}
-
-function pillOf(request: PullRequest | null, detail: PullRequestDetail | null): Pill {
+function faceOf(request: PullRequest | null, detail: PullRequestDetail | null): RequestFace {
   if (request === null) return 'none'
   // The detail's copy wins where there is one: it is the fresher read, and it
   // is what notices a request somebody else merged or retitled.
@@ -97,13 +44,13 @@ export function PullRequestHeader({
 }): React.JSX.Element {
   const { t, i18n } = useTranslation()
 
-  const pill = PILLS[pillOf(request, detail)]
+  const pill = FACES[faceOf(request, detail)]
 
   return (
     <div className="flex flex-col gap-1 px-3 pt-3 pb-2.5">
       <div className="flex items-center gap-2">
         <span
-          className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-full pr-2 pl-1.5 text-[11px] font-semibold ${pill.tone}`}
+          className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-full pr-2 pl-1.5 text-[11px] font-semibold ${TONES[pill.tone].badge}`}
         >
           <pill.Icon aria-hidden size={12} />
           {t(pill.labelKey)}

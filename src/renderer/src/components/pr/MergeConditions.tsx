@@ -3,8 +3,6 @@ import {
   ArrowUpFromLine,
   Check,
   GitCommitHorizontal,
-  GitMerge,
-  GitPullRequestClosed,
   GitPullRequestDraft,
   Info,
   X
@@ -12,28 +10,15 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '../Button.js'
+import { FACES, TONES, type Tone } from './requestFaces.js'
 import type { Attention, GitHubNote, RequestStatus } from './requestStatus.js'
 
-type Tone = 'danger' | 'warning' | 'accent' | 'success' | 'muted'
-
-/** A status colour on its own paired ground — never the colour as a fill. */
-const TONES: Record<Tone, { readonly text: string; readonly badge: string }> = {
-  danger: { text: 'text-danger', badge: 'bg-danger-bg text-danger' },
-  warning: { text: 'text-warning', badge: 'bg-warning-bg text-warning' },
-  accent: { text: 'text-accent', badge: 'bg-accent-bg text-accent' },
-  success: { text: 'text-success', badge: 'bg-success-bg text-success' },
-  muted: { text: 'text-ink-faint', badge: 'bg-muted text-ink-soft' }
-}
-
 /** GitHub's reasons, in the pane's words. */
-const NOTES: Record<
-  GitHubNote,
-  'pullRequest.mergeBlocked' | 'pullRequest.mergeBehind' | 'pullRequest.mergeUnstable'
-> = {
+const NOTES = {
   blocked: 'pullRequest.mergeBlocked',
   behind: 'pullRequest.mergeBehind',
   unstable: 'pullRequest.mergeUnstable'
-}
+} as const satisfies Record<GitHubNote, string>
 
 interface Line {
   readonly tone: Tone
@@ -105,6 +90,12 @@ function useAttentionLine(): (item: Attention, base: string) => Line {
           mark: <Info aria-hidden size={12} />,
           text: t(NOTES[item.note], { base })
         }
+      case 'settling':
+        return {
+          tone: 'muted',
+          mark: <span aria-hidden className="agent-arc" />,
+          text: t('pullRequest.mergeSettling')
+        }
     }
   }
 }
@@ -112,9 +103,9 @@ function useAttentionLine(): (item: Attention, base: string) => Line {
 /**
  * The footer's one line: the most pressing thing, or that nothing is.
  *
- * A request with nothing wanting attention is ready to merge — `attention`
- * holds every reason `canMerge` would refuse — so that is what an empty list
- * says.
+ * An open request with nothing wanting attention is ready to merge — every
+ * other verdict puts its reason in the list (`requestStatus`) — so that is what
+ * an empty list says.
  */
 export function AttentionLine({
   item,
@@ -136,11 +127,32 @@ export function AttentionLine({
       : lineOf(item, base)
 
   return (
+    <FooterLine tone={line.tone} mark={line.mark}>
+      {line.text}
+    </FooterLine>
+  )
+}
+
+/**
+ * One line of the footer: a mark in a status colour, and a sentence.
+ *
+ * Every line the footer can show is drawn through this, the warnings about the
+ * press below as well as the attention line, so which branch drew it never
+ * shows.
+ */
+export function FooterLine({
+  tone,
+  mark,
+  children
+}: {
+  readonly tone: Tone
+  readonly mark: React.ReactNode
+  readonly children: React.ReactNode
+}): React.JSX.Element {
+  return (
     <p className="text-ink-soft flex items-start gap-1.5 text-[12px] leading-snug">
-      <span className={`flex h-[1lh] shrink-0 items-center ${TONES[line.tone].text}`}>
-        {line.mark}
-      </span>
-      <span className="min-w-0">{line.text}</span>
+      <span className={`flex h-[1lh] shrink-0 items-center ${TONES[tone].text}`}>{mark}</span>
+      <span className="min-w-0">{children}</span>
     </p>
   )
 }
@@ -171,20 +183,18 @@ export function MergeConditions({
   const { t } = useTranslation()
   const lineOf = useAttentionLine()
 
-  if (!status.open) {
-    const merged = status.state === 'merged'
+  if (status.state !== 'open') {
+    const { Icon, tone } = FACES[status.state]
     return (
       <div className="workspace-card flex items-start gap-2.5 p-3">
-        <Badge tone={merged ? 'danger' : 'muted'}>
-          {merged ? (
-            <GitMerge aria-hidden size={12} />
-          ) : (
-            <GitPullRequestClosed aria-hidden size={12} />
-          )}
+        <Badge tone={tone}>
+          <Icon aria-hidden size={12} />
         </Badge>
         <p className="text-ink-soft leading-relaxed">
           {/* What the footer's removal is offered for — see the footer. */}
-          {merged ? t('pullRequest.mergedDone') : t('pullRequest.stateClosed', { number })}
+          {status.state === 'merged'
+            ? t('pullRequest.mergedDone')
+            : t('pullRequest.stateClosed', { number })}
         </p>
       </div>
     )
@@ -193,14 +203,15 @@ export function MergeConditions({
   const rows: Line[] = status.attention.map((item) => lineOf(item, base))
   // A repository that runs nothing, or whose every job was skipped, has nothing
   // that passed to report here; the Checks view says what it has, once.
-  if (!status.waiting && status.passed > 0) {
+  if (status.checks === 'passed') {
     rows.push({
       tone: 'success',
       mark: <Check aria-hidden size={12} />,
       text: t('pullRequest.checksPassedAll')
     })
   }
-  if (!status.conflicting) {
+  // Said only once GitHub has said it: right after a push it does not know yet.
+  if (status.noConflicts) {
     rows.push({
       tone: 'success',
       mark: <Check aria-hidden size={12} />,

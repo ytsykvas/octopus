@@ -1512,11 +1512,13 @@ describe('what the tab can do about a request', () => {
 
     await openAgentMenu(user)
 
-    expect(screen.getByText('Open a conversation in this workspace first.')).toBeInTheDocument()
+    // On the first item itself, where a screen reader reads it too.
+    expect(
+      screen.getByRole('menuitem', {
+        name: /^Resolve the conflicts\s*Open a conversation in this workspace first\.$/
+      })
+    ).toBeDisabled()
     expect(screen.getByRole('menuitem', { name: 'Review it' })).toBeDisabled()
-    // Including the one that appears against a conflict, which would otherwise
-    // be the one that stayed pressable.
-    expect(screen.getByRole('menuitem', { name: 'Resolve the conflicts' })).toBeDisabled()
     // The wording can still be changed without a conversation to send it to.
     await user.click(screen.getByRole('menuitem', { name: 'Edit the instructions…' }))
     expect(onEditInstructions).toHaveBeenCalledOnce()
@@ -1968,22 +1970,39 @@ describe('the shape of a request on screen', () => {
     expect(screen.getByRole('region', { name })).toBeVisible()
   })
 
-  it.each<[PullRequestDetail, readonly string[]]>([
-    [detail({ checks: [failing()] }), ['Checks: 1 failed', 'Merge: Waiting']],
-    [detail({ checks: [failing({ state: 'pending', completedAt: null })] }), ['Checks: 1 running']],
-    [detail({ checks: [failing({ state: 'passed' })] }), ['Checks: All passed', 'Merge: Ready']],
-    [detail(), ['Checks: None']],
+  it.each<[string, PullRequestDetail, readonly string[]]>([
+    ['a red check', detail({ checks: [failing()] }), ['Checks: 1 failed', 'Merge: Waiting']],
+    [
+      'a running check',
+      detail({ checks: [failing({ state: 'pending', completedAt: null })] }),
+      ['Checks: 1 running']
+    ],
+    [
+      'green checks',
+      detail({ checks: [failing({ state: 'passed' })] }),
+      ['Checks: All passed', 'Merge: Ready']
+    ],
+    ['no checks', detail(), ['Checks: None']],
     // Skipped by a path filter is not passed: nothing ran.
-    [detail({ checks: [failing({ state: 'skipped' })] }), ['Checks: Skipped', 'Merge: Ready']],
-    [detail({ decision: 'changesRequested' }), ['Review: Changes']],
-    [detail({ decision: 'approved' }), ['Review: Approved']],
-    [detail({ decision: 'reviewRequired' }), ['Review: Required']],
-    [detail({ comments: [inline()] }), ['Review: 1 comment']],
-    [detail({ mergeable: 'conflicting' }), ['Merge: Conflict']],
-    [detail({ draft: true }), ['Merge: Draft']],
-    [detail({ state: 'merged' }), ['Merge: Merged']],
-    [detail({ state: 'closed' }), ['Merge: Closed']]
-  ])('says where it stands on its tiles: %#', async (read, names) => {
+    [
+      'skipped checks',
+      detail({ checks: [failing({ state: 'skipped' })] }),
+      ['Checks: Skipped', 'Merge: Ready']
+    ],
+    ['changes requested', detail({ decision: 'changesRequested' }), ['Review: Changes']],
+    ['an approval', detail({ decision: 'approved' }), ['Review: Approved']],
+    ['a required review', detail({ decision: 'reviewRequired' }), ['Review: Required']],
+    ['a comment', detail({ comments: [inline()] }), ['Review: 1 comment']],
+    ['a conflict', detail({ mergeable: 'conflicting' }), ['Merge: Conflict']],
+    // A conflict is the one to fix first; marking it ready would not help.
+    ['a conflicting draft', detail({ mergeable: 'conflicting', draft: true }), ['Merge: Conflict']],
+    ['a draft', detail({ draft: true }), ['Merge: Draft']],
+    // GitHub holding it, or not having decided yet, is not "ready".
+    ['GitHub’s hold', detail({ mergeState: 'blocked' }), ['Merge: Waiting']],
+    ['GitHub still deciding', detail({ mergeable: 'unknown' }), ['Merge: Waiting']],
+    ['a merged request', detail({ state: 'merged' }), ['Merge: Merged']],
+    ['a closed request', detail({ state: 'closed' }), ['Merge: Closed']]
+  ])('says where it stands on its tiles with %s', async (_, read, names) => {
     answer(view({ request: request({ state: read.state }) }))
     answerDetail(read)
     renderPanel()
@@ -1991,6 +2010,36 @@ describe('the shape of a request on screen', () => {
     for (const name of names) {
       expect(await screen.findByRole('button', { name })).toBeInTheDocument()
     }
+  })
+
+  /* Right after a push GitHub does not know yet, and neither "ready" nor "no
+     conflicts" would be its answer. */
+  it('says GitHub is still deciding rather than that the request is ready', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ mergeable: 'unknown', mergeState: 'unknown' }))
+    renderPanel()
+
+    const footer = await nextStep()
+    expect(
+      within(footer).getByText('GitHub is still checking whether this can be merged.')
+    ).toBeInTheDocument()
+    expect(within(footer).queryByText('Ready to merge into main.')).not.toBeInTheDocument()
+
+    const merge = await showView(user, 'Merge')
+    expect(within(merge).queryByText('No conflicts with main.')).not.toBeInTheDocument()
+  })
+
+  it('says GitHub’s hold on the line, not that the request is ready', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ mergeState: 'blocked' }))
+    renderPanel()
+
+    const footer = await nextStep()
+    expect(within(footer).getByText(/GitHub will not merge this yet/)).toBeInTheDocument()
+    expect(within(footer).queryByText('Ready to merge into main.')).not.toBeInTheDocument()
+    // Still a press: `gh` turns it into auto-merge.
+    expect(within(footer).getByRole('button', { name: 'Merge' })).toBeEnabled()
   })
 
   it('keeps the view the reader picked, for as long as the request is the same', async () => {

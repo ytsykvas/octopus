@@ -1,33 +1,21 @@
 import { ChevronUp, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { InstructionKind } from '@core/instructions.js'
-
 import { Button } from '../Button.js'
 import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
 import type { PromptKind } from './requestStatus.js'
 
 /** Each prepared message, named for what pressing it does. */
-const LABELS: Record<
-  PromptKind,
-  | 'pullRequest.fixChecks'
-  | 'pullRequest.addressReview'
-  | 'pullRequest.resolveConflicts'
-  | 'pullRequest.doReview'
-  | 'pullRequest.multiAgentReview'
-> = {
+const LABELS = {
   fixChecks: 'pullRequest.fixChecks',
   addressReview: 'pullRequest.addressReview',
   resolveConflicts: 'pullRequest.resolveConflicts',
   review: 'pullRequest.doReview',
   multiAgentReview: 'pullRequest.multiAgentReview'
-}
+} as const satisfies Record<PromptKind, string>
 
-/**
- * The first of the two prompts that are always on offer (`requestStatus` puts
- * them last), which is where the line setting them apart is drawn.
- */
-const FIRST_ALWAYS: PromptKind = 'review'
+/** The two that apply to any open request, under whatever this moment calls for. */
+const ALWAYS = ['review', 'multiAgentReview'] as const satisfies readonly PromptKind[]
 
 /**
  * The prepared messages, in one menu at the foot of the pane.
@@ -47,48 +35,42 @@ export function AgentMenu({
   sending,
   onEditInstructions
 }: {
-  /** What is worth offering now, in order — `requestStatus` decides. */
+  /** What this moment calls for, most pressing first — `requestStatus` decides. */
   readonly offered: readonly PromptKind[]
   /**
    * Sends a kind's instruction, or null where there is no conversation to send
-   * it to. Null rather than a flag beside a handler that could not run: the
-   * guard inside would be one nothing can reach.
+   * it to — which draws every prompt disabled, with the reason above the first.
    */
-  readonly onPrompt: ((kind: InstructionKind) => void) | null
-  /** Which prompt is in flight, so the trigger says so. */
-  readonly sending: InstructionKind | null
+  readonly onPrompt: ((kind: PromptKind) => void) | null
+  /** A prepared message on its way, which the trigger says. */
+  readonly sending: boolean
   readonly onEditInstructions: () => void
 }): React.JSX.Element {
   const { t } = useTranslation()
 
-  const prompt = (kind: PromptKind, index: number): MenuAction => {
-    /* The reason nothing can be sent goes above the first item, where it is
-       read before any of them is tried; otherwise a line sets the two that are
-       always on offer apart from the ones that apply now, when there are any. */
-    const section =
-      index === 0 && onPrompt === null
-        ? { section: { note: t('pullRequest.noConversation') } }
-        : index > 0 && kind === FIRST_ALWAYS
-          ? { section: {} }
-          : {}
-
-    return {
-      id: kind,
-      label: t(LABELS[kind]),
-      icon: <Sparkles aria-hidden size={12} />,
-      disabled: onPrompt === null,
-      ...section,
-      onSelect: () => {
-        onPrompt?.(kind)
-      }
+  /* The reason nothing can be sent is the first item's description: read
+     before any of them is tried, and — unlike a section's note, which is
+     presentation — read by a screen reader too. Otherwise a line sets the two
+     that are always on offer apart from the ones that apply now, when there are
+     any. A disabled row takes no press, so the call below only ever runs with a
+     conversation to send to. */
+  const prompt = (kind: PromptKind, index: number): MenuAction => ({
+    id: kind,
+    label: t(LABELS[kind]),
+    icon: <Sparkles aria-hidden size={12} />,
+    disabled: onPrompt === null,
+    ...(index === 0 && onPrompt === null ? { description: t('pullRequest.noConversation') } : {}),
+    ...(index > 0 && kind === ALWAYS[0] ? { section: {} } : {}),
+    onSelect: () => {
+      onPrompt?.(kind)
     }
-  }
+  })
 
   return (
     <DropdownMenu
       align="left"
       actions={[
-        ...offered.map(prompt),
+        ...[...offered, ...ALWAYS].map(prompt),
         {
           id: 'instructions',
           label: t('pullRequest.editInstructionsItem'),
@@ -100,15 +82,9 @@ export function AgentMenu({
         }
       ]}
       trigger={({ onClick, open }) => (
-        <Button
-          size="sm"
-          variant="agent"
-          onClick={onClick}
-          aria-expanded={open}
-          disabled={sending !== null}
-        >
+        <Button size="sm" variant="agent" onClick={onClick} aria-expanded={open} disabled={sending}>
           <Sparkles aria-hidden size={12} />
-          {t(sending === null ? 'pullRequest.askAgent' : 'pullRequest.sending')}
+          {t(sending ? 'pullRequest.sending' : 'pullRequest.askAgent')}
           <ChevronUp aria-hidden size={12} />
         </Button>
       )}

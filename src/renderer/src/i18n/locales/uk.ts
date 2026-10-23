@@ -653,6 +653,7 @@ export const uk: Translation = {
     mergeBlocked: 'GitHub поки не вливає — бракує обовʼязкового ревю або перевірки.',
     mergeBehind: '{{base}} пішла вперед, відколи ця гілка від неї відділилася.',
     mergeUnstable: 'Перевірка не пройшла, але вливати все одно дозволено.',
+    mergeSettling: 'GitHub ще перевіряє, чи можна це влити.',
     mergeDraft: 'Чернетку не влити. Спершу позначте її готовою на GitHub.',
     mergeChecksRunning_one: '{{count}} перевірка ще виконується.',
     mergeChecksRunning_few: '{{count}} перевірки ще виконуються.',

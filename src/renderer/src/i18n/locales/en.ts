@@ -815,6 +815,9 @@ export const en = {
     mergeBlocked: 'GitHub will not merge this yet — a required review or check is missing.',
     mergeBehind: '{{base}} has moved on since this branch left it.',
     mergeUnstable: 'A check has not passed, but merging is still allowed.',
+    /* Right after a push GitHub has not worked out whether the request
+       merges; the button still takes a press, but "ready" would be a guess. */
+    mergeSettling: 'GitHub is still checking whether this can be merged.',
     mergeDraft: 'A draft cannot be merged. Mark it ready on GitHub first.',
     /* Not a refusal GitHub would make — it merges over a check that is not
        required — so this one says outright that the app is the one refusing. */

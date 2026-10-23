@@ -2,7 +2,6 @@ import { GitCommitHorizontal, GitPullRequest, RotateCw, SlidersHorizontal } from
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { InstructionKind } from '@core/instructions.js'
 import type { MergeMethod, PullRequest, PullRequestDraft } from '@core/pullRequests.js'
 import {
   type PullRequestComment,
@@ -25,7 +24,7 @@ import { MergeConditions } from './MergeConditions.js'
 import { NewPullRequestForm } from './NewPullRequestForm.js'
 import { PaneFooter, PullRequestFooter } from './PullRequestFooter.js'
 import { PullRequestHeader } from './PullRequestHeader.js'
-import { type RequestView, requestStatus } from './requestStatus.js'
+import { type PromptKind, type RequestView, requestStatus } from './requestStatus.js'
 import { StatusTiles } from './StatusTiles.js'
 
 interface PullRequestPanelProps {
@@ -100,8 +99,8 @@ export function PullRequestPanel({
   const request = view?.request ?? null
   const detail = usePullRequestDetail(workspaceId, request?.number ?? null, visible)
 
-  /** Which prepared message is in flight, so its own button says so. */
-  const [sending, setSending] = useState<InstructionKind | null>(null)
+  /** A prepared message on its way, which the menu's trigger says. */
+  const [sending, setSending] = useState(false)
   const [merging, setMerging] = useState(false)
   const [closing, setClosing] = useState(false)
   const [rerunning, setRerunning] = useState<RerunScope | null>(null)
@@ -215,13 +214,13 @@ export function PullRequestPanel({
    * edit. Both steps can fail, and a press that quietly did neither is worse
    * than one that says so (§13).
    */
-  const prompt = (kind: InstructionKind, open: PullRequest, conversation: string): void => {
-    setSending(kind)
+  const prompt = (kind: PromptKind, open: PullRequest, conversation: string): void => {
+    setSending(true)
     onConversation()
     void (async () => {
       const instruction = await window.octopus.workspaces.instruction(workspace.id, kind)
       if (!instruction.ok) {
-        setSending(null)
+        setSending(false)
         report(instruction)
         return
       }
@@ -259,7 +258,7 @@ export function PullRequestPanel({
         [instruction.value.trim(), context, failures].filter((part) => part !== '').join('\n\n'),
         { instruction: kind }
       )
-      setSending(null)
+      setSending(false)
       if (!sent.ok) report(sent)
     })()
   }
@@ -555,13 +554,11 @@ export function PullRequestPanel({
             base={view.base}
             dirty={view.dirty}
             exposedEnvFile={exposedEnvFile}
-            /* Null rather than a disabled flag beside a handler that could not
-               run: the guard would be one nothing can reach, and a check
-               nothing reaches is a claim nothing tests. */
+            // Null where there is no conversation to send to.
             onPrompt={
               chatId === null
                 ? null
-                : (kind: InstructionKind) => {
+                : (kind: PromptKind) => {
                     prompt(kind, request, chatId)
                   }
             }

@@ -1,19 +1,11 @@
-import {
-  AlertTriangle,
-  Check,
-  Circle,
-  GitMerge,
-  GitPullRequestClosed,
-  GitPullRequestDraft,
-  MessageSquare,
-  Minus,
-  X
-} from 'lucide-react'
+import type { TFunction } from 'i18next'
+import { AlertTriangle, Check, Circle, MessageSquare, Minus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { PullRequestDetail } from '@core/pullRequestShapes.js'
 
-import type { RequestStatus, RequestView } from './requestStatus.js'
+import { FACES, TONES } from './requestFaces.js'
+import type { MergeVerdict, RequestStatus, RequestView } from './requestStatus.js'
 
 /** A tile's face: the mark beside the value, and the value itself. */
 interface Face {
@@ -43,32 +35,7 @@ export function StatusTiles({
 }): React.JSX.Element {
   const { t } = useTranslation()
 
-  const failed = status.failedChecks.length
-
-  const checks: Face =
-    failed > 0
-      ? {
-          mark: <X aria-hidden size={12} className="text-danger" />,
-          value: t('pullRequest.tileChecksFailed', { count: failed })
-        }
-      : status.running > 0
-        ? {
-            mark: <span aria-hidden className="agent-arc" />,
-            value: t('pullRequest.tileChecksRunning', { count: status.running })
-          }
-        : status.passed > 0
-          ? {
-              mark: <Check aria-hidden size={12} className="text-success" />,
-              value: t('pullRequest.tileChecksPassed')
-            }
-          : {
-              mark: <Minus aria-hidden size={12} className="text-ink-faint" />,
-              value: t(
-                detail.checks.length === 0
-                  ? 'pullRequest.tileChecksNone'
-                  : 'pullRequest.tileChecksSkipped'
-              )
-            }
+  const checks = checksFace(status, t)
 
   const review: Face =
     detail.decision === 'changesRequested'
@@ -94,7 +61,7 @@ export function StatusTiles({
               value: t('pullRequest.tileReviewComments', { count: detail.comments.length })
             }
 
-  const merge = mergeFace(detail, status)
+  const merge = mergeFace(status.merge)
 
   return (
     <div
@@ -130,58 +97,75 @@ export function StatusTiles({
   )
 }
 
+function checksFace(status: RequestStatus, t: TFunction): Face {
+  switch (status.checks) {
+    case 'failed':
+      return {
+        mark: <X aria-hidden size={12} className="text-danger" />,
+        value: t('pullRequest.tileChecksFailed', { count: status.failedChecks.length })
+      }
+    case 'running':
+      return {
+        mark: <span aria-hidden className="agent-arc" />,
+        value: t('pullRequest.tileChecksRunning', { count: status.running })
+      }
+    case 'passed':
+      return {
+        mark: <Check aria-hidden size={12} className="text-success" />,
+        value: t('pullRequest.tileChecksPassed')
+      }
+    case 'skipped':
+    case 'none':
+      return {
+        mark: <Minus aria-hidden size={12} className="text-ink-faint" />,
+        value: t(
+          status.checks === 'none' ? 'pullRequest.tileChecksNone' : 'pullRequest.tileChecksSkipped'
+        )
+      }
+  }
+}
+
 /**
  * Whether merging would go through, which is not the same as what wants doing.
  *
  * Uncommitted and unpushed work is the footer's to say: it stands beside a
  * merge rather than in its way, so a tile reading "Ready" over it is true.
+ * GitHub holding the request, or not having decided yet, is "Waiting" — the
+ * button still takes a press, but "Ready" would be the app's guess.
  */
-function mergeFace(
-  detail: PullRequestDetail,
-  status: RequestStatus
-): {
+function mergeFace(verdict: MergeVerdict): {
   readonly mark: React.ReactNode
   readonly labelKey:
-    | 'pullRequest.pillMerged'
-    | 'pullRequest.pillClosed'
+    | (typeof FACES)['merged' | 'closed' | 'draft']['labelKey']
     | 'pullRequest.tileMergeConflict'
-    | 'pullRequest.isDraft'
     | 'pullRequest.tileMergeReady'
     | 'pullRequest.tileMergeWaiting'
 } {
-  if (status.state === 'merged') {
-    return {
-      mark: <GitMerge aria-hidden size={12} className="text-danger" />,
-      labelKey: 'pullRequest.pillMerged'
+  switch (verdict) {
+    case 'merged':
+    case 'closed':
+    case 'draft': {
+      const { Icon, tone, labelKey } = FACES[verdict]
+      return { mark: <Icon aria-hidden size={12} className={TONES[tone].text} />, labelKey }
     }
-  }
-  if (status.state === 'closed') {
-    return {
-      mark: <GitPullRequestClosed aria-hidden size={12} className="text-ink-faint" />,
-      labelKey: 'pullRequest.pillClosed'
-    }
-  }
-  if (status.conflicting) {
-    return {
-      mark: <AlertTriangle aria-hidden size={12} className="text-warning" />,
-      labelKey: 'pullRequest.tileMergeConflict'
-    }
-  }
-  if (detail.draft) {
-    return {
-      mark: <GitPullRequestDraft aria-hidden size={12} className="text-ink-faint" />,
-      labelKey: 'pullRequest.isDraft'
-    }
-  }
-  return status.canMerge
-    ? {
+    case 'conflict':
+      return {
+        mark: <AlertTriangle aria-hidden size={12} className="text-warning" />,
+        labelKey: 'pullRequest.tileMergeConflict'
+      }
+    case 'ready':
+      return {
         mark: <Check aria-hidden size={12} className="text-success" />,
         labelKey: 'pullRequest.tileMergeReady'
       }
-    : {
+    case 'checks':
+    case 'held':
+    case 'settling':
+      return {
         mark: <Circle aria-hidden size={11} className="text-ink-faint" />,
         labelKey: 'pullRequest.tileMergeWaiting'
       }
+  }
 }
 
 function Tile({
