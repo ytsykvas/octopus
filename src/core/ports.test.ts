@@ -4,6 +4,7 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  answersAt,
   type Connect,
   firstFreeBlock,
   isListening,
@@ -51,37 +52,83 @@ afterEach(async () => {
   }
 })
 
+/** A socket that emits one event on the next tick, and records the host it was asked for. */
+function answering(event: (host: string) => 'connect' | 'error', seen: string[] = []): Connect {
+  return (_port, host) => {
+    seen.push(host)
+    const socket = new EventEmitter() as EventEmitter & {
+      setTimeout: () => void
+      destroy: () => void
+    }
+    socket.setTimeout = () => undefined
+    socket.destroy = () => undefined
+
+    queueMicrotask(() => socket.emit(event(host), new Error('ECONNREFUSED')))
+    return socket as unknown as Socket
+  }
+}
+
+/** Listens on a free port of `host` and answers with it. */
+async function serveOn(host: string): Promise<number> {
+  server = createServer()
+  await new Promise<void>((resolve) => {
+    server?.listen(0, host, resolve)
+  })
+
+  const address = server.address()
+  return typeof address === 'object' && address !== null ? address.port : 0
+}
+
 describe('isListening', () => {
-  // The real thing, once: the injected connect below is only worth trusting if
-  // the shape it stands in for is the shape node actually has.
+  // The real thing: the injected connect below is only worth trusting if the
+  // shape it stands in for is the shape node actually has.
   it('says yes to a port something is listening on', async () => {
-    server = createServer()
-    await new Promise<void>((resolve) => {
-      server?.listen(0, '127.0.0.1', resolve)
-    })
+    await expect(isListening(await serveOn('127.0.0.1'))).resolves.toBe(true)
+  })
 
-    const address = server.address()
-    const port = typeof address === 'object' && address !== null ? address.port : 0
+  // `localhost` resolved to the other family: up in the browser, and the
+  // probe of 127.0.0.1 alone called it silent.
+  it('says yes to a server on ::1 alone', async () => {
+    await expect(isListening(await serveOn('::1'))).resolves.toBe(true)
+  })
 
-    await expect(isListening(port)).resolves.toBe(true)
+  it('says yes when only ::1 answers', async () => {
+    const onlySix = answering((host) => (host === '::1' ? 'connect' : 'error'))
+
+    await expect(isListening(3323, onlySix)).resolves.toBe(true)
   })
 
   // The case this exists for: octopus assigned the port, the script bound its
   // own, and nothing is there.
-  it('says no to a port nothing answers on', async () => {
-    const refusing: Connect = () => {
-      const socket = new EventEmitter() as EventEmitter & {
-        setTimeout: () => void
-        destroy: () => void
-      }
-      socket.setTimeout = () => undefined
-      socket.destroy = () => undefined
+  it('says no when neither address answers', async () => {
+    await expect(
+      isListening(
+        3323,
+        answering(() => 'error')
+      )
+    ).resolves.toBe(false)
+  })
 
-      queueMicrotask(() => socket.emit('error', new Error('ECONNREFUSED')))
-      return socket as unknown as Socket
-    }
+  it('asks both loopback addresses and nothing else', async () => {
+    const seen: string[] = []
+    await isListening(
+      3323,
+      answering(() => 'error', seen)
+    )
 
-    await expect(isListening(3323, refusing)).resolves.toBe(false)
+    expect(seen).toEqual(['127.0.0.1', '::1'])
+  })
+})
+
+describe('answersAt', () => {
+  it('says no to an address nothing answers on', async () => {
+    await expect(
+      answersAt(
+        3323,
+        '127.0.0.1',
+        answering(() => 'error')
+      )
+    ).resolves.toBe(false)
   })
 
   // Something accepted the connection and then said nothing. Waiting on that
@@ -89,7 +136,7 @@ describe('isListening', () => {
   it('gives up on a connection that never answers', async () => {
     const { connect, expire, destroyed } = silentSocket()
 
-    const answer = isListening(3323, connect)
+    const answer = answersAt(3323, '127.0.0.1', connect)
     expire()
 
     await expect(answer).resolves.toBe(false)
@@ -112,30 +159,13 @@ describe('isListening', () => {
       destroys += 1
     }
 
-    const answer = isListening(3323, () => socket as unknown as Socket)
+    const answer = answersAt(3323, '127.0.0.1', () => socket as unknown as Socket)
     socket.emit('error', new Error('ECONNREFUSED'))
     expire()
     socket.emit('connect')
 
     await expect(answer).resolves.toBe(false)
     expect(destroys).toBe(1)
-  })
-
-  it('asks loopback rather than anywhere reachable', () => {
-    let seen = ''
-    const record: Connect = (_port, host) => {
-      seen = host
-      const socket = new EventEmitter() as EventEmitter & {
-        setTimeout: () => void
-        destroy: () => void
-      }
-      socket.setTimeout = () => undefined
-      socket.destroy = () => undefined
-      return socket as unknown as Socket
-    }
-
-    void isListening(3323, record)
-    expect(seen).toBe('127.0.0.1')
   })
 })
 

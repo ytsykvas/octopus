@@ -10,8 +10,10 @@ that is not this one.
 **Private:** the development database, and the test one if the suite runs here.
 Created in setup, dropped in cleanup.
 
-**Shared:** `vendor/bundle` if the project vendors gems, `node_modules` if it
-has a JS build, `tmp/cache`. Symlinked to `$OCTOPUS_ROOT_PATH`, never dropped.
+**Shared:** a dump in the main checkout, and the gem and npm caches, which live
+outside the repository already. `vendor/bundle` and `node_modules` are not on
+this list: each worktree installs its own, so a branch that bumps a gem cannot
+rewrite the checkout's.
 
 **Pinned:** anything naming a real service — a payment sandbox, an SMTP host, an
 S3 bucket, a Sidekiq Redis URL. Env set, and a separate one for anything that
@@ -26,10 +28,8 @@ set -e
 : "${OCTOPUS_WORKSPACE_SLUG:?refusing to run without a workspace slug}"
 : "${DATABASE_NAME:?the env set must define DATABASE_NAME}"
 
-bundle install
-
-# Shared, so it is a link and never a copy: one bundle for every workspace.
-ln -sfn "$OCTOPUS_ROOT_PATH/node_modules" node_modules
+bundle check || bundle install
+[ -f package.json ] && npm install --no-audit --no-fund
 
 bin/rails db:prepare
 ```
@@ -47,13 +47,18 @@ per workspace.
 ```sh
 #!/bin/sh
 set -e
+# A SIGKILL leaves the pidfile, and Rails then refuses to boot on any port.
+rm -f tmp/pids/server.pid
 exec bin/rails server -b 127.0.0.1 -p "$OCTOPUS_PORT"
 ```
 
-`-b 127.0.0.1` because the server is for this machine. `exec` so a stop reaches
-Rails rather than the shell holding it.
+`-b 127.0.0.1` because the server is for this machine. `exec` so Rails is the
+process the SIGTERM reaches first and gets to remove its own pidfile; Stop
+signals the whole process group either way.
 
-A second process — a Sidekiq, a `bin/vite dev` — takes `$OCTOPUS_PORT_1`.
+An app started through `Procfile.dev` is `exec bin/dev -p "$OCTOPUS_PORT"`:
+foreman sets `PORT` itself and would override one from the environment. A
+second listener — a `bin/vite dev`, a mailcatcher — takes `$OCTOPUS_PORT_1`.
 
 ## Cleanup
 
@@ -62,20 +67,20 @@ A second process — a Sidekiq, a `bin/vite dev` — takes `$OCTOPUS_PORT_1`.
 # No set -e: this cannot stop the removal.
 : "${OCTOPUS_WORKSPACE_SLUG:?}"
 
-dropdb --if-exists "myapp_development_$OCTOPUS_WORKSPACE_SLUG"
-dropdb --if-exists "myapp_test_$OCTOPUS_WORKSPACE_SLUG"
-rm -rf "storage/$OCTOPUS_WORKSPACE_SLUG"
+dropdb --if-exists --force "myapp_development_$OCTOPUS_WORKSPACE_SLUG"
+dropdb --if-exists --force "myapp_test_$OCTOPUS_WORKSPACE_SLUG"
 ```
 
-`node_modules` is a symlink to something shared, so it is not on this list. `rm
--rf` on a symlink removes the link, but a trailing slash follows it — and that
-would empty the main checkout's `node_modules` while other workspaces are using
-it.
+`dropdb` rather than `bin/rails db:drop`: the cleanup has 30 seconds and no
+shell, a Rails boot spends much of that, and `db:drop` refuses outright on a
+protected environment. `--force` because a server still holding a connection
+would otherwise keep the database. `storage/` and `node_modules` sit inside the
+worktree and go with it.
 
 ## Variables
 
-Rails reads `config/database.yml`, which usually reads `DATABASE_URL` or a
-`database:` key. Either way the per-workspace name comes from the env set:
+Rails merges `DATABASE_URL` over `config/database.yml`, so the per-workspace
+name comes from the env set without touching the file:
 
 ```
 DATABASE_NAME=myapp_development_$OCTOPUS_WORKSPACE_SLUG

@@ -764,6 +764,8 @@ describe('validation at the boundary', () => {
     expect(answer).toMatchObject({
       ok: true,
       value: {
+        port: workspace.port,
+        portListening: false,
         variableNames: ['DATABASE_URL'],
         lastRuns: [
           { purpose: 'run', outcome: { kind: 'running' }, output: 'cannot reach [DATABASE_URL]' }

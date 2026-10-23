@@ -913,7 +913,7 @@
 
 /* Nothing moves on its own for anybody who has asked the system for less
    motion: every animation at once, so a spinner written tomorrow needs nothing
-   of its own (docs/ui.md, "Motion"). `!important` because a class such as
+   of its own (docs/ui/motion.md). `!important` because a class such as
    `.notice-in` outranks `*`. */
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -1,19 +1,19 @@
 ---
 name: agent-sdk
-description: Integrating with @anthropic-ai/claude-agent-sdk — starting agent sessions, streaming events, tool permissions, resume, and mapping SDK messages onto the internal AgentEvent type. Use when working on src/core/agent.ts, adding agent chat capabilities, handling session events or session ids.
+description: Integrating with @anthropic-ai/Codex-agent-sdk — starting agent sessions, streaming events, tool permissions, resume, and mapping SDK messages onto the internal AgentEvent type. Use when working on src/core/agent.ts, adding agent chat capabilities, handling session events or session ids.
 when_to_use: When an agent needs to be started in a workspace, its replies handled, tool permissions implemented, a session resumed after a restart, or session cost surfaced.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npx vitest:*), Bash(npm run typecheck:*)
 ---
 
-# Working with the Claude Agent SDK
+# Working with the Codex Agent SDK
 
-Package: `@anthropic-ai/claude-agent-sdk` (installed). Types live in
-`node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` — **check them**, because
+Package: `@anthropic-ai/Codex-agent-sdk` (installed). Types live in
+`node_modules/@anthropic-ai/Codex-agent-sdk/sdk.d.ts` — **check them**, because
 the public documentation presents a simplified picture.
 
 ## The project's core principle
 
-octopus is a **harness** around Claude Code, not a filter on it: it adds nothing
+octopus is a **harness** around Codex, not a filter on it: it adds nothing
 of its own to the context and withholds nothing the user has put there (§4,
 §12.3 docs/PROJECT.md).
 
@@ -21,16 +21,12 @@ of its own to the context and withholds nothing the user has put there (§4,
 settingSources: ['user', 'project', 'local'] // the default; the CLI's own set
 ```
 
-The SDK is explicit that `'project'` is what loads `CLAUDE.md`, and it turns out
-to gate `.claude/commands/` as well. The value is a user setting —
+The SDK is explicit that `'project'` is what loads `AGENTS.md`, and it turns out
+to gate `.Codex/commands/` as well. The value is a user setting —
 nothing / `['project']` / all three — but the default is the full set, and an
-agent that knows less here than in a terminal is a defect.
-
-**This reverses what this skill used to say.** Until 2026-08-19 it read "do not
-change this value", because loading nothing was taken to be the answer to
-Conductor. It was not: the objection is to material **we** add that nobody wrote,
-not to the instructions a user wrote for their own agent. If you find that
-argument still standing anywhere, it is stale — fix it.
+agent that knows less here than in a terminal is a defect. Loading nothing is
+not what §4 asks for: the objection is to material **we** add that nobody
+wrote, not to the instructions a user wrote for their own agent.
 
 What must stay true: no text of ours in the system prompt, no bundled skill of
 ours, and any prose the app sends goes as a **visible** user message. The one
@@ -40,7 +36,7 @@ answers a call the agent made, so it is not context we added.
 ## Basic run
 
 ```ts
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { query } from '@anthropic-ai/Codex-agent-sdk'
 
 const session = query({
   prompt: inputStream, // AsyncIterable<SDKUserMessage> — enables follow-ups
@@ -48,7 +44,7 @@ const session = query({
     cwd: workspace.path,
     resume: workspace.sessionId ?? undefined,
     settingSources: ['user', 'project', 'local'],
-    systemPrompt: { type: 'preset', preset: 'claude_code' },
+    systemPrompt: { type: 'preset', preset: 'Codex' },
     canUseTool: async (toolName, input, { decisionReason }) => {
       /* our own permission dialog */
     }
@@ -154,7 +150,8 @@ Alternatively call `session.streamInput(...)` on an existing session object.
 
 - `session.interrupt()` — stop the current work;
 - `session.setModel(model)` — switch models mid-flight;
-- `session.setPermissionMode(mode)` — `'default' | 'plan' | 'dontAsk' | 'bypassPermissions'`;
+- `session.setPermissionMode(mode)` — a `PermissionMode` from `sdk.d.ts`:
+  `'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto'`;
 - `session.close()` — **mandatory** when a workspace is removed or archived.
 
 An unclosed `query()` leaves a live child process behind. Every workspace must
@@ -168,9 +165,9 @@ keys**, so everything that has to change together goes in one call: a flag sent
 after a level replaces the level rather than joining it.
 
 At start-up the same layer is `Options.settings`, which takes a `Settings` object
-directly. Say every key explicitly, `false` included: with settings files now
-loaded, a key left unsaid is answered by whichever file happens to mention it,
-and a session that quietly kept the last one's answer is a state nobody chose.
+directly. Say every key explicitly, `false` included: settings files load too,
+so a key left unsaid is answered by whichever file happens to mention it, and a
+session that quietly kept the last one's answer is a state nobody chose.
 
 ## Permissions
 
@@ -181,18 +178,14 @@ at which the UI shows the user what the agent wants to do.
 **It takes three arguments, and the third is the one worth having.** It carries
 `decisionReason` — the bridge's own sentence saying why this request was raised —
 along with `suggestions`, `blockedPath` and `title`. Declaring only two
-parameters is legal TypeScript and silently throws all of it away, which is how
-the card came to say "the agent wants to use Edit" over a path and nothing else.
+parameters is legal TypeScript and silently throws all of it away, and the card
+then says "the agent wants to use Edit" over a path and nothing else. The
+reason matters: under `acceptEdits` the CLI still asks about an edit to the
+agent's own instructions (`.Codex/skills/…/SKILL.md`), and only
+`decisionReason` says so — without it the mode looks broken.
 
-That mattered more than it sounds. Measured against a live session: 59 edits
-under `acceptEdits` went through without a word, and the sixtieth —
-`.claude/skills/…/SKILL.md` — was asked about, because the CLI guards the agent's
-own instructions separately. It says so in `decisionReason`. Without it the mode
-looks broken and nothing on screen can say otherwise.
-
-A test double that flattens the hook hides this as thoroughly as the code does:
-`agent.test.ts`'s fake narrowed `askPermission` to the tool name, so no test
-could have failed when the field went unread. **Fakes take the whole argument.**
+**Fakes take the whole argument.** A test double that narrows `askPermission`
+to the tool name cannot fail when the field goes unread.
 
 Do not make `bypassPermissions` the default: transparency beats convenience (§4).
 
@@ -209,13 +202,13 @@ then the mapping, then the rendering.
 ## After an upgrade: the `cd` line
 
 The `CwdChanged` hook callback runs **only beside a command hook for the same
-event in the session's settings** — measured on 0.3.307, written down nowhere.
-`agent.ts` carries that command hook (`CWD_WATCH_SETTINGS`, a `true`) for the
-yellow "the agent's shell moved to …" line alone. No test starts a session, so
-a release that changes this leaves every check green and the line gone.
-After every upgrade of the package, run `npm run probe:cwd` once: it starts a
-session in a throwaway repository against the real login, asks for two `cd`s
-and fails when either goes unsaid.
+event in the session's settings** — measured on 0.3.307, still true on 0.3.308,
+written down nowhere. `agent.ts` carries that command hook
+(`CWD_WATCH_SETTINGS`, a `true`) for the yellow "the agent's shell moved to …"
+line alone. No test starts a session, so a release that changes this leaves
+every check green and the line gone. After every upgrade of the package, run
+`npm run probe:cwd` once: it starts a session in a throwaway repository against
+the real login, asks for two `cd`s and fails when either goes unsaid.
 
 ## Testing
 

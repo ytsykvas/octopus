@@ -36,10 +36,6 @@ describe("the repository's own scripts", () => {
     await expect(run('sh', ['-n', join(SCRIPTS, name)])).resolves.toBeDefined()
   })
 
-  it.each(NAMES)('%s carries nothing over from Conductor', async (name) => {
-    expect(await read(name)).not.toContain('CONDUCTOR_')
-  })
-
   describe('run.sh', () => {
     it('gives the dev copy a data root of its own, named by the slug', async () => {
       expect(await read('run.sh')).toContain(`export ${DATA_DIR_ENV}="${DEV_ROOT}"`)

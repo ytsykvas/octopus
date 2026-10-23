@@ -122,6 +122,12 @@ export interface SessionOptions {
   /** The workspace's remote URLs and the user's URL rewrites (`pushTargets`), for `agentEnv`. */
   readonly pushTargets: readonly string[]
   /**
+   * The workspace's variables (`workspaceEnv`), laid under the publish guard's
+   * own, which they cannot displace. Read once, as the session starts;
+   * `service.ts` starts the session again when they move.
+   */
+  readonly env: Readonly<Record<string, string>>
+  /**
    * What this conversation was told about each skill the record names, by the
    * name the agent knows (`skillOverridesFor`).
    *
@@ -527,7 +533,7 @@ export class SideQuestionUnsupportedError extends Error {
 }
 
 /**
- * Asks a `/btw` of a live conversation; see docs/core.md for what the CLI does.
+ * Asks a `/btw` of a live conversation; see docs/core/conversations.md for what the CLI does.
  *
  * Null when the CLI had no answer. A refused or aborted request is rethrown.
  */
@@ -927,7 +933,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       ...publishLocked(
         hooks.refuseCommand,
         options.pushTargets,
-        process.env,
+        { ...process.env, ...options.env },
         cwdWatch(hooks.onEvent)
       ),
       // What makes text appear while it is being written rather than in one

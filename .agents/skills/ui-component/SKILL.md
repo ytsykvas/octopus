@@ -9,32 +9,21 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npm run typecheck:*), Bash(np
 
 # UI component
 
-The style is a **calm desktop interface** in the spirit of Linear, Raycast and
-VS Code: neutral base, thin separators, restrained accents (§10 docs/PROJECT.md).
+The invariants are in `.Codex/rules/renderer.md`; this is how to meet them.
+Tokens live in `src/renderer/src/styles.css`; the design intent, a calm desktop
+interface in the spirit of Linear, Raycast and VS Code, is §10 of
+`docs/PROJECT.md`.
 
-Tokens live in `src/renderer/src/styles.css`. **Never write colours inline** —
-tokens only, otherwise the dark theme breaks.
+## Localising a string
 
-## Every string is localised
-
-No user-facing text appears in a component. Add the key to
-`src/renderer/src/i18n/locales/en.ts` first — English is the source of truth —
-then translate it in `uk.ts` and `de.ts`. TypeScript rejects a missing key, but
-not a stale one: rewording the English means rewording both translations too.
-German addresses the user as _du_, keeps developer terms English (der Branch,
-der Pull Request, der Workspace) and avoids long compounds.
+Add the key to `en.ts` first, then `uk.ts` and `de.ts`. German addresses the
+user as _du_, keeps developer terms English (der Branch, der Pull Request, der
+Workspace) and avoids long compounds.
 
 ```tsx
 const { t } = useTranslation()
 return <span>{t('sidebar.projects')}</span>
 ```
-
-Errors coming from core carry a `code`; render them through `useErrorMessage`
-rather than printing `failure.error` directly.
-
-**Delete a key when its last caller goes.** A key nothing reads is a claim
-about the interface that has quietly stopped being true, and it survives every
-type check — `en.ts` types the other locales, but nothing types them against the code.
 
 ## State that is not this component's
 
@@ -54,7 +43,7 @@ window's business, not the hook's.
   render (`if (activeId !== lastActiveId) { … }`, the official pattern); state
   that follows an event is set in the handler.
 - **No reading a ref during render.** A ref is not an escape hatch from the
-  rule above; both were rejected in turn while writing `WorkspaceTerminals`.
+  rule above; the linter rejects both.
 
 ## The content comes first
 
@@ -89,8 +78,7 @@ over its own content.
 - `.choice` — **every** checkbox and radio, with `.choice-danger` for the tick
   inside a destructive confirmation. Not optional and not replaceable by
   `accent-color`: that colours the checked fill and leaves the empty box a
-  white square on the dark canvas. Three of six inputs were left without it
-  because this list did not name it;
+  white square on the dark canvas;
 - `.section-label` — section heading (11px, weight 600, muted);
 - `.focus-ring` — visible keyboard focus;
 - `.titlebar-drag` — window drag region.
@@ -99,22 +87,12 @@ The second copy of a run of utility classes is the moment to add a class here.
 Six copies of the field styling had already drifted by a few pixels of height —
 inconsistency that reads as sloppiness rather than as variety.
 
-## Colours through tokens only
-
-```tsx
-// Good
-<div className="bg-surface text-ink border-line">
-
-// Bad — breaks the dark theme
-<div className="bg-[#f7f8fa] text-black border-gray-200">
-```
+## The tokens
 
 Available: `canvas`, `surface`, `muted`, `line`, `line-strong`, `ink`,
 `ink-soft`, `ink-faint`, `accent`, `accent-hover`, `on-accent`, `success`,
 `danger`, `warning`, `info`, plus paired backgrounds `success-bg`, `danger-bg`,
 `warning-bg`, `info-bg`.
-
-**Text on an accent** uses the `on-accent` token, not `text-white`.
 
 **Status colours** apply to text or icons; only the paired `*-bg` is used as a
 background. Solid colour blocks make a list look like confetti.
@@ -139,14 +117,14 @@ adding new button components.
 
 Existing pieces, worth checking before writing another: `Modal`,
 `DropdownMenu`, `Combobox` (a select with search), `Field`, `NameEditor`,
-`ResizeHandle`, `Terminal`, and `Disclosure` for anything that folds —
-`DisclosureButton` for the toggle, `DisclosureChevron` alone where the control
+`ResizeHandle`, `Terminal`, and the pair in `Disclosure.tsx` for anything that
+folds — `DisclosureButton` for the toggle, `DisclosureChevron` alone where the control
 is not a plain button (a `Button`, a tree row, a `<summary>`).
 
 A mounted `Terminal` that is not on screen is hidden with `.offstage` inside a
 box that clips, or with `display: none` — never `invisible` or a box of no
 height, which xterm cannot tell from on screen and goes on drawing
-(`docs/ui.md`, "A terminal not on screen stops being drawn").
+(`docs/ui/right-pane.md`, "A terminal not on screen stops being drawn").
 
 `Modal` deliberately leaves its body without padding so a list can span the
 full width — a form inside it brings its own.
@@ -223,30 +201,6 @@ Two consequences worth carrying to anything else built this way:
 - **Announce it as well as draw it.** A lifted surface and a mark reach nobody
   using a screen reader, so the chosen row, tab and rail item all carry
   `aria-current` — which is also the only handle a test has on selection.
-
-## Themes
-
-Nothing to do if you use tokens: `.dark` on `<html>` swaps every value at once.
-`App.tsx` sets the class from a main-process event.
-
-**Check both themes** — muted colours behave differently against a dark ground.
-
-## Where logic does not go
-
-A component renders and calls `window.octopus.*`. Git, filesystem and process
-work lives in `src/core/`.
-
-## Running the tests
-
-The renderer has a vitest config of its own, and the default one does not look
-in `src/renderer` at all. Without the flag a test file here is not "failing" —
-it is `No test files found`, which reads like a missing file.
-
-```bash
-npx vitest run --config vitest.renderer.config.ts src/renderer/src/components/X.test.tsx
-```
-
-`npm test` runs both configs in turn, so only a single file needs the flag.
 
 ## Before finishing
 

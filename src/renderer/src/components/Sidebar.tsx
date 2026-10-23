@@ -48,7 +48,7 @@ interface SidebarProps {
   /** Workspace whose name is being edited — set right after creation. */
   readonly editingWorkspaceId: string | null
   readonly onEditingWorkspaceChange: (workspaceId: string | null) => void
-  /** Opens a conversation in the selected workspace with Help's text in its composer. */
+  /** Opens a conversation in the selected workspace and sends Help's text there. */
   readonly onHelp: (kind: HelpKind) => void
   /** Whether another conversation fits; Help opens one, so it waits for room. */
   readonly canStartChat: boolean

@@ -24,7 +24,7 @@ file that was renamed is the cheapest kind of rot to find and the most certain
 to mislead.
 
 ```bash
-grep -oE '\(\.\./[^)]+\)|`src/[^`]+`' docs/*.md
+grep -oE '\((\.\./)+[^)]+\)|`src/[^`]+`' docs/*.md docs/*/*.md
 ```
 
 Check each one resolves. Report the ones that do not.
@@ -43,11 +43,11 @@ Then compare against the claims each document makes:
 | Document          | Goes stale when                                                               |
 | ----------------- | ----------------------------------------------------------------------------- |
 | `architecture.md` | a layer gains or loses a responsibility; a boundary rule changes              |
-| `core.md`         | a core module is added, removed or renamed; an invariant changes              |
+| `core/`           | a core module is added, removed or renamed; an invariant changes              |
 | `ipc.md`          | **any** channel is added, removed or renamed, or its validation changes       |
-| `data.md`         | a stored field appears; a migration is added; a path under `~/.octopus` moves |
-| `ui.md`           | the window layout changes; a token or shared component is added               |
-| `testing.md`      | the vitest projects, the coverage threshold or the exclusions change          |
+| `data/`           | a stored field appears; a migration is added; a path under `~/.octopus` moves |
+| `ui/`             | the window layout changes; a token or shared component is added               |
+| `testing.md`      | the two vitest configs, the coverage threshold or the exclusions change       |
 
 ### 3. Are the counts and lists still right?
 
@@ -55,15 +55,15 @@ These are the claims that quietly become wrong:
 
 ```bash
 grep -c "host.handle(" src/main/ipc.ts              # ipc.md gives a channel count
-ls src/core/*.ts | grep -v test                     # core.md lists the modules
+ls src/core/*.ts | grep -v test                     # core/modules.md lists the modules
 grep -n "thresholds" -A 5 vitest.shared.ts          # testing.md quotes the threshold
 ```
 
 The palette needs care — counting `--project-` in the stylesheet does not give
-the number of colours, and that count has now been wrong twice: each colour is
-declared once per theme, so the total is doubled, and the wash rules name
-`--project-color` on a dozen further lines besides. Do not correct the number,
-do not quote one. The list in the core is the answer:
+the number of colours: each colour is declared once per theme, so the total is
+doubled, and the wash rules name `--project-color` on a dozen further lines
+besides. Do not quote a number taken from the stylesheet. The list in the core
+is the answer:
 
 ```bash
 node -e "const s=require('fs').readFileSync('src/core/colors.ts','utf8');
@@ -105,5 +105,3 @@ One of two answers:
 - **In step with the code** — say so plainly, without inventing findings.
 - **These have drifted** — list each with the file and the claim, and say
   whether it is now wrong or merely incomplete.
-
-Replies to the user are in Ukrainian; everything written into `docs/` is English.

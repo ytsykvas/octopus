@@ -597,10 +597,10 @@ export const en = {
       'Sent when the pull request conflicts with its base branch and you ask the agent to settle it.',
     setupScripts: 'Setting the project up to run',
     setupScriptsHint:
-      'Put in a new conversation, unsent, when you choose Help → “Set this project up to run”. Octopus adds the checkout, the scripts in effect, the files it carries and the names of the variables below it — never their values.',
+      'Sent as the first message of a new conversation when you choose Help → “Set this project up to run”. Octopus adds the checkout, the workspace’s name, slug and port, the scripts in effect, the files it carries and the names of the variables below it — never their values.',
     diagnoseRun: 'Diagnosing a run that failed',
     diagnoseRunHint:
-      'Put in a new conversation, unsent, when you choose Help → “Why does Run not work?”. Octopus adds the same facts and the last lines of the latest build and server, with their exit codes.'
+      'Sent as the first message of a new conversation when you choose Help → “Why does Run not work?”. Octopus adds the same facts, whether anything is listening on the port, and the last lines of the latest build and server, with their exit codes.'
   },
 
   help: {
@@ -609,11 +609,17 @@ export const en = {
     diagnose: 'Why does Run not work?',
     diagnoseHint: 'The agent reads the last run\u2019s output, the scripts and the variable names',
     failed: 'Help could not read this workspace: {{reason}}',
-    /* The facts octopus writes under the instruction, in the composer of a new
-       conversation. Read by the agent, so plain and literal. */
+    notSent: 'Help could not send its message, so it is waiting in the composer: {{reason}}',
+    /* The facts octopus writes under the instruction, in the first message of a
+       new conversation. Read by the agent, so plain and literal. */
     context: {
       heading: '\u2014 What octopus knows about this workspace \u2014',
       checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',
+      workspace:
+        'Workspace ($OCTOPUS_WORKSPACE_NAME): {{name}}; its slug ($OCTOPUS_WORKSPACE_SLUG): {{slug}}',
+      port: 'Port ($OCTOPUS_PORT): {{port}}; run.sh also gets $OCTOPUS_PORT_1 \u2026 $OCTOPUS_PORT_9, which are {{next}}\u2013{{last}}',
+      listening: 'Something is listening on port {{port}} right now.',
+      notListening: 'Nothing is listening on port {{port}} right now.',
       envFile: 'Env file the env set is written into: {{name}}',
       profile: 'Env set in effect: {{name}}',
       variables:

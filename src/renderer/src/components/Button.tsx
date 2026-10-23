@@ -46,7 +46,10 @@ export function Button({
   return (
     <button
       type="button"
-      className={`focus-ring inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      // `shrink-0 whitespace-nowrap`: in a crowded flex row the button gave way
+      // first and its label broke onto a second line, past its fixed height.
+      // A label never wraps; whatever sits beside it does.
+      className={`focus-ring inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-[var(--radius-control)] border font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       {...rest}
     >
       {variant === 'agent' && <span aria-hidden className="ai-button-line" />}

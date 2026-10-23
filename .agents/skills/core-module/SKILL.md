@@ -9,24 +9,10 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npx vitest:*), Bash(npm test:
 
 # Core module
 
-`src/core/` holds all application logic. It is headless: no Electron imports,
-no knowledge of the UI. That is what makes it testable without launching the
-app and extractable into a CLI or daemon later (§11.1 docs/PROJECT.md).
-
-## Non-negotiables
-
-**Everything is written in English** — code, comments, test names, error
-messages. See the language policy in `AGENTS.md`.
-
-**100% coverage.** The threshold lives in `vitest.config.ts` and fails the
-build when it drops. This is not aspirational: the test is written with the
-code, not "later".
-
-**No `electron`.** Importing it under `src/core/` is blocked by a hook. If
-logic needs a window, dialog or menu, it belongs in `src/main/`, and the core
-keeps a pure function behind a typed interface.
-
-**No `any`.** For genuinely unknown data use `unknown` and narrow it with zod.
+The invariants are in `.Codex/rules/core.md`; this is how to meet them.
+`src/core/` is headless — no Electron, no DOM — which is what makes it
+testable without launching the app and extractable into a CLI or daemon later
+(§11.1 docs/PROJECT.md).
 
 ## Writing a testable module
 
@@ -70,9 +56,6 @@ Tests that need to name the value they expect pass a fixed source; the rest
 assert on properties.
 
 ## External processes
-
-Only `execFile`, **never `exec`**. Branch names and paths come from the user,
-and `exec` hands them to a shell — that is command injection.
 
 **Apply every field a patch carries.** An update that lists fields explicitly —
 `...(name !== undefined && { name })` — protects against writing back stale
@@ -124,7 +107,7 @@ agent treats as global checked inside one directory.
 | workspace `slug`   | its project — it names a database, and is **not** injective                         |
 | workspace `branch` | its project — branches live in a repository                                         |
 | workspace `id`     | the whole app — it is the IPC key                                                   |
-| skill `name`       | everything the agent can see — both stores, and the checkout's own `.claude/skills` |
+| skill `name`       | everything the agent can see — both stores, and the checkout's own `.Codex/skills` |
 | skill folder       | its store — it is a directory, and the app addresses a skill by it                  |
 | directory path     | the filesystem                                                                      |
 
@@ -139,41 +122,18 @@ Two projects are two repositories: `octopus/anna` in each is two different
 branches, and treating that as a clash locks every project after the first out
 of the start of the name pool.
 
-## git is the source of truth, not our state
+## Worked examples of three rules
 
-`state.json` holds only what git cannot know — the agent session, the port, the
-label. Anything git knows, ask git.
-
-A branch outlives the worktree it was created for: removal keeps it unless the
-user asks otherwise. So a name free in our records may still be taken in the
-repository, and `worktree add` will refuse. `takenByBranches` in `workspaces.ts`
-exists for exactly this.
-
-## A failed operation cleans up after itself
-
-An operation that creates several things — a directory, a branch, a record —
-must undo what it managed before failing. Debris left in git is invisible to
-the app but blocks every later attempt, so one failure becomes permanent.
-
-```ts
-export async function rollbackWorkspace(workspace: Workspace, exec: GitExec): Promise<void>
-```
-
-Rollback is best-effort and never throws: it runs while another failure is
-already being handled, and a second one must not replace the original.
-
-## Errors
-
-Never swallow them. If git fails, propagate stderr so the cause is visible in
-the UI rather than a generic "something went wrong".
-
-A `catch` is justified when the fallback is genuinely correct — not to make a
-gap in coverage disappear. If the alternative is a clearer error one line
-later, let it through instead.
-
-For failures the user can act on, throw a typed error carrying a
-machine-readable `code` — the renderer turns that into a localised message
-(see `ProjectValidationError` in `projects.ts`).
+- **git is the source of truth.** A branch outlives the worktree it was made
+  for, so a name free in `state.json` may still be taken in the repository —
+  `takenByBranches` in `workspaces.ts` asks git before `worktree add` refuses.
+- **A failed operation cleans up.** `rollbackWorkspace` in `workspaces.ts`
+  undoes the directory, the branch and the record, is best-effort and never
+  throws: it runs while another failure is already being handled.
+- **Errors carry a `code`.** `ProjectValidationError` in `projects.ts` is the
+  shape; the renderer maps the code to a localised message. A `catch` is
+  justified only when the fallback is genuinely correct, never to make a gap
+  in coverage disappear.
 
 ## Test shape
 
@@ -228,7 +188,7 @@ Then assert against that. The probes worth keeping from the last audit:
 | Ask                                       | Because                                                                                                             |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | what does a hostile name become           | `toSlug` output goes straight into `git branch`, which rejects `.lock`, `..`, leading `-`, `@{`, control characters |
-| what happens on collision                 | a port hash collides long before the range fills                                                                    |
+| what happens on collision                 | the pool is twenty blocks, and the port a probe finds free can be taken by the time a server binds                  |
 | what does a half-written file look like   | a crash between temp-write and rename leaves the temp behind                                                        |
 | what does the tool print on a stale entry | `prunable`, `locked` and `bare` lines the parser had never seen                                                     |
 

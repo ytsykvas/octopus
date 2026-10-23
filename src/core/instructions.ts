@@ -58,7 +58,7 @@ export const PUBLISHES_AFTER: Readonly<Record<InstructionKind, boolean>> = {
   review: false,
   multiAgentReview: false,
   resolveConflicts: true,
-  // Never read: Help's text is sent from the composer, not as an instruction.
+  // Never read: Help sends its text without naming an instruction kind.
   // False should that change — they write scripts at most, and nobody asked
   // for a push.
   setupScripts: false,
@@ -195,72 +195,113 @@ This branch conflicts with its base. Merge the base in and settle it.
 `,
 
   /*
-   * Help's two are put into a composer to be read before they are sent, rather
-   * than sent straight into the log, so their paragraphs are not wrapped: in a
-   * field narrower than eighty columns every hard break wrapped a second time.
+   * Help's two are read in the log as a message, and in a composer when their
+   * send fails, so their paragraphs are not wrapped: in a field narrower than
+   * eighty columns every hard break wrapped a second time.
    */
   setupScripts: `# Setting this project up to run
 
 Octopus runs every workspace in its own git worktree, on its own port, and starts it with three scripts kept in \`.octopus/scripts/\` inside the repository:
 
-- \`setup.sh\` — on Run, before the server: dependencies, the database, dumps, migrations.
-- \`run.sh\` — on Run, on \`$OCTOPUS_PORT\`: the dev server, and nothing else.
+- \`setup.sh\` — before the server, **on every Run**: dependencies, the database, migrations. It runs the tenth time as surely as the first, so it creates only what is absent, installs without wiping, never re-seeds and never restores a dump twice.
+- \`run.sh\` — on Run, on \`$OCTOPUS_PORT\`: the dev server, and nothing else. Restart runs only this one.
 - \`archive.sh\` — when the workspace is deleted: giving back exactly what setup took.
 
-Your job is to write them for this repository, in this worktree, and to say what else octopus needs. Octopus reads the scripts live from \`.octopus/scripts/\` in the worktree, ahead of anything in its own settings.
+Your job is to write the ones this repository needs, in this worktree, and to say what else octopus needs. Octopus reads the scripts live from \`.octopus/scripts/\` in the worktree, ahead of anything in its own settings. A library or a CLI with nothing to serve has no \`run.sh\`: say so rather than inventing a server.
 
 ## Do this in order
 
-1. **Look at the repository.** Which stack, which package manager, which services (database, cache, queue), how the dev server is started today, which files are gitignored but needed (\`.env\`, \`config/master.key\`, \`.env.local\`). If there is a \`.conductor/\` directory, read it: it is the same arrangement under older names (see the end).
+1. **Look at the repository.** Stack, package manager, services (database, cache, queue), and how it is started today: \`package.json\` scripts, a \`Procfile\`, a \`Makefile\`, \`docker-compose*.yml\`, \`.github/workflows\` (the most honest record of how to install and run it), \`.nvmrc\` or \`.tool-versions\`, \`.env.example\`, and the framework's own config (\`settings.py\`, \`config/database.yml\`, \`config/dev.exs\`, \`launchSettings.json\`) for every literal port and database name. Note which files are gitignored but needed (\`.env\`, \`config/master.key\`, \`.env.local\`).
 2. **Answer, for every resource, "what must this workspace not share with the others?"**
-   - **Private** — created by \`setup.sh\` under a name derived from \`$OCTOPUS_WORKSPACE_SLUG\`, dropped by \`archive.sh\`. A database, a tmp directory, a cache namespace.
-   - **Shared** — taken from the checkout at \`$OCTOPUS_ROOT_PATH\` and never dropped. A dump, a dependency cache.
-   - **Pinned** — a value every workspace must see, such as the database name pattern. That is a variable in the project's env set, never a line in a script.
+   - **Private** — created by \`setup.sh\` under a name built from \`$OCTOPUS_WORKSPACE_SLUG\`, dropped by \`archive.sh\`. The development database, the **test database** too (agents run suites in several workspaces at once), a Compose project, a cache namespace.
+   - **Shared** — read from the checkout at \`$OCTOPUS_ROOT_PATH\` or from the machine, never dropped. A dump, fixtures, a running Postgres, the package manager's cache.
+   - **Pinned** — a value every workspace must see, such as the database name pattern or a sandbox endpoint. That is a variable in the project's env set, never a line in a script.
 
-   Write the three lists down in your reply before writing any shell.
+   Gitignored data inside the worktree — \`db.sqlite3\`, \`storage/\`, \`media/\`, \`tmp/\`, \`_build/\` — is private for free and needs no line in either script. Write the three lists down in your reply before writing any shell.
 
-3. **The files to carry.** A worktree holds what git tracks. Every gitignored file the app needs must be listed in Project settings → Files carried into a workspace, one path per line; octopus copies them into each workspace before a run. List only paths git ignores. If this checkout has not got a file either, say where it may be found (a sibling checkout, a password manager) rather than inventing one.
-4. **The variables.** Read variable _names_ from the code, the \`.env.example\` and the existing \`.env\`, and list the ones the project's env set must define. **Never write a value, never print one, never commit one.** Values go into Project settings by hand. A \`KEY=value\` appended to \`.env\` by a script loses: octopus writes its own block last, on every run.
-5. **The scripts.** Write the three files, \`chmod +x\` each, and verify with \`sh -n\` and \`test -x\`. Do not run them: the person reading your reply presses Run.
+3. **The files to carry.** A worktree holds what git tracks. Every gitignored file the app needs must be listed in Project settings → Files carried into a workspace, one exact path per line, no globs; a trusted repository may carry the same list in \`.octopus/carry\`. Octopus copies them in when the workspace is made and again before each script, never over a file already there, so a seed database may be carried too. List only paths git ignores. If this checkout has not got a file either, a line may name where it is (\`.env = ~/work/app/.env\`, usually another checkout of the same repository); say where it may be found rather than inventing one.
+4. **The variables.** Read variable _names_ from the code, \`.env.example\` and the existing \`.env\`, and list the ones the env set must define. For a secret — a key, a password, a token — **never write a value**, never print one, never commit one; a script may say how to generate one (\`rails secret\`, \`php artisan key:generate --show\`), never generate it into a file. A value that is no secret and follows from the workspace is the opposite: propose it as a line to paste into the env set, written with octopus's names — \`DATABASE_URL=postgres://localhost/app_$OCTOPUS_WORKSPACE_SLUG\`, \`PORT=$OCTOPUS_PORT\`, \`VITE_API_URL=http://127.0.0.1:$OCTOPUS_PORT_1\`, \`BROWSER=none\`. If the stack reads another file than \`.env\` (Vite and Next read \`.env.local\`), say which to set as the project's env file. A \`KEY=value\` a script appends to that file loses: octopus writes its own block last, before every script.
+5. **The scripts.** Write the files the repository needs, a shebang on line 1, \`chmod +x\` each, and check each with the shell its shebang names (\`bash -n\` or \`sh -n\`), and with \`shellcheck\` if it is installed. Do not run them: the person reading your reply presses Run.
 6. **Say what happens next.** The Scripts tab shows a repository's scripts in full and Run stays disabled until the person presses "Allow these" or turns on "Trust this repository" in Project settings. A \`git pull\` that changes a script asks again.
 
 ## What a script is given
 
-Every script gets \`$OCTOPUS_ROOT_PATH\` (the checkout), \`$OCTOPUS_WORKSPACE_NAME\`, \`$OCTOPUS_WORKSPACE_SLUG\` and \`$OCTOPUS_ENV_PROFILE\`, plus every variable of the env set in effect. \`run.sh\` also gets \`$OCTOPUS_PORT\` and \`$OCTOPUS_PORT_1\` … \`$OCTOPUS_PORT_9\` for a stack that is more than one process. The server binds \`$OCTOPUS_PORT\`, never a literal.
+Every script gets \`$OCTOPUS_ROOT_PATH\` (the checkout), \`$OCTOPUS_WORKSPACE_NAME\`, \`$OCTOPUS_WORKSPACE_SLUG\` and \`$OCTOPUS_ENV_PROFILE\`, plus the variables of the env set in effect as dotenv would read them (a multi-line or backtick-quoted value stays in the file only). \`run.sh\` also gets \`$OCTOPUS_PORT\` and \`$OCTOPUS_PORT_1\` … \`$OCTOPUS_PORT_9\` for a stack that is more than one process. \`$OCTOPUS_PORT\` is what the app's link opens: the process a person looks at binds it, and an API takes \`$OCTOPUS_PORT_1\`.
 
-The slug is the workspace name lowercased, every other character an underscore, cut to 30 characters, so a prefix still fits inside Postgres' 63. It is the **only** source of a per-workspace name. The name itself may hold spaces.
+**Values in the env set may use those names.** Octopus fills in \`$OCTOPUS_PORT\`, \`$OCTOPUS_PORT_1\` … \`$OCTOPUS_PORT_9\`, \`$OCTOPUS_WORKSPACE_SLUG\` and the rest per workspace, in the env file and in every script's environment, so \`DB_PORT=$OCTOPUS_PORT_2\` reaches \`setup.sh\` too and a per-workspace database name reaches the app without a script writing \`.env\`. Nothing else is filled in. The port can move between runs, so nothing setup writes may remember it.
+
+The env set is in the environment of \`run.sh\`, and so of the server it starts: a stack that reads no dotenv (Spring, Go, .NET, Phoenix) still sees every variable, and a second process or package needs no second env file.
+
+The slug is the workspace name lowercased, every other character an underscore, cut to 30 characters, so a prefix still fits inside Postgres' 63. It is the **only** source of a per-workspace name; the name itself may hold spaces. The slug may begin with a digit or an underscore, so always put a prefix in front (\`app_$OCTOPUS_WORKSPACE_SLUG\`) and spell that name one way in the env set, \`setup.sh\` and \`archive.sh\`.
+
+\`setup.sh\` and \`run.sh\` are started by path through the user's login shell, in the worktree, as a fresh process: PATH shims (rbenv, pyenv, asdf, mise) work, shell functions do not — for nvm, \`. "$NVM_DIR/nvm.sh" && nvm use\` reads \`.nvmrc\`. Nothing can answer a prompt. \`archive.sh\` is started with no shell at all and the login PATH only, is given 30 seconds, and its output is not shown: plain tools, quick and quiet.
 
 ## Rules
 
-- Nothing shared is touched without the slug, and an empty slug stops the script: \`: "\${OCTOPUS_WORKSPACE_SLUG:?refusing to run without a workspace slug}"\` is the first line of \`setup.sh\` and \`archive.sh\`.
-- \`archive.sh\` never uses \`set -e\`: nothing may stop a workspace being removed, and the script must get as far as it can.
-- \`run.sh\` is only the server, started with \`exec\` so a Stop reaches it.
-- Scripts never write \`.env\` and never echo credentials.
-- Do not write \`.octopus/project.json\` from here: name, base branch and env file are set in Project settings, and that file is read from the checkout rather than the worktree.
-- Keep the scripts short. Dependencies that a fresh checkout needs go in \`setup.sh\`; anything already in \`$OCTOPUS_ROOT_PATH\` is linked or copied, not rebuilt.
+- Nothing shared is touched without the slug, and an empty slug stops the script: \`: "\${OCTOPUS_WORKSPACE_SLUG:?refusing to run without a workspace slug}"\` is the first line after the shebang of \`setup.sh\` and \`archive.sh\`.
+- \`archive.sh\` never uses \`set -e\`: nothing may stop a workspace being removed, and the script must get as far as it can. It uses plain tools — \`dropdb --if-exists --force\`, \`docker compose down -v --timeout 5\`, \`redis-cli\`, \`rm -rf\` — rather than the framework's CLI, and drops only names that hold the slug.
+- \`run.sh\` binds \`$OCTOPUS_PORT\` **exactly**, on 127.0.0.1 or all interfaces, and fails rather than moving to the next free port (\`vite --strictPort\`, \`next dev -p\`, \`artisan serve --port\`, \`dotnet run --urls\`, \`foreman start -p\`). A literal port anywhere — a config file, a proxy target, a Procfile — is a collision between workspaces.
+- \`run.sh\` is only the server, started with \`exec\` so it is the process the signal reaches first. Before the \`exec\` it may remove a stale pidfile or derive a variable; it does not install, migrate or write files.
+- Stop sends SIGTERM to the whole process group and SIGKILL a few seconds later. A process manager (\`foreman\`, \`overmind\`, \`concurrently\`) started with \`exec\` is fine. Anything outside the group is not stopped: Docker containers, the JVM a Gradle daemon forks. Containers go in \`setup.sh\`, detached and idempotent (\`docker compose up -d --wait\`) under \`COMPOSE_PROJECT_NAME=app_$OCTOPUS_WORKSPACE_SLUG\`, with host ports from \`$OCTOPUS_PORT_n\` in the env set, and come down in \`archive.sh\`; the app itself runs natively.
+- No prompts and no browser: \`--no-interaction\`, \`--noinput\`, \`--non-interactive\`, \`BROWSER=none\`, \`COREPACK_ENABLE_DOWNLOAD_PROMPT=0\`; never \`makemigrations\`, \`createsuperuser\`, \`key:generate\`, \`dev-certs --trust\` or \`iex\` in a script.
+- \`setup.sh\` never installs or starts anything machine-wide — a Postgres, a Redis, Docker, a runtime version. It checks (\`pg_isready\`, \`command -v\`) and fails with the command the person should run.
+- Dependencies are installed per worktree with the command that does not wipe (\`npm install\`, not \`npm ci\`; \`bundle check || bundle install\`; \`uv sync\`): the package manager's cache is shared already, so it is fast. Never link or copy \`node_modules\`, a virtualenv or \`vendor/\` from the checkout — tool caches inside them race, a virtualenv holds absolute paths, Composer's autoloader would load the checkout's code, and a branch's install would rewrite the checkout. Copy only what never changes in place — a dump, fixtures — with \`cp -c\`.
+- Scripts never write the env file and never echo credentials.
+- Where the app takes its port or database name only from a literal (\`config/dev.exs\`, \`settings.py\`, \`database.yml\`), make the smallest change that reads the variable with the old literal as its default, and say so in the reply.
+- Do not write \`.octopus/project.json\` from here: it is read from the checkout rather than the worktree, and only once the repository is trusted. Name the env file and the base branch in the reply; the person sets them in Project settings.
+- Keep the scripts short.
+
+## Where stacks collide with octopus
+
+- **Node (Next, Vite, Express):** caches live inside \`node_modules\` (\`.vite\`, \`.cache\`), so it is per worktree; Vite needs \`--strictPort\`; Next takes \`-p "$OCTOPUS_PORT"\`; corepack must not be left to ask.
+- **Django:** \`migrate --noinput\`, never \`makemigrations\`; create the database only if \`psql\` says it is absent, not with \`createdb || true\`, which also hides a Postgres that is down; \`settings.py\` reads the name from \`$DATABASE_URL\`; \`runserver "127.0.0.1:$OCTOPUS_PORT"\`.
+- **Rails:** \`bin/rails db:prepare\` is idempotent where \`db:setup\` re-seeds; \`DATABASE_URL\` with the slug reaches Rails without touching \`database.yml\`; \`rm -f tmp/pids/server.pid\` before the \`exec\`; a \`Procfile.dev\` app is \`exec bin/dev -p "$OCTOPUS_PORT"\`, since foreman sets \`PORT\` itself; \`config/master.key\` is carried.
+- **Laravel:** \`APP_KEY\` is a secret for the env set that the person makes with \`key:generate --show\`; \`composer install --no-interaction\`; \`artisan serve --host 127.0.0.1 --port "$OCTOPUS_PORT"\`; the Vite half of \`composer run dev\` sits on 5173 and needs \`--port "$OCTOPUS_PORT_1" --strictPort\`.
+- **Spring and Gradle:** \`./gradlew bootRun --no-daemon\`, or build in setup and \`exec java -jar … --server.port="$OCTOPUS_PORT"\`; \`SPRING_DATASOURCE_URL\` in the env set reaches it through the environment; SDKMAN is a shell function.
+- **.NET:** \`dotnet run --no-launch-profile --urls "http://127.0.0.1:$OCTOPUS_PORT"\`, since \`launchSettings.json\` holds a literal; \`dotnet watch --non-interactive\`; \`ConnectionStrings__Default\` is a valid env-set key.
+- **Phoenix:** \`config/dev.exs\` holds a literal port and database; \`mix ecto.create\` and \`mix ecto.migrate\`, not \`ecto.setup\`; \`exec mix phx.server\`, never \`iex\`.
+- **Go:** module and build caches are global, so setup is \`go mod download\`; the ports in \`.air.toml\` are literals that collide.
+- **Docker Compose:** a per-slug \`COMPOSE_PROJECT_NAME\`, host ports from \`$OCTOPUS_PORT_n\` in the env set (Compose interpolates them from the environment), \`up -d --wait\` in setup, \`down -v --timeout 5\` in archive; a Compose \`up\` in the foreground of \`run.sh\` outlives Stop.
+- **Monorepo:** one env file is written, so every other package reads the environment; Turborepo's strict env mode hides it unless \`passThroughEnv\` names \`OCTOPUS_*\` or \`--env-mode=loose\` is given; every package's \`dev\` script with a literal port takes \`$OCTOPUS_PORT_n\`.
+- **Version managers:** a runtime version the machine lacks is a machine-wide install; report the \`asdf install\` or \`nvm install\` rather than running it in setup.
 
 ## Verify, without running anything
 
-\`sh -n\` on each script; \`test -x\` on each; \`command -v\` for every tool they call; \`git check-ignore -v\` for every path to carry. Then read them once more for: the slug on every destructive line, no \`set -e\` in \`archive.sh\`, \`$OCTOPUS_PORT\` bound, nothing shared deleted, no \`CONDUCTOR_\` names left. Report what each check answered.
-
-## If the repository has \`.conductor/\`
-
-\`[scripts] setup/run/archive\` → the three files; \`file_include_globs\` → the files to carry; \`$CONDUCTOR_PORT\` → \`$OCTOPUS_PORT\`; \`$CONDUCTOR_ROOT_PATH\` → \`$OCTOPUS_ROOT_PATH\`; \`$CONDUCTOR_WORKSPACE_NAME\` → \`$OCTOPUS_WORKSPACE_SLUG\` (their name was already a slug; ours is not); \`[prompts]\` → \`.octopus/instructions/\`. Drop any \`cp\` of secrets (that is the carry list now) and anything that pins the environment (that is the env set).
+For each script: a shebang on line 1; \`bash -n\` or \`sh -n\` as the shebang says; \`test -x\`; \`command -v\` for every tool it calls, asked through \`$SHELL -i -c\` since that is how the script is started; \`git check-ignore -v\` for every path to carry. Then read them once more for: the guard after the shebang, a prefix and the slug on every destructive line, no \`set -e\` in \`archive.sh\`, \`$OCTOPUS_PORT\` bound exactly and no literal port, nothing that prompts or opens a browser, nothing shared deleted, nothing that writes the env file. Report what each check answered.
 `,
 
   diagnoseRun: `# Why does Run not work?
 
-Run in octopus is two scripts in order: \`.octopus/scripts/setup.sh\` (the build), then \`.octopus/scripts/run.sh\` (the server) on \`$OCTOPUS_PORT\`. A failed build stops there. Below this message octopus has put what it knows: which scripts are in effect and where they come from, the env set and the names of its variables, the files it carries, any problems in the env set, and the last lines of the most recent build and server with their exit codes.
+Run in octopus is two scripts in order: \`.octopus/scripts/setup.sh\` (the build), then \`.octopus/scripts/run.sh\` (the server) on \`$OCTOPUS_PORT\`. A failed build stops there. Restart runs only \`run.sh\` again, on the build it has. Below this message octopus has put what it knows: the checkout, this workspace's name, slug and port, whether anything is listening on that port right now, which scripts are in effect and where they come from, the env set and the names of its variables, the files it carries, any problems in the env set, and the last lines of the most recent build and server with their exit codes.
+
+Every script is given \`$OCTOPUS_ROOT_PATH\`, \`$OCTOPUS_WORKSPACE_NAME\`, \`$OCTOPUS_WORKSPACE_SLUG\` and \`$OCTOPUS_ENV_PROFILE\`, plus the env set's variables; \`run.sh\` also gets \`$OCTOPUS_PORT\` and \`$OCTOPUS_PORT_1\` … \`$OCTOPUS_PORT_9\`. Your own session has the same variables, set when it started; the facts below are octopus's reading now, and win where the two differ.
 
 Find out why before changing anything.
 
-1. **Read the output first.** The last error is usually not the first thing printed; find the line that actually failed.
-2. **Check what the script was given.** A run most often stops on a variable the script could not read, and that is almost never the script. The env set is written into the workspace's env file on every run, last and winning; a script that appends its own \`KEY=value\` is overwritten. The variable names are listed below; the values are not, and you must not ask for them to be pasted here.
-3. **Check what is missing from the worktree.** A worktree holds what git tracks. A file the app reads at boot (\`.env\`, \`master.key\`) that is not in the files carried into the workspace is simply absent.
-4. **Check the port and the slug.** The server must bind \`$OCTOPUS_PORT\`, not a literal. A database or directory named without \`$OCTOPUS_WORKSPACE_SLUG\` is shared with every other workspace.
-5. **Check the gate.** A repository's scripts do not run until they are allowed on the Scripts tab, and a script runs by path, so it must be executable (\`test -x\`).
+## First, which case this is
 
-Then say, in order: what failed, why, and the smallest change that fixes it. Propose the change; if it is in a script, write it and \`chmod +x\`. Do not run the scripts yourself and never write a variable's value anywhere.
+- **Nothing has run yet.** Octopus says so below. Ask the person to press Run on the Scripts tab and ask again, unless Run is disabled, which is one of the next two.
+- **There are no scripts.** Nothing can run. Say so and point to Help → "Set this project up to run", which writes them; do not write them from here.
+- **The scripts are not allowed yet.** Run stays disabled until the person presses "Allow these" on the Scripts tab or turns on "Trust this repository" in Project settings. Say that; there is nothing else to diagnose.
+- **The last runs look healthy:** the build exited 0, the server is still running and something is listening on the port. Then the failure is what the person sees, and you have not seen it: ask what they see (a blank page, an error in the browser, another workspace's page, an old build) before guessing.
+
+## Then, in order
+
+1. **Read the output first.** The last error is usually not the first thing printed; find the line that actually failed. Only the last lines are kept, so the first error may be gone; say so rather than inventing it.
+2. **Check what the script was given.** A run most often stops on a variable the script could not read, and that is almost never the script. The env set is written into the workspace's env file before every script, last and winning; a script that appends its own \`KEY=value\` is overwritten. The variable names are listed below; the values are not, and you must not ask for them to be pasted here.
+3. **Check what is missing from the worktree.** A worktree holds what git tracks. A file the app reads at boot (\`.env\`, \`master.key\`) that is not in the files carried into the workspace is simply absent.
+4. **Check the port.** The server must bind \`$OCTOPUS_PORT\` exactly, not a literal and not the next free port: a dev server that moved on is running where the app's link does not look. Octopus asks both loopback addresses, 127.0.0.1 and \`::1\`, so "not listening" below means nothing holds the port on either: the server never got that far, or it bound another port or a non-loopback address only. \`lsof -nP -iTCP:<port> -sTCP:LISTEN\` shows who holds the port and on which address.
+5. **Check the slug.** A database, a container or a directory named without \`$OCTOPUS_WORKSPACE_SLUG\` is shared with every other workspace, and whichever ran last wins.
+6. **Check how the script is started.** It runs by path through the login shell, as a fresh process with nothing to answer a prompt: a build that hangs is usually waiting on a question or opening a browser, and \`nvm\` or SDKMAN, being shell functions, are not there unless the script loads them. Setup runs on every Run, so a step that only works the first time fails the second.
+7. **Check what the last run left behind.** Stop reaches the server's process group and nothing else: a Docker container, a Gradle daemon or a stale pidfile (\`tmp/pids/server.pid\`) from before can hold the port or refuse the boot.
+8. **Check what is outside octopus.** A Postgres or Redis that is not running (\`pg_isready\`, \`docker ps\`); a runtime version that \`.nvmrc\` or \`.tool-versions\` names and the machine has not got; a migration a branch switch brought in that \`setup.sh\` does not run. Octopus starts none of those: say the command the person should run.
+9. **Check the gate.** A repository's scripts do not run until they are allowed on the Scripts tab, and a script runs by path, so it must be executable (\`test -x\`) and start with a shebang.
+
+## What you may run, and what you may not
+
+You may run checks that change nothing: \`lsof -nP -iTCP:<port> -sTCP:LISTEN\`, \`pg_isready\`, \`docker ps\`, \`bash -n\` or \`sh -n\` on a script, \`test -f\` and \`test -x\` on a path, and \`command -v <tool>\` through \`$SHELL -i -c\`, since that is how a script is started. You may not kill a process, install anything, run a migration, or run \`setup.sh\` or \`run.sh\` yourself: the person presses Run.
+
+Then say, in order: what failed, why, and the smallest change that fixes it. Propose the change; if it is in a script, write it and \`chmod +x\`, and say that Run is gated again until the person presses "Allow these". Never write a variable's value anywhere.
 `
 }
 

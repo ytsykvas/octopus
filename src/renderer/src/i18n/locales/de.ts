@@ -494,10 +494,10 @@ export const de: Translation = {
       'Wird gesendet, wenn der Pull Request mit seinem Basis-Branch kollidiert und du den Agenten bittest, das zu lösen.',
     setupScripts: 'Das Projekt startklar machen',
     setupScriptsHint:
-      'Wird ungesendet in ein neues Gespräch gelegt, wenn du Hilfe → „Dieses Projekt startklar machen“ wählst. Octopus fügt darunter den Checkout, die geltenden Skripte, die mitgenommenen Dateien und die Namen der Variablen an — nie ihre Werte.',
+      'Wird als erste Nachricht eines neuen Gesprächs gesendet, wenn du Hilfe → „Dieses Projekt startklar machen“ wählst. Octopus fügt darunter den Checkout, Name, Slug und Port des Workspace, die geltenden Skripte, die mitgenommenen Dateien und die Namen der Variablen an — nie ihre Werte.',
     diagnoseRun: 'Einen fehlgeschlagenen Lauf untersuchen',
     diagnoseRunHint:
-      'Wird ungesendet in ein neues Gespräch gelegt, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.'
+      'Wird als erste Nachricht eines neuen Gesprächs gesendet, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten, ob auf dem Port gerade etwas lauscht, und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.'
   },
 
   help: {
@@ -508,9 +508,16 @@ export const de: Translation = {
     diagnoseHint:
       'Der Agent liest die Ausgabe des letzten Laufs, die Skripte und die Variablennamen',
     failed: 'Die Hilfe konnte diesen Workspace nicht lesen: {{reason}}',
+    notSent:
+      'Die Hilfe konnte ihre Nachricht nicht senden, sie wartet daher im Eingabefeld: {{reason}}',
     context: {
       heading: '\u2014 Was octopus über diesen Workspace weiß \u2014',
       checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',
+      workspace:
+        'Workspace ($OCTOPUS_WORKSPACE_NAME): {{name}}; sein Slug ($OCTOPUS_WORKSPACE_SLUG): {{slug}}',
+      port: 'Port ($OCTOPUS_PORT): {{port}}; run.sh bekommt außerdem $OCTOPUS_PORT_1 \u2026 $OCTOPUS_PORT_9, also {{next}}\u2013{{last}}',
+      listening: 'Auf Port {{port}} lauscht gerade etwas.',
+      notListening: 'Auf Port {{port}} lauscht gerade nichts.',
       envFile: 'Env-Datei, in die das Variablen-Set geschrieben wird: {{name}}',
       profile: 'Geltendes Variablen-Set: {{name}}',
       variables:

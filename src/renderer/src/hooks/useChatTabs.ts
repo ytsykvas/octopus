@@ -67,9 +67,11 @@ export interface ChatTabsController {
    * since the composer reads its draft once, as it mounts — and is told even
    * when the workspace changed meanwhile. A conversation made here is keyed by
    * its chat id (an unwritten first tab is made real before it, and keeps
-   * `first`), so the id is the key the draft is filed under.
+   * `first`), so the id is the key the draft is filed under. The tab waits for
+   * what it returns, so a message it sends is on disk when the pane mounts, as
+   * in `forkThen`.
    */
-  readonly create: (beforeShown?: (id: string) => void) => Promise<void>
+  readonly create: (beforeShown?: (id: string) => void | Promise<void>) => Promise<void>
   /**
    * Opens a conversation continuing this one, from a side answer when `aside`
    * is given, and moves to it. Says whether it did.
@@ -430,7 +432,7 @@ export function useChatTabs(
    * the tabs, creating the second first would put the older conversation second.
    */
   const create = useCallback(
-    async (beforeShown?: (id: string) => void) => {
+    async (beforeShown?: (id: string) => void | Promise<void>) => {
       const id = shown.current
       /* v8 ignore next */
       if (id === null) return
@@ -450,7 +452,7 @@ export function useChatTabs(
       // Whatever is on screen by now: the conversation exists and holds a
       // place, and a draft is filed under its own workspace, so the text is
       // there when that workspace is opened again.
-      if (created.ok) beforeShown?.(created.value.id)
+      if (created.ok) await beforeShown?.(created.value.id)
       if (shown.current !== id) return
 
       if (!created.ok) {

@@ -7,14 +7,17 @@ import { useErrorMessage } from './useErrorMessage.js'
 import { useLatest } from './useLatest.js'
 
 /**
- * What Help does when one of its items is chosen: a new conversation with the
- * instruction and what octopus knows already in its composer, and nothing sent.
+ * What Help does when one of its items is chosen: a new conversation, started
+ * on the instruction and what octopus knows already.
  *
- * Put down rather than sent, because the app adds nothing to what the agent is
- * told that the reader has not seen (§4): the text is there to read, edit and
- * send. A new conversation rather than the one on screen, because a draft
- * cannot be put into a composer that is already drawn: it reads its draft once,
- * as it mounts.
+ * Sent rather than put down, because choosing the item is the asking: a draft
+ * left a second press to make and nothing to change in it. The reader still
+ * sees every word (§4) — it is the conversation's first message — and edits
+ * what the agent is told in Project settings. A new conversation rather than
+ * the one on screen, so the ask never lands in the middle of another task.
+ *
+ * A message that could not be sent is put in the composer instead, so the
+ * text is never lost and one press of Send retries it.
  *
  * Every read is done before anything is created, so a failure creates nothing;
  * an answer that arrives after the workspace changed is dropped, as
@@ -64,8 +67,19 @@ export function useHelp(
           }
 
           const text = helpMessage(kind, instruction.value, context.value, t)
-          await create((chatId) => {
+          await create(async (chatId) => {
+            let reason: string
+            try {
+              const sent = await window.octopus.chats.send(chatId, text)
+              if (sent.ok) return
+              reason = describeFailure(sent)
+            } catch (cause) {
+              // Caught here rather than below: `create` would stop short of
+              // showing a conversation that exists.
+              reason = String(cause)
+            }
             keepDraft(id, chatId, text)
+            report(t('help.notSent', { reason }))
           })
         } catch (cause) {
           // A rejected read — main gone, a channel an older build has not got —
