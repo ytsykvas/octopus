@@ -1,8 +1,8 @@
 /**
  * The two small pieces every right-pane tab draws: a message in place of
  * content, and a quiet icon button for its toolbar. Shared once the Files tab
- * needed both as well; the pull request tab still keeps a copy of `Notice` of
- * its own. The chat log floats the same button over its content.
+ * needed both as well, and the pull request tab gave up its own copy of
+ * `Notice`. The chat log floats the same button over its content.
  */
 
 export function Notice({

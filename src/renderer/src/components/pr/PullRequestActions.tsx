@@ -1,4 +1,4 @@
-import { ArrowUpFromLine, GitMerge, Trash2, Upload } from 'lucide-react'
+import { ArrowUpFromLine, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -8,8 +8,7 @@ import type { PullRequestDetail } from '@core/pullRequestShapes.js'
 
 import { Button } from '../Button.js'
 import { CommitMessageField } from './CommitMessageField.js'
-import { DropdownMenu } from '../DropdownMenu.js'
-import { MERGE_METHODS } from './mergeMethods.js'
+import { MergeMenu } from './MergeMenu.js'
 import type { Attention, GitHubNote, RequestStatus } from './requestStatus.js'
 
 /**
@@ -257,37 +256,17 @@ export function PullRequestActions({
 
       {open && (
         <div className="flex items-center gap-2">
-          <DropdownMenu
-            align="left"
-            actions={MERGE_METHODS.map(({ method, labelKey }) => ({
-              id: method,
-              label: t(labelKey),
-              onSelect: () => {
-                onMerge(method)
-              }
-            }))}
-            trigger={({ onClick, open: shown }) => (
-              <Button
-                size="sm"
-                variant="accent"
-                onClick={onClick}
-                aria-expanded={shown}
-                className="flex-1"
-                // A conflict and a draft are refusals GitHub would make anyway;
-                // saying so here saves a round trip that ends in an error the
-                // pane would then have to explain.
-                //
-                // A red check is not that. GitHub merges over one that nobody
-                // marked required, so this fourth condition is a policy octopus
-                // keeps rather than a refusal it is predicting — and it is a
-                // hard one: the way past it is to fix the check, or to merge in
-                // the browser, where nobody can do it by reflex.
-                disabled={merging || !status.canMerge}
-              >
-                <GitMerge aria-hidden size={12} />
-                {t(merging ? 'pullRequest.merging' : 'pullRequest.merge')}
-              </Button>
-            )}
+          {/* A conflict and a draft are refusals GitHub would make anyway;
+              saying so here saves a round trip that ends in an error the pane
+              would then have to explain. A red check is a policy octopus
+              keeps rather than a refusal it is predicting — see
+              `requestStatus`. */}
+          <MergeMenu
+            variant="accent"
+            className="flex-1"
+            onMerge={onMerge}
+            merging={merging}
+            disabled={!status.canMerge}
           />
 
           {/* `danger` rather than `destructive`: two filled buttons side by side

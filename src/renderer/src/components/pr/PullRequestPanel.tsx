@@ -18,6 +18,7 @@ import { usePullRequest } from '../../hooks/usePullRequest.js'
 import { usePullRequestDetail } from '../../hooks/usePullRequestDetail.js'
 import { type PullRequestQuoteController, toQuote } from '../../hooks/usePullRequestQuotes.js'
 import { Button } from '../Button.js'
+import { Notice } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { ChecksList } from './ChecksList.js'
 import { CommentList } from './CommentList.js'
@@ -534,21 +535,5 @@ function Section({
       </div>
       {children}
     </section>
-  )
-}
-
-function Notice({
-  children,
-  tone = 'soft'
-}: {
-  readonly children: React.ReactNode
-  readonly tone?: 'soft' | 'danger'
-}): React.JSX.Element {
-  return (
-    <div className="min-h-0 flex-1 overflow-auto p-4">
-      <p className={`leading-relaxed ${tone === 'danger' ? 'text-danger' : 'text-ink-faint'}`}>
-        {children}
-      </p>
-    </div>
   )
 }
