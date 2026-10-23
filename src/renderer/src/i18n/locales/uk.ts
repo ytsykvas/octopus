@@ -537,6 +537,7 @@ export const uk: Translation = {
   },
 
   pullRequest: {
+    description: 'Опис',
     capped:
       'GitHub запитали про сто найновіших коментарів і п’ятдесят гілок обговорення — і він відповів рівно стількома, тож старіші сюди могли не потрапити. На GitHub у запиті є всі.',
     noWorkspaceTitle: 'Ще немає чого пропонувати',
@@ -951,9 +952,6 @@ export const uk: Translation = {
     skillsEmptyNote: 'Додайте скіл у налаштуваннях — і він з’явиться тут у кожній розмові.',
     skillsSettings: 'Відкрити налаштування',
     attach: 'Прикріпити файли',
-    attachRemove: 'Прибрати цей файл',
-    attachIntro: 'Файли, на які я показую:',
-    attachDrop: 'Відпустіть, щоб прикріпити',
     tabWithNotes: '{{described}}, {{waiting}}',
     notesWaiting_one: '{{count}} нотатка чекає',
     notesWaiting_few: '{{count}} нотатки чекають',

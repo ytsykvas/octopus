@@ -2870,6 +2870,7 @@ describe('App', () => {
         value: {
           state: 'open',
           title: 'Rename the thing',
+          description: '',
           url: 'https://github.com/o/p/pull/7',
           draft: false,
           checks: [],
@@ -2915,7 +2916,7 @@ describe('App', () => {
 
     // The right button's "Add to chat": the file goes out as an attachment, so
     // the conversation it lands in comes to the front to show it.
-    it('is attached to the conversation in front from its menu', async () => {
+    it('is written into the conversation in front from its menu', async () => {
       const user = await openReadme()
       await screen.findByText('# Planner')
 
@@ -2925,7 +2926,7 @@ describe('App', () => {
       await waitFor(() => {
         expect(screen.queryByText('# Planner')).not.toBeInTheDocument()
       })
-      expect(screen.getByTitle('/tmp/planner/anna/README.md')).toHaveTextContent('README.md')
+      expect(screen.getByRole('textbox')).toHaveValue('/tmp/planner/anna/README.md ')
     })
   })
 
@@ -2978,6 +2979,7 @@ describe('App', () => {
       value: {
         state: 'merged',
         title: 'Rename the thing',
+        description: '',
         url: 'https://github.com/o/p/pull/7',
         draft: false,
         checks: [],

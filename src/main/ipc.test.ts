@@ -2102,6 +2102,7 @@ describe('workspaces of a real project', () => {
                 id: 'PR_1',
                 state: 'OPEN',
                 title: 'Rename the thing',
+                body: '',
                 url: 'https://github.com/o/p/pull/7',
                 isDraft: false,
                 mergeable: 'CONFLICTING',

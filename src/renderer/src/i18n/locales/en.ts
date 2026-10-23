@@ -497,7 +497,8 @@ export const en = {
     /* A row's right-click menu. The keys are an editor's explorer's. */
     copyPath: 'Copy path (⌥⌘C)',
     copyRelativePath: 'Copy relative path (⌥⇧⌘C)',
-    /* Attaches the row's path to the conversation in front, as a dropped file. */
+    /* Writes the row's path into the conversation in front, at its caret, as a
+       dropped file would be. */
     addToChat: 'Add to chat',
     pathCopied: 'Path copied',
     copyFailed: 'Could not copy the path'
@@ -653,6 +654,8 @@ export const en = {
        numbers the pane wants a search box, not a longer page — and a reader who
        cannot find a remark they remember should learn why here rather than by
        reasoning about it. */
+    /* The card under the views: what the request's author wrote about it. */
+    description: 'Description',
     capped:
       'GitHub was asked for the most recent hundred comments and fifty threads, and answered with that many \u2014 so there may be older ones this pane is not showing. The request on GitHub has all of them.',
     noWorkspaceTitle: 'Nothing to propose yet',
@@ -1262,16 +1265,9 @@ export const en = {
     skillsEmpty: 'No skills yet.',
     skillsEmptyNote: 'Add one in settings, and it appears here for every conversation.',
     skillsSettings: 'Open settings',
-    /* A control with nothing behind it yet, and it says so rather than
-       swallowing the click. */
+    /* The paperclip, and the title of the dialog it opens: the files chosen
+       are written into the field by their paths, at the caret. */
     attach: 'Attach files',
-    attachRemove: 'Take this file back',
-    /* What the message says above the paths. The agent is told where the files
-       are, not handed copies of them — §4's rule that nothing implicit reaches
-       it, in the plainest form it takes. */
-    attachIntro: 'Files I am pointing you at:',
-    /* Shown over the composer while something is being dragged onto it. */
-    attachDrop: 'Drop to attach',
     /* A tab's spoken name when notes wait in it: its name and state, then the count. */
     tabWithNotes: '{{described}}, {{waiting}}',
     /* The counter on a conversation's tab: notes from the viewer that will go

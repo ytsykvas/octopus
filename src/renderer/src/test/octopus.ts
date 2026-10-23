@@ -444,6 +444,7 @@ function detailFixture(): PullRequestDetail {
   return {
     state: 'open',
     title: 'Rename the thing',
+    description: '',
     url: 'https://github.com/ytsykvas/octopus/pull/1',
     draft: false,
     checks: [],

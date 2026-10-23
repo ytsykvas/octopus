@@ -1,4 +1,4 @@
-import { Paperclip, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { codeReference } from '../codeReference.js'
@@ -40,16 +40,13 @@ function said(note: ChatNote): string {
 }
 
 /**
- * The notes and files riding along with the next message.
+ * The notes riding along with the next message.
  *
  * Shown rather than merely counted: what goes out is written into the message
  * itself (§4), and a chip that names the file and the line is what makes that
- * checkable before it is sent rather than after. An attached file is the same
- * bargain — the message carries its **path**, and the chip is what says so
- * before the message goes.
- *
- * One strip for both kinds rather than two. They are one answer to "what else
- * is going out with this", and two rules over one field would say the opposite.
+ * checkable before it is sent rather than after. A file pointed at needs no
+ * chip: its path is written into the field, where it is read and edited like
+ * the rest of the message.
  *
  * The strip disappears when there is nothing to say, the way the attic above it
  * does — an empty rule over the field would be chrome asserting that a review
@@ -57,19 +54,14 @@ function said(note: ChatNote): string {
  */
 export function ComposerAttachments({
   notes,
-  onRemove,
-  files,
-  onRemoveFile
+  onRemove
 }: {
   readonly notes: readonly ChatNote[]
   readonly onRemove: (note: ChatNote) => void
-  /** Paths the message will name; never copies of the files themselves. */
-  readonly files: readonly string[]
-  readonly onRemoveFile: (path: string) => void
 }): React.JSX.Element | null {
   const { t } = useTranslation()
 
-  if (notes.length === 0 && files.length === 0) return null
+  if (notes.length === 0) return null
 
   return (
     /* Room above as well as below. The strip sits directly under the attic's
@@ -77,33 +69,6 @@ export function ComposerAttachments({
        while floating over the field — which read as though they belonged to the
        row above rather than to the message. */
     <div className="flex flex-wrap gap-1 px-1 pt-2 pb-1">
-      {/* Files first: they are what the message is about more often than a note
-          is, and a strip that reorders as notes arrive would be hard to aim at. */}
-      {files.map((path) => (
-        <span
-          key={path}
-          className="border-line bg-muted text-ink-soft flex max-w-full items-center gap-1 rounded-[var(--radius-control)] border px-1.5 py-0.5"
-        >
-          <Paperclip aria-hidden size={11} className="text-ink-faint shrink-0" />
-          {/* The name, with the whole path on hover: a chip wide enough for
-              `/Users/…/Desktop/Screenshot 2026-09-06 at 14.02.11.png` is a chip
-              that pushes everything else off the strip. */}
-          <span className="min-w-0 truncate text-[11px]" title={path}>
-            {path.slice(path.lastIndexOf('/') + 1)}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              onRemoveFile(path)
-            }}
-            aria-label={t('chat.attachRemove')}
-            className="focus-ring text-ink-faint hover:text-danger shrink-0 rounded-[var(--radius-control)]"
-          >
-            <X aria-hidden size={11} />
-          </button>
-        </span>
-      ))}
-
       {notes.map((note) => (
         <span
           key={noteKey(note)}

@@ -4,13 +4,12 @@ import type { CodeNote } from '../../hooks/useCodeNotes.js'
 import type { DiffComment } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuote } from '../../hooks/usePullRequestQuotes.js'
 
-import { type ChatNote, mergeNotes, noteKey, withNotes } from './attachments.js'
+import { type ChatNote, insertPaths, mergeNotes, noteKey, withNotes } from './attachments.js'
 
 const INTROS = {
   diff: 'Review notes:',
   pullRequest: 'From the review:',
-  oldSide: '(as it was)',
-  files: 'Files I am pointing you at:'
+  oldSide: '(as it was)'
 }
 
 const comment = (overrides: Partial<DiffComment> = {}): DiffComment => ({
@@ -231,29 +230,54 @@ describe('writing a remark from the review into the message', () => {
     // Both of the diff's notes are above the review, whatever order they came in.
     expect(message.indexOf('src/core/diff.ts:9')).toBeLessThan(message.indexOf('#812'))
   })
-  /*
-   * The whole of an attachment is its path. Nothing is copied anywhere: the
-   * agent is told where a file is and reads it, which is §4's rule in the
-   * plainest form it takes — and it makes the message the user can read back
-   * the whole of what was sent.
-   */
-  it('names the attached files in the message', () => {
-    const message = withNotes('have a look', [], INTROS, ['/a/shot.png', '/b/server.log'])
+  it('leaves a message with no notes exactly as it was typed', () => {
+    expect(withNotes('rerun the tests', [], INTROS)).toBe('rerun the tests')
+  })
+})
 
-    expect(message).toBe(
-      'Files I am pointing you at:\n\n/a/shot.png\n\n/b/server.log\n\nhave a look'
+/*
+ * The whole of an attachment is its path, written where the reader is typing.
+ * Nothing is copied anywhere and nothing is added in front of it: the message
+ * read back in the log is the whole of what was sent.
+ */
+describe('writing a file pointed at into the draft', () => {
+  it('writes it where the caret is, set apart from the words on either side', () => {
+    expect(insertPaths('compare with', 7, ['/a/shot.png'])).toEqual({
+      draft: 'compare /a/shot.png with',
+      caret: 19
+    })
+  })
+
+  it('adds no second space where there is one already', () => {
+    expect(insertPaths('look at ', 8, ['/a/shot.png'])).toEqual({
+      draft: 'look at /a/shot.png ',
+      caret: 20
+    })
+    // Before a space, the caret stops ahead of it rather than past a new one.
+    expect(insertPaths('see  please', 4, ['/a.png'])).toEqual({
+      draft: 'see /a.png please',
+      caret: 10
+    })
+  })
+
+  it('stands alone in an empty field, with the caret ready for the next word', () => {
+    expect(insertPaths('', 0, ['/a/shot.png'])).toEqual({ draft: '/a/shot.png ', caret: 12 })
+  })
+
+  it('writes several in the order they came, a space apart', () => {
+    expect(insertPaths('', 0, ['/a.png', '/b.log']).draft).toBe('/a.png /b.log ')
+  })
+
+  /* Inside a sentence nothing else says where a name with spaces ends, and a
+     path the agent cuts at the first space names a file that does not exist. */
+  it('puts a path with a space in it in backticks', () => {
+    expect(insertPaths('', 0, ['/Users/me/Desktop/Знімок екрана 18.57.56.png']).draft).toBe(
+      '`/Users/me/Desktop/Знімок екрана 18.57.56.png` '
     )
   })
 
-  /* An attachment is usually what the message is about, while a note is a
-     remark on work already there. */
-  it('puts the files before the notes', () => {
-    const message = withNotes('and this', [note()], INTROS, ['/a/shot.png'])
-
-    expect(message.indexOf('/a/shot.png')).toBeLessThan(message.indexOf(INTROS.diff))
-  })
-
-  it('leaves a message with neither exactly as it was typed', () => {
-    expect(withNotes('rerun the tests', [], INTROS, [])).toBe('rerun the tests')
+  // A caret left past the text — the draft shortened under it — writes at the end.
+  it('writes at the end when the caret is past it', () => {
+    expect(insertPaths('hi', 9, ['/a.png'])).toEqual({ draft: 'hi /a.png ', caret: 10 })
   })
 })

@@ -23,17 +23,8 @@ const NOTE: ChatNote = {
   text: 'why here?'
 }
 
-function renderStrip(
-  options: { readonly files?: readonly string[]; readonly notes?: readonly ChatNote[] } = {}
-): void {
-  render(
-    <ComposerAttachments
-      notes={options.notes ?? []}
-      onRemove={vi.fn()}
-      files={options.files ?? []}
-      onRemoveFile={vi.fn()}
-    />
-  )
+function renderStrip(notes: readonly ChatNote[]): void {
+  render(<ComposerAttachments notes={notes} onRemove={vi.fn()} />)
 }
 
 describe('the strip riding along with the next message', () => {
@@ -43,35 +34,15 @@ describe('the strip riding along with the next message', () => {
    * a review exists.
    */
   it('is not drawn when there is nothing to say', () => {
-    const { container } = render(
-      <ComposerAttachments notes={[]} onRemove={vi.fn()} files={[]} onRemoveFile={vi.fn()} />
-    )
+    const { container } = render(<ComposerAttachments notes={[]} onRemove={vi.fn()} />)
 
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('is drawn for a file alone', () => {
-    renderStrip({ files: ['/a/shot.png'] })
-
-    expect(screen.getByText('shot.png')).toBeInTheDocument()
-  })
-
-  it('is drawn for a note alone', () => {
-    renderStrip({ notes: [NOTE] })
+  it('is drawn for a note', () => {
+    renderStrip([NOTE])
 
     expect(screen.getByText('why here?')).toBeInTheDocument()
-  })
-
-  /*
-   * Files before notes, and fixed rather than by arrival: a file is what the
-   * message is about more often than a note is, and a strip that reordered as
-   * notes came in would be hard to aim a click at.
-   */
-  it('puts the files before the notes, whatever order they arrived in', () => {
-    renderStrip({ files: ['/a/shot.png'], notes: [NOTE] })
-
-    const chips = screen.getAllByRole('button')
-    expect(chips[0]).toHaveAccessibleName('Take this file back')
-    expect(chips[1]).toHaveAccessibleName('Remove this note')
+    expect(screen.getByRole('button', { name: 'Remove this note' })).toBeInTheDocument()
   })
 })

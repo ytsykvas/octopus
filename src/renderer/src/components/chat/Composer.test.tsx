@@ -18,7 +18,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onStop: ReturnType<typeof vi.fn>
   onMode: ReturnType<typeof vi.fn>
   onModels: ReturnType<typeof vi.fn>
-  onRemoveFile: ReturnType<typeof vi.fn>
+  onFilesTaken: ReturnType<typeof vi.fn>
   onDropFiles: ReturnType<typeof vi.fn>
   onPasteImage: ReturnType<typeof vi.fn>
   rerender: (next: Partial<ComposerProps>) => void
@@ -31,7 +31,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   const onStop = vi.fn()
   const onMode = vi.fn()
   const onModels = vi.fn()
-  const onRemoveFile = vi.fn()
+  const onFilesTaken = vi.fn()
   const onDropFiles = vi.fn()
   const onPasteImage = vi.fn()
 
@@ -48,7 +48,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       onEfforts={vi.fn()}
       onAutoCompact={vi.fn()}
       files={[]}
-      onRemoveFile={onRemoveFile}
+      onFilesTaken={onFilesTaken}
       onAttachFiles={vi.fn()}
       onDropFiles={onDropFiles}
       onPasteImage={onPasteImage}
@@ -83,7 +83,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
     onStop,
     onMode,
     onModels,
-    onRemoveFile,
+    onFilesTaken,
     onDropFiles,
     onPasteImage,
     // For the settings that have to be watched *changing* — the chip follows
@@ -1366,26 +1366,38 @@ describe('the model the session is running', () => {
     expect(onPasteImage).not.toHaveBeenCalled()
   })
 
-  /* What goes out is where the files are, not copies of them: §4's rule that
-     nothing implicit reaches the agent, in the plainest form it takes. */
-  it('names the attached files in the message it sends', async () => {
+  /* A file pointed at is written into the text where the caret is, as a path
+     typed there would be — not on a chip, and not under a heading of its own.
+     What goes out is where the file is, not a copy: §4's rule that nothing
+     implicit reaches the agent, in the plainest form it takes. */
+  it('writes a file pointed at into the text, where the caret is', async () => {
     const user = userEvent.setup()
-    const { onSend } = renderComposer({ files: ['/a/shot.png'] })
+    const { onFilesTaken, onSend, rerender } = renderComposer()
 
-    await user.type(field(), 'have a look')
+    await user.type(field(), 'compare with')
+    const textarea = field() as HTMLTextAreaElement
+    textarea.setSelectionRange(7, 7)
+    fireEvent.select(textarea)
+
+    rerender({ files: ['/a/shot.png'] })
+
+    expect(textarea).toHaveValue('compare /a/shot.png with')
+    // Taken, so the same path is not written a second time.
+    expect(onFilesTaken).toHaveBeenCalledOnce()
+    // The caret after it, and the field ready for the next word.
+    expect(textarea).toHaveFocus()
+    expect(textarea.selectionStart).toBe(19)
+
     await user.click(screen.getByRole('button', { name: 'Send' }))
-
-    expect(onSend).toHaveBeenCalledWith('Files I am pointing you at:\n\n/a/shot.png\n\nhave a look')
+    // Nothing added in front of it: the message is what the field said.
+    expect(onSend).toHaveBeenCalledWith('compare /a/shot.png with')
   })
 
-  it('shows an attached file, and takes it back', async () => {
-    const user = userEvent.setup()
-    const { onRemoveFile } = renderComposer({ files: ['/a/shot.png'] })
+  it('writes nothing while no file is waiting', () => {
+    const { onFilesTaken } = renderComposer({ initialDraft: 'as it was' })
 
-    expect(screen.getByText('shot.png')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Take this file back' }))
-
-    expect(onRemoveFile).toHaveBeenCalledWith('/a/shot.png')
+    expect(field()).toHaveValue('as it was')
+    expect(onFilesTaken).not.toHaveBeenCalled()
   })
 })
 
