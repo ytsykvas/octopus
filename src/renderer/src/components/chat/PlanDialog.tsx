@@ -129,7 +129,7 @@ export function PlanDialog({
       footer={
         <>
           {goesOnIn !== null && (
-            <span className="text-ink-soft mr-auto text-[11px]">
+            <span className="text-ink-soft mr-auto min-w-0 flex-1 text-[11px]">
               {t(goesOnIn === 'auto' ? 'chat.planExecuteHintAuto' : 'chat.planExecuteHint')}
             </span>
           )}
@@ -140,8 +140,9 @@ export function PlanDialog({
           >
             {editing ? t('chat.planEditDone') : t('chat.planEdit')}
           </Button>
+          {/* Outlined, so executing is the one filled action: two coloured
+              buttons side by side asked the eye to choose before the reader had. */}
           <Button
-            variant="accent"
             disabled={unusable}
             onClick={() => {
               setForking(true)
