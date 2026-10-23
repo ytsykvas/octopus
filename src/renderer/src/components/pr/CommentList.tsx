@@ -1,7 +1,8 @@
-import { MessageSquarePlus } from 'lucide-react'
+import { FileText, MessageSquarePlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { initials } from '@core/initials.js'
 import { commentKey, type PullRequestComment, type ReviewVerdict } from '@core/pullRequestShapes.js'
 
 import { Markdown } from '../chat/Markdown.js'
@@ -90,14 +91,22 @@ export function CommentList({
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="workspace-card divide-line divide-y">
       {comments.map((comment) => {
         const key = commentKey(comment)
         const at = moment(comment.createdAt)
 
         return (
-          <li key={key} className="border-line group border-b pb-2 last:border-0 last:pb-0">
-            <div className="flex items-baseline gap-2">
+          <li key={key} className="group p-2.5">
+            <div className="flex items-center gap-2">
+              {/* Two letters of the name, as a mark to find a person by down
+                  the list; the name beside it is what is read. */}
+              <span
+                aria-hidden
+                className="bg-muted text-ink-soft flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+              >
+                {initials(comment.author ?? '')}
+              </span>
               <span className="text-ink min-w-0 truncate font-medium">
                 {comment.author ?? t('pullRequest.unknownAuthor')}
               </span>
@@ -108,18 +117,10 @@ export function CommentList({
                 </span>
               )}
 
-              {comment.kind === 'inline' && (
-                <span
-                  className="text-ink-faint min-w-0 flex-1 truncate font-mono text-[11px]"
-                  title={comment.path}
-                >
-                  {comment.path.slice(comment.path.lastIndexOf('/') + 1)}
-                  {comment.line !== null && `:${String(comment.line)}`}
-                </span>
-              )}
-
               {comment.kind === 'inline' && comment.resolved && (
-                <span className="text-ink-faint shrink-0">{t('pullRequest.resolved')}</span>
+                <span className="bg-muted text-ink-soft shrink-0 rounded-full px-1.5 text-[11px]">
+                  {t('pullRequest.resolved')}
+                </span>
               )}
 
               {at !== null && (
@@ -146,9 +147,21 @@ export function CommentList({
             {/* The lines the note was written against, as GitHub kept them. A
                 line number alone would point at whatever now sits there. */}
             {comment.kind === 'inline' && (
-              <pre className="text-ink-faint border-line mt-1 max-h-24 overflow-auto border-l pl-2 font-mono text-[11px] leading-relaxed">
-                {comment.quote}
-              </pre>
+              <div className="border-line mt-1.5 overflow-hidden rounded-[var(--radius-control)] border">
+                <p
+                  className="bg-muted text-ink-soft flex min-w-0 items-center gap-1.5 px-2 py-0.5 font-mono text-[11px]"
+                  title={comment.path}
+                >
+                  <FileText aria-hidden size={11} className="shrink-0" />
+                  <span className="truncate">
+                    {comment.path.slice(comment.path.lastIndexOf('/') + 1)}
+                    {comment.line !== null && `:${String(comment.line)}`}
+                  </span>
+                </p>
+                <pre className="bg-canvas text-ink-soft max-h-24 overflow-auto px-2 py-1.5 font-mono text-[11px] leading-relaxed">
+                  {comment.quote}
+                </pre>
+              </div>
             )}
 
             {comment.body.trim() !== '' && (

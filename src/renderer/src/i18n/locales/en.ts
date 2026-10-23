@@ -689,10 +689,8 @@ export const en = {
     create: 'Open pull request',
     creating: 'Opening…',
     open: 'Open on GitHub',
-    /* The state the branch is in, each said as a fact rather than as a status
-       word — the number is what identifies it to anyone who goes looking. */
-    stateOpen: 'Pull request #{{number}} is open.',
-    stateMerged: 'Pull request #{{number}} was merged.',
+    /* What the Merge view says of a request that ended without one — the
+       number is what identifies it to anyone who goes looking. */
     stateClosed: 'Pull request #{{number}} was closed without merging.',
 
     /* Committing from here, which is what lets a workspace go from finished
@@ -702,6 +700,9 @@ export const en = {
     createShortcut: 'Create PR',
     commitMessage: 'Commit message',
     commitMessagePlaceholder: 'Rename the thing',
+    /* The footer's field, which has no name drawn above it: the placeholder
+       names it, and says what leaving it empty does. */
+    commitMessageAmends: 'Message (empty amends)',
     commitHint:
       'Commits every change in this workspace under this message, then opens the request.',
     /* Said beside the field rather than found out afterwards: octopus writes
@@ -717,6 +718,60 @@ export const en = {
     refresh: 'Read GitHub again',
     readAt: 'Read at {{time}}',
     isDraft: 'Draft',
+    /* Where the request stands, as one word in a coloured pill at the top of
+       the pane. Draft is `isDraft` above. Merged and closed are also the Merge
+       tile's value, which is the same word for the same state. */
+    pillOpen: 'Open',
+    pillMerged: 'Merged',
+    pillClosed: 'Closed',
+    pillNotOpened: 'Not opened',
+    newPullRequest: 'New pull request',
+    tryAgain: 'Try again',
+    /* The three tiles under the header, which also pick the view below them.
+       A value and the tile's own name; the names are `checks`, `review` and
+       `merge`. Short, because three of them share the pane's width. */
+    views: 'What the request needs',
+    tileChecksFailed_one: '{{count}} failed',
+    tileChecksFailed_few: '{{count}} failed',
+    tileChecksFailed_many: '{{count}} failed',
+    tileChecksFailed_other: '{{count}} failed',
+    tileChecksRunning_one: '{{count}} running',
+    tileChecksRunning_few: '{{count}} running',
+    tileChecksRunning_many: '{{count}} running',
+    tileChecksRunning_other: '{{count}} running',
+    tileChecksPassed: 'All passed',
+    tileChecksNone: 'None',
+    tileChecksSkipped: 'Skipped',
+    /* A tile's name for a screen reader and its tooltip: the view, then where
+       it stands. */
+    tileName: '{{view}}: {{value}}',
+    tileReviewComments_one: '{{count}} comment',
+    tileReviewComments_few: '{{count}} comments',
+    tileReviewComments_many: '{{count}} comments',
+    tileReviewComments_other: '{{count}} comments',
+    tileReviewChanges: 'Changes',
+    tileReviewRequired: 'Required',
+    tileMergeReady: 'Ready',
+    tileMergeWaiting: 'Waiting',
+    tileMergeConflict: 'Conflict',
+    /* The Merge view and the footer: the rows that say something is fine, the
+       footer's line when nothing wants attention, the one row about this
+       checkout's own work, and the press that ends a request unmerged. */
+    checksPassedAll: 'All checks have passed.',
+    noConflicts: 'No conflicts with {{base}}.',
+    readyToMerge: 'Ready to merge into {{base}}.',
+    uncommitted: 'Changes here are not committed yet.',
+    closePullRequest: 'Close pull request',
+    /* The strip at the foot of the pane, named for a screen reader. */
+    nextStep: 'Next step',
+    /* Said on the footer's line while an empty field would amend a commit that
+       is already on GitHub: the one consequence of that press worth more than
+       a tooltip. */
+    amendReplaces:
+      'Left empty, the changes go into the last commit, and the amended commit replaces the one on GitHub.',
+    /* The menu of prepared messages at the foot of the pane. */
+    askAgent: 'Ask the agent',
+    editInstructionsItem: 'Edit the instructions…',
 
     checks: 'Checks',
     checksNone: 'This repository runs nothing on a pull request.',
@@ -758,8 +813,6 @@ export const en = {
     verdictCommented: 'commented',
     verdictDismissed: 'dismissed',
     decisionApproved: 'Approved',
-    decisionChangesRequested: 'Changes requested',
-    decisionReviewRequired: 'Review required',
 
     merge: 'Merge',
     close: 'Close',
@@ -773,6 +826,9 @@ export const en = {
     mergeBlocked: 'GitHub will not merge this yet — a required review or check is missing.',
     mergeBehind: '{{base}} has moved on since this branch left it.',
     mergeUnstable: 'A check has not passed, but merging is still allowed.',
+    /* Right after a push GitHub has not worked out whether the request
+       merges; the button still takes a press, but "ready" would be a guess. */
+    mergeSettling: 'GitHub is still checking whether this can be merged.',
     mergeDraft: 'A draft cannot be merged. Mark it ready on GitHub first.',
     /* Not a refusal GitHub would make — it merges over a check that is not
        required — so this one says outright that the app is the one refusing. */
@@ -817,7 +873,7 @@ export const en = {
     amendNeedsCommit:
       'This branch has no commit of its own to amend yet. Write a message to make one.',
     commitAndPushHint:
-      'Commits every change in this workspace under this message, then pushes it onto the request. Left empty, the changes are added to the last commit instead, which replaces it on GitHub.',
+      'Commits every change in this workspace under this message, then pushes it onto the request. Left empty, the changes are added to the last commit instead, and the amended commit replaces the one on GitHub.',
     sending: 'Sending…',
 
     /* Appended to whichever instruction is sent, so the agent does not have to

@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react'
+import { AlertTriangle, GitPullRequest, Info, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -7,6 +7,7 @@ import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 
 import { Button } from '../Button.js'
 import { CommitMessageField } from './CommitMessageField.js'
+import { PaneFooter } from './PullRequestFooter.js'
 
 interface NewPullRequestFormProps {
   readonly view: PullRequestView
@@ -112,116 +113,151 @@ export function NewPullRequestForm({
           commitMessage: view.dirty ? (committing ? commitMessage.trim() : title.trim()) : null
         })
       }}
-      className="flex flex-col gap-2"
+      className="flex min-h-0 flex-1 flex-col"
     >
-      {!view.pushed && (
-        <p className="text-ink-faint leading-relaxed">{t('pullRequest.willPush')}</p>
-      )}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-3 pb-3">
+        {/* Said before the button rather than after it fails. Pushing is a
+            thing that happens to somebody else's machine. */}
+        {!view.pushed && <Callout tone="info">{t('pullRequest.willPush')}</Callout>}
 
-      {view.dirty && (
-        <div className="flex flex-col gap-1">
-          {/* Left empty, the commit still happens — under the title, or under
-              what the agent writes into this field. Neither string is the old
-              "the work stays behind", which stopped being true when this field
-              stopped deciding. */}
+        {/* Not gated on the field below. Pressing the button commits whether
+            or not a message was typed, so a warning that waited for one was
+            hidden on exactly the path the hint describes. Dirty is the whole
+            condition, and an env file git does not ignore is itself an
+            uncommitted change — so it is true whenever this can bite. */}
+        {view.dirty && exposedEnvFile !== null && (
+          <Callout tone="warning">
+            {t('pullRequest.envNotIgnored', { file: exposedEnvFile })}
+          </Callout>
+        )}
+
+        {/* Left empty, the commit still happens — under the title, or under
+            what the agent writes into this field. */}
+        {view.dirty && (
           <CommitMessageField
             value={commitMessage}
             onChange={setCommitMessage}
             hint={t(committing ? 'pullRequest.commitHint' : 'pullRequest.dirty')}
           />
+        )}
 
-          {/* Not gated on the field above. Pressing the button commits whether
-              or not a message was typed, so a warning that waited for one was
-              hidden on exactly the path the hint describes. Dirty is the whole
-              condition, and an env file git does not ignore is itself an
-              uncommitted change — so it is true whenever this can bite. */}
-          {exposedEnvFile !== null && (
-            <p className="text-warning leading-relaxed">
-              {t('pullRequest.envNotIgnored', { file: exposedEnvFile })}
-            </p>
-          )}
-        </div>
-      )}
+        <label className="flex flex-col gap-1">
+          <span className="section-label">{t('pullRequest.title')}</span>
+          <input
+            value={title}
+            onChange={(event) => {
+              setTitle(event.target.value)
+            }}
+            placeholder={t('pullRequest.titlePlaceholder')}
+            className="input"
+          />
+        </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="section-label">{t('pullRequest.title')}</span>
-        <input
-          value={title}
-          onChange={(event) => {
-            setTitle(event.target.value)
-          }}
-          placeholder={t('pullRequest.titlePlaceholder')}
-          className="input"
-        />
-      </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">{t('pullRequest.body')}</span>
+          <textarea
+            value={body}
+            onChange={(event) => {
+              setBody(event.target.value)
+            }}
+            placeholder={t('pullRequest.bodyPlaceholder')}
+            rows={6}
+            className="input h-auto resize-none py-1 leading-relaxed"
+          />
+        </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="section-label">{t('pullRequest.body')}</span>
-        <textarea
-          value={body}
-          onChange={(event) => {
-            setBody(event.target.value)
-          }}
-          placeholder={t('pullRequest.bodyPlaceholder')}
-          rows={6}
-          className="input h-auto resize-none py-1 leading-relaxed"
-        />
-      </label>
+        {/* Said where the empty fields are, not in a tooltip: this is the one
+            behaviour of the form that is not visible from looking at it. */}
+        {actionError !== null && <p className="text-danger leading-relaxed">{actionError}</p>}
 
-      {/* Said where the empty fields are, not in a tooltip: this is the one
-          behaviour of the form that is not visible from looking at it. */}
-      {actionError !== null && <p className="text-danger leading-relaxed">{actionError}</p>}
-
-      <div className="flex flex-col items-start gap-1">
-        <p className="text-ink-faint leading-relaxed">
-          {written ? t('pullRequest.written') : t('pullRequest.emptyHint')}
+        <p className="text-ink-faint text-[11px] leading-relaxed">
+          {written && <Sparkles aria-hidden size={11} className="mr-1 inline align-[-1px]" />}
+          {written ? t('pullRequest.written') : t('pullRequest.emptyHint')}{' '}
+          <button
+            type="button"
+            onClick={onEditInstructions}
+            className="focus-ring hover:text-ink rounded-[var(--radius-control)] underline"
+          >
+            {t('pullRequest.emptyHintSettings')}
+          </button>
         </p>
-        <Button size="sm" onClick={onEditInstructions}>
-          {t('pullRequest.emptyHintSettings')}
-        </Button>
       </div>
 
-      {/* `choice` paints the box and sizes it, so it belongs on the input. On
-          the label it made the label 0.875rem wide, and the words wrapped
-          inside a square the size of a tick and spilled over the button. */}
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={draft}
-          onChange={(event) => {
-            setDraft(event.target.checked)
-          }}
-          className="choice focus-ring"
-        />
-        <span>{t('pullRequest.draft')}</span>
-      </label>
+      <PaneFooter>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* `choice` paints the box and sizes it, so it belongs on the input.
+              On the label it made the label 0.875rem wide, and the words
+              wrapped inside a square the size of a tick and spilled over the
+              button. */}
+          <label className="mr-auto flex items-center gap-2 whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={draft}
+              onChange={(event) => {
+                setDraft(event.target.checked)
+              }}
+              className="choice focus-ring"
+            />
+            <span>{t('pullRequest.draft')}</span>
+          </label>
 
-      {/* Never disabled for an empty title any more: empty means "you write
-          it", and a disabled button would be the app refusing the thing it is
-          offering. Still disabled while either half is in flight. */}
-      {untitled && !drafting && !creating ? (
-        // Handing the writing to the agent is a different act from opening the
-        // request, so it looks like one: the composer's ring, a sparkle, and a
-        // width of its own rather than the whole row.
-        <button
-          type="submit"
-          className="ai-button focus-ring text-ink hover:text-ink relative inline-flex h-8 items-center justify-center gap-2 self-center rounded-[var(--radius-control)] border border-transparent px-4 font-medium transition-colors"
-        >
-          <span aria-hidden className="ai-button-line" />
-          <Sparkles aria-hidden size={14} className="shrink-0" />
-          {t('pullRequest.ask')}
-        </button>
-      ) : (
-        <Button type="submit" variant="accent" disabled={creating || drafting}>
-          {t(
-            drafting
-              ? 'pullRequest.drafting'
-              : creating
-                ? 'pullRequest.creating'
-                : 'pullRequest.create'
+          {/* Never disabled for an empty title: empty means "you write it", and
+              a disabled button would be the app refusing the thing it is
+              offering. Still disabled while either half is in flight. Handing
+              the writing to the agent is a different act from opening the
+              request, so it looks like one: the composer's ring. */}
+          {untitled && !drafting && !creating ? (
+            <Button type="submit" size="sm" variant="agent" className="whitespace-nowrap">
+              <Sparkles aria-hidden size={12} />
+              {t('pullRequest.ask')}
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="sm"
+              variant="success"
+              disabled={creating || drafting}
+              className="whitespace-nowrap"
+            >
+              <GitPullRequest aria-hidden size={12} />
+              {t(
+                drafting
+                  ? 'pullRequest.drafting'
+                  : creating
+                    ? 'pullRequest.creating'
+                    : 'pullRequest.create'
+              )}
+            </Button>
           )}
-        </Button>
-      )}
+        </div>
+      </PaneFooter>
     </form>
+  )
+}
+
+/**
+ * A sentence the reader should see before pressing: something that will happen
+ * (`info`) or something that could go wrong (`warning`), on its paired ground.
+ */
+function Callout({
+  tone,
+  children
+}: {
+  readonly tone: 'info' | 'warning'
+  readonly children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <p
+      className={`text-ink flex items-start gap-2 rounded-[var(--radius-control)] px-2.5 py-2 leading-snug ${
+        tone === 'info' ? 'bg-info-bg' : 'bg-warning-bg'
+      }`}
+    >
+      <span
+        className={`flex h-[1lh] shrink-0 items-center ${tone === 'info' ? 'text-info' : 'text-warning'}`}
+      >
+        {tone === 'info' ? <Info aria-hidden size={13} /> : <AlertTriangle aria-hidden size={13} />}
+      </span>
+      <span className="min-w-0">{children}</span>
+    </p>
   )
 }

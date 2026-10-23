@@ -2,7 +2,6 @@ import {
   CloudDownload,
   FolderOpen,
   GitBranch,
-  GitMerge,
   GitPullRequest,
   PanelRightClose,
   PanelRightOpen,
@@ -18,8 +17,7 @@ import type { ThemeName } from '@core/types.js'
 import type { Failure, Result } from '../../preload/index.js'
 
 import { Button } from './components/Button.js'
-import { DropdownMenu } from './components/DropdownMenu.js'
-import { MERGE_METHODS } from './components/pr/mergeMethods.js'
+import { MergeMenu } from './components/pr/MergeMenu.js'
 import { Chat } from './components/chat/Chat.js'
 import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { Placeholder } from './components/Placeholder.js'
@@ -904,43 +902,27 @@ export function App(): React.JSX.Element {
            */}
           {openRequest?.state === 'open' && selectedWorkspace !== null && (
             <>
-              <DropdownMenu
-                align="right"
-                actions={MERGE_METHODS.map(({ method, labelKey }) => ({
-                  id: method,
-                  label: t(labelKey),
-                  onSelect: () => {
-                    finishRequest(
-                      (number) =>
-                        window.octopus.workspaces.mergePullRequest(
-                          selectedWorkspace.id,
-                          number,
-                          method
-                        ),
-                      openRequest.number
-                    )
-                  }
-                }))}
-                trigger={({ onClick, open: shown }) => (
-                  <Button
-                    size="sm"
-                    variant="accent"
-                    onClick={onClick}
-                    aria-expanded={shown}
-                    /* The same rule the pane keeps, said in the summary this
-                       list carries: a red check and a check still going both
-                       hold the button, and a repository that runs none reports
-                       `none` and is merged as it always was. */
-                    disabled={
-                      finishing ||
-                      openRequest.checks === 'failed' ||
-                      openRequest.checks === 'running'
-                    }
-                  >
-                    <GitMerge aria-hidden size={12} />
-                    {t('pullRequest.merge')}
-                  </Button>
-                )}
+              <MergeMenu
+                // Green, like every press that finishes the work.
+                variant="success"
+                onMerge={(method) => {
+                  finishRequest(
+                    (number) =>
+                      window.octopus.workspaces.mergePullRequest(
+                        selectedWorkspace.id,
+                        number,
+                        method
+                      ),
+                    openRequest.number
+                  )
+                }}
+                /* The same rule the pane keeps, said in the summary this list
+                   carries: a red check and a check still going both hold the
+                   button, and a repository that runs none reports `none` and
+                   is merged as it always was. */
+                disabled={
+                  finishing || openRequest.checks === 'failed' || openRequest.checks === 'running'
+                }
               />
 
               <Button

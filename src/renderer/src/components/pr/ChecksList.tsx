@@ -49,6 +49,13 @@ const STATES: Record<
 }
 
 /**
+ * Which rows come first: what needs looking at, then what is still going.
+ *
+ * A stable sort, so within a state the checks keep GitHub's own order.
+ */
+const ORDER: Record<CheckState, number> = { failed: 0, pending: 1, passed: 2, skipped: 3 }
+
+/**
  * What CI has made of the branch, one row per check.
  *
  * Flat rather than grouped by workflow. A repository runs both GitHub Actions
@@ -68,25 +75,27 @@ export function ChecksList({
   }
 
   return (
-    <ul className="space-y-0.5">
-      {checks.map((check) => {
-        const state = STATES[check.state]
-        const took = duration(check.startedAt, check.completedAt)
+    <ul className="workspace-card divide-line divide-y overflow-hidden">
+      {[...checks]
+        .sort((a, b) => ORDER[a.state] - ORDER[b.state])
+        .map((check) => {
+          const state = STATES[check.state]
+          const took = duration(check.startedAt, check.completedAt)
 
-        return (
-          <li
-            // The name is what GitHub identifies a check by within a request,
-            // and two runs of one job replace rather than stack.
-            key={`${check.workflow ?? ''}/${check.name}`}
-            className="flex items-center gap-2"
-          >
-            <span className={`shrink-0 ${state.tone}`}>{state.icon}</span>
+          return (
+            <li
+              // The name is what GitHub identifies a check by within a request,
+              // and two runs of one job replace rather than stack.
+              key={`${check.workflow ?? ''}/${check.name}`}
+              className="flex h-[30px] items-center gap-2 px-2.5"
+            >
+              <span className={`shrink-0 ${state.tone}`}>{state.icon}</span>
 
-            <span className="min-w-0 flex-1 truncate" title={check.workflow ?? check.name}>
-              {check.name}
-            </span>
+              <span className="min-w-0 flex-1 truncate" title={check.workflow ?? check.name}>
+                {check.name}
+              </span>
 
-            {/*
+              {/*
               Two facts, so two spans. They shared one, and `took ?? word` meant
               the word was never drawn for a finished Actions check: a `CheckRun`
               reaches a finished state only through `COMPLETED`, which carries
@@ -98,31 +107,31 @@ export function ChecksList({
               the link: last, they would each start wherever the duration
               happened to end.
             */}
-            {took !== null && (
-              <span className="text-ink-faint shrink-0 font-mono text-[11px] tabular-nums">
-                {took}
+              {took !== null && (
+                <span className="text-ink-faint shrink-0 font-mono text-[11px] tabular-nums">
+                  {took}
+                </span>
+              )}
+
+              <span className="text-ink-faint shrink-0 font-mono text-[11px]">
+                {t(state.labelKey)}
               </span>
-            )}
 
-            <span className="text-ink-faint shrink-0 font-mono text-[11px]">
-              {t(state.labelKey)}
-            </span>
-
-            {check.url !== null && (
-              <a
-                href={check.url}
-                target="_blank"
-                rel="noreferrer"
-                title={check.name}
-                aria-label={`${check.name} — ${t(state.labelKey)}`}
-                className="focus-ring text-ink-faint hover:text-accent shrink-0 rounded-[var(--radius-control)]"
-              >
-                <ExternalLink aria-hidden size={11} />
-              </a>
-            )}
-          </li>
-        )
-      })}
+              {check.url !== null && (
+                <a
+                  href={check.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={check.name}
+                  aria-label={`${check.name} — ${t(state.labelKey)}`}
+                  className="focus-ring text-ink-faint hover:text-accent shrink-0 rounded-[var(--radius-control)]"
+                >
+                  <ExternalLink aria-hidden size={11} />
+                </a>
+              )}
+            </li>
+          )
+        })}
     </ul>
   )
 }

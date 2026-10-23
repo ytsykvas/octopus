@@ -30,11 +30,12 @@ the frame's own and the fade is by opacity: the border to transparent, the line
 and the glow up, over 0.2s. The line and the glow are also `visibility: hidden`
 at rest, so a blurred layer nobody can see is not painted.
 
-**The ring is also worn by the one button that hands the writing to the agent**
-— "Ask the agent to describe it" in the pull request form (`.ai-button`), with a
-sparkle icon and the width of its words. There the line is faint at rest and
-turns only under the pointer or keyboard focus, never the glow; once the title
-has text, the button is the plain accent "Open pull request" again.
+**The ring is also worn by the buttons that hand the work to the agent** —
+"Ask the agent to describe it" in the pull request form and the pull request
+pane's "Ask the agent" menu, both `Button`'s `agent` variant (`.ai-button`),
+with a sparkle icon and the width of their words. There the line is faint at
+rest and turns only under the pointer or keyboard focus, never the glow; once
+the form's title has text, its button is the green "Open pull request".
 
 **Nothing in the composer's ring moves.** It did: the line turned its
 gradient's own angle (`--ring-angle`, registered with `@property` so it

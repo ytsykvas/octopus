@@ -1,8 +1,21 @@
 # The Pull request tab
 
 **The pull request tab is the one place that reaches GitHub for something other
-than cloning.** It names the branch, and then either reports the request there
-is — number, title, a link out — or offers the form that opens one. Two things
+than cloning.** It has one shape from the form to the merge: a header, the
+views, and a strip pinned along the bottom holding the next step. The header is
+a pill saying where the request stands (_Open_, _Draft_, _Merged_, _Closed_,
+_Not opened_; merged and closed in the sidebar mark's colours, so the row and the
+pane agree on how one ended — an open request's mark is coloured by its checks,
+which the tiles carry here), the number, the time of the last read beside the
+control that reads again, a link out, the title as a heading and `branch → base`.
+`requestFaces.ts` holds the glyph, word and colour of each state once, for the
+pill, the Merge tile and the Merge view's closing card. Under it a request that
+exists has three tiles — Checks, Review, Merge — each a value ("1 failed",
+"Changes", "Waiting") and the view's name; they are also what picks the view
+below them, and the one picked carries a bar in the project's colour.
+Buttons with `aria-pressed`, the way `Segmented` draws a choice, rather than a tab
+list, which would promise arrow keys and a panel each controls. A branch with no
+request has the form instead, or the sentence saying there is nothing to open. Two things
 are said **before** the button rather than after it fails: that opening will push
 a branch that is not pushed, and that uncommitted work is committed with it. Pushing
 touches somebody else's machine, and a button that does that silently is one
@@ -14,11 +27,16 @@ only on showing, a tab left open through a turn kept saying there was nothing
 to open after the agent had committed, until another tab was clicked and this
 one clicked back.
 
-Two buttons sit above all of that. **Instructions for a new PR** opens the
-project's own instruction where it lives, in project settings — one editor for
-one file, reached from the place it matters, which is the arrangement "Write the
-script" already uses. A second editor here would be a second place for the two
-to disagree.
+**The project's instructions** open where they live, in project settings — one
+editor for one file, reached from the place it matters, which is the arrangement
+"Write the script" already uses. A second editor here would be a second place
+for the two to disagree. The way there is wherever the wording is about to be
+used: _Change how it writes them_ under the form's fields, _Instructions for a
+new PR_ on a branch with nothing to open, and the last item of the agent's menu
+on an open request — kept, alone in the footer, when the request's detail could
+not be read, since neither the reviews nor the instructions need it. A merged or
+closed one has nothing left to send, and so no menu. It used to be a button at the top of every state,
+above a request that had long been opened.
 
 **The form's own draft button is a different thing from the one below**, and the
 difference is what makes it fragile. It asks the agent once, with read-only
@@ -52,8 +70,55 @@ the window header, through the same callback, because two copies of "open that
 tab" drift the first time one of them is touched.
 
 **The pane is one component per question**, under `components/pr/`, beside the
-diff's own folder: the summary, the checks, the review, the actions and the form
-for a request that does not exist yet.
+diff's own folder: the header, the tiles, the checks, the review, the merge
+conditions, the footer with its agent menu, and the form for a request that does
+not exist yet. What they draw is decided once, in `requestStatus.ts`: one verdict
+on the checks (failed, running, passed, skipped, none), one on the merge, the
+prompts this moment calls for, the view to open on, and an ordered list of what
+wants attention. The tiles read the verdicts and the Merge view and the footer
+read the list, because three spellings of "is it ready" are three things that
+drift apart — and two had: the tile called a request _Ready_ off the button's
+policy while the footer said GitHub would not merge it.
+
+**_Ready_ is GitHub's word, not the app's.** The merge verdict is `ready` only
+when GitHub has said the request merges: one it holds back for a required review
+or a branch behind its base is `held`, and one it has not worked out yet — the
+first read after every push — is `settling`, with its own line saying GitHub is
+still checking. Both read _Waiting_ on the tile, and _No conflicts_ waits for
+GitHub to say so too. The button still takes a press in both, as before: `gh`
+turns one into auto-merge.
+
+**The pane opens on the view that answers the question the request is asking**:
+Checks while one is red or running, Review once there is a review or an open
+thread, Merge otherwise. That is settled once, on the request's first read, and
+then only the reader moves it: a view that followed every read pulled itself out
+from under the reader — resolving the last thread jumped from Review to Merge,
+and a run starting after a push hid a reply being typed. Settled during render
+rather than in an effect, and stored with the workspace and the number, the way
+the detail is: numbers are only unique within a repository, so #7 in another
+project opens on its own view. The views are hidden rather than unmounted, so a
+reply half written under a thread survives a look at the checks.
+
+**The footer holds the next step**: the one line that matters most, the commit
+message while there is work to commit, and the buttons — each row wrapping
+rather than squeezing, so at the pane's narrowest, or in a language with longer
+words, a press drops a line instead of running off the edge. The line is the
+first thing wanting attention, or _Ready to merge into main_, and it is a polite
+live region, so a press that changes it is read out. Three warnings about the
+press below take the line rather than adding a block: the env file git does not
+ignore, while there is work to commit; that the branch has no commit of its own
+to amend, which a disabled button's tooltip could never say; and that an empty
+field would replace a commit already on GitHub. The commit field has no hint
+under it: its placeholder says an empty one amends, and the button beside it
+says _Commit & push_ or _Amend commit & push_. The field sits by its button
+because an empty one amends, and a field kept in another view would amend
+unseen. **The green button is the next step**: committing while there is work to
+commit, else sending the commits that are waiting, else merging. Push and Merge
+stay beside it, quiet, Merge with every reason it has for refusing. Merged, the
+one press left is the red removal; closed, there is no footer at all. A press
+that removes its own button — Push once nothing is left, Merge once merged —
+leaves keyboard focus on the pane rather than at the top of the window
+(`useFocusKeeper`).
 
 Two reads feed it, and they are apart on purpose. `workspaces:pullRequest` says
 whether the branch has one; `workspaces:pullRequestDetail` says what has become
@@ -150,9 +215,11 @@ under one button is worse than the quieter one going.
 **The commit message is typed, and an empty one amends.** The field is the
 same one the create form carries — one component, because two fields for one idea
 drift, and this app has already spent a commit deleting a second copy of a
-function for that reason. What differs is the sentence under it and the fallback:
-the form commits under the title when its field is empty, and the agent's draft
-fills that field rather than standing behind it. Here there is neither, so an
+function for that reason. What differs is the fallback, and so what is said
+about it: the form carries a sentence under the field because it commits under
+the title when the field is empty, and the agent's draft fills that field rather
+than standing behind it. Here there is neither, so the field's placeholder and
+its button say what empty does instead, and an
 empty field does not commit under a sentence nobody chose — the button reads
 _Amend commit & push_ and folds the work into the branch's last commit, which
 keeps the description that commit already has; with text in the field it reads
@@ -160,8 +227,8 @@ _Commit & push_. The message was fixed at "Answer the review" until the field
 existed, on every press, whether or not anybody had reviewed anything.
 
 Amending is refused where it would rewrite what is not the branch's: on a branch
-with no commit of its own the button is disabled and says why, since HEAD is
-then the base's commit. A last commit already on GitHub is replaced there with a
+with no commit of its own the button is disabled and the footer's line says why,
+since HEAD is then the base's commit. A last commit already on GitHub is replaced there with a
 forced push, but only over a remote tip this checkout already holds — a commit
 pushed from somewhere else would be thrown away, so that case is refused with a
 sentence instead — and with the lease pinned to that tip rather than left bare,
@@ -187,10 +254,14 @@ as pushed whenever another prefix ended in the same segment.
 
 **Push sends what is already committed.** _Commit & push_ appears only while
 the worktree is dirty, so work the agent committed — or the reader committed in
-the workspace's terminal — had no way onto the request except the terminal. The
-two sit side by side rather than replacing each other, because a branch can be in
-both states at once: something committed and not sent, something else not
-committed at all. The count of waiting commits is read against the branch's own
+the workspace's terminal — had no way onto the request except the terminal. A
+branch can be in both states at once, something committed and not sent and
+something else not committed at all, so Push stays beside _Commit & push_, quiet
+while committing is the green press. Pushing alone is how the agent's commits go
+out without what else is lying in the worktree — an env file git does not
+ignore among it, which committing would stage; the redesign that briefly hid
+Push while there was work to commit left committing as the only way to send
+them. The count of waiting commits is read against the branch's own
 copy on the remote, which is a different question from the `ahead` the form uses:
 a branch fully pushed is still ahead of `main`.
 
@@ -215,9 +286,13 @@ it kept, which is the failure the whole tab exists to avoid.
 
 **The prepared messages** — fix the checks, answer the review, review it, review
 it with several subagents, resolve the conflicts — each send the project's
-instruction plus a line naming the request. Drawn twice rather than once around a
-guard: without a conversation the press could not do anything, and a branch
-nothing can reach is a claim nothing tests.
+instruction plus a line naming the request. They live in one menu at the foot of
+the pane, _Ask the agent_, wearing the composer's ring (`Button`'s `agent`
+variant): the row of buttons they were had grown to six and wrapped, and the ones
+that answered the moment looked like the ones that are always there. The ones
+that apply now come first, the two that always do sit under a line, and the
+instructions close it. Without a conversation every prompt is there and
+disabled, with the reason above the first.
 
 **Three of them end in a push the app makes.** The agent may not push (§12.3 of
 `PROJECT.md`), so fixing the checks, answering the review and resolving the
@@ -242,7 +317,7 @@ which run went red. The log itself is not pasted in: a message is capped at
 to truncate it — possibly past the error. The agent reads it where it lives, and
 can read it again after it pushes.
 
-**Re-running the checks is two buttons**, beside the heading of the checks and
+**Re-running the checks is two buttons**, under the list in the Checks view and
 only while one is red: _Failed_ restarts the failed jobs of each run that has
 one (`gh run rerun --failed`), _All_ restarts every run whole. The run id comes
 from the job's link, the only place the rollup carries it, so a status from
