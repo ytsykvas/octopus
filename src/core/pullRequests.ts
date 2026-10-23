@@ -112,8 +112,31 @@ const RemotePullRequestSchema = z.object({
   state: RemoteStateSchema,
   title: z.string(),
   url: z.string(),
-  createdAt: z.iso.datetime()
+  createdAt: z.iso.datetime(),
+  headRefOid: z.string().min(1)
 })
+
+/**
+ * Whether the branch has moved on from a request that is no longer open.
+ *
+ * GitHub keeps a branch's newest request as its newest until another is
+ * opened, so a branch merged and then committed to went on reading as merged:
+ * the pane offered only removing the workspace, and no way to open a request
+ * for the work after the merge. A request that is no longer open is the
+ * branch's current one only while the branch still ends where it did.
+ *
+ * Counted from the request's last commit, which `countAhead` answers zero for
+ * whenever git cannot — a commit pushed from a checkout this clone never
+ * fetched among them. That cannot show the branch moved on, so the request
+ * stays rather than vanishing on a guess.
+ */
+export async function movedPast(
+  request: { readonly state: z.infer<typeof RemoteStateSchema>; readonly headRefOid: string },
+  branch: string,
+  git: GitExec
+): Promise<boolean> {
+  return request.state !== 'OPEN' && (await countAhead(git, request.headRefOid, branch)) > 0
+}
 
 /**
  * The pull request for a branch, or the absence of one.
@@ -152,9 +175,13 @@ export async function readPullRequest(
 
   // The newest, when a branch has been opened and closed and opened again:
   // `gh` lists most recent first, and the current one is what the pane is about.
-  // One too old to be the workspace's means everything older is too.
+  // One too old to be the workspace's means everything older is too, and one
+  // the branch has moved past leaves it with none until another is opened.
   const newest = remote[0]
-  const current = newest !== undefined && openedFor(newest, owner) ? newest : undefined
+  const current =
+    newest !== undefined && openedFor(newest, owner) && !(await movedPast(newest, branch, git))
+      ? newest
+      : undefined
 
   return {
     request:
@@ -190,7 +217,7 @@ async function listPullRequests(
       '--limit',
       '1',
       '--json',
-      'number,state,title,url,createdAt'
+      'number,state,title,url,createdAt,headRefOid'
     ])
   } catch {
     throw new GitHubError('notConnected', {}, 'Could not ask GitHub about this branch.')

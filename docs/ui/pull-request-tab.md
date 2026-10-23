@@ -280,6 +280,16 @@ so it asks about uncommitted work and about the branch exactly as the list does.
 A **closed** request is not a finished one — it is reopened, or the branch is
 reworked and opened again — so only a merge draws this.
 
+**A request that is no longer open is current only until the branch moves past
+it.** GitHub keeps a branch's newest request as its newest until another is
+opened, so a branch merged and then committed to went on reading as merged: the
+one press left was removing the workspace, and the work after the merge had no
+way onto a request. Once the branch has commits after the request's last one
+(`headRefOid`), the branch reads as having no request, and the pane offers the
+form again. A last commit this clone does not have cannot show that, so the
+request stays — the same "cannot say" that keeps the push count from rounding to
+zero.
+
 **Resolve goes both ways.** Undoing one is a single click on GitHub, and a pane
 that can do a thing but not undo it sends the reader to the browser for the half
 it kept, which is the failure the whole tab exists to avoid.

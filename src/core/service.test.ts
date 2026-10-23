@@ -314,12 +314,22 @@ describe('GitHub projects', () => {
 const EARLIER = '2000-01-01T00:00:00Z'
 const LATER = '2999-01-01T00:00:00Z'
 
-/** A `gh` answering one request on the workspace's branch, opened at `createdAt`. */
+/**
+ * A `gh` answering one request on the workspace's branch, opened at `createdAt`
+ * and ending at `head` — by default a commit no clone has, which is a request
+ * the branch cannot be shown to have moved past.
+ */
 const oneRequest =
-  (createdAt: string, branch: () => string) =>
+  (createdAt: string, branch: () => string, head: () => string = () => '0'.repeat(40)) =>
   () =>
   (args: readonly string[]): Promise<string> => {
-    const request = { number: 7, state: 'MERGED', url: 'https://x/pull/7', createdAt }
+    const request = {
+      number: 7,
+      state: 'MERGED',
+      url: 'https://x/pull/7',
+      createdAt,
+      headRefOid: head()
+    }
     return Promise.resolve(
       JSON.stringify([
         args.includes('--head')
@@ -702,6 +712,49 @@ describe('workspaces', () => {
     await service.removeWorkspaceById(workspace.id, { deleteBranch: true })
 
     await expect(outside(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  /*
+   * GitHub's word covers the commits the request carried and nothing after
+   * them. Merged and then committed to, the branch was deleted on that word —
+   * and with it the work after the merge, which no request had ever held.
+   */
+  it('refuses to delete a branch committed to after its request was merged', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    let head = ''
+    const service = await createService({
+      ...paths(dir),
+      makeGh: oneRequest(
+        LATER,
+        () => '',
+        () => head
+      )
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const run = promisify(execFile)
+    const inside = (args: string[]): Promise<string> =>
+      run('git', args, { cwd: workspace.path }).then(({ stdout }) => stdout)
+    const outside = (args: string[]): Promise<string> =>
+      run('git', args, { cwd: repo }).then(({ stdout }) => stdout)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'work'])
+    head = (await inside(['rev-parse', 'HEAD'])).trim()
+    await outside(['merge', '--squash', workspace.branch])
+    await outside(['commit', '-q', '-m', 'squashed'])
+
+    await writeFile(join(workspace.path, 'more.txt'), 'more\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'after the merge'])
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: true })
+    ).rejects.toMatchObject({ code: 'branchUnmerged' })
   })
 
   it('keeps refusing when the merged request predates the workspace', async () => {

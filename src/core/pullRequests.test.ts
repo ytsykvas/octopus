@@ -71,13 +71,17 @@ const OPENED = '2026-02-01T00:00:00Z'
 
 const owner = (branch: string): BranchOwner => ({ branch, createdAt: BEGAN, branchSince: null })
 
+/** A commit no clone has: what a request pushed from somewhere else names. */
+const ABSENT = '0'.repeat(40)
+
 const OPEN_PR = JSON.stringify([
   {
     number: 7,
     state: 'OPEN',
     title: 'Rename the thing',
     url: 'https://github.com/o/p/pull/7',
-    createdAt: OPENED
+    createdAt: OPENED,
+    headRefOid: ABSENT
   }
 ])
 
@@ -124,6 +128,30 @@ async function branchWithCommit(name = 'octopus/anna'): Promise<string> {
 
 const workExec = (): ReturnType<typeof gitIn> => gitIn(join(dir, 'work'))
 
+/** One request on the branch, as `gh pr list` answers, ending at `headRefOid`. */
+const listed = (state: string, headRefOid: string): string =>
+  JSON.stringify([{ number: 7, state, title: 't', url: 'u', createdAt: OPENED, headRefOid }])
+
+async function tipOf(ref: string): Promise<string> {
+  return (await run('git', ['rev-parse', ref], { cwd: join(dir, 'work') })).stdout.trim()
+}
+
+/** Another commit on whatever HEAD is on. */
+async function commitOn(file: string): Promise<void> {
+  const work = join(dir, 'work')
+  await writeFile(join(work, file), `${file}\n`, 'utf8')
+  await run('git', ['add', '.'], { cwd: work })
+  await run('git', [...IDENTITY, 'commit', '-q', '-m', file], { cwd: work })
+}
+
+/** What GitHub's merge button does with the default method, done locally. */
+async function mergeIntoMain(branch: string): Promise<void> {
+  const work = join(dir, 'work')
+  await run('git', ['checkout', '-q', 'main'], { cwd: work })
+  await run('git', [...IDENTITY, 'merge', '-q', '--no-ff', '-m', 'merge', branch], { cwd: work })
+  await run('git', ['checkout', '-q', branch], { cwd: work })
+}
+
 describe('reading a branch', () => {
   it('reports no pull request for a branch that has none', async () => {
     const branch = await branchWithCommit()
@@ -155,7 +183,7 @@ describe('reading a branch', () => {
       '--limit',
       '1',
       '--json',
-      'number,state,title,url,createdAt'
+      'number,state,title,url,createdAt,headRefOid'
     ])
   })
 
@@ -176,7 +204,7 @@ describe('reading a branch', () => {
   it('lowers the state `gh` shouts', async () => {
     const branch = await branchWithCommit()
     const merged = JSON.stringify([
-      { number: 7, state: 'MERGED', title: 't', url: 'u', createdAt: OPENED }
+      { number: 7, state: 'MERGED', title: 't', url: 'u', createdAt: OPENED, headRefOid: ABSENT }
     ])
 
     const view = await readPullRequest(
@@ -192,7 +220,14 @@ describe('reading a branch', () => {
   it("takes a request opened before the workspace began as somebody else's", async () => {
     const branch = await branchWithCommit()
     const earlier = JSON.stringify([
-      { number: 7, state: 'MERGED', title: 't', url: 'u', createdAt: '2025-12-01T00:00:00Z' }
+      {
+        number: 7,
+        state: 'MERGED',
+        title: 't',
+        url: 'u',
+        createdAt: '2025-12-01T00:00:00Z',
+        headRefOid: ABSENT
+      }
     ])
 
     const view = await readPullRequest(
@@ -466,6 +501,95 @@ describe('reading a branch', () => {
     await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
     })
+  })
+})
+
+/*
+ * A request that is no longer open is the branch's current one only until the
+ * branch moves on. Merged and then committed to, the newest request on the
+ * branch was still the merged one, so the pane offered nothing but removing
+ * the workspace — and no way at all to open a request for the new work.
+ */
+describe('reading a branch that moved past its request', () => {
+  it('takes a merged request the branch has moved past as no longer current', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await mergeIntoMain(branch)
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.request).toBeNull()
+    // Only the commit after the merge: the merged ones are on `main` now.
+    expect(view.ahead).toBe(1)
+  })
+
+  it('keeps a merged request while the branch is where it was merged', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await mergeIntoMain(branch)
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.request?.state).toBe('merged')
+  })
+
+  it('takes a closed request the branch has moved past as no longer current', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('CLOSED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.request).toBeNull()
+  })
+
+  // New commits are what an open request is for: they land on it when pushed.
+  it('keeps an open request however far the branch has moved', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('OPEN', head) }).gh,
+      workExec()
+    )
+
+    expect(view.request?.state).toBe('open')
+  })
+
+  /* Pushed from another checkout, the request's last commit may not be in this
+     clone at all. That cannot show the branch moved past it, so the request
+     stays what it was rather than vanishing on a guess. */
+  it('keeps a merged request whose last commit this clone does not have', async () => {
+    const branch = await branchWithCommit()
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('MERGED', ABSENT) }).gh,
+      workExec()
+    )
+
+    expect(view.request?.state).toBe('merged')
   })
 })
 
@@ -1607,7 +1731,7 @@ describe('the state map', () => {
       ['CLOSED', 'closed']
     ] as const) {
       const answer = JSON.stringify([
-        { number: 1, state: shouted, title: 't', url: 'u', createdAt: OPENED }
+        { number: 1, state: shouted, title: 't', url: 'u', createdAt: OPENED, headRefOid: ABSENT }
       ])
       const view = await readPullRequest(
         owner(branch),
