@@ -46,6 +46,8 @@ interface PullRequestFooterProps {
    */
   readonly ahead: number
   readonly committing: boolean
+  /** Commits the remote lacks; null when they cannot be counted from here. */
+  readonly unpushedCommits: number | null
   /** Sends what is already committed, without committing anything else. */
   readonly onPush: () => void
   readonly pushing: boolean
@@ -85,6 +87,7 @@ export function PullRequestFooter({
   onCommitAndPush,
   ahead,
   committing,
+  unpushedCommits,
   onPush,
   pushing,
   onRemoveWorkspace
@@ -117,20 +120,19 @@ export function PullRequestFooter({
   // which is where one is reopened.
   if (status.state !== 'open') return null
 
-  /* Committing pushes too, so a push of its own is offered only where there is
-     nothing to commit. */
-  const pushable = !dirty && status.attention.some((item) => item.kind === 'unpushed')
+  /* Offered beside the commit too, not only where there is nothing to commit:
+     the two are separate states and a branch can be in both. Pushing alone is
+     how commits the agent made go out without whatever else is lying in the
+     worktree — an env file git does not ignore included, which committing
+     would stage. */
+  const pushable = unpushedCommits !== null && unpushedCommits > 0
 
   /* An empty field amends, and where the last commit is already on GitHub the
      amended one replaces it there. That is the one consequence of this press
      worth a line of its own rather than a tooltip: it rewrites history somebody
      else may have fetched. With commits still waiting, the last one is local
      and amending it changes nothing anybody has seen. */
-  const replacing =
-    dirty &&
-    amending &&
-    ahead > 0 &&
-    !status.attention.some((item) => item.kind === 'unpushed' || item.kind === 'unpushedUnknown')
+  const replacing = dirty && amending && ahead > 0 && unpushedCommits === 0
 
   return (
     <PaneFooter>
@@ -139,6 +141,10 @@ export function PullRequestFooter({
           exactly the press it is about. */}
       {dirty && exposedEnvFile !== null ? (
         <Warning>{t('pullRequest.envNotIgnoredPush', { file: exposedEnvFile })}</Warning>
+      ) : dirty && cannotAmend ? (
+        // Said here rather than in the disabled button's title, which a
+        // disabled button never shows.
+        <Warning>{t('pullRequest.amendNeedsCommit')}</Warning>
       ) : replacing ? (
         <Warning>{t('pullRequest.amendReplaces')}</Warning>
       ) : (
@@ -160,11 +166,9 @@ export function PullRequestFooter({
               onCommitAndPush(message.trim())
             }}
             // Amending a branch with no commit of its own would rewrite the
-            // base's commit instead — and it says why, rather than only greying.
+            // base's commit instead; the line above says why.
             disabled={committing || cannotAmend}
-            title={t(
-              cannotAmend ? 'pullRequest.amendNeedsCommit' : 'pullRequest.commitAndPushHint'
-            )}
+            title={t('pullRequest.commitAndPushHint')}
           >
             <Upload aria-hidden size={12} />
             {t(
@@ -188,8 +192,15 @@ export function PullRequestFooter({
 
         <span className="flex-1" />
 
+        {/* Quiet beside a commit, which is the green press while there is
+            work to commit. */}
         {pushable && (
-          <Button size="sm" variant="success" onClick={onPush} disabled={pushing}>
+          <Button
+            size="sm"
+            variant={dirty ? 'quiet' : 'success'}
+            onClick={onPush}
+            disabled={pushing}
+          >
             <ArrowUpFromLine aria-hidden size={12} />
             {t(pushing ? 'pullRequest.pushing' : 'pullRequest.push')}
           </Button>

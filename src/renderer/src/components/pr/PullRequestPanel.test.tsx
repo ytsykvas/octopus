@@ -1329,6 +1329,46 @@ describe('a pull request that exists', () => {
     expect(await screen.findByText('#7')).toBeInTheDocument()
     expect(await screen.findByText(/Could not reach GitHub/)).toBeInTheDocument()
   })
+
+  /* The reviews and the instructions do not need the detail: without it the
+     menu that reaches them would have gone with the checks. */
+  it('still offers the agent when the detail could not be read', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    vi.mocked(octopus().workspaces.pullRequestDetail).mockResolvedValue({
+      ok: false,
+      error: 'gh: not logged in',
+      code: 'notConnected'
+    })
+    const { onEditInstructions } = renderPanel()
+
+    await screen.findByText(/Could not reach GitHub/)
+    await openAgentMenu(user)
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Review it',
+      'Multi-agent review',
+      'Edit the instructions…'
+    ])
+
+    await user.click(screen.getByRole('menuitem', { name: 'Review it' }))
+    expect(octopus().workspaces.instruction).toHaveBeenCalledWith(anna.id, 'review')
+    await openAgentMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: 'Edit the instructions…' }))
+    expect(onEditInstructions).toHaveBeenCalledOnce()
+  })
+
+  it('offers nothing at the foot of a closed request it could not read', async () => {
+    answer(view({ request: request({ state: 'closed' }) }))
+    vi.mocked(octopus().workspaces.pullRequestDetail).mockResolvedValue({
+      ok: false,
+      error: 'gh: not logged in',
+      code: 'notConnected'
+    })
+    renderPanel()
+
+    await screen.findByText(/Could not reach GitHub/)
+    expect(screen.queryByRole('region', { name: 'Next step' })).not.toBeInTheDocument()
+  })
 })
 
 describe('what the tab can do about a request', () => {
@@ -1811,16 +1851,19 @@ describe('what the tab can do about a request', () => {
 
     const button = await screen.findByRole('button', { name: 'Amend commit & push' })
     expect(button).toBeDisabled()
-    // And says why: a control that is simply grey is one the reader guesses at.
-    expect(button).toHaveAttribute(
-      'title',
-      'This branch has no commit of its own to amend yet. Write a message to make one.'
-    )
+    // And says why, on the footer's line: a disabled button never shows its
+    // title, and a control that is simply grey is one the reader guesses at.
+    const footer = await nextStep()
+    const why = 'This branch has no commit of its own to amend yet. Write a message to make one.'
+    expect(within(footer).getByText(why)).toBeInTheDocument()
+    // Not the line about replacing a pushed commit: there is none to replace.
+    expect(within(footer).queryByText(/^Left empty/)).not.toBeInTheDocument()
 
     await user.type(screen.getByRole('textbox', { name: 'Commit message' }), 'Something')
     const commit = screen.getByRole('button', { name: 'Commit & push' })
     expect(commit).toBeEnabled()
     // The refusal's reason gives way to what the press does.
+    expect(within(footer).queryByText(why)).not.toBeInTheDocument()
     expect(commit).toHaveAttribute('title', expect.stringContaining('Commits every change'))
   })
 
@@ -2201,10 +2244,43 @@ describe('the shape of a request on screen', () => {
     expect(within(footer).queryByText(/Committing and pushing would send/)).not.toBeInTheDocument()
   })
 
-  /* Committing pushes as well, so a separate push beside it would be a second
-     press for the same thing. */
-  it('offers no push of its own while there is work to commit', async () => {
+  /* Committing stages everything; pushing alone sends only what is already
+     committed. A branch can need both, and the second is the only way to send
+     the agent's commits without what else is lying in the worktree. */
+  it('keeps the push beside the commit, quiet while the commit is the green one', async () => {
+    const user = userEvent.setup()
     answer(view({ request: request(), dirty: true, unpushedCommits: 2 }))
+    answerDetail(detail())
+    renderPanel()
+
+    const footer = await nextStep()
+    expect(within(footer).getByRole('button', { name: 'Amend commit & push' })).toHaveClass(
+      'bg-success'
+    )
+    const push = within(footer).getByRole('button', { name: 'Push' })
+    expect(push).not.toHaveClass('bg-success')
+
+    await user.click(push)
+    expect(octopus().workspaces.push).toHaveBeenCalledWith(anna.id)
+    expect(octopus().workspaces.commitAndPush).not.toHaveBeenCalled()
+    expect(octopus().workspaces.amendAndPush).not.toHaveBeenCalled()
+  })
+
+  /* The case the separate push exists for: committing would put the env file
+     in the request, and the warning says so beside a press that does not. */
+  it('offers a push that leaves an exposed env file out', async () => {
+    answer(view({ request: request(), dirty: true, unpushedCommits: 1 }))
+    answerDetail(detail())
+    vi.mocked(octopus().projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
+    renderPanel({ envFile: '.env.octopus' })
+
+    const footer = await nextStep()
+    expect(await within(footer).findByText(/Committing and pushing would send/)).toBeInTheDocument()
+    expect(within(footer).getByRole('button', { name: 'Push' })).toBeEnabled()
+  })
+
+  it('offers no push where nothing is waiting to go', async () => {
+    answer(view({ request: request(), dirty: true, unpushedCommits: null }))
     answerDetail(detail())
     renderPanel()
 
@@ -2241,8 +2317,7 @@ describe('the shape of a request on screen', () => {
       [
         'the remote cannot be counted',
         view({ request: request(), dirty: true, unpushedCommits: null })
-      ],
-      ['the branch has no commit to amend', view({ request: request(), dirty: true, ahead: 0 })]
+      ]
     ])('is not said when %s', async (_, branch) => {
       answer(branch)
       answerDetail(detail())

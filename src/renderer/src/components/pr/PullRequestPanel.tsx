@@ -18,6 +18,7 @@ import { type PullRequestQuoteController, toQuote } from '../../hooks/usePullReq
 import { Button } from '../Button.js'
 import { Notice } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
+import { AgentMenu } from './AgentMenu.js'
 import { ChecksList } from './ChecksList.js'
 import { CommentList } from './CommentList.js'
 import { MergeConditions } from './MergeConditions.js'
@@ -433,6 +434,14 @@ export function PullRequestPanel({
   const shown: RequestView =
     chosen?.key === requestKey ? chosen.view : (read?.status.recommendedView ?? 'merge')
 
+  // Null where there is no conversation to send to.
+  const onPrompt =
+    chatId === null
+      ? null
+      : (kind: PromptKind) => {
+          prompt(kind, request, chatId)
+        }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {header}
@@ -563,14 +572,7 @@ export function PullRequestPanel({
             base={view.base}
             dirty={view.dirty}
             exposedEnvFile={exposedEnvFile}
-            // Null where there is no conversation to send to.
-            onPrompt={
-              chatId === null
-                ? null
-                : (kind: PromptKind) => {
-                    prompt(kind, request, chatId)
-                  }
-            }
+            onPrompt={onPrompt}
             sending={sending}
             onEditInstructions={onEditInstructions}
             onMerge={(method: MergeMethod) => {
@@ -580,12 +582,30 @@ export function PullRequestPanel({
             onCommitAndPush={commitAndPush}
             ahead={view.ahead}
             committing={committing}
+            unpushedCommits={view.unpushedCommits}
             onPush={push}
             pushing={pushing}
             onRemoveWorkspace={() => {
               onRemoveWorkspace(workspace.id)
             }}
           />
+        </>
+      )}
+
+      {/* A detail that could not be read still leaves an open request to
+          review, and the instructions to edit; without this the menu that
+          reaches both went with the detail. */}
+      {read === null && detail.error !== null && request.state === 'open' && (
+        <>
+          <span className="flex-1" />
+          <PaneFooter>
+            <AgentMenu
+              offered={[]}
+              onPrompt={onPrompt}
+              sending={sending}
+              onEditInstructions={onEditInstructions}
+            />
+          </PaneFooter>
         </>
       )}
     </div>
