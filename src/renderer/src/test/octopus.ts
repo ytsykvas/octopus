@@ -163,6 +163,10 @@ export function installOctopusStub(): Api {
       helpContext: vi.fn(() =>
         ok({
           rootPath: '/tmp/planner',
+          workspaceName: 'Alice',
+          slug: 'alice',
+          port: 3111,
+          portListening: true,
           envFile: '.env',
           profile: 'default',
           variableNames: [],

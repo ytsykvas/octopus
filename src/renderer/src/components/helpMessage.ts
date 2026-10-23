@@ -2,7 +2,7 @@ import type { TFunction } from 'i18next'
 
 import type { InstructionKind } from '@core/instructions.js'
 import type { LastRun, RunPurpose } from '@core/runLog.js'
-import { SCRIPT_KINDS } from '@core/scriptEnv.js'
+import { BLOCK, SCRIPT_KINDS } from '@core/scriptEnv.js'
 import type { HelpContext, HelpEnvProblem } from '@core/service.js'
 
 import { formatClock } from './chat/format.js'
@@ -71,6 +71,15 @@ function factsPart(context: HelpContext, t: TFunction): string {
     t('help.context.heading'),
     '',
     t('help.context.checkout', { path: context.rootPath }),
+    t('help.context.workspace', { name: context.workspaceName, slug: context.slug }),
+    t('help.context.port', {
+      port: context.port,
+      next: context.port + 1,
+      last: context.port + BLOCK - 1
+    }),
+    t(context.portListening ? 'help.context.listening' : 'help.context.notListening', {
+      port: context.port
+    }),
     t('help.context.envFile', { name: context.envFile }),
     t('help.context.profile', { name: context.profile }),
     names.length === 0

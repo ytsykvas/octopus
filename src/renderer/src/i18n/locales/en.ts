@@ -597,10 +597,10 @@ export const en = {
       'Sent when the pull request conflicts with its base branch and you ask the agent to settle it.',
     setupScripts: 'Setting the project up to run',
     setupScriptsHint:
-      'Sent as the first message of a new conversation when you choose Help → “Set this project up to run”. Octopus adds the checkout, the scripts in effect, the files it carries and the names of the variables below it — never their values.',
+      'Sent as the first message of a new conversation when you choose Help → “Set this project up to run”. Octopus adds the checkout, the workspace’s name, slug and port, the scripts in effect, the files it carries and the names of the variables below it — never their values.',
     diagnoseRun: 'Diagnosing a run that failed',
     diagnoseRunHint:
-      'Sent as the first message of a new conversation when you choose Help → “Why does Run not work?”. Octopus adds the same facts and the last lines of the latest build and server, with their exit codes.'
+      'Sent as the first message of a new conversation when you choose Help → “Why does Run not work?”. Octopus adds the same facts, whether anything is listening on the port, and the last lines of the latest build and server, with their exit codes.'
   },
 
   help: {
@@ -615,6 +615,11 @@ export const en = {
     context: {
       heading: '\u2014 What octopus knows about this workspace \u2014',
       checkout: 'Checkout ($OCTOPUS_ROOT_PATH): {{path}}',
+      workspace:
+        'Workspace ($OCTOPUS_WORKSPACE_NAME): {{name}}; its slug ($OCTOPUS_WORKSPACE_SLUG): {{slug}}',
+      port: 'Port ($OCTOPUS_PORT): {{port}}; run.sh also gets $OCTOPUS_PORT_1 \u2026 $OCTOPUS_PORT_9, which are {{next}}\u2013{{last}}',
+      listening: 'Something is listening on 127.0.0.1:{{port}} right now.',
+      notListening: 'Nothing is listening on 127.0.0.1:{{port}} right now.',
       envFile: 'Env file the env set is written into: {{name}}',
       profile: 'Env set in effect: {{name}}',
       variables:

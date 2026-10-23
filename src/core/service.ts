@@ -127,7 +127,7 @@ import {
   writeProfile
 } from './envProfiles.js'
 import { runArchiveScript } from './archive.js'
-import type { ScriptValues } from './scriptEnv.js'
+import { type ScriptValues, workspaceSlug } from './scriptEnv.js'
 import { type UsageReport, type UsageWindows, windowsFrom } from './usage.js'
 import {
   type Config,
@@ -834,13 +834,24 @@ function withoutLineText({ line, reason, subject }: EnvProblem): HelpEnvProblem 
  * What octopus knows about a workspace that its agent cannot find for itself —
  * the facts Help writes under its two instructions.
  *
- * Built from what a run already reads, so Help and Run cannot disagree. **No
+ * Built from what a run already reads, so Help and Run cannot disagree — the
+ * port's answer included, from the probe the Scripts tab asks. **No
  * value of a variable is in here**: names only, and a problem in the env set
  * names its subject only where that is a name (`HelpEnvProblem`).
  */
 export interface HelpContext {
   /** The checkout, as `$OCTOPUS_ROOT_PATH` gives it to a script. */
   readonly rootPath: string
+  /**
+   * `$OCTOPUS_WORKSPACE_NAME`, and the slug built from it. The agent's own
+   * session is given neither, nor the port: a script's values reach it only here.
+   */
+  readonly workspaceName: string
+  readonly slug: string
+  /** `$OCTOPUS_PORT`; the nine after it are the rest of the block. */
+  readonly port: number
+  /** Whether anything answered on the port when Help was asked: the one fact read from the machine. */
+  readonly portListening: boolean
   /** The file in the worktree the env block is written into. */
   readonly envFile: string
   /** The env set in effect. */
@@ -5289,6 +5300,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       return {
         rootPath: values.rootPath,
+        workspaceName: values.workspaceName,
+        slug: workspaceSlug(values.workspaceName),
+        port: values.port,
+        portListening: await listening(values.port),
         envFile,
         profile: values.profile,
         variableNames: Object.keys(variables),

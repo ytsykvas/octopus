@@ -149,7 +149,10 @@ workspace and **sends it a message at once**: the
 instruction of that kind (`setupScripts`, `diagnoseRun` — edited in Settings
 like the pull request's, and overridden from `.octopus/instructions/`), then a
 block of what octopus knows that the agent cannot find for itself —
-`workspaces:helpContext`: the checkout, the env file, the set in effect and its
+`workspaces:helpContext`: the checkout, the workspace's name, slug and port and
+whether anything answers on that port right now (the probe `workspaces:serving`
+asks — the agent's own session is given none of a script's values), the env
+file, the set in effect and its
 variables **by name only**, the scripts in effect and where they come from,
 whether the repository's still wait for _Allow these_, the carried paths and the
 set's problems. _Why does Run not work?_ adds the last build and server from

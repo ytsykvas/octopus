@@ -2932,6 +2932,27 @@ describe('what Help is told about a workspace', () => {
     expect(JSON.stringify(context)).not.toContain('app_')
   })
 
+  // The agent's session is given none of a script's values, so these are the
+  // only way it learns which port and which per-workspace names to look for.
+  it('names the workspace, its slug and its port, and whether the port answers', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.renameWorkspaceById(workspaceId, 'fix auth')
+    const port = (await service.listWorkspaces(projectId))[0]?.port ?? 0
+
+    answering.add(port)
+    await expect(service.helpContext(workspaceId, [])).resolves.toMatchObject({
+      workspaceName: 'fix auth',
+      slug: 'fix_auth',
+      port,
+      portListening: true
+    })
+
+    answering.clear()
+    await expect(service.helpContext(workspaceId, [])).resolves.toMatchObject({
+      portListening: false
+    })
+  })
+
   // A problem whose subject is the whole line — which may be a pasted secret.
   it('reports a line that is not an assignment by its number alone', async () => {
     const { projectId, workspaceId } = await withWorkspace()
