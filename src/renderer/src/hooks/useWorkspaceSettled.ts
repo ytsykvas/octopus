@@ -7,7 +7,7 @@ import { useTurnSettled } from './useTurnSettled.js'
  * its chats ended, or the window came back from somewhere the user might have
  * edited them.
  *
- * In place of a watcher, which octopus deliberately does not run (`docs/ui.md`):
+ * In place of a watcher, which octopus deliberately does not run (`docs/ui/files-tab.md`):
  * these are the moments a reader would expect the picture to be current, and
  * between them nothing on screen claims to be live. Nothing fires while
  * `enabled` is false — a hidden tab reads when it is shown again instead.

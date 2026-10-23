@@ -46,7 +46,7 @@ Then compare against the claims each document makes:
 | `core/`           | a core module is added, removed or renamed; an invariant changes              |
 | `ipc.md`          | **any** channel is added, removed or renamed, or its validation changes       |
 | `data/`           | a stored field appears; a migration is added; a path under `~/.octopus` moves |
-| `ui.md`           | the window layout changes; a token or shared component is added               |
+| `ui/`             | the window layout changes; a token or shared component is added               |
 | `testing.md`      | the two vitest configs, the coverage threshold or the exclusions change       |
 
 ### 3. Are the counts and lists still right?

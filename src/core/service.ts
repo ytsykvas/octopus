@@ -6370,7 +6370,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * a turn costs and how long it takes.
        *
        * The price is that `/effort` lasts one turn. That is the same bargain
-       * `/permissions` already lives with, and `docs/ui.md` says so rather than
+       * `/permissions` already lives with, and `docs/ui/chat-pickers.md` says so rather than
        * leaving it to be discovered.
        */
       // Before anything is sent, so the message goes to the session the window

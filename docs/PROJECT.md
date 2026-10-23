@@ -207,7 +207,7 @@ moment to reconsider — not before.
 **Animation is CSS.** `motion` sat in this table the same way, and nothing
 imported it either: every animation is CSS, so one rule in `styles.css` stops
 them all under Reduce motion — a JavaScript library would slip past it
-(`docs/ui.md`, "Motion").
+(`docs/ui/motion.md`).
 
 **Native modules.** Stage 1 started without them to avoid a build step, and that held until the embedded terminal arrived: `node-pty` is native. A `postinstall` script runs `electron-builder install-app-deps` — the same tool that packages the app, so the two cannot disagree — and `npm install` remains a single step. The binding is built through Node-API rather than against V8 directly, so it is not tied to Electron's ABI: the same binary loads under plain Node and under Electron.
 
@@ -771,7 +771,7 @@ instead.
 
 The layer boundaries are §11.1. What each core module does is
 [`docs/core/`](core/README.md); how the window is put together is
-[`docs/ui.md`](ui.md); what is written to disk is [`docs/data/`](data/README.md).
+[`docs/ui/`](ui/README.md); what is written to disk is [`docs/data/`](data/README.md).
 
 ---
 

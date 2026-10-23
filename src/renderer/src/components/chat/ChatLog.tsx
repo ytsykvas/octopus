@@ -1264,7 +1264,7 @@ function WorktreeMoveRow({ move }: { move: WorktreeMove }): React.JSX.Element {
 
 /**
  * The line where a shell command moved the session — a `cd` the call never
- * named, said from the CLI's own hook (`docs/ui.md`).
+ * named, said from the CLI's own hook (`docs/ui/chat-log.md`).
  *
  * The same register as the worktree line above, for the same split: the agent
  * works in one directory while the panes show another. Inside the workspace

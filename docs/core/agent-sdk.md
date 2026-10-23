@@ -162,8 +162,8 @@ written down here because the block was built on the opposite assumption. It is
 the speed of the control request, though, not a promise about the figures: the
 account's endpoint behind it refuses most requests and the CLI answers from a
 fallback without saying so — see "The account's endpoint refuses most requests"
-in [ui.md](../ui.md). On 0.3.299 a read with the transcript scan is ~515ms and one
-without it 2–16ms; the sidebar asks without, and `docs/ui.md` has the
+in [ui/account-and-status.md](../ui/account-and-status.md). On 0.3.299 a read with the transcript scan is ~515ms and one
+without it 2–16ms; the sidebar asks without, and that file has the
 measurement.
 
 Slash commands were measured the same way, and three of the four answers were
