@@ -106,8 +106,8 @@ export function PullRequestPanel({
   const [rerunning, setRerunning] = useState<RerunScope | null>(null)
   const [committing, setCommitting] = useState(false)
   const [pushing, setPushing] = useState(false)
-  /** The view the reader picked, and for which request — see `shown` below. */
-  const [chosen, setChosen] = useState<{ number: number; view: RequestView } | null>(null)
+  /** The view showing, and which request it was settled for — see `shown` below. */
+  const [chosen, setChosen] = useState<{ key: string; view: RequestView } | null>(null)
 
   /*
    * Whether git ignores the file octopus writes this workspace's variables into.
@@ -416,13 +416,22 @@ export function PullRequestPanel({
     )
   }
 
-  /* The view the reader picked holds for as long as the request is the same
-     one; until then, and for the next request, the pane shows the one that
-     answers the question the request is asking. Derived rather than reset in
+  /* Settled once per request, on its first read: the view that answers the
+     question the request is asking when it is opened, and then whatever the
+     reader picks. Never moved by a later read — resolving the last thread, or
+     a run starting after a push, would otherwise pull the view out from under
+     a reply being typed in it.
+
+     Keyed by workspace as well as number, the way the detail is: numbers are
+     only unique within one repository. Adjusted during render rather than in
      an effect, so there is no frame in which a new request shows the old
      choice. */
+  const requestKey = `${workspace.id}#${String(request.number)}`
+  if (read !== null && chosen?.key !== requestKey) {
+    setChosen({ key: requestKey, view: read.status.recommendedView })
+  }
   const shown: RequestView =
-    chosen?.number === request.number ? chosen.view : (read?.status.recommendedView ?? 'merge')
+    chosen?.key === requestKey ? chosen.view : (read?.status.recommendedView ?? 'merge')
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -442,7 +451,7 @@ export function PullRequestPanel({
             status={read.status}
             view={shown}
             onView={(next) => {
-              setChosen({ number: request.number, view: next })
+              setChosen({ key: requestKey, view: next })
             }}
           />
 

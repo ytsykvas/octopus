@@ -118,6 +118,8 @@ function renderPanel(
   onRemoveWorkspace: ReturnType<typeof vi.fn>
   onConversation: ReturnType<typeof vi.fn>
   quotes: ReturnType<typeof quoteController>
+  /** Draws the same pane for another workspace, the way the window switches. */
+  showWorkspace: (workspace: typeof anna) => void
 } {
   const onEditInstructions = vi.fn()
   const onError = vi.fn()
@@ -126,9 +128,9 @@ function renderPanel(
   const onConversation = vi.fn()
   const quotes = overrides.quotes ?? quoteController()
 
-  render(
+  const panel = (workspace: typeof anna | null): React.JSX.Element => (
     <PullRequestPanel
-      workspace={overrides.workspace === undefined ? anna : overrides.workspace}
+      workspace={workspace}
       visible={overrides.visible ?? true}
       chatId={overrides.chatId === undefined ? 'chat-1' : overrides.chatId}
       quotes={quotes}
@@ -140,6 +142,7 @@ function renderPanel(
       onConversation={onConversation}
     />
   )
+  const { rerender } = render(panel(overrides.workspace === undefined ? anna : overrides.workspace))
 
   return {
     onEditInstructions,
@@ -147,7 +150,10 @@ function renderPanel(
     onRequestChanged,
     onRemoveWorkspace,
     onConversation,
-    quotes
+    quotes,
+    showWorkspace: (workspace) => {
+      rerender(panel(workspace))
+    }
   }
 }
 
@@ -2058,9 +2064,10 @@ describe('the shape of a request on screen', () => {
     expect(await tile('Review')).toHaveAttribute('aria-pressed', 'true')
   })
 
-  /* Until the reader picks one, the pane follows the request: a run that
-     finishes moves it from the checks to whether it can go in. */
-  it('follows the request until the reader picks a view', async () => {
+  /* Settled once, when the request is first read: a run that finishes, or a
+     thread that gets resolved, does not pull the view out from under whatever
+     the reader is doing in it. */
+  it('stays on the view it opened on when the checks finish', async () => {
     const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
@@ -2070,6 +2077,40 @@ describe('the shape of a request on screen', () => {
 
     answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
     await user.click(screen.getByRole('button', { name: 'Read GitHub again' }))
+    expect(await screen.findByRole('button', { name: 'Checks: All passed' })).toBeInTheDocument()
+
+    expect(await tile('Checks')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('region', { name: 'Checks' })).toBeVisible()
+  })
+
+  it('stays on the review when its last thread is resolved', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline()] }))
+    renderPanel()
+
+    expect(await tile('Review')).toHaveAttribute('aria-pressed', 'true')
+
+    // Resolved: nothing is left asking for an answer, which on its own would
+    // make Merge the view to open on.
+    answerDetail(detail({ comments: [inline({ resolved: true })] }))
+    await user.click(screen.getByRole('button', { name: 'Resolve' }))
+    expect(await screen.findByRole('button', { name: 'Unresolve' })).toBeInTheDocument()
+
+    expect(await tile('Review')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  /* Numbers are only unique within a repository: #7 in another project is
+     another request, and opens on its own view. */
+  it('does not carry a picked view to the same number in another workspace', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    const { showWorkspace } = renderPanel()
+
+    await showView(user, 'Checks')
+
+    showWorkspace(workspaceView('bruno', { projectId: 'atlas' }))
 
     await waitFor(async () => {
       expect(await tile('Merge')).toHaveAttribute('aria-pressed', 'true')
