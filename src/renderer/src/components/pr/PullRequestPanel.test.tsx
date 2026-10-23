@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -151,6 +151,35 @@ function renderPanel(
   }
 }
 
+type User = ReturnType<typeof userEvent.setup>
+
+/** A view's tile, named for the view and then for where it stands. */
+function tile(name: 'Checks' | 'Review' | 'Merge'): Promise<HTMLElement> {
+  return screen.findByRole('button', { name: new RegExp(`^${name}: `) })
+}
+
+/** Picks one of the three views through its tile, and hands back the view. */
+async function showView(user: User, name: 'Checks' | 'Review' | 'Merge'): Promise<HTMLElement> {
+  await user.click(await tile(name))
+  return screen.getByRole('region', { name })
+}
+
+/** The strip at the foot of the pane, once the request has been read. */
+function nextStep(): Promise<HTMLElement> {
+  return screen.findByRole('region', { name: 'Next step' })
+}
+
+/** Opens the menu of prepared messages. */
+async function openAgentMenu(user: User): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: /Ask the agent/ }))
+}
+
+/** Sends one prepared message from the menu. */
+async function choosePrompt(user: User, name: string): Promise<void> {
+  await openAgentMenu(user)
+  await user.click(screen.getByRole('menuitem', { name }))
+}
+
 describe('the pull request tab', () => {
   it('asks for a workspace before anything else', () => {
     renderPanel({ workspace: null })
@@ -227,7 +256,7 @@ describe('the pull request tab', () => {
    */
   it('sends the reader to the project instructions rather than editing them here', async () => {
     const user = userEvent.setup()
-    answer(view())
+    answer(view({ ahead: 0, dirty: false }))
     const { onEditInstructions } = renderPanel()
 
     await user.click(await screen.findByRole('button', { name: 'Instructions for a new PR' }))
@@ -240,6 +269,8 @@ describe('the pull request tab', () => {
     renderPanel()
 
     expect(await screen.findByText(/no commits that main does not/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open pull request' })).toBeDisabled()
+    expect(screen.getByText('Not opened')).toBeInTheDocument()
   })
 
   /*
@@ -706,7 +737,8 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ decision: 'approved' }))
     renderPanel()
 
-    expect(await screen.findByText('Pull request #7 is open.')).toBeInTheDocument()
+    expect(await screen.findByText('#7')).toBeInTheDocument()
+    expect(screen.getByText('Open')).toBeInTheDocument()
     // Awaited rather than read: the summary and the detail come back on two
     // channels, so the number is on screen a tick before the verdict is.
     expect(await screen.findByText('Approved')).toBeInTheDocument()
@@ -795,7 +827,7 @@ describe('a pull request that exists', () => {
     answerDetail(detail())
     renderPanel()
 
-    await screen.findByText('Pull request #7 is open.')
+    await screen.findByText('#7')
     expect(screen.queryByText(/not showing/)).not.toBeInTheDocument()
   })
 
@@ -822,8 +854,9 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ draft: true }))
     renderPanel()
 
-    expect(await screen.findByText('Draft')).toBeInTheDocument()
-    expect(screen.getByText(/draft cannot be merged/)).toBeInTheDocument()
+    // The pill above, and the Merge tile.
+    expect(await screen.findAllByText('Draft')).toHaveLength(2)
+    expect(within(await nextStep()).getByText(/draft cannot be merged/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
   })
 
@@ -838,7 +871,9 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ mergeable: 'mergeable', mergeState: 'blocked' }))
     const { quotes } = renderPanel()
 
-    expect(await screen.findByText(/required review or check is missing/)).toBeInTheDocument()
+    expect(
+      within(await nextStep()).getByText(/required review or check is missing/)
+    ).toBeInTheDocument()
     expect(quotes.add).not.toHaveBeenCalled()
   })
 
@@ -847,7 +882,7 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ mergeState: 'behind' }))
     renderPanel()
 
-    expect(await screen.findByText(/main has moved on/)).toBeInTheDocument()
+    expect(within(await nextStep()).getByText(/main has moved on/)).toBeInTheDocument()
   })
 
   /* Mergeable and worth a word: nothing is stopping the merge, but a check has
@@ -857,7 +892,7 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ mergeState: 'unstable' }))
     renderPanel()
 
-    expect(await screen.findByText(/check has not passed/)).toBeInTheDocument()
+    expect(within(await nextStep()).getByText(/check has not passed/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Merge' })).toBeEnabled()
   })
 
@@ -872,7 +907,9 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ checks: [failing({ name: 'lint' })] }))
     renderPanel()
 
-    expect(await screen.findByText('1 check failed. Fix it before merging.')).toBeInTheDocument()
+    expect(
+      within(await nextStep()).getByText('1 check failed. Fix it before merging.')
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
   })
 
@@ -893,7 +930,7 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
     renderPanel()
 
-    expect(await screen.findByText('1 check is still running.')).toBeInTheDocument()
+    expect(within(await nextStep()).getByText('1 check is still running.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
   })
 
@@ -916,7 +953,7 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ mergeState: 'unstable', checks: [failing({ name: 'lint' })] }))
     renderPanel()
 
-    expect(await screen.findByText(/before merging/)).toBeInTheDocument()
+    expect(within(await nextStep()).getByText(/before merging/)).toBeInTheDocument()
     expect(screen.queryByText(/merging is still allowed/)).not.toBeInTheDocument()
   })
 
@@ -930,7 +967,7 @@ describe('a pull request that exists', () => {
     answerDetail(detail())
     renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Close' }))
+    await user.click(await screen.findByRole('button', { name: 'Close pull request' }))
 
     expect(octopus().workspaces.closePullRequest).toHaveBeenCalledWith(anna.id, 7)
     // Nothing was merged on the way past.
@@ -963,7 +1000,7 @@ describe('a pull request that exists', () => {
     // merging takes, rather than a second place for one to appear.
     const { onError } = renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Close' }))
+    await user.click(await screen.findByRole('button', { name: 'Close pull request' }))
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('already merged'))
@@ -1196,7 +1233,9 @@ describe('a pull request that exists', () => {
     answerDetail(detail({ comments: [inline({ resolved: true })] }))
     renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Unresolve' }))
+    // A settled thread asks nothing of the request, so the pane opens on Merge.
+    const review = await showView(user, 'Review')
+    await user.click(within(review).getByRole('button', { name: 'Unresolve' }))
 
     await waitFor(() => {
       expect(octopus().workspaces.setReviewThreadResolved).toHaveBeenCalledWith(
@@ -1281,7 +1320,7 @@ describe('a pull request that exists', () => {
     })
     renderPanel()
 
-    expect(await screen.findByText('Pull request #7 is open.')).toBeInTheDocument()
+    expect(await screen.findByText('#7')).toBeInTheDocument()
     expect(await screen.findByText(/Could not reach GitHub/)).toBeInTheDocument()
   })
 })
@@ -1293,7 +1332,7 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail())
     const { onConversation } = renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Review it' }))
+    await choosePrompt(user, 'Review it')
 
     // The conversation comes in front of any open file before it is written to.
     expect(onConversation).toHaveBeenCalledTimes(1)
@@ -1312,7 +1351,7 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail({ checks: [failing()] }))
     renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Fix the checks' }))
+    await choosePrompt(user, 'Fix the checks')
 
     await vi.waitFor(() => {
       expect(vi.mocked(octopus().chats.send).mock.calls[0]?.[2]).toEqual({
@@ -1321,13 +1360,16 @@ describe('what the tab can do about a request', () => {
     })
   })
 
-  it('has a button for each of the reviews it can ask for', async () => {
+  it('offers each of the reviews it can ask for', async () => {
+    const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail())
     renderPanel()
 
-    expect(await screen.findByRole('button', { name: 'Review it' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Multi-agent review' })).toBeInTheDocument()
+    await openAgentMenu(user)
+
+    expect(screen.getByRole('menuitem', { name: 'Review it' })).toBeEnabled()
+    expect(screen.getByRole('menuitem', { name: 'Multi-agent review' })).toBeEnabled()
   })
 
   /*
@@ -1336,37 +1378,55 @@ describe('what the tab can do about a request', () => {
    * alone — it would never appear on exactly the projects this app is for.
    */
   it('offers to answer the review once anybody has said anything', async () => {
+    const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail({ decision: null, comments: [inline()] }))
     renderPanel()
 
-    expect(await screen.findByRole('button', { name: 'Address the review' })).toBeInTheDocument()
+    await openAgentMenu(user)
+
+    expect(screen.getByRole('menuitem', { name: 'Address the review' })).toBeInTheDocument()
   })
 
   it('does not offer to answer a review nobody has left', async () => {
+    const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail())
     renderPanel()
 
-    await screen.findByRole('button', { name: 'Review it' })
-    expect(screen.queryByRole('button', { name: 'Address the review' })).not.toBeInTheDocument()
+    await openAgentMenu(user)
+
+    expect(screen.getByRole('menuitem', { name: 'Review it' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Address the review' })).not.toBeInTheDocument()
   })
 
-  it('offers to fix the checks once one of them has failed', async () => {
+  it('offers to fix the checks once one of them has failed, first of all', async () => {
+    const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail({ checks: [failing()] }))
     renderPanel()
 
-    expect(await screen.findByRole('button', { name: 'Fix the checks' })).toBeInTheDocument()
+    await openAgentMenu(user)
+
+    // The one that answers the moment, above the two that are always there.
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Fix the checks',
+      'Review it',
+      'Multi-agent review',
+      'Edit the instructions…'
+    ])
   })
 
   it('does not offer to fix checks that all passed', async () => {
+    const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
     renderPanel()
 
-    await screen.findByRole('button', { name: 'Review it' })
-    expect(screen.queryByRole('button', { name: 'Fix the checks' })).not.toBeInTheDocument()
+    await openAgentMenu(user)
+
+    expect(screen.getByRole('menuitem', { name: 'Review it' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Fix the checks' })).not.toBeInTheDocument()
   })
 
   /*
@@ -1380,7 +1440,7 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail({ checks: [failing(), failing({ name: 'lint', state: 'passed' })] }))
     renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Fix the checks' }))
+    await choosePrompt(user, 'Fix the checks')
 
     expect(octopus().workspaces.instruction).toHaveBeenCalledWith(anna.id, 'fixChecks')
     const sent = vi.mocked(octopus().chats.send).mock.calls[0]?.[1] ?? ''
@@ -1400,7 +1460,7 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail({ checks: [failing({ url: null })] }))
     renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Fix the checks' }))
+    await choosePrompt(user, 'Fix the checks')
 
     const sent = vi.mocked(octopus().chats.send).mock.calls[0]?.[1] ?? ''
     expect(sent).toContain('Checks that failed:\n- test')
@@ -1415,23 +1475,28 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail({ checks: [failing()] }))
     renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Review it' }))
+    await choosePrompt(user, 'Review it')
 
     const sent = vi.mocked(octopus().chats.send).mock.calls[0]?.[1] ?? ''
     expect(sent).not.toContain('Checks that failed')
   })
 
   it('will not send a prepared message without a conversation to send it to', async () => {
+    const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail({ mergeable: 'conflicting' }))
-    renderPanel({ chatId: null })
+    const { onEditInstructions } = renderPanel({ chatId: null })
 
-    const button = await screen.findByRole('button', { name: 'Review it' })
-    expect(button).toBeDisabled()
-    expect(button).toHaveAttribute('title', 'Open a conversation in this workspace first.')
-    // Including the one that appears against a conflict, which is drawn apart
-    // from the others and would otherwise be the one that stayed pressable.
-    expect(screen.getByRole('button', { name: 'Resolve the conflicts' })).toBeDisabled()
+    await openAgentMenu(user)
+
+    expect(screen.getByText('Open a conversation in this workspace first.')).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Review it' })).toBeDisabled()
+    // Including the one that appears against a conflict, which would otherwise
+    // be the one that stayed pressable.
+    expect(screen.getByRole('menuitem', { name: 'Resolve the conflicts' })).toBeDisabled()
+    // The wording can still be changed without a conversation to send it to.
+    await user.click(screen.getByRole('menuitem', { name: 'Edit the instructions…' }))
+    expect(onEditInstructions).toHaveBeenCalledOnce()
   })
 
   // The verdict is the whole of a bare approval, and the list has to draw one
@@ -1468,7 +1533,7 @@ describe('what the tab can do about a request', () => {
     })
     const { onError } = renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Review it' }))
+    await choosePrompt(user, 'Review it')
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('EACCES'))
@@ -1483,7 +1548,7 @@ describe('what the tab can do about a request', () => {
     vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'no such chat' })
     const { onError } = renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Review it' }))
+    await choosePrompt(user, 'Review it')
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('no such chat'))
@@ -1502,9 +1567,10 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail())
     renderPanel()
 
-    expect(await screen.findByText('2 commits are not on GitHub yet.')).toBeInTheDocument()
+    const footer = await nextStep()
+    expect(within(footer).getByText('2 commits are not on GitHub yet.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Push' }))
+    await user.click(within(footer).getByRole('button', { name: 'Push' }))
 
     expect(octopus().workspaces.push).toHaveBeenCalledWith(anna.id)
     // Read again either way, and the detail too: pushing is what starts the
@@ -1525,8 +1591,8 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail({ state: 'merged' }))
     renderPanel()
 
-    // Waited for on something PullRequestActions itself draws: the summary
-    // above it is drawn from the branch read, which lands first.
+    // Waited for on something drawn from the detail: the header is drawn from
+    // the branch read, which lands first.
     await screen.findByText('This branch is merged. Its workspace is still here.')
 
     expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
@@ -1542,7 +1608,7 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail())
     renderPanel()
 
-    expect(await screen.findByText(/cannot be counted from here/)).toBeInTheDocument()
+    expect(within(await nextStep()).getByText(/cannot be counted from here/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
   })
 
@@ -1580,10 +1646,12 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail({ mergeable: 'conflicting', mergeState: 'dirty' }))
     renderPanel()
 
-    expect(await screen.findByText('This branch conflicts with main.')).toBeInTheDocument()
+    expect(
+      within(await nextStep()).getByText('This branch conflicts with main.')
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
 
-    await user.click(screen.getByRole('button', { name: 'Resolve the conflicts' }))
+    await choosePrompt(user, 'Resolve the conflicts')
 
     expect(octopus().workspaces.instruction).toHaveBeenCalledWith(anna.id, 'resolveConflicts')
   })
@@ -1599,7 +1667,7 @@ describe('what the tab can do about a request', () => {
     renderPanel()
 
     expect(await screen.findByRole('button', { name: 'Merge' })).toBeEnabled()
-    expect(screen.queryByText(/conflicts with/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/This branch conflicts with/)).not.toBeInTheDocument()
   })
 
   it('merges by the method that was chosen, and reads the state again', async () => {
@@ -1717,7 +1785,8 @@ describe('what the tab can do about a request', () => {
     await user.type(screen.getByRole('textbox', { name: 'Commit message' }), 'Something')
     const commit = screen.getByRole('button', { name: 'Commit & push' })
     expect(commit).toBeEnabled()
-    expect(commit).not.toHaveAttribute('title')
+    // The refusal's reason gives way to what the press does.
+    expect(commit).toHaveAttribute('title', expect.stringContaining('Commits every change'))
   })
 
   it('says it is committing while the commit is under way', async () => {
@@ -1759,8 +1828,9 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail())
     renderPanel()
 
-    await screen.findByRole('button', { name: 'Review it' })
+    await screen.findByRole('button', { name: 'Merge' })
     expect(screen.queryByRole('button', { name: /commit & push/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Commit message' })).not.toBeInTheDocument()
   })
 
   // A merged request has nothing left to do to it, and "review it" on one is a
@@ -1770,9 +1840,9 @@ describe('what the tab can do about a request', () => {
     answerDetail(detail({ state: 'merged' }))
     renderPanel()
 
-    expect(await screen.findByText('Pull request #7 was merged.')).toBeInTheDocument()
+    expect(await screen.findByText(/This branch is merged/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Review it' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ask the agent/ })).not.toBeInTheDocument()
   })
 })
 
@@ -1850,5 +1920,346 @@ describe('re-running the checks', () => {
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('run is in progress'))
     })
+  })
+})
+
+describe('the shape of a request on screen', () => {
+  /* The pane opens on the view that answers the question the request is
+     asking: what went red, what a reviewer said, or whether it can go in. */
+  it.each([
+    ['Checks', detail({ checks: [failing()] })],
+    ['Checks', detail({ checks: [failing({ state: 'pending', completedAt: null })] })],
+    ['Review', detail({ decision: 'changesRequested' })],
+    ['Merge', detail()],
+    ['Merge', detail({ state: 'merged' })]
+  ] as const)('opens on %s when that is what needs looking at', async (name, read) => {
+    answer(view({ request: request({ state: read.state }) }))
+    answerDetail(read)
+    renderPanel()
+
+    expect(await tile(name)).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('region', { name })).toBeVisible()
+  })
+
+  it.each<[PullRequestDetail, readonly string[]]>([
+    [detail({ checks: [failing()] }), ['Checks: 1 failed', 'Merge: Waiting']],
+    [detail({ checks: [failing({ state: 'pending', completedAt: null })] }), ['Checks: 1 running']],
+    [detail({ checks: [failing({ state: 'passed' })] }), ['Checks: All passed', 'Merge: Ready']],
+    [detail(), ['Checks: None']],
+    // Skipped by a path filter is not passed: nothing ran.
+    [detail({ checks: [failing({ state: 'skipped' })] }), ['Checks: Skipped', 'Merge: Ready']],
+    [detail({ decision: 'changesRequested' }), ['Review: Changes']],
+    [detail({ decision: 'approved' }), ['Review: Approved']],
+    [detail({ decision: 'reviewRequired' }), ['Review: Required']],
+    [detail({ comments: [inline()] }), ['Review: 1 comment']],
+    [detail({ mergeable: 'conflicting' }), ['Merge: Conflict']],
+    [detail({ draft: true }), ['Merge: Draft']],
+    [detail({ state: 'merged' }), ['Merge: Merged']],
+    [detail({ state: 'closed' }), ['Merge: Closed']]
+  ])('says where it stands on its tiles: %#', async (read, names) => {
+    answer(view({ request: request({ state: read.state }) }))
+    answerDetail(read)
+    renderPanel()
+
+    for (const name of names) {
+      expect(await screen.findByRole('button', { name })).toBeInTheDocument()
+    }
+  })
+
+  it('keeps the view the reader picked, for as long as the request is the same', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
+    renderPanel()
+
+    await showView(user, 'Review')
+
+    // The checks finish, which on its own would move the pane to Merge.
+    answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
+    await user.click(screen.getByRole('button', { name: 'Read GitHub again' }))
+    expect(await screen.findByRole('button', { name: 'Checks: All passed' })).toBeInTheDocument()
+
+    expect(await tile('Review')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  /* Until the reader picks one, the pane follows the request: a run that
+     finishes moves it from the checks to whether it can go in. */
+  it('follows the request until the reader picks a view', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
+    renderPanel()
+
+    expect(await tile('Checks')).toHaveAttribute('aria-pressed', 'true')
+
+    answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
+    await user.click(screen.getByRole('button', { name: 'Read GitHub again' }))
+
+    await waitFor(async () => {
+      expect(await tile('Merge')).toHaveAttribute('aria-pressed', 'true')
+    })
+  })
+
+  it('starts the next request on the view that suits it, not on the last one picked', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    await showView(user, 'Checks')
+
+    answer(view({ request: request({ number: 8 }) }))
+    await user.click(screen.getByRole('button', { name: 'Read GitHub again' }))
+    expect(await screen.findByText('#8')).toBeInTheDocument()
+
+    await waitFor(async () => {
+      expect(await tile('Merge')).toHaveAttribute('aria-pressed', 'true')
+    })
+  })
+
+  /* Hidden rather than unmounted: a sentence half written under a thread is
+     worth more than the look at the checks that would have thrown it away. */
+  it('keeps a reply half written while another view is looked at', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ comments: [inline()] }))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Reply' }))
+    await user.type(screen.getByRole('textbox', { name: 'Reply' }), 'Half a thought')
+
+    await showView(user, 'Checks')
+    expect(screen.queryByRole('textbox', { name: 'Reply' })).not.toBeInTheDocument()
+
+    const review = await showView(user, 'Review')
+    expect(within(review).getByRole('textbox', { name: 'Reply' })).toHaveValue('Half a thought')
+  })
+
+  it('lists what is fine beside what is not', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request(), dirty: true }))
+    answerDetail(detail({ checks: [failing({ state: 'passed' })] }))
+    renderPanel()
+
+    const merge = await showView(user, 'Merge')
+
+    expect(within(merge).getByText('Changes here are not committed yet.')).toBeInTheDocument()
+    expect(within(merge).getByText('All checks have passed.')).toBeInTheDocument()
+    expect(within(merge).getByText('No conflicts with main.')).toBeInTheDocument()
+  })
+
+  it('says a request is ready when nothing wants attention', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    expect(within(await nextStep()).getByText('Ready to merge into main.')).toBeInTheDocument()
+  })
+
+  /* The env warning is the most important thing to say about that press, so
+     it takes the footer's line rather than adding a block under it. */
+  it('puts the env warning in the place of the footer’s line', async () => {
+    answer(view({ request: request(), dirty: true }))
+    answerDetail(detail())
+    vi.mocked(octopus().projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
+    renderPanel({ envFile: '.env.octopus' })
+
+    const footer = await nextStep()
+    expect(await within(footer).findByText(/Committing and pushing would send/)).toBeInTheDocument()
+    expect(
+      within(footer).queryByText('Changes here are not committed yet.')
+    ).not.toBeInTheDocument()
+  })
+
+  /* The warning is about the commit-and-push press, which a clean branch does
+     not have: there it would be a warning about nothing. */
+  it('keeps the env warning off a branch with nothing to commit', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    vi.mocked(octopus().projects.isEnvIgnored).mockResolvedValue({ ok: true, value: false })
+    renderPanel({ envFile: '.env.octopus' })
+
+    const footer = await nextStep()
+    expect(await within(footer).findByText('Ready to merge into main.')).toBeInTheDocument()
+    expect(within(footer).queryByText(/Committing and pushing would send/)).not.toBeInTheDocument()
+  })
+
+  /* Committing pushes as well, so a separate push beside it would be a second
+     press for the same thing. */
+  it('offers no push of its own while there is work to commit', async () => {
+    answer(view({ request: request(), dirty: true, unpushedCommits: 2 }))
+    answerDetail(detail())
+    renderPanel()
+
+    const footer = await nextStep()
+    expect(within(footer).getByRole('button', { name: 'Amend commit & push' })).toBeInTheDocument()
+    expect(within(footer).queryByRole('button', { name: 'Push' })).not.toBeInTheDocument()
+  })
+
+  /* Amending a commit GitHub already has replaces it there, which is worth the
+     line; amending one still local, or committing anew, rewrites nothing. */
+  describe('the line about amending a pushed commit', () => {
+    const REPLACES =
+      'Left empty, the changes go into the last commit, which then replaces it on GitHub.'
+
+    it('is said while an empty field would amend a pushed commit', async () => {
+      const user = userEvent.setup()
+      answer(view({ request: request(), dirty: true }))
+      answerDetail(detail())
+      renderPanel()
+
+      const footer = await nextStep()
+      expect(await within(footer).findByText(REPLACES)).toBeInTheDocument()
+
+      await user.type(screen.getByRole('textbox', { name: 'Commit message' }), 'Something')
+      expect(within(footer).queryByText(REPLACES)).not.toBeInTheDocument()
+      expect(within(footer).getByText('Changes here are not committed yet.')).toBeInTheDocument()
+    })
+
+    it.each([
+      [
+        'the last commit is still local',
+        view({ request: request(), dirty: true, unpushedCommits: 1 })
+      ],
+      [
+        'the remote cannot be counted',
+        view({ request: request(), dirty: true, unpushedCommits: null })
+      ],
+      ['the branch has no commit to amend', view({ request: request(), dirty: true, ahead: 0 })]
+    ])('is not said when %s', async (_, branch) => {
+      answer(branch)
+      answerDetail(detail())
+      renderPanel()
+
+      const footer = await nextStep()
+      await within(footer).findByText('Changes here are not committed yet.')
+      expect(within(footer).queryByText(REPLACES)).not.toBeInTheDocument()
+    })
+  })
+
+  /* Green is the press that finishes something, and only one is green at a
+     time: the one that comes first. */
+  it.each([
+    ['uncommitted work', view({ request: request(), dirty: true }), 'Amend commit & push'],
+    ['unpushed commits', view({ request: request(), unpushedCommits: 2 }), 'Push'],
+    ['nothing left here', view({ request: request() }), 'Merge']
+  ])('makes the next press the green one with %s', async (_, branch, name) => {
+    answer(branch)
+    answerDetail(detail())
+    renderPanel()
+
+    const footer = await nextStep()
+    expect(within(footer).getByRole('button', { name })).toHaveClass('bg-success')
+    if (name !== 'Merge') {
+      expect(within(footer).getByRole('button', { name: 'Merge' })).not.toHaveClass('bg-success')
+    }
+  })
+
+  /* Merging stays beside the push rather than waiting behind it — and keeps
+     every reason it has for refusing. */
+  it('keeps the merge beside a push, refusing where it would anyway', async () => {
+    answer(view({ request: request(), unpushedCommits: 1 }))
+    answerDetail(detail({ checks: [failing()] }))
+    renderPanel()
+
+    const footer = await nextStep()
+    expect(within(footer).getByRole('button', { name: 'Push' })).toBeEnabled()
+    expect(within(footer).getByRole('button', { name: 'Merge' })).toBeDisabled()
+  })
+
+  it('offers only the removal once a request is merged', async () => {
+    answer(view({ request: request({ state: 'merged' }) }))
+    answerDetail(detail({ state: 'merged' }))
+    renderPanel()
+
+    const footer = await nextStep()
+    expect(within(footer).getByRole('button', { name: 'Remove workspace…' })).toHaveClass(
+      'bg-danger'
+    )
+    expect(within(footer).getAllByRole('button')).toHaveLength(1)
+  })
+
+  it('has nothing at its foot once a request is closed', async () => {
+    answer(view({ request: request({ state: 'closed' }) }))
+    answerDetail(detail({ state: 'closed' }))
+    renderPanel()
+
+    await screen.findByText('Pull request #7 was closed without merging.')
+    expect(screen.queryByRole('region', { name: 'Next step' })).not.toBeInTheDocument()
+  })
+
+  it('links the request out to GitHub from its header', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    expect(await screen.findByRole('link', { name: 'Open on GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/o/p/pull/7'
+    )
+  })
+
+  it('puts the checks that went red first', async () => {
+    answer(view({ request: request() }))
+    answerDetail(
+      detail({ checks: [failing({ name: 'lint', state: 'passed' }), failing({ name: 'test' })] })
+    )
+    renderPanel()
+
+    const checks = await screen.findByRole('region', { name: 'Checks' })
+    expect(
+      within(checks)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent)
+    ).toEqual([expect.stringContaining('test'), expect.stringContaining('lint')])
+  })
+
+  it('says which prepared message is on its way', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().workspaces.instruction).mockReturnValue(new Promise(() => undefined))
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    renderPanel()
+
+    await choosePrompt(user, 'Review it')
+
+    expect(await screen.findByRole('button', { name: /Sending…/ })).toBeDisabled()
+  })
+
+  it('reaches the instructions from the menu while a request is open', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    const { onEditInstructions } = renderPanel()
+
+    await choosePrompt(user, 'Edit the instructions…')
+
+    expect(onEditInstructions).toHaveBeenCalledOnce()
+  })
+})
+
+describe('before the branch has been read', () => {
+  it('says it is asking', async () => {
+    vi.mocked(octopus().workspaces.pullRequest).mockReturnValue(new Promise(() => undefined))
+    renderPanel()
+
+    expect(await screen.findByText('Asking GitHub about this branch…')).toBeInTheDocument()
+  })
+
+  /* A read that failed is asked again from where it is said, rather than by
+     leaving the tab and coming back. */
+  it('asks again when the reader says so', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().workspaces.pullRequest).mockResolvedValueOnce({
+      ok: false,
+      error: 'gh: not logged in',
+      code: 'notConnected'
+    })
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Try again' }))
+
+    // The default answer is a branch with work and no request: the form.
+    expect(await screen.findByRole('textbox', { name: 'Title' })).toBeInTheDocument()
   })
 })

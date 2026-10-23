@@ -2941,7 +2941,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Pull request' }))
     await user.click(await screen.findByText('anna'))
 
-    await user.click(await screen.findByRole('button', { name: 'Instructions for a new PR' }))
+    // A branch with work and no request: the form's own way to the wording.
+    await user.click(await screen.findByRole('button', { name: 'Change how it writes them' }))
 
     expect(await screen.findByRole('dialog', { name: 'Project settings' })).toBeInTheDocument()
     expect(screen.getByLabelText('Pull request descriptions')).toBeInTheDocument()
@@ -3076,7 +3077,8 @@ describe('App', () => {
 
     // What it offers instead: the two things a request that exists can have
     // done to it, rather than an invitation to open a second one.
-    expect(screen.getByRole('button', { name: 'Merge' })).toBeInTheDocument()
+    // Green, like every press that finishes the work.
+    expect(screen.getByRole('button', { name: 'Merge' })).toHaveClass('bg-success')
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
   })
 

@@ -904,7 +904,8 @@ export function App(): React.JSX.Element {
             <>
               <MergeMenu
                 align="right"
-                variant="accent"
+                // Green, like every press that finishes the work.
+                variant="success"
                 onMerge={(method) => {
                   finishRequest(
                     (number) =>

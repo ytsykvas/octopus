@@ -662,7 +662,7 @@ the app never sees a token (§10.9).
   (held while the window is hidden) while a check is running **or** while GitHub has not worked out whether the
   branch is mergeable, since it computes that asynchronously and a repository
   with no CI has no pending check to wait on. While one is red, two buttons
-  beside the heading restart its Actions runs — only the failed jobs, or all of
+  under the list restart its Actions runs — only the failed jobs, or all of
   them — through `gh run rerun`.
 - **The review.** Issue comments, review submissions and inline notes in one
   reading order. The inline ones come from a GraphQL query by the request's node
@@ -670,7 +670,8 @@ the app never sees a token (§10.9).
   **Add to chat** puts a remark into the composer beside the diff's own notes,
   so a question can be typed under it rather than the app asking one. A thread
   is replied to, resolved and reopened from the same list.
-- **The five prepared messages** — fix the checks, answer the review, review it,
+- **The five prepared messages**, in one _Ask the agent_ menu at the foot of
+  the pane, the ones that apply now first — fix the checks, answer the review, review it,
   review it with several subagents, resolve the conflicts — each the project's
   own instruction plus a line naming the request, sent as one visible user
   message (§4). The agent may not push (§12.3), so the three that change the

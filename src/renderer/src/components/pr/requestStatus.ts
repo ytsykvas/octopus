@@ -1,5 +1,16 @@
 import type { InstructionKind } from '@core/instructions.js'
-import type { MergeState, PullRequestCheck, PullRequestDetail } from '@core/pullRequestShapes.js'
+import type {
+  MergeState,
+  PullRequestCheck,
+  PullRequestDetail,
+  PullRequestState
+} from '@core/pullRequestShapes.js'
+
+/** The prepared messages this pane sends; the other kinds belong elsewhere. */
+export type PromptKind = Extract<
+  InstructionKind,
+  'fixChecks' | 'addressReview' | 'resolveConflicts' | 'review' | 'multiAgentReview'
+>
 
 /** The three views of a request, which the pane shows one at a time. */
 export type RequestView = 'checks' | 'review' | 'merge'
@@ -39,17 +50,25 @@ export type Attention =
   | { readonly kind: 'githubNote'; readonly note: GitHubNote }
 
 export interface RequestStatus {
+  /** The detail's copy, which is the fresher read of the two. */
+  readonly state: PullRequestState
   readonly open: boolean
   /** The checks that went red, which is what the fix prompt is about. */
   readonly failedChecks: readonly PullRequestCheck[]
   readonly running: number
+  /**
+   * Checks that passed. Not "everything that did not fail": a suite whose every
+   * job was skipped by a path filter has passed nothing, and "all passed" over
+   * it would be the app's opinion rather than CI's answer.
+   */
+  readonly passed: number
   /** A check is red or still going, and merging waits for it. */
   readonly waiting: boolean
   readonly conflicting: boolean
   /** Whether the merge button takes a press, apart from a merge already in flight. */
   readonly canMerge: boolean
   /** The prepared messages worth offering now, in the order they are drawn. */
-  readonly offered: readonly InstructionKind[]
+  readonly offered: readonly PromptKind[]
   /**
    * What wants doing, most pressing first — the order is what the footer's one
    * line reads from, so the work in this checkout comes before what GitHub
@@ -93,7 +112,7 @@ export function requestStatus(
   const conflicting = detail.mergeable === 'conflicting'
   const reviewed = detail.decision === 'changesRequested' || hasRemarks(detail)
 
-  const offered: InstructionKind[] = []
+  const offered: PromptKind[] = []
   /* A request that is merged or closed has nothing left to do to it. The
      prompts would still run, but "review it" on a merged branch is a reading of
      history rather than of a change. */
@@ -124,9 +143,11 @@ export function requestStatus(
   }
 
   return {
+    state: detail.state,
     open,
     failedChecks,
     running,
+    passed: detail.checks.filter((check) => check.state === 'passed').length,
     waiting,
     conflicting,
     /* A conflict and a draft are refusals GitHub would make anyway. A red or

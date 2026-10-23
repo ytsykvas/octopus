@@ -1,8 +1,7 @@
-import { GitPullRequest, RotateCw } from 'lucide-react'
+import { GitCommitHorizontal, GitPullRequest, RotateCw, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { shortBranchName } from '@core/branches.js'
 import type { InstructionKind } from '@core/instructions.js'
 import type { MergeMethod, PullRequest, PullRequestDraft } from '@core/pullRequests.js'
 import {
@@ -22,10 +21,12 @@ import { Notice } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { ChecksList } from './ChecksList.js'
 import { CommentList } from './CommentList.js'
+import { MergeConditions } from './MergeConditions.js'
 import { NewPullRequestForm } from './NewPullRequestForm.js'
-import { PullRequestActions } from './PullRequestActions.js'
-import { PullRequestSummary } from './PullRequestSummary.js'
-import { requestStatus } from './requestStatus.js'
+import { PaneFooter, PullRequestFooter } from './PullRequestFooter.js'
+import { PullRequestHeader } from './PullRequestHeader.js'
+import { type RequestView, requestStatus } from './requestStatus.js'
+import { StatusTiles } from './StatusTiles.js'
 
 interface PullRequestPanelProps {
   readonly workspace: WorkspaceView | null
@@ -106,6 +107,8 @@ export function PullRequestPanel({
   const [rerunning, setRerunning] = useState<RerunScope | null>(null)
   const [committing, setCommitting] = useState(false)
   const [pushing, setPushing] = useState(false)
+  /** The view the reader picked, and for which request — see `shown` below. */
+  const [chosen, setChosen] = useState<{ number: number; view: RequestView } | null>(null)
 
   /*
    * Whether git ignores the file octopus writes this workspace's variables into.
@@ -158,8 +161,29 @@ export function PullRequestPanel({
       </Placeholder>
     )
   }
-  if (error !== null) return <Notice tone="danger">{error}</Notice>
-  if (loading || !view) return <Notice>{t('pullRequest.loading')}</Notice>
+  if (error !== null) {
+    return (
+      <Notice tone="danger">
+        {error}
+        <span className="mt-2 block">
+          <Button size="sm" onClick={refresh}>
+            <RotateCw aria-hidden size={11} />
+            {t('pullRequest.tryAgain')}
+          </Button>
+        </span>
+      </Notice>
+    )
+  }
+  if (loading || !view) {
+    return (
+      <Notice>
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden className="agent-arc" />
+          {t('pullRequest.loading')}
+        </span>
+      </Notice>
+    )
+  }
 
   const report = (failure: Failure): void => {
     onError(describeFailure(failure))
@@ -330,27 +354,53 @@ export function PullRequestPanel({
   }
 
   const attached = new Set(quotes.pending.map((quote) => quote.key))
+  const exposedEnvFile = envIgnored ? null : envFile
 
-  return (
-    <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3">
-      <p className="text-ink-faint flex items-center gap-2 font-mono text-[11px]">
-        <GitPullRequest aria-hidden size={12} className="shrink-0" />
-        <span className="truncate" title={workspace.branch}>
-          {shortBranchName(workspace.branch)}
-        </span>
-      </p>
+  const header = (
+    <PullRequestHeader
+      request={request}
+      detail={detail.detail}
+      readAt={detail.readAt}
+      onRefresh={() => {
+        refresh()
+        detail.refresh()
+      }}
+      branch={workspace.branch}
+      base={view.base}
+    />
+  )
 
-      {/* The instruction is the project's own, edited where it lives rather than
-          in a second editor here that could disagree with it. */}
-      <Button variant="quiet" onClick={onEditInstructions}>
-        {t('pullRequest.editInstructions')}
-      </Button>
+  if (request === null) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {header}
 
-      {request === null ? (
-        view.ahead === 0 && !view.dirty ? (
-          <p className="text-ink-faint leading-relaxed">
-            {t('pullRequest.nothingToOpen', { base: view.base })}
-          </p>
+        {view.ahead === 0 && !view.dirty ? (
+          <>
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-auto p-6 text-center">
+              <span className="bg-muted text-ink-soft flex size-9 items-center justify-center rounded-full">
+                <GitCommitHorizontal aria-hidden size={16} />
+              </span>
+              {/* The instruction is the project's own, edited where it lives
+                  rather than in a second editor here that could disagree. */}
+              <Button size="sm" onClick={onEditInstructions}>
+                <SlidersHorizontal aria-hidden size={12} />
+                {t('pullRequest.editInstructions')}
+              </Button>
+            </div>
+
+            <PaneFooter>
+              <div className="flex items-center gap-2">
+                <p className="text-ink-faint min-w-0 flex-1 text-[12px] leading-snug">
+                  {t('pullRequest.nothingToOpen', { base: view.base })}
+                </p>
+                <Button size="sm" variant="success" disabled>
+                  <GitPullRequest aria-hidden size={12} />
+                  {t('pullRequest.create')}
+                </Button>
+              </div>
+            </PaneFooter>
+          </>
         ) : (
           <NewPullRequestForm
             view={view}
@@ -360,143 +410,176 @@ export function PullRequestPanel({
             onDraft={draft}
             actionError={actionError}
             onEditInstructions={onEditInstructions}
-            exposedEnvFile={envIgnored ? null : envFile}
+            exposedEnvFile={exposedEnvFile}
           />
-        )
-      ) : (
+        )}
+      </div>
+    )
+  }
+
+  /* The view the reader picked holds for as long as the request is the same
+     one; until then, and for the next request, the pane shows the one that
+     answers the question the request is asking. Derived rather than reset in
+     an effect, so there is no frame in which a new request shows the old
+     choice. */
+  const shown: RequestView =
+    chosen?.number === request.number ? chosen.view : (read?.status.recommendedView ?? 'merge')
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {header}
+
+      {/* The detail failing is not the branch failing: the number, the title
+          and the link above are still worth having, so this says what is
+          missing rather than blanking the pane. */}
+      {detail.error !== null && (
+        <p className="text-danger px-3 pb-3 leading-relaxed">{detail.error}</p>
+      )}
+
+      {read !== null && (
         <>
-          <PullRequestSummary
-            request={request}
-            detail={detail.detail}
-            readAt={detail.readAt}
-            onRefresh={() => {
-              refresh()
-              detail.refresh()
+          <StatusTiles
+            detail={read.detail}
+            status={read.status}
+            view={shown}
+            onView={(next) => {
+              setChosen({ number: request.number, view: next })
             }}
           />
 
-          {/* The detail failing is not the branch failing: the number, the
-              title and the link above are still worth having, so this says
-              what is missing rather than blanking the pane. */}
-          {detail.error !== null && <p className="text-danger leading-relaxed">{detail.error}</p>}
+          {/* All three stay mounted and only the shown one is drawn: a reply
+              half typed under a thread must survive a look at the checks. */}
+          <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
+            <div
+              role="region"
+              aria-label={t('pullRequest.checks')}
+              hidden={shown !== 'checks'}
+              className="space-y-2"
+            >
+              <ChecksList checks={read.detail.checks} />
 
-          {read !== null && (
-            <>
-              <Section
-                title={t('pullRequest.checks')}
-                /* Only while something is red: restarting a green suite is a
-                   thing nobody reaches for, and two buttons on every request
-                   would be noise beside the one moment they matter. */
-                action={
-                  failed.length > 0 && (
-                    <div className="flex gap-1">
-                      {RERUNS.map(({ scope, labelKey, titleKey }) => (
-                        <Button
-                          key={scope}
-                          size="sm"
-                          title={t(titleKey)}
-                          disabled={rerunning !== null}
-                          onClick={() => {
-                            rerun(request.number, scope)
-                          }}
-                        >
-                          <RotateCw
-                            aria-hidden
-                            size={11}
-                            className={rerunning === scope ? 'animate-spin' : ''}
-                          />
-                          {t(labelKey)}
-                        </Button>
-                      ))}
-                    </div>
+              {/* Only while something is red: restarting a green suite is a
+                  thing nobody reaches for, and two buttons on every request
+                  would be noise beside the one moment they matter. */}
+              {failed.length > 0 && (
+                <div className="flex gap-1">
+                  {RERUNS.map(({ scope, labelKey, titleKey }) => (
+                    <Button
+                      key={scope}
+                      size="sm"
+                      title={t(titleKey)}
+                      disabled={rerunning !== null}
+                      onClick={() => {
+                        rerun(request.number, scope)
+                      }}
+                    >
+                      <RotateCw
+                        aria-hidden
+                        size={11}
+                        className={rerunning === scope ? 'animate-spin' : ''}
+                      />
+                      {t(labelKey)}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div
+              role="region"
+              aria-label={t('pullRequest.review')}
+              hidden={shown !== 'review'}
+              className="space-y-2"
+            >
+              <CommentList
+                comments={read.detail.comments}
+                onAddToChat={(comment: PullRequestComment) => {
+                  quotes.add(toQuote(comment, request.number))
+                }}
+                attached={attached}
+                onReply={async (threadId, body) => {
+                  const result = await window.octopus.workspaces.replyToReviewThread(
+                    workspace.id,
+                    threadId,
+                    body
                   )
-                }
-              >
-                <ChecksList checks={read.detail.checks} />
-              </Section>
+                  if (!result.ok) {
+                    report(result)
+                    return false
+                  }
+                  // Read again rather than adding the reply to what is on
+                  // screen: GitHub decides what a comment ends up looking
+                  // like, and a pane that draws its own guess is a pane that
+                  // can disagree with the request it is showing.
+                  detail.refresh()
+                  return true
+                }}
+                onSetResolved={async (threadId, resolved) => {
+                  const result = await window.octopus.workspaces.setReviewThreadResolved(
+                    workspace.id,
+                    threadId,
+                    resolved
+                  )
+                  if (!result.ok) report(result)
+                  else detail.refresh()
+                }}
+              />
 
-              <Section title={t('pullRequest.review')}>
-                <CommentList
-                  comments={read.detail.comments}
-                  onAddToChat={(comment: PullRequestComment) => {
-                    quotes.add(toQuote(comment, request.number))
-                  }}
-                  attached={attached}
-                  onReply={async (threadId, body) => {
-                    const result = await window.octopus.workspaces.replyToReviewThread(
-                      workspace.id,
-                      threadId,
-                      body
-                    )
-                    if (!result.ok) {
-                      report(result)
-                      return false
-                    }
-                    // Read again rather than adding the reply to what is on
-                    // screen: GitHub decides what a comment ends up looking
-                    // like, and a pane that draws its own guess is a pane that
-                    // can disagree with the request it is showing.
-                    detail.refresh()
-                    return true
-                  }}
-                  onSetResolved={async (threadId, resolved) => {
-                    const result = await window.octopus.workspaces.setReviewThreadResolved(
-                      workspace.id,
-                      threadId,
-                      resolved
-                    )
-                    if (!result.ok) report(result)
-                    else detail.refresh()
-                  }}
-                />
+              {/* A truncation nobody wrote down is one somebody eventually
+                  debugs. Three ceilings sit behind this and none is worth
+                  raising — past them the pane needs a search box rather than a
+                  longer page — so what is owed is saying that what is here is
+                  not all there is. Only when a read came back full, or the
+                  line would be an apology on every request. */}
+              {read.detail.capped && (
+                <p className="text-ink-faint leading-relaxed">{t('pullRequest.capped')}</p>
+              )}
+            </div>
 
-                {/* A truncation nobody wrote down is one somebody eventually
-                    debugs. Three ceilings sit behind this and none is worth
-                    raising — past them the pane needs a search box rather than
-                    a longer page — so what is owed is saying that what is here
-                    is not all there is. Only when a read came back full, or the
-                    line would be an apology on every request. */}
-                {read.detail.capped && (
-                  <p className="text-ink-faint mt-2 leading-relaxed">{t('pullRequest.capped')}</p>
-                )}
-              </Section>
-
-              <PullRequestActions
-                detail={read.detail}
+            <div role="region" aria-label={t('pullRequest.merge')} hidden={shown !== 'merge'}>
+              <MergeConditions
+                number={request.number}
                 status={read.status}
                 base={view.base}
-                dirty={view.dirty}
-                exposedEnvFile={envIgnored ? null : envFile}
-                /* Null rather than a disabled flag beside a handler that could
-                   not run: the guard would be one nothing can reach, and a
-                   check nothing reaches is a claim nothing tests. */
-                onPrompt={
-                  chatId === null
-                    ? null
-                    : (kind: InstructionKind) => {
-                        prompt(kind, request, chatId)
-                      }
-                }
-                sending={sending}
-                onMerge={(method: MergeMethod) => {
-                  merge(request.number, method)
-                }}
-                merging={merging}
                 onClose={() => {
                   close(request.number)
                 }}
                 closing={closing}
-                onCommitAndPush={commitAndPush}
-                ahead={view.ahead}
-                committing={committing}
-                onPush={push}
-                pushing={pushing}
-                onRemoveWorkspace={() => {
-                  onRemoveWorkspace(workspace.id)
-                }}
+                merging={merging}
               />
-            </>
-          )}
+            </div>
+          </div>
+
+          <PullRequestFooter
+            status={read.status}
+            base={view.base}
+            dirty={view.dirty}
+            exposedEnvFile={exposedEnvFile}
+            /* Null rather than a disabled flag beside a handler that could not
+               run: the guard would be one nothing can reach, and a check
+               nothing reaches is a claim nothing tests. */
+            onPrompt={
+              chatId === null
+                ? null
+                : (kind: InstructionKind) => {
+                    prompt(kind, request, chatId)
+                  }
+            }
+            sending={sending}
+            onEditInstructions={onEditInstructions}
+            onMerge={(method: MergeMethod) => {
+              merge(request.number, method)
+            }}
+            merging={merging}
+            onCommitAndPush={commitAndPush}
+            ahead={view.ahead}
+            committing={committing}
+            onPush={push}
+            pushing={pushing}
+            onRemoveWorkspace={() => {
+              onRemoveWorkspace(workspace.id)
+            }}
+          />
         </>
       )}
     </div>
@@ -516,24 +599,3 @@ const RERUNS: readonly {
   },
   { scope: 'all', labelKey: 'pullRequest.rerunAll', titleKey: 'pullRequest.rerunAllTitle' }
 ]
-
-function Section({
-  title,
-  action,
-  children
-}: {
-  readonly title: string
-  /** Drawn at the heading's right edge, for what acts on the whole section. */
-  readonly action?: React.ReactNode
-  readonly children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <section className="space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="section-label">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  )
-}

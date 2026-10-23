@@ -20,19 +20,27 @@ export function CommitMessageField({
    * One commits and opens a request; the other commits and pushes onto one that
    * exists. The field is the same and the consequence is not, so the sentence
    * comes from the caller.
+   *
+   * Absent in the pane's footer, where the button beside the field already
+   * names the consequence and the footer is held to three rows: the field is
+   * then one row, its name read aloud rather than drawn above it.
    */
   hint
 }: {
   readonly value: string
   readonly onChange: (value: string) => void
-  readonly hint: string
+  readonly hint?: string
 }): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="flex flex-col gap-1">
-        <span className="section-label">{t('pullRequest.commitMessage')}</span>
+      {/* `relative` for the hidden name: `sr-only` is absolutely positioned,
+          and anchored to nothing nearer it would escape the pane's scroller. */}
+      <label className="relative flex flex-col gap-1">
+        <span className={hint === undefined ? 'sr-only' : 'section-label'}>
+          {t('pullRequest.commitMessage')}
+        </span>
         <input
           value={value}
           onChange={(event) => {
@@ -43,7 +51,7 @@ export function CommitMessageField({
         />
       </label>
 
-      <p className="text-ink-faint leading-relaxed">{hint}</p>
+      {hint !== undefined && <p className="text-ink-faint leading-relaxed">{hint}</p>}
     </div>
   )
 }

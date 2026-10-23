@@ -130,10 +130,12 @@ forces scrolling.
 
 ## Components
 
-`Button` has four variants: `accent` (primary action), `quiet` (secondary),
-`danger` (subdued destructive), `destructive` (filled, for the action a
-confirmation is asking about). Extend it rather than adding new button
-components.
+`Button` has six variants: `accent` (primary action), `success` (green: what
+starts something running or finishes the work — Run, a send, a push, a merge),
+`quiet` (secondary), `danger` (subdued destructive), `destructive` (filled, for
+the action a confirmation is asking about) and `agent` (the composer's colour
+ring, for a press that hands the work to the agent). Extend it rather than
+adding new button components.
 
 Existing pieces, worth checking before writing another: `Modal`,
 `DropdownMenu`, `Combobox` (a select with search), `Field`, `NameEditor`,

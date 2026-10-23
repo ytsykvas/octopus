@@ -800,11 +800,12 @@ the frame's own and the fade is by opacity: the border to transparent, the line
 and the glow up, over 0.2s. The line and the glow are also `visibility: hidden`
 at rest, so a blurred layer nobody can see is not painted.
 
-**The ring is also worn by the one button that hands the writing to the agent**
-— "Ask the agent to describe it" in the pull request form (`.ai-button`), with a
-sparkle icon and the width of its words. There the line is faint at rest and
-turns only under the pointer or keyboard focus, never the glow; once the title
-has text, the button is the plain accent "Open pull request" again.
+**The ring is also worn by the buttons that hand the work to the agent** —
+"Ask the agent to describe it" in the pull request form and the pull request
+pane's "Ask the agent" menu, both `Button`'s `agent` variant (`.ai-button`),
+with a sparkle icon and the width of their words. There the line is faint at
+rest and turns only under the pointer or keyboard focus, never the glow; once
+the form's title has text, its button is the green "Open pull request".
 
 **Nothing in the composer's ring moves.** It did: the line turned its
 gradient's own angle (`--ring-angle`, registered with `@property` so it
@@ -2251,8 +2252,17 @@ stored, unlike the tab beside it: which tab is showing is a standing preference,
 and this is a mood about the run in front of you.
 
 **The pull request tab is the one place that reaches GitHub for something other
-than cloning.** It names the branch, and then either reports the request there
-is — number, title, a link out — or offers the form that opens one. Two things
+than cloning.** It has one shape from the form to the merge: a header, the
+views, and a strip pinned along the bottom holding the next step. The header is
+a pill saying where the request stands (_Open_, _Draft_, _Merged_, _Closed_,
+_Not opened_ — in the sidebar mark's colours, so the row and the pane agree),
+the number, the time of the last read beside the control that reads again, a
+link out, the title and `branch → base`. Under it a request that exists has three
+tiles — Checks, Review, Merge — each a value ("1 failed", "Changes",
+"Ready") and the view's name; they are also what picks the view below them.
+Buttons with `aria-pressed`, the way `Segmented` draws a choice, rather than a tab
+list, which would promise arrow keys and a panel each controls. A branch with no
+request has the form instead, or the sentence saying there is nothing to open. Two things
 are said **before** the button rather than after it fails: that opening will push
 a branch that is not pushed, and that uncommitted work is committed with it. Pushing
 touches somebody else's machine, and a button that does that silently is one
@@ -2264,11 +2274,15 @@ only on showing, a tab left open through a turn kept saying there was nothing
 to open after the agent had committed, until another tab was clicked and this
 one clicked back.
 
-Two buttons sit above all of that. **Instructions for a new PR** opens the
-project's own instruction where it lives, in project settings — one editor for
-one file, reached from the place it matters, which is the arrangement "Write the
-script" already uses. A second editor here would be a second place for the two
-to disagree.
+**The project's instructions** open where they live, in project settings — one
+editor for one file, reached from the place it matters, which is the arrangement
+"Write the script" already uses. A second editor here would be a second place
+for the two to disagree. The way there is wherever the wording is about to be
+used: _Change how it writes them_ under the form's fields, _Instructions for a
+new PR_ on a branch with nothing to open, and the last item of the agent's menu
+on an open request. A merged or closed one has nothing left to send, and so no
+menu. It used to be a button at the top of every state,
+above a request that had long been opened.
 
 **The form's own draft button is a different thing from the one below**, and the
 difference is what makes it fragile. It asks the agent once, with read-only
@@ -2302,8 +2316,37 @@ the window header, through the same callback, because two copies of "open that
 tab" drift the first time one of them is touched.
 
 **The pane is one component per question**, under `components/pr/`, beside the
-diff's own folder: the summary, the checks, the review, the actions and the form
-for a request that does not exist yet.
+diff's own folder: the header, the tiles, the checks, the review, the merge
+conditions, the footer with its agent menu, and the form for a request that does
+not exist yet. What they draw is decided once, in `requestStatus.ts`: the counts,
+whether merging is allowed, the prompts worth offering, the view to open on, and
+an ordered list of what wants attention. The tiles, the Merge view and the
+footer each read that list, because three spellings of "has a check failed" are
+three things that drift apart.
+
+**The pane opens on the view that answers the question the request is asking**:
+Checks while one is red or running, Review once somebody has said something,
+Merge otherwise. Until the reader picks a tile it keeps following — a run that
+finishes moves it from Checks to Merge — and a pick holds for as long as the
+request is the same one. Derived rather than reset in an effect: the choice is
+stored with the request's number, so the next request opens on its own view
+without a frame of the old one. The views are hidden rather than unmounted, so a
+reply half written under a thread survives a look at the checks.
+
+**The footer is at most three rows**: the one line that matters most, the commit
+message while there is work to commit, and the buttons. The line is the first
+thing wanting attention, or _Ready to merge into main_; while git does not
+ignore the env file and there is work to commit, that warning takes the line
+rather than adding a block, and so does the warning that an empty field would
+replace a commit already on GitHub — the one consequence of that press worth
+more than a tooltip. The commit field has no hint under it otherwise: the button
+beside it already says _Commit & push_ or _Amend commit & push_, and the rest is
+its tooltip. The field sits by its button because an empty one
+amends, and a field kept in another view would amend unseen. **The green button
+is the next step**: committing while there is work to commit, else sending the
+commits that are waiting, else merging. Merged, the one press left is the red
+removal; closed, there is no footer at all. Merge stays beside a commit or a push, quiet, with
+every reason it has for refusing.
 
 Two reads feed it, and they are apart on purpose. `workspaces:pullRequest` says
 whether the branch has one; `workspaces:pullRequestDetail` says what has become
@@ -2437,10 +2480,10 @@ as pushed whenever another prefix ended in the same segment.
 
 **Push sends what is already committed.** _Commit & push_ appears only while
 the worktree is dirty, so work the agent committed — or the reader committed in
-the workspace's terminal — had no way onto the request except the terminal. The
-two sit side by side rather than replacing each other, because a branch can be in
-both states at once: something committed and not sent, something else not
-committed at all. The count of waiting commits is read against the branch's own
+the workspace's terminal — had no way onto the request except the terminal. A
+branch can be in both states at once, something committed and not sent and
+something else not committed at all; committing sends everything too, so while
+there is work to commit, Push gives way to it. The count of waiting commits is read against the branch's own
 copy on the remote, which is a different question from the `ahead` the form uses:
 a branch fully pushed is still ahead of `main`.
 
@@ -2465,9 +2508,13 @@ it kept, which is the failure the whole tab exists to avoid.
 
 **The prepared messages** — fix the checks, answer the review, review it, review
 it with several subagents, resolve the conflicts — each send the project's
-instruction plus a line naming the request. Drawn twice rather than once around a
-guard: without a conversation the press could not do anything, and a branch
-nothing can reach is a claim nothing tests.
+instruction plus a line naming the request. They live in one menu at the foot of
+the pane, _Ask the agent_, wearing the composer's ring (`Button`'s `agent`
+variant): the row of buttons they were had grown to six and wrapped, and the ones
+that answered the moment looked like the ones that are always there. The ones
+that apply now come first, the two that always do sit under a line, and the
+instructions close it. Without a conversation every prompt is there and
+disabled, with the reason above the first.
 
 **Three of them end in a push the app makes.** The agent may not push (§12.3 of
 `PROJECT.md`), so fixing the checks, answering the review and resolving the
@@ -2492,7 +2539,7 @@ which run went red. The log itself is not pasted in: a message is capped at
 to truncate it — possibly past the error. The agent reads it where it lives, and
 can read it again after it pushes.
 
-**Re-running the checks is two buttons**, beside the heading of the checks and
+**Re-running the checks is two buttons**, under the list in the Checks view and
 only while one is red: _Failed_ restarts the failed jobs of each run that has
 one (`gh run rerun --failed`), _All_ restarts every run whole. The run id comes
 from the job's link, the only place the rollup carries it, so a status from
@@ -3890,10 +3937,13 @@ field styling had already drifted by a few pixels of height.
 | `StatusSegment`                                        | one figure of the status bar and the list it opens. Every segment is the same thing — a count and the workspaces behind it — so the rows are handed in rather than each segment drawing a panel of its own; a row with nowhere to go (the application itself) is not a button                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `FileEditor`, `NameEditor`, `ResizeHandle`, `Terminal` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
-`Button` has five variants: `accent`, `success` (green, for the control that
-starts something running — the Scripts tab's Run, matching the title bar's),
-`quiet`, `danger` (subdued destructive), `destructive` (filled, for the action a
-confirmation is asking about).
+`Button` has six variants: `accent`, `success` (green, for the control that
+starts something running or finishes the work — the Scripts tab's Run, matching
+the title bar's, a send, and the pull request's Commit & push, Push, Merge and
+Open pull request, in the pane and the header alike), `quiet`, `danger` (subdued
+destructive), `destructive` (filled, for the action a confirmation is asking
+about) and `agent` (the composer's colour ring, for a press that hands the work
+to the agent — it draws the ring's line itself).
 
 `useConfirm` can carry one extra choice as a checkbox, and it may start ticked —
 removing a workspace offers to delete its branch, already marked, because a
