@@ -300,7 +300,10 @@ Variables reach a script under `OCTOPUS_*` names: `$OCTOPUS_PORT` (plus
 `OCTOPUS_WORKSPACE_NAME`, `OCTOPUS_WORKSPACE_SLUG` and `OCTOPUS_ENV_PROFILE` for
 all three, along with the variables of the set in effect. Dev values
 appended to `.env` inside `setup.sh` belong in the env block instead — which
-stays out of the repository.
+stays out of the repository. A value there may name `$OCTOPUS_PORT` or
+`$OCTOPUS_WORKSPACE_SLUG`, and is filled in per workspace both in the file and
+in every script's environment, so `DATABASE_URL=…/app_$OCTOPUS_WORKSPACE_SLUG`
+is how a per-workspace database reaches the app.
 
 ## Where this lives in the code
 

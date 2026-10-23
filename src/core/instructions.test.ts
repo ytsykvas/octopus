@@ -4,8 +4,10 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { ARCHIVE_TIMEOUT_MS } from './archive.js'
 import {
   effectiveInstruction,
+  InstructionBodySchema,
   InstructionKindSchema,
   instructionPath,
   instructionTemplate,
@@ -13,6 +15,7 @@ import {
   readInstruction,
   writeInstruction
 } from './instructions.js'
+import { scriptEnv, SLUG_MAX_LENGTH } from './scriptEnv.js'
 
 let root: string
 
@@ -205,5 +208,56 @@ describe('the two Help asks for', () => {
 
   it.each(HELP_KINDS)('never ask for a value to be written: %s', (kind) => {
     expect(instructionTemplate(kind)).toMatch(/never write a (?:value|variable's value)/i)
+  })
+
+  // A variable a script is given and the prompt never names is one no agent uses.
+  it('name every variable a script is given', () => {
+    const given = Object.keys(
+      scriptEnv('run', { rootPath: '/r', workspaceName: 'w', port: 3100, profile: 'default' })
+    )
+    const prompt = instructionTemplate('setupScripts')
+    const named = (name: string): boolean => new RegExp(`\\$${name}(?![0-9A-Z_])`).test(prompt)
+
+    // The ten ports are written as a range, `_1` … `_9`, so the ends stand for the middle.
+    const ranged = /^OCTOPUS_PORT_[2-8]$/
+    expect(given.filter((name) => !ranged.test(name) && !named(name))).toEqual([])
+  })
+
+  it.each(HELP_KINDS)('fit inside what the editor will save: %s', (kind) => {
+    expect(InstructionBodySchema.safeParse(instructionTemplate(kind)).success).toBe(true)
+  })
+
+  it('give the slug and the cleanup the limits the code holds them to', () => {
+    const prompt = instructionTemplate('setupScripts')
+    expect(prompt).toContain(`cut to ${String(SLUG_MAX_LENGTH)} characters`)
+    expect(prompt).toContain(`given ${String(ARCHIVE_TIMEOUT_MS / 1000)} seconds`)
+  })
+
+  // The cleanup runs without a shell, so a file whose guard displaced its
+  // shebang fails to start at all.
+  it('put the guard after the shebang', () => {
+    expect(instructionTemplate('setupScripts')).toContain('is the first line after the shebang')
+  })
+
+  // Vite and Next move to the next free port when theirs is taken, and the
+  // app's link then opens nothing.
+  it('ask for the port to be bound exactly', () => {
+    expect(instructionTemplate('setupScripts')).toMatch(/binds `\$OCTOPUS_PORT` \*\*exactly\*\*/)
+  })
+
+  // A link to the checkout's dependencies lets one branch's install rewrite
+  // every other workspace's.
+  it('install dependencies per worktree rather than linking the checkout', () => {
+    const prompt = instructionTemplate('setupScripts')
+    expect(prompt).toContain('Never link or copy `node_modules`')
+    expect(prompt).not.toMatch(/linked or copied, not rebuilt/)
+  })
+
+  // The whole of how a per-workspace name reaches an app without a script
+  // writing the env file.
+  it('say that values in the env set may name the workspace', () => {
+    expect(instructionTemplate('setupScripts')).toContain(
+      '**Values in the env set may use those names.**'
+    )
   })
 })

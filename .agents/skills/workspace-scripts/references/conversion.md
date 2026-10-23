@@ -4,10 +4,11 @@
 when the last repository has been converted** — it describes a bridge, not a
 feature.
 
-octopus reads `.conductor/` already, so a repository set up for that tool works
-here unchanged and there is no hurry. Converting is worth it for one reason:
-`.octopus/scripts/` are files, which can be read in a diff and run outside the
-app, while Conductor's `run` is a command line inside a config file.
+octopus does **not** read `.conductor/`: nothing under `src/` looks for it, and
+a repository set up only for that tool runs nothing here until it is
+translated. The translation is short, and it leaves files — `.octopus/scripts/`
+can be read in a diff and run outside the app, where Conductor's `run` is a
+command line inside a config file.
 
 ## The translation
 
@@ -16,7 +17,7 @@ app, while Conductor's `run` is a command line inside a config file.
 | `[scripts] setup`           | `.octopus/scripts/setup.sh`                   |
 | `[scripts] run`             | `.octopus/scripts/run.sh`                     |
 | `[scripts] archive`         | `.octopus/scripts/archive.sh`                 |
-| `file_include_globs`        | the carry list in Project settings            |
+| `file_include_globs`        | the carry list, one exact path per line       |
 | `$CONDUCTOR_PORT`           | `$OCTOPUS_PORT`, and `_1`…`_9` for the rest   |
 | `$CONDUCTOR_ROOT_PATH`      | `$OCTOPUS_ROOT_PATH`                          |
 | `$CONDUCTOR_WORKSPACE_NAME` | **`$OCTOPUS_WORKSPACE_SLUG`**                 |
@@ -28,11 +29,9 @@ scripts slugify by hand before naming anything with it, so the counterpart is
 the slug and not `$OCTOPUS_WORKSPACE_NAME`. Translating it to `_NAME` gives a
 string with spaces and capitals in it, which then names a database.
 
-When a script resolves out of `.conductor/`, octopus sets the `CONDUCTOR_*`
-names too, with the workspace name already slugified — so their scripts keep
-working while the conversion has not happened yet. That is the bridge; a script
-under `.octopus/` gets no such aliases, which is why the check for a leftover
-`CONDUCTOR_` matters.
+No script is given a `CONDUCTOR_*` name, so a leftover one expands to nothing —
+which is why the check for a leftover `CONDUCTOR_` matters, and why it matters
+most in a line that drops or deletes.
 
 ## Three things that come out
 
