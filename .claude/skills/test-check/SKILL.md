@@ -91,8 +91,8 @@ on a `<dialog>` to fire a `cancel` event. Anything else is styling.
 
 ## Writing what is missing
 
-Follow `.agents/skills/core-module/SKILL.md` and
-`.agents/skills/ui-component/SKILL.md`, and `docs/testing.md` for how the suite
+Follow `.claude/rules/core.md`, `.claude/rules/renderer.md`, the
+`core-module` and `ui-component` skills, and `docs/testing.md` for how the suite
 is arranged. In short:
 
 - core tests drive **real git** in a temporary directory, never a mock;
@@ -127,6 +127,3 @@ Report in three parts, shortest first:
 3. **Gaps** — untested branches, fields and error paths.
 
 If the suite is sound, say so plainly rather than inventing findings.
-
-Replies to the user are in Ukrainian; everything written into the repository is
-English.

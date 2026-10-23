@@ -9,7 +9,7 @@ allowed-tools: Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(ls:*)
 # Documentation check
 
 Documentation rots quietly. Nothing fails when a document starts describing an
-application that no longer exists — and `AGENTS.md` sends whoever comes next to
+application that no longer exists — and `CLAUDE.md` sends whoever comes next to
 read `docs/` first, so a stale claim is worse than no claim: it sends them the
 wrong way with confidence.
 
@@ -47,7 +47,7 @@ Then compare against the claims each document makes:
 | `ipc.md`          | **any** channel is added, removed or renamed, or its validation changes       |
 | `data.md`         | a stored field appears; a migration is added; a path under `~/.octopus` moves |
 | `ui.md`           | the window layout changes; a token or shared component is added               |
-| `testing.md`      | the vitest projects, the coverage threshold or the exclusions change          |
+| `testing.md`      | the two vitest configs, the coverage threshold or the exclusions change       |
 
 ### 3. Are the counts and lists still right?
 
@@ -105,5 +105,3 @@ One of two answers:
 - **In step with the code** — say so plainly, without inventing findings.
 - **These have drifted** — list each with the file and the claim, and say
   whether it is now wrong or merely incomplete.
-
-Replies to the user are in Ukrainian; everything written into `docs/` is English.

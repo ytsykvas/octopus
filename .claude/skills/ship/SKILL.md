@@ -32,7 +32,7 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    ```
 
    Name it for the change, not for the session. See the Git section of
-   `AGENTS.md`.
+   `CLAUDE.md`.
 
 4. **Commit.** Conventional Commits, **in English** like the rest of the
    repository:
@@ -40,8 +40,8 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    ```
    feat: add worktree manager
 
-   Create, list and remove workspaces via git worktree. The port is derived
-   deterministically from the workspace id.
+   Create, list and remove workspaces via git worktree. A port block is
+   allocated from the pool and given back with the workspace.
    ```
 
    Prefixes: `feat:` new capability, `fix:` bug fix, `refactor:` no behaviour
@@ -58,20 +58,25 @@ allowed-tools: Bash(npm run:*), Bash(git status:*), Bash(git diff:*), Bash(git l
    the working tree keeps both changes. Then `git diff --cached --stat` must
    name exactly this change's files, and nothing else, before committing.
 
-5. **Report.** Tell the user in plain Ukrainian what was recorded, and say the
+5. **Report.** Say plainly what was recorded, and say the
    branch is waiting to be pushed and opened from the app's Pull request tab.
    Do not recite the diff.
 
 ## Do not
 
 - Push or open a pull request unless the user asked. Treat a push as published:
-  `origin` is private now but has been public, and a public commit is mirrored
-  and indexed within minutes and not retractable by a later commit.
+  `origin` is public, and a public commit is mirrored and indexed within
+  minutes and not retractable by a later commit.
 - Merge your own pull request unless the user asked. A green gate means it is
   ready, not that it was wanted — and with CI off, the gate is the local one on
   the branch merged with fresh `main`.
 - Pass `--no-verify`.
 - Commit `.env`, keys or tokens. If you spot one in the diff, stop and warn.
+
+## If asked for a pull request description
+
+Follow `.octopus/instructions/pull-request.md` — the same text the app sends
+its own draft agent.
 
 ## If a description was supplied
 
