@@ -349,7 +349,8 @@ export function Composer({
     setCaret(next.caret)
     textarea.current?.focus()
     onFilesTaken()
-  }, [files, onFilesTaken])
+  }, [files, onFilesTaken, caretRef])
+
   /** Which suggestion Enter would take. */
   const [active, setActive] = useState(0)
   /**
