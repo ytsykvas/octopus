@@ -67,8 +67,6 @@ export interface NoteIntros {
    * locales.
    */
   readonly oldSide: string
-  /** What the attached paths are introduced by. */
-  readonly files: string
 }
 
 /**
@@ -84,20 +82,40 @@ export interface NoteIntros {
  * line number on its own would point at whatever now sits there. The same is
  * true of a review comment, which is why GitHub's own hunk travels with it.
  */
-export function withNotes(
-  text: string,
-  notes: readonly ChatNote[],
-  intros: NoteIntros,
-  /**
-   * Paths of the files attached, which the message names rather than carries.
-   *
-   * The whole of an attachment. Nothing is copied anywhere: the agent is told
-   * where a file is and reads it, which is §4's rule in its plainest form and
-   * what makes the message the user reads back the whole of what was sent.
-   */
-  files: readonly string[] = []
-): string {
-  if (notes.length === 0 && files.length === 0) return text
+/**
+ * Writes the paths of files pointed at into a draft, at the caret.
+ *
+ * The whole of an attachment is its path, written where the reader is typing —
+ * "compare `a.png` with" is a sentence, a list under a heading is not. Nothing
+ * is copied anywhere: the agent is told where a file is and reads it, which is
+ * §4's rule in its plainest form, and the message read back in the log is the
+ * whole of what was sent.
+ *
+ * A path with a space in it goes in backticks. Inside a sentence nothing else
+ * says where `Screenshot 2026-09-06 at 14.02.11.png` ends, and a path the agent
+ * cuts short at the first space is a file that does not exist.
+ */
+export function insertPaths(
+  draft: string,
+  caret: number,
+  paths: readonly string[]
+): { readonly draft: string; readonly caret: number } {
+  const at = Math.min(caret, draft.length)
+  const before = draft.slice(0, at)
+  const after = draft.slice(at)
+
+  // Set apart from the words on either side, and no further: a space is added
+  // only where there is not one already, and the caret lands after the one that
+  // follows, so the next word typed is a word of its own.
+  const lead = before === '' || /\s$/.test(before) ? '' : ' '
+  const trail = /^\s/.test(after) ? '' : ' '
+  const written = `${lead}${paths.map((path) => (/\s/.test(path) ? `\`${path}\`` : path)).join(' ')}${trail}`
+
+  return { draft: `${before}${written}${after}`, caret: at + written.length }
+}
+
+export function withNotes(text: string, notes: readonly ChatNote[], intros: NoteIntros): string {
+  if (notes.length === 0) return text
 
   const diff = notes.filter((note) => note.kind === 'diff')
   const code = notes.filter((note) => note.kind === 'code')
@@ -108,9 +126,6 @@ export function withNotes(
   // have none: a path, its lines and the code quoted under them say what they
   // are, and a heading over lines sent without a word only got in their way.
   const parts = [
-    // Files first, and the notes after them: an attachment is usually what the
-    // message is about, while a note is a remark on work already there.
-    ...(files.length === 0 ? [] : [intros.files, ...files]),
     ...(diff.length === 0
       ? []
       : [intros.diff, ...diff.map((note) => fromDiff(note, intros.oldSide))]),

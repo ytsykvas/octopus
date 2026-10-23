@@ -69,29 +69,35 @@ which are clicked where it is mostly read — mostly, because it is also the way
 out of what it reports.
 
 **A file is attached by pointing at it, not by copying it.** The paperclip is
-live now, and it is one of four ways in: a file can be dragged onto the
-composer, added from the Files tab's right-click menu or, for a screenshot,
-pasted straight into the field. What goes out is
-the file's **path**, written into the message beside the review notes — §4's
-rule that nothing implicit reaches the agent, in the plainest form it takes, and
-what makes the message the sender reads back the whole of what was sent.
+one of four ways in: a file can be dragged onto the composer, added from the
+Files tab's right-click menu or, for a screenshot, pasted straight into the
+field. Each writes the file's **path** into the text **where the caret is**, as
+if it had been typed there — §4's rule that nothing implicit reaches the agent,
+in the plainest form it takes, and what makes the message the sender reads back
+the whole of what was sent. There is no heading over it: "compare
+`/a/shot.png` with" reads as one sentence, and a line announcing the files in
+front of it read as the app talking rather than the sender.
+
+A space is put on either side when the text there has none, so the path never
+runs into a word, and the caret lands after it. A path with whitespace in it —
+macOS names every screenshot that way — is written between backticks, or the
+agent could not tell where it ends. Several paths at once go in a row, a space
+apart (`insertPaths` in `attachments.ts`).
 
 Nothing is copied anywhere, which is the decision the rest follows from. A copy
 would put a second version of somebody's file somewhere they did not put it, and
-it would go stale the moment they edited the original. The chip above the field
-names the file and holds the whole path on hover; taking it back before sending
-is a click. The list is held per conversation in `App` (`useAttachedFiles`),
-the way the viewer's notes are, because the Files tab adds to it from the other
-side of the window.
+it would go stale the moment they edited the original. Taking a path back is
+deleting text, the way anything typed is. The paths waiting to be written are
+held per conversation in `App` (`useAttachedFiles`), because the Files tab adds
+to them from the other side of the window: the composer takes them as they
+arrive and writes them at the caret its field last had, so a file added from the
+tree lands where the sender left off rather than at the end.
 
-**One strip carries both the files and the review notes**, and it is drawn only
+**The strip above the field carries the review notes**, and it is drawn only
 when it has something on it — the way the attic above it is. An empty rule over
-the field would be chrome asserting that a review exists. Files come first and
-stay first: a file is what the message is about more often than a note is, and a
-strip that reordered as notes arrived would be hard to aim a click at. It has
-room above as well as below, or the chips touch the attic's rule and read as
-part of the row above rather than as part of the message they are going out
-with.
+the field would be chrome asserting that a review exists. It has room above as
+well as below, or the notes touch the attic's rule and read as part of the row
+above rather than as part of the message they are going out with.
 
 The **paste** is the one exception and cannot be anything else, since a
 clipboard carries a picture rather than a file. That one is written under
@@ -258,8 +264,8 @@ writes `@agent-<name>` into the text: Claude Code turns that into an
 instruction to hand the work to that agent rather than leave the choice to
 Claude — measured through the SDK, not only the CLI — and the message the user
 reads back says so. Typing the written form (`@agent-Exp`) finds the same row.
-Files are not offered: they are attached with the paperclip, a drop or a paste,
-and an `@` list of paths was a fourth way in nobody used.
+Files are not offered: they are written in with the paperclip, a drop, a paste
+or the Files tab, and an `@` list of paths was a fifth way in nobody used.
 
 **Typing `/` offers commands, and where it is typed decides which.** The word
 is read at the caret, like a mention, and only when the slash starts a word —

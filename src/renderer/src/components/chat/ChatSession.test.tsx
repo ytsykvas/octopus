@@ -1812,11 +1812,12 @@ describe('the permission mode', () => {
   })
 
   /*
-   * The paperclip is the visible one of three ways in. What goes out is the
-   * file's **path** — nothing is copied anywhere, which is §4's rule that
-   * nothing implicit reaches the agent in the plainest form it takes.
+   * The paperclip is the visible one of four ways in. The file is written
+   * into the field by its **path**, where the caret was — nothing is copied
+   * anywhere, which is §4's rule that nothing implicit reaches the agent in the
+   * plainest form it takes.
    */
-  it('attaches a chosen file and names its path in the message', async () => {
+  it('writes a chosen file into the message by its path', async () => {
     const user = userEvent.setup()
     vi.mocked(octopus().dialog.pickFiles).mockResolvedValue({
       ok: true,
@@ -1825,17 +1826,16 @@ describe('the permission mode', () => {
     givenChat()
     await openLoadedChat()
 
+    await user.type(screen.getByRole('textbox'), 'have a look at')
     await user.click(await screen.findByRole('button', { name: 'Attach files' }))
-    expect(await screen.findByText('shot.png')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('textbox')).toHaveValue('have a look at /a/shot.png ')
+    })
 
-    await user.type(screen.getByRole('textbox'), 'have a look')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => {
-      expect(octopus().chats.send).toHaveBeenCalledWith(
-        CHAT_ID,
-        'Files I am pointing you at:\n\n/a/shot.png\n\nhave a look'
-      )
+      expect(octopus().chats.send).toHaveBeenCalledWith(CHAT_ID, 'have a look at /a/shot.png')
     })
   })
 
