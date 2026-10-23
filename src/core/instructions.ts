@@ -211,7 +211,7 @@ Your job is to write them for this repository, in this worktree, and to say what
 
 ## Do this in order
 
-1. **Look at the repository.** Which stack, which package manager, which services (database, cache, queue), how the dev server is started today, which files are gitignored but needed (\`.env\`, \`config/master.key\`, \`.env.local\`). If there is a \`.conductor/\` directory, read it: it is the same arrangement under older names (see the end).
+1. **Look at the repository.** Which stack, which package manager, which services (database, cache, queue), how the dev server is started today, which files are gitignored but needed (\`.env\`, \`config/master.key\`, \`.env.local\`).
 2. **Answer, for every resource, "what must this workspace not share with the others?"**
    - **Private** — created by \`setup.sh\` under a name derived from \`$OCTOPUS_WORKSPACE_SLUG\`, dropped by \`archive.sh\`. A database, a tmp directory, a cache namespace.
    - **Shared** — taken from the checkout at \`$OCTOPUS_ROOT_PATH\` and never dropped. A dump, a dependency cache.
@@ -241,11 +241,7 @@ The slug is the workspace name lowercased, every other character an underscore, 
 
 ## Verify, without running anything
 
-\`sh -n\` on each script; \`test -x\` on each; \`command -v\` for every tool they call; \`git check-ignore -v\` for every path to carry. Then read them once more for: the slug on every destructive line, no \`set -e\` in \`archive.sh\`, \`$OCTOPUS_PORT\` bound, nothing shared deleted, no \`CONDUCTOR_\` names left. Report what each check answered.
-
-## If the repository has \`.conductor/\`
-
-\`[scripts] setup/run/archive\` → the three files; \`file_include_globs\` → the files to carry; \`$CONDUCTOR_PORT\` → \`$OCTOPUS_PORT\`; \`$CONDUCTOR_ROOT_PATH\` → \`$OCTOPUS_ROOT_PATH\`; \`$CONDUCTOR_WORKSPACE_NAME\` → \`$OCTOPUS_WORKSPACE_SLUG\` (their name was already a slug; ours is not); \`[prompts]\` → \`.octopus/instructions/\`. Drop any \`cp\` of secrets (that is the carry list now) and anything that pins the environment (that is the env set).
+\`sh -n\` on each script; \`test -x\` on each; \`command -v\` for every tool they call; \`git check-ignore -v\` for every path to carry. Then read them once more for: the slug on every destructive line, no \`set -e\` in \`archive.sh\`, \`$OCTOPUS_PORT\` bound, nothing shared deleted. Report what each check answered.
 `,
 
   diagnoseRun: `# Why does Run not work?
