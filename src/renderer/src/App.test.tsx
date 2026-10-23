@@ -2870,6 +2870,7 @@ describe('App', () => {
         value: {
           state: 'open',
           title: 'Rename the thing',
+          description: '',
           url: 'https://github.com/o/p/pull/7',
           draft: false,
           checks: [],
@@ -2978,6 +2979,7 @@ describe('App', () => {
       value: {
         state: 'merged',
         title: 'Rename the thing',
+        description: '',
         url: 'https://github.com/o/p/pull/7',
         draft: false,
         checks: [],

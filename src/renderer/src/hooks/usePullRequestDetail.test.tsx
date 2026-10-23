@@ -14,6 +14,7 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
   return {
     state: 'open',
     title: 'Rename the thing',
+    description: '',
     url: 'https://github.com/o/p/pull/7',
     draft: false,
     checks: [],

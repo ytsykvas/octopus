@@ -654,6 +654,8 @@ export const en = {
        numbers the pane wants a search box, not a longer page — and a reader who
        cannot find a remark they remember should learn why here rather than by
        reasoning about it. */
+    /* The card under the views: what the request's author wrote about it. */
+    description: 'Description',
     capped:
       'GitHub was asked for the most recent hundred comments and fifty threads, and answered with that many \u2014 so there may be older ones this pane is not showing. The request on GitHub has all of them.',
     noWorkspaceTitle: 'Nothing to propose yet',

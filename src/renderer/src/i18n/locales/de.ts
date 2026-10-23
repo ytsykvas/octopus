@@ -550,6 +550,7 @@ export const de: Translation = {
   },
 
   pullRequest: {
+    description: 'Beschreibung',
     capped:
       'GitHub wurde nach den neuesten hundert Kommentaren und fünfzig Threads gefragt und hat genau so viele geliefert – es kann also ältere geben, die hier fehlen. Auf GitHub sind alle zu sehen.',
     noWorkspaceTitle: 'Noch nichts vorzuschlagen',

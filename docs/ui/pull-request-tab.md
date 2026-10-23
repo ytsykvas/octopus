@@ -121,6 +121,15 @@ that removes its own button — Push once nothing is left, Merge once merged —
 leaves keyboard focus on the pane rather than at the top of the window
 (`useFocusKeeper`).
 
+**The description fills the room the views leave** above the footer
+(`RequestDescription`). A short view left most of the pane empty, and the
+author's own words about the request are what a reader wants nearest the
+status. It sits under whichever view is chosen, being the request's and not a
+view's, and scrolls with them, so a long one never pushes the footer away. A
+template's `<!-- … -->` notes are taken out first — with raw HTML off they
+would draw as text, the instructions to the author read as the description —
+and where nothing is left there is no card at all.
+
 Two reads feed it, and they are apart on purpose. `workspaces:pullRequest` says
 whether the branch has one; `workspaces:pullRequestDetail` says what has become
 of it. When the first fails the pane blanks, because nothing on it is true any
