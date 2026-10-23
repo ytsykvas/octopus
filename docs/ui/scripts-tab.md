@@ -165,6 +165,21 @@ A workspace whose directory has gone loses all of them, `Run` included.
 disposes the session — so the server is already dead while the stage still says
 it is serving, and a control left up would point at a refused port.
 
+**Which scripts a workspace has is read again in five moments**
+(`useWorkspaceScripts`): when the list of workspaces changes, when Project
+settings close — that is where a script is first written by hand — after an
+approval, once a turn of any chat in the selected workspace has ended and
+settled (`useTurnSettled`, the same 300ms the diff pane waits), and when another
+workspace is opened. The turn is the third way a script appears: an agent asked
+to set the project up writes `.octopus/scripts/`, which changes neither the list
+nor a settings dialog, and the tab went on saying there was no build script
+until something else happened to re-read it. A turn is heard only for the
+workspace on screen, so one that ended in another is read when that one is
+opened.
+The first three read every workspace; a turn and a switch read the one on screen
+alone and keep the other answers, since nothing else can have moved — unless the
+whole read they follow had not finished, which is then made again whole.
+
 **`Stop` reaches only what is still going.** Both halves watch one token, since
 stopping means stopping this workspace rather than guessing which half is busy —
 but a half that has already exited keeps its terminal. The build's log is what a

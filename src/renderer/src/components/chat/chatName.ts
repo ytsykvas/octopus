@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next'
 
-import { type AgentKind, AGENT_NAMES } from '@core/chats.js'
+import { type AgentKind, AGENT_NAMES, MAX_CHATS_PER_WORKSPACE } from '@core/chats.js'
 
 /**
  * What a conversation is called: the name it was given, or its agent and its
@@ -17,4 +17,12 @@ export function chatName(
   number: number
 ): string {
   return chat.title ?? t('chat.tab', { agent: AGENT_NAMES[chat.agent], number })
+}
+
+/**
+ * Why nothing more can open a conversation here, in one wording for every
+ * place that cannot: the history's rows and the Help menu's items.
+ */
+export function chatCapHint(t: TFunction): string {
+  return t('chat.historyFull', { limit: MAX_CHATS_PER_WORKSPACE })
 }

@@ -10,7 +10,8 @@ in `readEffectiveInstruction`, which is what the panel and the prompts ask.
 
 There is one per button on the pull request tab — `pull-request.md`,
 `commit-message.md`, `fix-checks.md`, `address-review.md`, `review.md`,
-`multi-agent-review.md` and `resolve-conflicts.md`. Which kind lives in which
+`multi-agent-review.md` and `resolve-conflicts.md` — and one per item of the
+Help menu: `setup-scripts.md` and `diagnose-run.md`. Which kind lives in which
 file is a `Record<InstructionKind, string>` in `instructions.ts`, so a new one
 without a home is a compile error — and a test iterates the enum to catch the thing the
 compiler cannot see, two kinds pointing at one file.

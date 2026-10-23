@@ -4,12 +4,23 @@ import { spawn, type IPty } from 'node-pty'
 import { homedir } from 'node:os'
 
 import {
+  appendTail,
+  isRunPurpose,
+  RUN_PURPOSES,
+  withRun,
+  type RecordedRun,
+  type RunOutcome,
+  type RunPurpose,
+  type WorkspaceRuns
+} from '../core/runLog.js'
+import {
   buildTerminalArgv,
   buildTerminalEnv,
   resolveCwd,
   resolveShell,
   type TerminalId,
   type TerminalOwner,
+  type TerminalPurpose,
   type TerminalSession,
   type TerminalSpec
 } from '../core/terminal.js'
@@ -94,8 +105,29 @@ interface Session {
   readonly bareShell: boolean
 }
 
+/**
+ * The most recent build or server of one workspace, as it streamed.
+ *
+ * Mutable and local to `main`: it is written on every chunk, and a copy per
+ * chunk would be 30 000 objects a second for a build that prints fast.
+ */
+interface RunRecord {
+  outcome: RunOutcome
+  /** At most twice `TAIL_CHARS`; cut and cleaned only when somebody asks. */
+  raw: string
+}
+
 export class TerminalManager {
   private readonly sessions = new Map<TerminalId, Session>()
+  /**
+   * The last build and server of each workspace, kept past its session.
+   *
+   * Here rather than in the window, because the window throws a pane's buffer
+   * away when it unmounts — and "why does Run not work?" is asked after the
+   * run, often from somewhere else. Kept in memory only: it survives a reload
+   * of the window and not a restart of the application.
+   */
+  private readonly runs = new Map<string, WorkspaceRuns<RunRecord>>()
   /**
    * Sessions out of `sessions` whose group has not emptied yet, by id.
    *
@@ -113,7 +145,11 @@ export class TerminalManager {
    * Bound, because it reads `process` through `this` and a bare reference to
    * the method loses it.
    */
-  constructor(private readonly kill: Kill = process.kill.bind(process)) {}
+  constructor(
+    private readonly kill: Kill = process.kill.bind(process),
+    /** When a run ended is read from this, so a test can say when that was. */
+    private readonly now: () => Date = () => new Date()
+  ) {}
 
   /** Starts a session and streams its output to the given renderer. */
   create(spec: TerminalSpec, target: WebContents): TerminalId {
@@ -127,6 +163,8 @@ export class TerminalManager {
       cols: spec.cols,
       rows: spec.rows
     })
+
+    const record = this.record(spec.owner.workspaceId, spec.owner.purpose, { kind: 'running' })
 
     const send = (data: string): void => {
       // The window can close while the shell is still writing.
@@ -151,6 +189,8 @@ export class TerminalManager {
     }
 
     pty.onData((data) => {
+      if (record) record.raw = appendTail(record.raw, data)
+
       if (batch === null) {
         send(data)
         batch = setTimeout(() => {
@@ -175,6 +215,15 @@ export class TerminalManager {
     target.once('destroyed', closeWithWindow)
 
     pty.onExit(({ exitCode, signal }) => {
+      // The typings say `signal?: number`, but a normal exit reports 0 rather
+      // than undefined — checking for undefined reported every run as killed.
+      // Signal numbers start at 1, so falsy means "no signal".
+      const code = signal ? null : exitCode
+
+      // Here, not in `report`, which does nothing once the window is gone — and
+      // a window closed mid-run is one of the times the record is asked for.
+      if (record) record.outcome = { kind: 'exited', at: this.now().toISOString(), exitCode: code }
+
       // What is still gathered goes first. Told of the exit before it, the pane
       // forgets the session and drops the run's last lines on arrival.
       if (batch !== null) clearTimeout(batch)
@@ -188,10 +237,7 @@ export class TerminalManager {
 
       const report = (): void => {
         if (target.isDestroyed()) return
-        // The typings say `signal?: number`, but a normal exit reports 0 rather
-        // than undefined — checking for undefined reported every run as killed.
-        // Signal numbers start at 1, so falsy means "no signal".
-        target.send('terminal:exit', { id, exitCode: signal ? null : exitCode })
+        target.send('terminal:exit', { id, exitCode: code })
       }
 
       // Gone already means a stop took it, and is ending the group itself.
@@ -220,6 +266,53 @@ export class TerminalManager {
       bareShell: spec.command.length === 0
     })
     return id
+  }
+
+  /**
+   * Keeps a start the Scripts tab refused before its script ran, in the words
+   * it showed: a port somebody else holds, an env file it would not write, a
+   * shell that would not spawn. None of those leaves a session behind, so Help
+   * would have said nothing had run — or quoted the Run before as this one.
+   */
+  refuse(workspaceId: string, purpose: RunPurpose, reason: string): void {
+    this.record(workspaceId, purpose, { kind: 'refused', reason })
+  }
+
+  /**
+   * A fresh record for a workspace's build or server, replacing the last one.
+   *
+   * Replaced at the start rather than the end: the question is about the run
+   * somebody just pressed, and a server restarted after a failed one should
+   * not answer with the failure.
+   */
+  private record(
+    workspaceId: string | null,
+    purpose: TerminalPurpose,
+    outcome: RunOutcome
+  ): RunRecord | null {
+    if (workspaceId === null || !isRunPurpose(purpose)) return null
+
+    const record: RunRecord = { outcome, raw: '' }
+    this.runs.set(workspaceId, withRun(this.runs.get(workspaceId), purpose, record))
+    return record
+  }
+
+  /**
+   * The last build and server of a workspace, whichever exist, build first.
+   *
+   * Copies, so nothing outside can write into a record still streaming.
+   */
+  lastRuns(workspaceId: string): RecordedRun[] {
+    const runs = this.runs.get(workspaceId)
+    return RUN_PURPOSES.flatMap((purpose) => {
+      const record = runs?.[purpose]
+      return record ? [{ purpose, ...record }] : []
+    })
+  }
+
+  /** Drops a workspace's records: when it is removed, and when a new one is made under its id. */
+  forgetRuns(workspaceId: string): void {
+    this.runs.delete(workspaceId)
   }
 
   write(id: TerminalId, data: string): void {

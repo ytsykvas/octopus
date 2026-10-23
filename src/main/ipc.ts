@@ -55,6 +55,7 @@ import { QuestionAnswerSchema } from '../core/questions.js'
 import { RepoItemIdsSchema } from '../core/repoConfig.js'
 import { terminalOwners } from '../core/resources.js'
 import { RevertPathSchema } from '../core/revert.js'
+import { RunPurposeSchema, TAIL_CHARS } from '../core/runLog.js'
 import { ScriptBodySchema, ScriptKindSchema } from '../core/scripts.js'
 import { StrayPidsSchema } from '../core/strayServers.js'
 import { SkillImportSchema, SkillSaveSchema } from '../core/skills.js'
@@ -185,6 +186,16 @@ export interface IpcHost {
  */
 const FilePathSchema = z.string().min(1).max(4096)
 
+/**
+ * Why a Run did not start, as the Scripts tab worded it.
+ *
+ * Cut rather than refused: a refusal dropped here would leave the run before
+ * to answer as this one. Only a guard on what `main` holds — Help masks the
+ * reason and cuts it far shorter, in that order, so this cut can never leave
+ * half a secret in what it shows.
+ */
+const RefusalSchema = z.string().transform((reason) => reason.slice(0, TAIL_CHARS))
+
 /** A message of a conversation, by the id it was sent under. */
 const MessageIdSchema = z.uuid()
 
@@ -301,6 +312,22 @@ export function registerIpc(
    * the asker could never show it.
    */
   host.handle('terminal:list', () => attempt(() => Promise.resolve(terminals.list())))
+
+  /*
+   * A Run the Scripts tab refused before its script started, in the words it
+   * showed, kept beside the runs Help quotes. Parsed rather than trusted, and
+   * kept only for a workspace on record: all three are held for the life of
+   * the app, and the reason is written into a message.
+   */
+  host.handle(
+    'terminal:refused',
+    (_event, workspaceId: string, purpose: unknown, reason: unknown) =>
+      attempt(() => {
+        const run = RunPurposeSchema.parse(purpose)
+        const why = RefusalSchema.parse(reason)
+        if (service.hasWorkspace(workspaceId)) terminals.refuse(workspaceId, run, why)
+      })
+  )
 
   // The patch is validated rather than trusted: it arrives from the renderer
   // and its base branch reaches a git command.
@@ -544,6 +571,15 @@ export function registerIpc(
   )
 
   /*
+   * The runs are kept in `main` and the values to mask out of them are known
+   * only to the core, so this is where the two meet — and the one way a run's
+   * output reaches the window. The id is only looked up.
+   */
+  host.handle('workspaces:helpContext', (_event, workspaceId: string) =>
+    attempt(() => service.helpContext(workspaceId, terminals.lastRuns(workspaceId)))
+  )
+
+  /*
    * Every skill argument is parsed rather than trusted, and the name most of
    * all: it becomes a directory under `~/.octopus` and reaches a recursive
    * delete, so `SkillNameSchema` is the boundary that refuses `..` before any
@@ -750,8 +786,13 @@ export function registerIpc(
     attempt(() => service.reorderProjects(z.array(z.string()).parse(orderedIds)))
   )
 
+  // Its workspaces' last runs go with it, once it has gone.
   host.handle('projects:remove', (_event, projectId: string) =>
-    attempt(() => service.removeProjectById(projectId))
+    attempt(async () => {
+      for (const workspaceId of await service.removeProjectById(projectId)) {
+        terminals.forgetRuns(workspaceId)
+      }
+    })
   )
 
   host.handle('projects:listRemote', () => attempt(() => service.listRemoteRepositories()))
@@ -764,8 +805,18 @@ export function registerIpc(
     attempt(() => service.readWorkspace(workspaceId))
   )
 
+  /*
+   * A workspace just made has never run here. A project added back has the
+   * same id and draws from the same names, so a record a removal failed to
+   * drop — one that threw part-way, before it could say which it removed —
+   * would answer "why does Run not work?" about a run that never happened here.
+   */
   host.handle('workspaces:create', (_event, projectId: string) =>
-    attempt(() => service.createWorkspaceIn(projectId))
+    attempt(async () => {
+      const created = await service.createWorkspaceIn(projectId)
+      terminals.forgetRuns(created.id)
+      return created
+    })
   )
 
   /* The body is parsed rather than trusted: it arrives from the renderer and is
@@ -779,8 +830,13 @@ export function registerIpc(
     attempt(() => service.renameWorkspaceById(workspaceId, name))
   )
 
+  // A removed workspace's last runs go with it, and only once it has gone: a
+  // removal that failed leaves the workspace, and its runs are still worth asking about.
   host.handle('workspaces:remove', (_event, workspaceId: string, options: RemoveOptions) =>
-    attempt(() => service.removeWorkspaceById(workspaceId, options))
+    attempt(async () => {
+      await service.removeWorkspaceById(workspaceId, options)
+      terminals.forgetRuns(workspaceId)
+    })
   )
 
   host.handle('workspaces:hasChanges', (_event, workspaceId: string) =>

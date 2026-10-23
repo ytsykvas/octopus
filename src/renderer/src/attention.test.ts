@@ -5,6 +5,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { type Notice, noticeFrom, projectMark, seen, settle, withNotice } from './attention.js'
 import { workspaceView } from './test/workspaces.js'
+import { TURN_DONE } from './test/chat.js'
 
 const ANNA = workspaceView('anna')
 const BEN = workspaceView('ben')
@@ -45,27 +46,17 @@ function waitingIn(workspace: WorkspaceView, chatId: string): WorkspaceView {
   }
 }
 
-const RESULT = {
-  type: 'result',
-  ok: true,
-  costUsd: null,
-  durationMs: 1,
-  inputTokens: null,
-  outputTokens: null,
-  terminalReason: null
-} satisfies AgentEvent
-
 describe('the notice an event amounts to', () => {
   it('reads the conversation coming to rest as done and a failed turn as an error', () => {
     expect(from({ type: 'finished' })).toEqual(notice({ at: 7 }))
-    expect(from({ ...RESULT, ok: false })?.kind).toBe('error')
+    expect(from({ ...TURN_DONE, ok: false })?.kind).toBe('error')
     expect(from({ type: 'error', message: 'gone' })?.kind).toBe('error')
   })
 
   // The CLI opens a turn of its own to hand over each finished agent's report:
   // a turn ending is not the work being done.
   it('is nothing for a turn that ended well', () => {
-    expect(from(RESULT)).toBeNull()
+    expect(from(TURN_DONE)).toBeNull()
   })
 
   it('names the project from the workspace it happened in', () => {
@@ -122,7 +113,7 @@ describe('the notice an event amounts to', () => {
   })
 
   it('is nothing for a workspace the window does not know', () => {
-    expect(from(RESULT, 'gone/workspace')).toBeNull()
+    expect(from(TURN_DONE, 'gone/workspace')).toBeNull()
   })
 })
 

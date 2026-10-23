@@ -14,7 +14,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import type { Result } from '../../preload/index.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
-import { chat, emitAgentEvent, givenChats } from './test/chat.js'
+import { chat, emitAgentEvent, givenChats, TURN_DONE } from './test/chat.js'
 import { disconnectedAccounts } from './test/octopus.js'
 import type { ResolvedScript } from '@core/repoSource.js'
 import { workspaceView } from './test/workspaces.js'
@@ -1057,6 +1057,31 @@ describe('App', () => {
         expect(window.octopus.workspaces.scripts).toHaveBeenCalledWith('planner/anna')
       })
       expect(within(bar).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+    })
+
+    it('offers the script an agent wrote once its turn has ended', async () => {
+      await onAnna({})
+      const bar = titleBar()
+      await waitFor(() => {
+        expect(window.octopus.workspaces.scripts).toHaveBeenCalledWith('planner/anna')
+      })
+      expect(within(bar).queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+
+      givenScriptsOf({ planner: SERVER_ONLY })
+      emitAgentEvent(TURN_DONE)
+
+      expect(await within(bar).findByRole('button', { name: 'Run' })).toBeEnabled()
+    })
+
+    it('offers the script an agent wrote while another workspace was open', async () => {
+      const user = await onAnna({})
+      await user.click(screen.getByText('bob'))
+      givenScriptsOf({ planner: SERVER_ONLY })
+      emitAgentEvent(TURN_DONE)
+
+      await user.click(screen.getByText('anna'))
+
+      expect(await within(titleBar()).findByRole('button', { name: 'Run' })).toBeEnabled()
     })
 
     // One state behind both buttons: a press in the title bar moves the
@@ -2387,6 +2412,59 @@ describe('App', () => {
     await waitFor(() => {
       expect(window.octopus.chats.create).toHaveBeenCalledWith('planner/anna')
     })
+  })
+
+  it('opens Help’s ask as a new conversation with the text in its composer, unsent', async () => {
+    givenTwoProjects()
+    givenChats([chat({ id: 'chat-1' })])
+    vi.mocked(window.octopus.workspaces.instruction).mockResolvedValue({
+      ok: true,
+      value: 'Write the scripts for this repository.'
+    })
+    vi.mocked(window.octopus.chats.create).mockImplementation(() => {
+      givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+      return Promise.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
+    })
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await user.click(screen.getByRole('menuitem', { name: /Set this project up to run/ }))
+    await waitFor(() => {
+      expect(screen.getByRole('textbox')).toHaveProperty(
+        'value',
+        expect.stringMatching(
+          /^Write the scripts for this repository\.\n\n[\s\S]*Checkout \(\$OCTOPUS_ROOT_PATH\): \/tmp\/planner/
+        )
+      )
+    })
+    expect(
+      within(screen.getByRole('navigation', { name: 'Conversations' })).getByRole('button', {
+        name: /^Claude 2/,
+        current: 'page'
+      })
+    ).toBeInTheDocument()
+    expect(window.octopus.workspaces.instruction).toHaveBeenCalledWith(
+      'planner/anna',
+      'setupScripts'
+    )
+    expect(window.octopus.chats.send).not.toHaveBeenCalled()
+  })
+
+  it('offers Help’s items disabled while the workspace has three conversations', async () => {
+    givenTwoProjects()
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' }), chat({ id: 'chat-3' })])
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+
+    expect(screen.getByRole('menuitem', { name: /Set this project up to run/ })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: /Why does Run not work/ })).toBeDisabled()
   })
 
   // The browser's key for "bring back what I just closed". Closing a tab keeps

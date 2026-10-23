@@ -11,7 +11,7 @@
 ## Localisation
 
 No user-facing string appears inline. Keys live in
-[`i18n/locales/`](../../src/renderer/src/i18n/locales), English first — `uk.ts` and
+[`i18n/locales/`](../../src/renderer/src/i18n/locales/), English first — `uk.ts` and
 `de.ts` are typed against `en.ts`, so a missing key is a compile error, and
 `locales.test.ts` checks every translation asks for the same `{{values}}`.
 

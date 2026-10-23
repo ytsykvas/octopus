@@ -52,6 +52,7 @@ import {
 } from './service.js'
 import type { CliOutput, PluginCli } from './plugins.js'
 import { POOL_START } from './ports.js'
+import type { RecordedRun } from './runLog.js'
 import type { ChatEntry } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
@@ -1539,7 +1540,7 @@ describe('projects', () => {
     const workspace = await service.createWorkspaceIn(project.id)
     await rm(workspace.path, { recursive: true, force: true })
 
-    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    await expect(service.removeProjectById(project.id)).resolves.toEqual([workspace.id])
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -1554,7 +1555,7 @@ describe('projects', () => {
 
     await rm(repo, { recursive: true, force: true })
 
-    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    await expect(service.removeProjectById(project.id)).resolves.toHaveLength(1)
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -1631,7 +1632,7 @@ describe('projects', () => {
   })
 
   it('removing a missing project does not corrupt state', async () => {
-    await expect(service.removeProjectById('missing')).resolves.toBeUndefined()
+    await expect(service.removeProjectById('missing')).resolves.toEqual([])
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -2896,6 +2897,212 @@ describe('sets of variables', () => {
   })
 })
 
+describe('what Help is told about a workspace', () => {
+  async function withWorkspace(): Promise<{
+    projectId: string
+    workspaceId: string
+    repoPath: string
+  }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    // The project's own, which git has canonicalised: `/var` is `/private/var`.
+    return { projectId: project.id, workspaceId: workspace.id, repoPath: project.repoPath }
+  }
+
+  it('names the variables of the set in effect, and never their values', async () => {
+    const { projectId, workspaceId, repoPath } = await withWorkspace()
+    await service.saveEnvProfile(
+      projectId,
+      'default',
+      'API_KEY=sentinel-secret-value\nDB_NAME=app_$OCTOPUS_WORKSPACE_SLUG\n'
+    )
+
+    const context = await service.helpContext(workspaceId, [])
+
+    expect(context).toMatchObject({
+      rootPath: repoPath,
+      envFile: '.env',
+      profile: 'default',
+      variableNames: ['API_KEY', 'DB_NAME'],
+      envProblems: []
+    })
+    expect(JSON.stringify(context)).not.toContain('sentinel-secret-value')
+    expect(JSON.stringify(context)).not.toContain('app_')
+  })
+
+  // A problem whose subject is the whole line — which may be a pasted secret.
+  it('reports a line that is not an assignment by its number alone', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'A=1\nsk-live-pasted-token\nA=2\n')
+
+    const { envProblems } = await service.helpContext(workspaceId, [])
+
+    expect(envProblems).toEqual([
+      { line: 2, reason: 'noAssignment' },
+      { line: 3, reason: 'duplicate', subject: 'A' }
+    ])
+  })
+
+  /*
+   * A line's subject is text from it — what comes before its `=` for a bad
+   * name, all of it for no assignment — so a pasted `KEY: value` and a line of
+   * a key pasted without its quotes both put a secret there.
+   */
+  it('reports a badly named line by its number alone too', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(
+      projectId,
+      'default',
+      [
+        'DATABASE_URL: postgres://app:hunter2@db.internal/app?sslmode=require',
+        'PRIVATE_KEY=-----BEGIN KEY-----',
+        'q3Zx/9Yp+abcDEF==',
+        '-----END KEY-----',
+        'A=1',
+        'A=$OCTOPUS_PROT',
+        ''
+      ].join('\n')
+    )
+
+    const context = await service.helpContext(workspaceId, [])
+
+    expect(JSON.stringify(context)).not.toContain('hunter2')
+    expect(JSON.stringify(context)).not.toContain('q3Zx')
+    expect(context.envProblems).toContainEqual({ line: 6, reason: 'duplicate', subject: 'A' })
+    expect(context.envProblems).toContainEqual({
+      line: 6,
+      reason: 'unknownVariable',
+      subject: 'OCTOPUS_PROT'
+    })
+  })
+
+  it('answers for the set a workspace was put on, and does not fall back to the default', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'DUMP_URL=s3://staging\n')
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+    await rm(projectEnvProfile(projectId, 'prod', join(dir, 'data')))
+
+    await expect(service.helpContext(workspaceId, [])).resolves.toMatchObject({
+      profile: 'prod',
+      variableNames: [],
+      envProblems: []
+    })
+  })
+
+  it('names what a run would carry and the scripts it would run', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveProjectCarryList(projectId, '.env\nconfig/master.key\n')
+    await service.saveProjectScript(projectId, 'run', '#!/bin/sh\nexec true\n')
+
+    const context = await service.helpContext(workspaceId, [])
+
+    expect(context.carry).toEqual(['.env', 'config/master.key'])
+    const { scripts, approved } = await service.workspaceScripts(workspaceId)
+    expect(context.scripts).toEqual(scripts)
+    expect(context.scriptsApproved).toBe(approved)
+    expect(context.scripts.run?.source).toBe('project')
+  })
+
+  it('does not take a line of a key pasted without quotes for a name', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(
+      projectId,
+      'default',
+      'KEY=-----BEGIN KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj\ndGhpc2lzYXNlY3JldA==\n'
+    )
+
+    const context = await service.helpContext(workspaceId, [])
+
+    expect(context.variableNames).toEqual(['KEY'])
+    expect(JSON.stringify(context)).not.toContain('dGhpc2')
+  })
+
+  const server = (raw: string): RecordedRun => ({
+    purpose: 'run',
+    outcome: { kind: 'running' },
+    raw
+  })
+
+  it('masks the values of the set the workspace was put on, $ and all', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.createEnvProfile(projectId, 'prod', null)
+    await service.saveEnvProfile(projectId, 'prod', 'DB_PASSWORD=Pa$$w0rd123\n')
+    await service.setWorkspaceEnvProfile(workspaceId, 'prod')
+
+    const { lastRuns } = await service.helpContext(workspaceId, [
+      server('+ DB_PASSWORD=Pa$$w0rd123')
+    ])
+
+    expect(lastRuns).toEqual([
+      { purpose: 'run', outcome: { kind: 'running' }, output: '+ DB_PASSWORD=[DB_PASSWORD]' }
+    ])
+  })
+
+  // The file keeps what the run was given until the next run rewrites it.
+  it('masks what the last run was given after the set has changed', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'API_KEY=rotated-away-value\n')
+    await service.prepareWorkspace(workspaceId)
+    await service.saveEnvProfile(projectId, 'default', 'API_KEY=the-new-value\n')
+
+    const { lastRuns } = await service.helpContext(workspaceId, [
+      server('sent rotated-away-value, then the-new-value')
+    ])
+
+    expect(lastRuns).toMatchObject([{ output: 'sent [API_KEY], then [API_KEY]' }])
+  })
+
+  it('masks a carried env file the set never had', async () => {
+    const { projectId, workspaceId, repoPath } = await withWorkspace()
+    await writeFile(join(repoPath, '.env.development'), 'SMTP_PASSWORD=carried-secret\n', 'utf8')
+    await service.saveProjectCarryList(projectId, '.env.development\n')
+    await service.prepareWorkspace(workspaceId)
+
+    const { lastRuns } = await service.helpContext(workspaceId, [
+      server('auth failed for carried-secret')
+    ])
+
+    expect(lastRuns).toMatchObject([{ output: 'auth failed for [SMTP_PASSWORD]' }])
+  })
+
+  it('leaves out a build on record once there is no build script to run', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    const build: RecordedRun = {
+      purpose: 'setup',
+      outcome: { kind: 'exited', at: '2026-10-22T09:41:00.000Z', exitCode: 1 },
+      raw: 'old failure'
+    }
+    const runs = [build, server('listening')]
+
+    const before = await service.helpContext(workspaceId, runs)
+    expect(before.lastRuns.map(({ purpose }) => purpose)).toEqual(['run'])
+
+    await service.saveProjectScript(projectId, 'setup', '#!/bin/sh\nnpm install\n')
+    const after = await service.helpContext(workspaceId, runs)
+    expect(after.lastRuns.map(({ purpose }) => purpose)).toEqual(['setup', 'run'])
+  })
+
+  it('masks a refusal’s reason as it masks output', async () => {
+    const { projectId, workspaceId } = await withWorkspace()
+    await service.saveEnvProfile(projectId, 'default', 'DB_PASSWORD=Pa$$w0rd123\n')
+
+    const { lastRuns } = await service.helpContext(workspaceId, [
+      { purpose: 'run', outcome: { kind: 'refused', reason: 'bad Pa$$w0rd123' }, raw: '' }
+    ])
+
+    expect(lastRuns[0]?.outcome).toEqual({ kind: 'refused', reason: 'bad [DB_PASSWORD]' })
+  })
+
+  it('refuses a workspace it does not know', async () => {
+    await expect(service.helpContext('planner/nobody', [])).rejects.toMatchObject({
+      code: 'worktreeMissing'
+    })
+  })
+})
+
 describe('removing a project', () => {
   it("runs each workspace's cleanup and deletes what the project kept here", async () => {
     /*
@@ -2937,7 +3144,7 @@ describe('removing a project', () => {
     await mkdir(join(dir, 'elsewhere'), { recursive: true })
     await symlink(join(dir, 'elsewhere'), join(workspace.path, '.octopus'))
 
-    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    await expect(service.removeProjectById(project.id)).resolves.toEqual([workspace.id])
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -2987,14 +3194,14 @@ describe('removing a project', () => {
     await service.createWorkspaceIn(project.id)
     await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
 
-    await expect(service.removeProjectById(project.id)).resolves.toBeUndefined()
+    await expect(service.removeProjectById(project.id)).resolves.toHaveLength(1)
     expect(service.listProjects()).toHaveLength(0)
   })
 
   it('cleans up after a project whose record has already gone', async () => {
     // A directory nothing points at is exactly the case worth removing, so the
     // delete runs whether or not the project is still in state.
-    await expect(service.removeProjectById('never-existed')).resolves.toBeUndefined()
+    await expect(service.removeProjectById('never-existed')).resolves.toEqual([])
   })
 
   it('does not raise when the stored settings cannot be deleted', async () => {
@@ -3004,7 +3211,7 @@ describe('removing a project', () => {
      * rather than a reason to fail. An id that could never name one is the
      * cheapest way to make it fail on purpose.
      */
-    await expect(service.removeProjectById('../elsewhere')).resolves.toBeUndefined()
+    await expect(service.removeProjectById('../elsewhere')).resolves.toEqual([])
   })
 })
 
@@ -14889,6 +15096,17 @@ describe('reading one workspace', () => {
 
   it('answers nothing for a workspace that is gone', async () => {
     await expect(service.readWorkspace('planner/nobody')).resolves.toBeNull()
+  })
+
+  // Asked by every refusal the Scripts tab reports, so it reads no git at all.
+  it('says whether a workspace is on record, asking git nothing', async () => {
+    const { service: watched, projectId, calls } = await recorded()
+    const workspace = await watched.createWorkspaceIn(projectId)
+    calls.length = 0
+
+    expect(watched.hasWorkspace(workspace.id)).toBe(true)
+    expect(watched.hasWorkspace('planner/nobody')).toBe(false)
+    expect(calls).toEqual([])
   })
 
   /*

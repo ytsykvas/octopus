@@ -37,13 +37,12 @@ run rspec, rubocop and brakeman", could not — the tools are read-only — and
 spent its turn on that, answering with no title in it. The failure looked like
 the agent being broken and was the prompt failing to say which job this was.
 
-**Ask the agent to describe it** sends that instruction — the project's, or the
-global one in Settings where a project has written none — to the workspace's
-conversation, as an ordinary message. Not a call behind the reader's back: §4
-leaves no room for the app prompting the agent invisibly, and the answer has to
-appear in the conversation anyway. With no conversation open the button says so
-rather than starting one, since a conversation created by a button pressed for
-something else is a surprise.
+**Ask the agent to describe it** is that one-shot draft (`draftPullRequest`),
+not a message to the workspace's conversation: the instruction — the
+repository's, the project's, or the global one in Settings — goes to a query of
+its own, and the answer comes back into the form's fields, where it is read,
+changed or thrown away before anything is opened. Nothing is added to a
+conversation, so none is started for it either.
 
 It asks `gh` nothing while another tab is showing. The diff follows the same
 rule, and it matters more here: this leaves the machine, so a hidden tab would be

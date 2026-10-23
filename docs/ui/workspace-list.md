@@ -8,7 +8,40 @@ dragged, and gone with the list when it is folded. It wears the composer's
 colour ring in rules of its own (`.help-button`) — a faint line and glow at
 rest, the line turning and the glow brightening only under the pointer or
 keyboard focus, paused rather than reset when they leave, so nothing moves while
-nobody is near it. It is a stub for now: pressing it does nothing.
+nobody is near it.
+
+**Pressing it opens a menu of two** (`HelpMenu`, a `DropdownMenu` whose trigger
+is the same button, so nothing changes at rest): _Set this project up to run_
+and _Why does Run not work?_. Each opens a **new conversation** in the selected
+workspace with a text already in its composer and **sends nothing**: the
+instruction of that kind (`setupScripts`, `diagnoseRun` — edited in Settings
+like the pull request's, and overridden from `.octopus/instructions/`), then a
+block of what octopus knows that the agent cannot find for itself —
+`workspaces:helpContext`: the checkout, the env file, the set in effect and its
+variables **by name only**, the scripts in effect and where they come from,
+whether the repository's still wait for _Allow these_, the carried paths and the
+set's problems. _Why does Run not work?_ adds the last build and server from
+the same answer, each with how it ended and its last lines — the env set's
+values masked out of them, in a fence longer than any backticks they hold, so a
+fence of their own cannot end it — or, for a start the Scripts tab refused, the reason
+it showed, masked the same way; or it asks for a run where there has been none.
+`helpMessage.ts` assembles it; `useHelp` reads all of it before creating
+anything, so a failed read opens nothing — a rejected one, from a main that has
+gone or lacks the channel, says so too — and a second press while the first is
+reading is ignored rather than opening a second conversation.
+
+A new tab, where the pull request pane refuses to start one, because here the
+person pressed Help and a conversation is what they asked for — and because a
+draft cannot be put into a composer already drawn: it reads its draft once, as
+it mounts. So `useChatTabs.create` takes a `beforeShown` callback, told the new
+id once the record exists and before its tab is drawn — even when the workspace
+changed meanwhile, since the conversation exists and takes a place — and the
+text is filed as that tab's draft then. Put down rather than sent (§4): the reader sees every
+word the agent will get, edits it, and presses Send. The chat starts in
+whatever mode a new conversation starts in. At the cap of three conversations
+both items are shown and disabled, saying a tab has to be closed first
+(`chat.historyFull`). A script the agent writes appears on the Scripts tab once
+its turn ends, and waits for _Allow these_ like any other.
 
 **A branch list that came back full makes the header stop claiming.** The mark
 on every workspace row comes from one read of the repository's hundred most

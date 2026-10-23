@@ -12,13 +12,13 @@ import {
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { MAX_CHAT_TITLE, MAX_CHATS_PER_WORKSPACE } from '@core/chats.js'
+import { MAX_CHAT_TITLE } from '@core/chats.js'
 
 import type { ChatTab, ChatTabsController } from '../../hooks/useChatTabs.js'
 import { chatStatusLabel, chatStatusTone } from '../agentStatus.js'
 import { DropdownMenu } from '../DropdownMenu.js'
 import { NameEditor } from '../NameEditor.js'
-import { chatName } from './chatName.js'
+import { chatCapHint, chatName } from './chatName.js'
 
 interface ChatTabsProps {
   readonly tabs: ChatTabsController
@@ -119,7 +119,7 @@ function HistoryMenu({ tabs }: { readonly tabs: ChatTabsController }): React.JSX
           // the time is only ever missing from a row nobody can pick anyway.
           description: tabs.canCreate
             ? t('chat.historyClosed', { when: when(closedAt) })
-            : t('chat.historyFull', { limit: MAX_CHATS_PER_WORKSPACE }),
+            : chatCapHint(t),
           disabled: !tabs.canCreate,
           onSelect: () => void tabs.reopen(chat.id)
         }))

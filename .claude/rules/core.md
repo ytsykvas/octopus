@@ -36,4 +36,6 @@ for meeting them is the `core-module` skill.
   real git will not produce.
 - **A function with a default parameter is tested with and without it.**
 - **Verify a guard by reverting it.** 100% coverage says the line ran, not that
-  anything would notice if it went: put the bug back and the suite must go red.
+  anything would notice if it went: put the bug back and the suite must go red
+  — and check with `git diff` that it went back, since a scripted revert that
+  matches nothing leaves a hollow test looking verified.

@@ -34,6 +34,7 @@ import type {
   WorkspaceStatusEvent
 } from '../core/service.js'
 import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
+import { TAIL_CHARS, type RecordedRun } from '../core/runLog.js'
 import type { Workspace } from '../core/store.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
@@ -156,13 +157,19 @@ interface TerminalSpies {
   readonly write: Mock<(id: string, data: string) => void>
   readonly resize: Mock<(id: string, cols: number, rows: number) => void>
   readonly dispose: Mock<(id: string) => void>
+  readonly lastRuns: Mock<(workspaceId: string) => RecordedRun[]>
+  readonly forgetRuns: Mock<(workspaceId: string) => void>
+  readonly refuse: Mock<(workspaceId: string, purpose: string, reason: string) => void>
 }
 
 function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } {
   const sessions: TerminalSpies = {
     write: vi.fn(),
     resize: vi.fn(),
-    dispose: vi.fn()
+    dispose: vi.fn(),
+    lastRuns: vi.fn((): RecordedRun[] => []),
+    forgetRuns: vi.fn(),
+    refuse: vi.fn()
   }
 
   // Enough of a manager to answer `list`, so a test about the channel can read
@@ -393,6 +400,7 @@ describe('channel table', () => {
     'instructions:read',
     'instructions:save',
     'instructions:effective',
+    'workspaces:helpContext',
     'skills:list',
     'skills:read',
     'skills:save',
@@ -486,6 +494,7 @@ describe('channel table', () => {
     'terminal:resize',
     'terminal:dispose',
     'terminal:list',
+    'terminal:refused',
     'accounts:status',
     'accounts:github',
     'accounts:signOut',
@@ -735,6 +744,36 @@ describe('validation at the boundary', () => {
     await expect(invoke('instructions:effective', workspace.id, 'pullRequest')).resolves.toEqual({
       ok: true,
       value: 'Project rules.'
+    })
+  })
+
+  it('hands Help a workspace’s facts and last runs, names and no values', async () => {
+    const projectId = await addProject('masked')
+    const workspace = await createWorkspace(projectId)
+    await invoke('env:save', projectId, 'default', 'DATABASE_URL=postgres://u:hunter2@db/app\n')
+    sessions.lastRuns.mockReturnValueOnce([
+      {
+        purpose: 'run',
+        outcome: { kind: 'running' },
+        raw: 'cannot reach postgres://u:hunter2@db/app'
+      }
+    ])
+
+    const answer = await invoke('workspaces:helpContext', workspace.id)
+
+    expect(answer).toMatchObject({
+      ok: true,
+      value: {
+        variableNames: ['DATABASE_URL'],
+        lastRuns: [
+          { purpose: 'run', outcome: { kind: 'running' }, output: 'cannot reach [DATABASE_URL]' }
+        ]
+      }
+    })
+    expect(JSON.stringify(answer)).not.toContain('hunter2')
+    expect(sessions.lastRuns).toHaveBeenCalledWith(workspace.id)
+    await expect(invoke('workspaces:helpContext', 'masked/nobody')).resolves.toMatchObject({
+      ok: false
     })
   })
 
@@ -1578,7 +1617,7 @@ describe('scripts and instructions of a real project', () => {
     }
 
     expect(answer.ok).toBe(true)
-    expect(answer.value).toHaveLength(13)
+    expect(answer.value).toHaveLength(15)
     // The workspace is parsed rather than trusted.
     await expect(invoke('sources:read', projectId, 7)).resolves.toMatchObject({ ok: false })
   })
@@ -1689,11 +1728,69 @@ describe('workspaces of a real project', () => {
     })
   })
 
+  it('keeps a Run the Scripts tab refused, its purpose and reason parsed', async () => {
+    const workspace = await createWorkspace(await addProject())
+
+    await expect(invoke('terminal:refused', workspace.id, 'run', 'Port taken.')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    expect(sessions.refuse).toHaveBeenCalledExactlyOnceWith(workspace.id, 'run', 'Port taken.')
+  })
+
+  // Dropped, the run before would answer as this one; Help masks before it cuts shorter.
+  it('cuts a long reason rather than dropping it', async () => {
+    const workspace = await createWorkspace(await addProject())
+
+    await invoke('terminal:refused', workspace.id, 'setup', 'x'.repeat(TAIL_CHARS + 10))
+
+    expect(sessions.refuse).toHaveBeenCalledExactlyOnceWith(
+      workspace.id,
+      'setup',
+      'x'.repeat(TAIL_CHARS)
+    )
+  })
+
+  it('keeps nothing for a script Help never asks about, or a workspace not on record', async () => {
+    const workspace = await createWorkspace(await addProject())
+
+    for (const purpose of ['archive', 'mining']) {
+      await expect(invoke('terminal:refused', workspace.id, purpose, 'x')).resolves.toMatchObject({
+        ok: false
+      })
+    }
+    await expect(invoke('terminal:refused', 'nobody/here', 'run', 'x')).resolves.toMatchObject({
+      ok: true
+    })
+    expect(sessions.refuse).not.toHaveBeenCalled()
+  })
+
+  it('forgets the last runs of every workspace of a project it removes', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    sessions.forgetRuns.mockClear()
+
+    await expect(invoke('projects:remove', projectId)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
+  })
+
+  it('starts a new workspace with no last runs', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(sessions.forgetRuns).toHaveBeenCalledWith(workspace.id)
+  })
+
   // The renderer asks before it removes, so the refusal and the forced removal
   // are both part of one flow and have to work in that order.
   it('refuses to remove uncommitted work until it is forced', async () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
+    // Creating it forgets its runs too; what is asked here is removal.
+    sessions.forgetRuns.mockClear()
 
     await expect(invoke('workspaces:hasChanges', workspace.id)).resolves.toEqual({
       ok: true,
@@ -1710,10 +1807,12 @@ describe('workspaces of a real project', () => {
       ok: false,
       code: 'uncommittedChanges'
     })
+    expect(sessions.forgetRuns).not.toHaveBeenCalled()
 
     expect(await invoke('workspaces:remove', workspace.id, { force: true })).toMatchObject({
       ok: true
     })
+    expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
     await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
   })
 

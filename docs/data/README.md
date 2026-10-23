@@ -9,7 +9,7 @@ else joins a home directory by hand.
   config.json                        settings
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
-  instructions/*.md                  seven prompts every project falls back to
+  instructions/*.md                  the prompts every project falls back to
   skills/                            an extra working-directory root: what every project gets, made at the first message
     .claude/skills/<folder>/SKILL.md one skill, in Claude Code's own format
     .claude/commands/<name>.md       one command, typed as /<name>; the file is the whole prompt

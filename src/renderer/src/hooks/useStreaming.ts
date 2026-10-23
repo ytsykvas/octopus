@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLatest } from './useLatest.js'
 
 /** Prose and reasoning still being written, kept apart so they render apart. */
 export interface Streaming {
@@ -121,10 +122,7 @@ export function useStreaming(key: string | null, drawn = true): StreamingBuffer 
   // Read through a ref, so `append` keeps its identity across the pane being
   // hidden and shown: the pane's event subscription is built on it, and torn
   // down and up on a change it dropped a rewind's re-read and a queued mark.
-  const shown = useRef(drawn)
-  useEffect(() => {
-    shown.current = drawn
-  }, [drawn])
+  const shown = useLatest(drawn)
 
   const schedule = useCallback(() => {
     if (timer.current !== null) return
@@ -146,7 +144,7 @@ export function useStreaming(key: string | null, drawn = true): StreamingBuffer 
       pending.current[kind] += chunk
       if (shown.current) schedule()
     },
-    [schedule]
+    [schedule, shown]
   )
 
   // What gathered while the pane was hidden is drawn as it comes forward.

@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { availableParallelism } from 'node:os'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { z } from 'zod'
 
@@ -105,7 +105,15 @@ import { type CliPermission, readCliPermissions } from './cliPermissions.js'
 import { allowedStanding, type StandingPermission, withStanding } from './standingPermissions.js'
 import type { CarryReport, PreparedWorkspace } from './carry.js'
 import { applyEnvOverrides, discardIfOnlyBlock, removeEnvBlock, readWorkspaceEnv } from './env.js'
-import { parseEnvBody, substituteEnv } from './envBlock.js'
+import {
+  checkEnvBody,
+  envSecrets,
+  type EnvProblem,
+  type EnvSecret,
+  parseEnvBody,
+  substituteEnv
+} from './envBlock.js'
+import { helpRun, type LastRun, type RecordedRun } from './runLog.js'
 import { DEFAULT_PROFILE } from './envProfileNames.js'
 import {
   createProfile,
@@ -795,6 +803,59 @@ function standingFrom(request: PendingPermission): StandingPermission {
   return { toolName: request.toolName, ruleContent: null }
 }
 
+/** The reasons whose subject is a name: a key that passed the check, or a `$OCTOPUS_…` reference. */
+const NAMED_REASONS = [
+  'duplicate',
+  'unknownVariable'
+] as const satisfies readonly EnvProblem['reason'][]
+
+type NamedReason = (typeof NAMED_REASONS)[number]
+
+function isNamed(reason: EnvProblem['reason']): reason is NamedReason {
+  return NAMED_REASONS.some((named) => named === reason)
+}
+
+/**
+ * A problem in the env set as Help may tell it: the subject only where it is a
+ * name. Every other subject is text from the line itself — the whole of it, or
+ * everything before its `=` — which for a pasted `KEY: value` or a line of a
+ * key pasted without quotes is the secret. Those go by line number alone, with
+ * no subject to print by mistake.
+ */
+export type HelpEnvProblem =
+  | { readonly line: number; readonly reason: NamedReason; readonly subject: string }
+  | { readonly line: number; readonly reason: Exclude<EnvProblem['reason'], NamedReason> }
+
+function withoutLineText({ line, reason, subject }: EnvProblem): HelpEnvProblem {
+  return isNamed(reason) ? { line, reason, subject } : { line, reason }
+}
+
+/**
+ * What octopus knows about a workspace that its agent cannot find for itself —
+ * the facts Help writes under its two instructions.
+ *
+ * Built from what a run already reads, so Help and Run cannot disagree. **No
+ * value of a variable is in here**: names only, and a problem in the env set
+ * names its subject only where that is a name (`HelpEnvProblem`).
+ */
+export interface HelpContext {
+  /** The checkout, as `$OCTOPUS_ROOT_PATH` gives it to a script. */
+  readonly rootPath: string
+  /** The file in the worktree the env block is written into. */
+  readonly envFile: string
+  /** The env set in effect. */
+  readonly profile: string
+  readonly variableNames: readonly string[]
+  readonly envProblems: readonly HelpEnvProblem[]
+  /** The paths carried into the workspace before a run, the repository's included. */
+  readonly carry: readonly string[]
+  readonly scripts: ScriptsInWorkspace['scripts']
+  /** Whether the scripts above may run here, or wait for _Allow these_. */
+  readonly scriptsApproved: boolean
+  /** The last build and server, build first, as `helpRun` makes them fit to quote. */
+  readonly lastRuns: readonly LastRun[]
+}
+
 export interface OctopusService {
   getConfig(): Config
   updateConfig(
@@ -810,7 +871,11 @@ export interface OctopusService {
   updateProjectById(projectId: string, patch: ProjectPatch): Promise<void>
   /** Changes one list of a project, applied to it as the write finds it (`ProjectEdit`). */
   editProjectById(projectId: string, edit: ProjectEdit): Promise<void>
-  removeProjectById(projectId: string): Promise<void>
+  /**
+   * Removes a project and every workspace of it, answering with those
+   * workspaces' ids — what `main` drops their last runs by.
+   */
+  removeProjectById(projectId: string): Promise<string[]>
   /** Saves the order the tab strip shows the projects in. */
   reorderProjects(orderedIds: readonly string[]): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
@@ -840,6 +905,11 @@ export interface OctopusService {
    * one they learn to click through.
    */
   workspaceScripts(workspaceId: string): Promise<ScriptsInWorkspace>
+  /**
+   * The facts Help adds under its instructions, with the runs `main` kept for
+   * this workspace (`TerminalManager.lastRuns`) made fit to quote.
+   */
+  helpContext(workspaceId: string, runs: readonly RecordedRun[]): Promise<HelpContext>
   /**
    * Records that these scripts were read, so they may run.
    *
@@ -1201,6 +1271,8 @@ export interface OctopusService {
    * after every turn of every agent.
    */
   readWorkspace(workspaceId: string): Promise<WorkspaceView | null>
+  /** Whether a workspace is on record — nothing read from disk, so cheap to ask. */
+  hasWorkspace(workspaceId: string): boolean
   createWorkspaceIn(projectId: string): Promise<Workspace>
   renameWorkspaceById(workspaceId: string, name: string): Promise<void>
   removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<void>
@@ -4048,6 +4120,40 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * Every secret a run in this workspace could have printed, for masking out
+   * of its output.
+   *
+   * The set as it stands, and the env files the worktree holds: the one the
+   * block is written into keeps the values the last run was given, whatever the
+   * set says since, and a carried `.env` holds credentials the set never had.
+   * Another carried file, a `master.key`, is not dotenv and is not read.
+   */
+  async function secretsIn(
+    workspace: Workspace,
+    set: string,
+    envFile: string,
+    carry: readonly string[]
+  ): Promise<EnvSecret[]> {
+    const files = [
+      envFile,
+      ...carry.filter((path) => path !== envFile && basename(path).startsWith('.env'))
+    ]
+    const written = await Promise.all(files.map((file) => readWorkspaceEnv(workspace.path, file)))
+
+    return [set, ...written].flatMap((text) => (text === null ? [] : envSecrets(text)))
+  }
+
+  /** Which script would run for each kind in this workspace, and whether it may. */
+  async function scriptsIn(project: Project, workspace: Workspace): Promise<ScriptsInWorkspace> {
+    const scripts = await resolveScripts(workspace.path, project.id, dataRoot, project.preferLocal)
+    const digest = scriptsDigest(scripts)
+
+    // Nothing supplied by the repository is nothing to approve, which is
+    // every project configured the way they all used to be.
+    return { approved: allowedToRun(project, digest), digest, scripts }
+  }
+
+  /**
    * Whether the scripts a repository supplies may run.
    *
    * Three ways to yes, and they are different statements. Nothing supplied is
@@ -5166,18 +5272,32 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async workspaceScripts(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-      const scripts = await resolveScripts(
-        workspace.path,
-        project.id,
-        dataRoot,
-        project.preferLocal
-      )
-      const digest = scriptsDigest(scripts)
+      return scriptsIn(requireProject(workspace.projectId), workspace)
+    },
 
-      // Nothing supplied by the repository is nothing to approve, which is
-      // every project configured the way they all used to be.
-      return { approved: allowedToRun(project, digest), digest, scripts }
+    async helpContext(workspaceId, runs) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      const { values, stored, variables } = await scriptSetFor(project, workspace)
+      const envFile = await envFileFor(project, workspace)
+      const carry = (await carriedIn(project, workspace.path)).map((file) => file.path)
+      const secrets = await secretsIn(workspace, substituteEnv(stored, values), envFile, carry)
+      const { scripts, approved } = await scriptsIn(project, workspace)
+      // Without a build script a Run starts the server alone, so a build on
+      // record is from before the script went and would read as this Run's.
+      const current = runs.filter((run) => run.purpose !== 'setup' || scripts.setup !== undefined)
+
+      return {
+        rootPath: values.rootPath,
+        envFile,
+        profile: values.profile,
+        variableNames: Object.keys(variables),
+        envProblems: checkEnvBody(stored).map(withoutLineText),
+        carry,
+        scripts,
+        scriptsApproved: approved,
+        lastRuns: current.map((run) => helpRun(run, secrets))
+      }
     },
 
     async projectScripts(projectId, workspaceId) {
@@ -5598,6 +5718,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async removeProjectById(projectId) {
       const project = findProject(state, projectId)
       const closing: Chat[] = []
+      // Read now: the commit below drops them all, whether or not the project's own record is there.
+      const removed = workspacesOfProject(state, projectId).map((workspace) => workspace.id)
 
       // The records go either way, so the directories and branches have to go
       // with them: left behind they are invisible to the app but still occupy
@@ -5655,6 +5777,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * survives is exactly the case worth cleaning.
        */
       await removeProjectData(projectId, dataRoot).catch(() => undefined)
+      return removed
     },
 
     async listWorkspaces(projectId) {
@@ -5673,6 +5796,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const counts = await countChanges(stored, await baseRefOf(project), makeExec, withIndexCopy)
 
       return reconcile(stored, worktrees, counts, state.chats.filter(isOpenChat), turnStarts)
+    },
+
+    hasWorkspace(workspaceId) {
+      return state.workspaces.some((workspace) => workspace.id === workspaceId)
     },
 
     async readWorkspace(workspaceId) {

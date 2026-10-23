@@ -1,4 +1,4 @@
-import { GitBranch, LifeBuoy, LoaderCircle, Plus } from 'lucide-react'
+import { GitBranch, LifeBuoy, LoaderCircle, Plus, Stethoscope, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -8,6 +8,9 @@ import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { AddTile } from './AddTile.js'
+import { chatCapHint } from './chat/chatName.js'
+import { DropdownMenu } from './DropdownMenu.js'
+import type { HelpKind } from './helpMessage.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
 
@@ -45,6 +48,10 @@ interface SidebarProps {
   /** Workspace whose name is being edited — set right after creation. */
   readonly editingWorkspaceId: string | null
   readonly onEditingWorkspaceChange: (workspaceId: string | null) => void
+  /** Opens a conversation in the selected workspace with Help's text in its composer. */
+  readonly onHelp: (kind: HelpKind) => void
+  /** Whether another conversation fits; Help opens one, so it waits for room. */
+  readonly canStartChat: boolean
 }
 
 /**
@@ -69,7 +76,9 @@ export function Sidebar({
   onRenameWorkspace,
   onRemoveWorkspace,
   editingWorkspaceId,
-  onEditingWorkspaceChange
+  onEditingWorkspaceChange,
+  onHelp,
+  canStartChat
 }: SidebarProps): React.JSX.Element {
   const { t } = useTranslation()
   // The pane follows the cursor from local state; the config only hears about
@@ -154,7 +163,7 @@ export function Sidebar({
         </p>
       )}
 
-      {inWorkspace && <HelpButton />}
+      {inWorkspace && <HelpMenu onHelp={onHelp} canStartChat={canStartChat} />}
     </aside>
   )
 }
@@ -256,31 +265,63 @@ function FirstWorkspaceButton({
   )
 }
 
+/** What Help can be asked, each item opening a conversation of its own. */
+const HELP_ITEMS = [
+  { kind: 'setupScripts', label: 'help.setup', hint: 'help.setupHint', Icon: Wrench },
+  { kind: 'diagnoseRun', label: 'help.diagnose', hint: 'help.diagnoseHint', Icon: Stethoscope }
+] as const
+
 /**
  * The way to help, at the foot of the list and just above the limits — and only
  * while a workspace is open.
  *
  * Borrows the composer's colour ring on purpose — the one other control meant
  * to be found at a glance: a faint ring at rest that turns only under the
- * pointer or keyboard focus, so idle it costs nothing. A stub until help exists.
+ * pointer or keyboard focus, so idle it costs nothing.
+ *
+ * At the cap on conversations every item is disabled, saying why.
  */
-function HelpButton(): React.JSX.Element {
+function HelpMenu({
+  onHelp,
+  canStartChat
+}: {
+  readonly onHelp: (kind: HelpKind) => void
+  readonly canStartChat: boolean
+}): React.JSX.Element {
   const { t } = useTranslation()
+  const full = chatCapHint(t)
 
   return (
     <div className="shrink-0 px-2 pt-1 pb-3">
-      <button
-        type="button"
-        className="help-button group focus-ring text-ink-soft hover:text-ink relative flex h-8 w-full items-center gap-2.5 rounded-[var(--radius-control)] border border-transparent px-3 font-medium transition-colors"
-      >
-        <span aria-hidden className="help-button-line" />
-        <LifeBuoy
-          aria-hidden
-          size={15}
-          className="shrink-0 transition-transform duration-500 group-hover:rotate-90 motion-reduce:transition-none motion-reduce:group-hover:rotate-0"
-        />
-        <span className="min-w-0 flex-1 truncate">{t('sidebar.help')}</span>
-      </button>
+      <DropdownMenu
+        align="left"
+        trigger={({ onClick, open }) => (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={onClick}
+            className="help-button group focus-ring text-ink-soft hover:text-ink relative flex h-8 w-full items-center gap-2.5 rounded-[var(--radius-control)] border border-transparent px-3 font-medium transition-colors"
+          >
+            <span aria-hidden className="help-button-line" />
+            <LifeBuoy
+              aria-hidden
+              size={15}
+              className="shrink-0 transition-transform duration-500 group-hover:rotate-90 motion-reduce:transition-none motion-reduce:group-hover:rotate-0"
+            />
+            <span className="min-w-0 flex-1 truncate">{t('sidebar.help')}</span>
+          </button>
+        )}
+        actions={HELP_ITEMS.map(({ kind, label, hint, Icon }) => ({
+          id: kind,
+          label: t(label),
+          description: canStartChat ? t(hint) : full,
+          icon: <Icon aria-hidden size={15} />,
+          disabled: !canStartChat,
+          onSelect: () => {
+            onHelp(kind)
+          }
+        }))}
+      />
     </div>
   )
 }
