@@ -11,8 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
  * like any other guard. It runs against a throwaway project root whose
  * `node_modules` links to this checkout's, so the real prettier answers.
  */
-const HOOK = resolve(import.meta.dirname, '../../.claude/hooks/format.sh')
-const MODULES = resolve(import.meta.dirname, '../../node_modules')
+const HOOK = resolve(import.meta.dirname, '../.claude/hooks/format.sh')
+const MODULES = resolve(import.meta.dirname, '../node_modules')
 const MESSY = 'const  x = {a:1}\n'
 const TIDY = 'const x = { a: 1 }\n'
 

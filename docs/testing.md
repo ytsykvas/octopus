@@ -22,6 +22,10 @@ There are two configs, sharing `vitest.shared.ts`:
 | `vitest.config.ts`          | node        | `src/core`, `src/main`, `src/preload` |
 | `vitest.renderer.config.ts` | jsdom       | `src/renderer`                        |
 
+The node run also takes the tests under `scripts/`, which hold the repository's
+own tooling — the format-on-edit hook in `.claude/hooks/` among it. They run
+with the gate but sit outside the coverage count, which is about `src`.
+
 ```bash
 npx vitest run                                          # core, main, preload
 npx vitest run --config vitest.renderer.config.ts       # the interface
