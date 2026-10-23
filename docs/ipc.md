@@ -110,7 +110,7 @@ does, including that a skill is back on.
 ### Plugins
 
 Claude Code's plugins, through Claude Code's own CLI (see "Plugins go through
-Claude Code's CLI" in `core.md`). Every argument here becomes an argument to a
+Claude Code's CLI" in `core/skills-and-plugins.md`). Every argument here becomes an argument to a
 process: `PluginIdSchema` holds an id to `name@marketplace` with both halves
 starting with a letter or digit, which also keeps a leading `-` from being read
 as a flag. `PluginTargetSchema` takes the scope and its project as one value —

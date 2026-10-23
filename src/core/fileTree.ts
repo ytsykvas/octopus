@@ -6,7 +6,7 @@ import type { GitExec } from './git.js'
  *
  * Pure apart from the one reader at the bottom, which takes its executor as a
  * parameter — so this module pulls in nothing Node-only and the window may
- * import its values (the first table in docs/core.md). The tree is built here
+ * import its values (the first table in docs/core/modules.md). The tree is built here
  * rather than in the window because the parsing is where git's output turns
  * out to be stranger than expected, and that is worth testing on strings.
  */

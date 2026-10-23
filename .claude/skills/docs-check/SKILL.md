@@ -43,7 +43,7 @@ Then compare against the claims each document makes:
 | Document          | Goes stale when                                                               |
 | ----------------- | ----------------------------------------------------------------------------- |
 | `architecture.md` | a layer gains or loses a responsibility; a boundary rule changes              |
-| `core.md`         | a core module is added, removed or renamed; an invariant changes              |
+| `core/`           | a core module is added, removed or renamed; an invariant changes              |
 | `ipc.md`          | **any** channel is added, removed or renamed, or its validation changes       |
 | `data.md`         | a stored field appears; a migration is added; a path under `~/.octopus` moves |
 | `ui.md`           | the window layout changes; a token or shared component is added               |
@@ -55,7 +55,7 @@ These are the claims that quietly become wrong:
 
 ```bash
 grep -c "host.handle(" src/main/ipc.ts              # ipc.md gives a channel count
-ls src/core/*.ts | grep -v test                     # core.md lists the modules
+ls src/core/*.ts | grep -v test                     # core/modules.md lists the modules
 grep -n "thresholds" -A 5 vitest.shared.ts          # testing.md quotes the threshold
 ```
 

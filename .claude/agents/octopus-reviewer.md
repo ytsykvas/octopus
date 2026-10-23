@@ -15,7 +15,7 @@ sessions in parallel. The rules are `CLAUDE.md` and the three files under
 1. **The architectural split.** `src/core/` imports no `electron`; `src/main/`
    stays a thin bridge; the renderer touches no git, file or process directly;
    SDK messages reach the renderer only as `AgentEvent`. The renderer imports a
-   _value_ only from a core module in the first table of `docs/core.md`.
+   _value_ only from a core module in the first table of `docs/core/modules.md`.
 2. **Safety.** `execFile` with an argument array, never `exec`; nothing
    interpolated into a shell line or AppleScript source; every IPC argument
    parsed with zod before it reaches a process argument, a path or a script;

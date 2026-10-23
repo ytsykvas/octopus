@@ -656,7 +656,7 @@ measured on SDK 0.3.307 (CLI 2.1.307) on a `cd` into a worktree, back out of
 it and away from the repository, and **not** on `EnterWorktree` or
 `ExitWorktree`, which stay drawn from the call. The callback runs only
 beside a command hook for the same event in the session's settings, which the
-session carries for that reason alone (`CWD_WATCH_SETTINGS`, `docs/core.md`).
+session carries for that reason alone (`CWD_WATCH_SETTINGS`, `docs/core/agent-sdk.md`).
 The hook becomes a
 `cwd_changed` event, kept in the transcript, drawn in the same warning register
 as the worktree line: the path from the workspace's root when inside it, whole

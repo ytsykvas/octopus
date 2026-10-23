@@ -527,7 +527,7 @@ export class SideQuestionUnsupportedError extends Error {
 }
 
 /**
- * Asks a `/btw` of a live conversation; see docs/core.md for what the CLI does.
+ * Asks a `/btw` of a live conversation; see docs/core/conversations.md for what the CLI does.
  *
  * Null when the CLI had no answer. A refused or aborted request is rethrown.
  */

@@ -3454,7 +3454,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * Commits a change to a chat and answers with what was in force just before
    * it, for `pushModel` and `pushEffort` to compare with — read inside the
-   * commit, where the change is decided (`docs/core.md` says what reading it
+   * commit, where the change is decided (`docs/core/conversations.md` says what reading it
    * before did).
    */
   async function changeInForce(
@@ -5796,7 +5796,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * refuses on the ordinary path rather than a rare one. Asked afterwards,
        * the answer arrived with the conversations already deleted and the
        * cleanup script already run, against a workspace that then went on
-       * living — which is the opposite of what docs/core.md promises about an
+       * living — which is the opposite of what docs/core/workspaces-and-git.md promises about an
        * operation that fails.
        */
       await ensureRemovable(workspace, execs, removal)

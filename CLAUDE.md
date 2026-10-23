@@ -36,7 +36,7 @@ docs/          why things are shaped as they are — start at docs/README.md
 2. **`src/core/` knows nothing about the UI.** An ESLint rule refuses an
    `electron` import there. The renderer may import _types_ from any core
    module, but a _value_ only from one that pulls in nothing Node-only — the
-   list is the first table in [docs/core.md](docs/core.md). When the window
+   list is the first table in [docs/core/modules.md](docs/core/modules.md). When the window
    needs a constant from an unsafe module, move the constant; never import it out.
 3. **Trust nothing that crosses a boundary.** Data from IPC, disk, git or the
    SDK is parsed with zod before use, and types come from `z.infer`. External

@@ -182,7 +182,7 @@ export function globalInstruction(file: string, root: string = rootDir()): strin
  *
  * A local plugin was the obvious answer and is the wrong one, measured against
  * a live session: a plugin's skills load, and `skillOverrides` does not touch
- * them under any spelling of the key. See `docs/core.md`.
+ * them under any spelling of the key. See `docs/core/modules.md`, the `skills.ts` row.
  */
 export function globalSkillsRoot(root: string = rootDir()): string {
   return join(root, 'skills')
