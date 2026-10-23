@@ -19,6 +19,7 @@ import { shortBranchName } from './branches.js'
 import { GitHubError } from './github.js'
 import { countAhead, currentBranch, type GitExec, reasonFrom } from './git.js'
 import {
+  type BranchListPayload,
   type BranchOwner,
   type BranchRequest,
   BranchListSchema,
@@ -37,7 +38,8 @@ import {
   toPullRequestState,
   toRerunPayload
 } from './pullRequestShapes.js'
-import { amendAll, commitAll, hasUncommittedChanges } from './worktree.js'
+import { amendAll, commitAll, hasUncommittedChanges, isBranchMerged } from './worktree.js'
+import { freshBase, WorkspaceError } from './workspaces.js'
 import { allOf } from './parallel.js'
 
 const run = promisify(execFile)
@@ -99,6 +101,34 @@ export interface PullRequestView {
    * message as an empty string for as long as the message existed.
    */
   readonly base: string
+  /**
+   * The request the branch has moved past, or null where it has not.
+   *
+   * `request` is null then, and the pane offers the form again — this is what
+   * lets it say why a branch that had a request reads as having none.
+   */
+  readonly previous: PreviousRequest | null
+}
+
+/** A merged or closed request the branch has since been committed to past. */
+export interface PreviousRequest {
+  readonly number: number
+  readonly state: 'merged' | 'closed'
+  readonly url: string
+  /**
+   * Whether the base has to come into the branch before a new request's diff
+   * shows only the new work.
+   *
+   * True after a squash or a rebase merge, which lands the content and not the
+   * commits: the branch still carries every commit the request did. Asked as
+   * "is the base already in the branch" as well as "are the request's commits
+   * on the base", because the second alone never changes after a squash — the
+   * offer outlived the update that answered it — and the base here is a
+   * tracking ref nothing fetches after a merge on GitHub, so an ordinary merge
+   * read as a squash. Always false for a closed request, none of whose commits
+   * reached the base to come back.
+   */
+  readonly needsBase: boolean
 }
 
 /**
@@ -112,8 +142,31 @@ const RemotePullRequestSchema = z.object({
   state: RemoteStateSchema,
   title: z.string(),
   url: z.string(),
-  createdAt: z.iso.datetime()
+  createdAt: z.iso.datetime(),
+  headRefOid: z.string().min(1)
 })
+
+/**
+ * Whether the branch has moved on from a request that is no longer open.
+ *
+ * GitHub keeps a branch's newest request as its newest until another is
+ * opened, so a branch merged and then committed to went on reading as merged:
+ * the pane offered only removing the workspace, and no way to open a request
+ * for the work after the merge. A request that is no longer open is the
+ * branch's current one only while the branch still ends where it did.
+ *
+ * Counted from the request's last commit, which `countAhead` answers zero for
+ * whenever git cannot — a commit pushed from a checkout this clone never
+ * fetched among them. That cannot show the branch moved on, so the request
+ * stays rather than vanishing on a guess.
+ */
+export async function movedPast(
+  request: { readonly state: z.infer<typeof RemoteStateSchema>; readonly headRefOid: string },
+  branch: string,
+  git: GitExec
+): Promise<boolean> {
+  return request.state !== 'OPEN' && (await countAhead(git, request.headRefOid, branch)) > 0
+}
 
 /**
  * The pull request for a branch, or the absence of one.
@@ -152,9 +205,12 @@ export async function readPullRequest(
 
   // The newest, when a branch has been opened and closed and opened again:
   // `gh` lists most recent first, and the current one is what the pane is about.
-  // One too old to be the workspace's means everything older is too.
+  // One too old to be the workspace's means everything older is too, and one
+  // the branch has moved past leaves it with none until another is opened.
   const newest = remote[0]
-  const current = newest !== undefined && openedFor(newest, owner) ? newest : undefined
+  const own = newest !== undefined && openedFor(newest, owner) ? newest : undefined
+  const passed = own !== undefined && (await movedPast(own, branch, git)) ? own : undefined
+  const current = passed === undefined ? own : undefined
 
   return {
     request:
@@ -170,7 +226,28 @@ export async function readPullRequest(
     dirty,
     ahead,
     unpushedCommits,
-    base
+    base,
+    previous: passed === undefined ? null : await previousOf(passed, branch, base, git)
+  }
+}
+
+/** A request the branch moved past, as the pane names it. */
+async function previousOf(
+  request: z.infer<typeof RemotePullRequestSchema>,
+  branch: string,
+  base: string,
+  git: GitExec
+): Promise<PreviousRequest> {
+  const merged = request.state === 'MERGED'
+
+  return {
+    number: request.number,
+    state: merged ? 'merged' : 'closed',
+    url: request.url,
+    needsBase:
+      merged &&
+      !(await isBranchMerged(git, request.headRefOid, base)) &&
+      !(await isBranchMerged(git, base, branch))
   }
 }
 
@@ -190,7 +267,7 @@ async function listPullRequests(
       '--limit',
       '1',
       '--json',
-      'number,state,title,url,createdAt'
+      'number,state,title,url,createdAt,headRefOid'
     ])
   } catch {
     throw new GitHubError('notConnected', {}, 'Could not ask GitHub about this branch.')
@@ -363,6 +440,83 @@ export async function createPullRequest(
   // `gh` prints the URL and nothing else worth keeping. Trimmed rather than
   // parsed: there is no `--json` on `pr create`.
   return raw.trim()
+}
+
+/**
+ * Brings the base into the branch, so a request opened next has a diff of only
+ * the new work.
+ *
+ * What a squash or a rebase merge leaves for: the branch still carries the
+ * commits the base took as one, and without this a second request's diff would
+ * show them all again. Their commits stay in its list either way — they are
+ * still not the base's — but the changes are. A merge rather than a rebase,
+ * because the branch is already on the remote and a rebase would have to be
+ * forced over it.
+ *
+ * Refused while there is uncommitted work, before the remote is asked
+ * anything: git would refuse a merge touching it anyway, after the fetch. The
+ * base is fetched first because its tracking ref is stale exactly when somebody
+ * merged on GitHub — which, after a squash, is when this is pressed.
+ *
+ * A merge that fails is undone rather than left in the worktree. Left, it is a
+ * half-finished merge in a directory an agent is about to work in, with nothing
+ * in the pane saying so — and where it cannot be undone, the reader is told that
+ * instead of being told the branch is as it was.
+ */
+export async function updateFromBase(
+  branch: string,
+  base: string,
+  git: GitExec,
+  fetchGit: GitExec
+): Promise<void> {
+  await requireHeadOn(branch, git)
+
+  if (await hasUncommittedChanges(git)) {
+    throw new WorkspaceError(
+      'uncommittedChanges',
+      { name: branch },
+      `${branch} has uncommitted changes.`
+    )
+  }
+
+  const ref = await freshBase(base, git, fetchGit)
+
+  try {
+    await git(['merge', '--no-edit', ref])
+  } catch (error) {
+    const params = { base: ref, branch, reason: reasonFrom(error) }
+    if (await abortMerge(git)) {
+      throw new GitHubError('updateFailed', params, `Could not merge ${ref} into ${branch}.`)
+    }
+    throw new GitHubError(
+      'updateLeftMerging',
+      params,
+      `Could not merge ${ref} into ${branch}, nor undo the merge.`
+    )
+  }
+}
+
+/**
+ * Undoes a merge that failed, and answers whether the worktree is out of one.
+ *
+ * Never throws: it runs while the failure is being reported, and may not
+ * replace it. Answered from `MERGE_HEAD` rather than from the abort, because a
+ * merge that never started — an unknown committer, a refusing hook — leaves
+ * nothing to abort, and the abort's refusal then says nothing about the tree.
+ */
+async function abortMerge(git: GitExec): Promise<boolean> {
+  try {
+    await git(['merge', '--abort'])
+  } catch {
+    // Nothing to abort, or nothing git can do about it; MERGE_HEAD says which.
+  }
+
+  try {
+    await git(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])
+    return false
+  } catch {
+    return true
+  }
 }
 
 /**
@@ -931,6 +1085,7 @@ export interface BranchRequestList {
 export async function readBranchRequests(
   owners: readonly BranchOwner[],
   gh: GhExec,
+  git: GitExec,
   limit: number = BRANCH_REQUEST_LIMIT
 ): Promise<BranchRequestList> {
   const payload = shaped(
@@ -945,13 +1100,15 @@ export async function readBranchRequests(
           '--limit',
           String(limit),
           '--json',
-          'headRefName,number,state,url,createdAt,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision'
+          'headRefName,number,state,url,createdAt,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision,headRefOid'
         ])
       )
     )
   )
 
-  const requests = toBranchRequests(ownRequests(payload, owners))
+  const own = ownRequests(payload, owners)
+  const passed = await branchesMovedPast(own, owners, git)
+  const requests = toBranchRequests(own).filter((request) => !passed.has(request.branch))
 
   /*
    * Whether the answer came back full, decided here rather than by counting
@@ -964,6 +1121,31 @@ export async function readBranchRequests(
    * which it is. The same reasoning, and the same field, as `listRepositories`.
    */
   return { requests, capped: payload.length >= limit }
+}
+
+/**
+ * The workspace branches whose newest request they have moved past.
+ *
+ * The newest only, as `toBranchRequests` picks it: an older request moved past
+ * says nothing about the mark, which is drawn from the newest. And only on a
+ * workspace's branch, because the answer holds a hundred requests, most of them
+ * long merged on branches nothing draws a mark for — a `git` process each, a
+ * minute apart, for nothing.
+ */
+async function branchesMovedPast(
+  payload: BranchListPayload,
+  owners: readonly BranchOwner[],
+  git: GitExec
+): Promise<Set<string>> {
+  // `gh` lists most recent first, so the first entry per branch is the newest.
+  const newest = new Map<string, BranchListPayload[number]>()
+  for (const entry of payload) {
+    if (!newest.has(entry.headRefName)) newest.set(entry.headRefName, entry)
+  }
+
+  const held = owners.flatMap((owner) => newest.get(owner.branch) ?? [])
+  const answers = await allOf(held.map((entry) => movedPast(entry, entry.headRefName, git)))
+  return new Set(held.filter((_, index) => answers[index]).map((entry) => entry.headRefName))
 }
 
 /** `gh` refusing to answer, which is a different failure from an odd answer. */

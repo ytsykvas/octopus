@@ -634,7 +634,9 @@ export const BranchListSchema = z.array(
     mergeable: z.string(),
     mergeStateStatus: z.string(),
     // `""` where there is none, as in the detail.
-    reviewDecision: z.string()
+    reviewDecision: z.string(),
+    // The request's last commit: what a branch that moved on has moved past.
+    headRefOid: z.string().min(1)
   })
 )
 

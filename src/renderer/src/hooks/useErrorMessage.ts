@@ -128,6 +128,13 @@ export function useErrorMessage(): (failure: Failure) => string {
           })
         case 'headNotOnBranch':
           return t('errors.headNotOnBranch', { branch: failure.params?.branch ?? '' })
+        case 'updateFailed':
+        case 'updateLeftMerging':
+          return t(`errors.${failure.code}`, {
+            base: failure.params?.base ?? '',
+            branch: failure.params?.branch ?? '',
+            reason: failure.params?.reason ?? ''
+          })
         case 'pushTargetChanged':
           return t('errors.pushTargetChanged', {
             branch: failure.params?.branch ?? '',

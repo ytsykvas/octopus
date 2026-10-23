@@ -94,6 +94,14 @@ work of its own to do in between cannot accidentally ask twice; asking twice is
 worse than it sounds, because the cleanup script runs in the worktree and a
 script that writes there would make the second answer differ from the first.
 
+A squash or rebase merge rewrites the commits, so git alone calls such a branch
+unmerged; the last thing asked is whether GitHub merged the branch's request.
+**That word covers the commits the request carried and nothing after them.** A
+request the branch has moved past (`movedPast` in `pullRequests.ts`) is no
+longer the branch's request at all, so a branch committed to after its merge is
+refused like any other — it used to be deleted on GitHub's word, and the work
+after the merge with it.
+
 ## An update applies every field it carries
 
 `updateProject` lists fields explicitly, which protects against writing back a

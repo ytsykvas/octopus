@@ -1,4 +1,4 @@
-import { AlertTriangle, GitPullRequest, Info, Sparkles } from 'lucide-react'
+import { GitPullRequest, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -6,6 +6,7 @@ import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 
 import { Button } from '../Button.js'
+import { Callout } from './Callout.js'
 import { CommitMessageField } from './CommitMessageField.js'
 import { PaneFooter } from './PullRequestFooter.js'
 
@@ -232,32 +233,5 @@ export function NewPullRequestForm({
         </div>
       </PaneFooter>
     </form>
-  )
-}
-
-/**
- * A sentence the reader should see before pressing: something that will happen
- * (`info`) or something that could go wrong (`warning`), on its paired ground.
- */
-function Callout({
-  tone,
-  children
-}: {
-  readonly tone: 'info' | 'warning'
-  readonly children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <p
-      className={`text-ink flex items-start gap-2 rounded-[var(--radius-control)] px-2.5 py-2 leading-snug ${
-        tone === 'info' ? 'bg-info-bg' : 'bg-warning-bg'
-      }`}
-    >
-      <span
-        className={`flex h-[1lh] shrink-0 items-center ${tone === 'info' ? 'text-info' : 'text-warning'}`}
-      >
-        {tone === 'info' ? <Info aria-hidden size={13} /> : <AlertTriangle aria-hidden size={13} />}
-      </span>
-      <span className="min-w-0">{children}</span>
-    </p>
   )
 }

@@ -26,6 +26,7 @@ function view(overrides: Partial<PullRequestView> = {}): PullRequestView {
     ahead: 2,
     unpushedCommits: 0,
     base: 'main',
+    previous: null,
     ...overrides
   }
 }
@@ -690,6 +691,102 @@ describe('the pull request tab', () => {
     await user.type(await screen.findByLabelText('Commit message'), 'Add the thing')
 
     expect(screen.queryByText(/\.env\.local/)).not.toBeInTheDocument()
+  })
+})
+
+/*
+ * A branch committed to after its request was merged reads as having none, and
+ * the form is offered again. Without a word about the earlier request the pane
+ * looked as though the merge had been forgotten.
+ */
+describe('a branch that moved past its last request', () => {
+  const merged = { number: 238, state: 'merged', url: 'https://github.com/o/p/pull/238' } as const
+
+  it('names the request it moved past, beside the form', async () => {
+    answer(view({ previous: { ...merged, needsBase: false } }))
+    renderPanel()
+
+    expect(await screen.findByText(/#238 was merged/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open #238 on GitHub' })).toHaveAttribute(
+      'href',
+      merged.url
+    )
+    expect(screen.getByLabelText('Title')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Update from/ })).not.toBeInTheDocument()
+  })
+
+  it('names a closed one as closed', async () => {
+    answer(view({ previous: { ...merged, state: 'closed', needsBase: false } }))
+    renderPanel()
+
+    expect(await screen.findByText(/#238 was closed/)).toBeInTheDocument()
+  })
+
+  it('names it where there is nothing to open as well', async () => {
+    answer(view({ ahead: 0, previous: { ...merged, needsBase: false } }))
+    renderPanel()
+
+    expect(await screen.findByText(/#238 was merged/)).toBeInTheDocument()
+    expect(screen.getByText(/no commits that main does not/)).toBeInTheDocument()
+  })
+
+  /* After a squash the branch still carries what the base took as one, so a
+     request opened now would show it all again. The pane says so before the
+     form is filled in, and offers the fix. */
+  it('offers to bring the base in after a squash, and reads the branch again', async () => {
+    const user = userEvent.setup()
+    answer(view({ previous: { ...merged, needsBase: true } }))
+    renderPanel()
+
+    expect(await screen.findByText(/would show those changes again/)).toBeInTheDocument()
+    const reads = vi.mocked(octopus().workspaces.pullRequest).mock.calls.length
+    await user.click(screen.getByRole('button', { name: 'Update from main' }))
+
+    expect(octopus().workspaces.updateFromBase).toHaveBeenCalledWith(anna.id)
+    await waitFor(() => {
+      expect(vi.mocked(octopus().workspaces.pullRequest).mock.calls.length).toBeGreaterThan(reads)
+    })
+  })
+
+  /* git refuses to merge into a dirty tree, so the press could only fail; the
+     pane says what to do first instead of offering it. */
+  it('holds the button while there is uncommitted work, and says why', async () => {
+    answer(view({ dirty: true, previous: { ...merged, needsBase: true } }))
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: 'Update from main' })).toBeDisabled()
+    expect(screen.getByText(/Commit or set aside the uncommitted work first/)).toBeInTheDocument()
+  })
+
+  it('holds the button while the base is coming in', async () => {
+    const user = userEvent.setup()
+    answer(view({ previous: { ...merged, needsBase: true } }))
+    vi.mocked(octopus().workspaces.updateFromBase).mockReturnValue(new Promise(() => undefined))
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Update from main' }))
+
+    expect(screen.getByRole('button', { name: 'Updating from main…' })).toBeDisabled()
+  })
+
+  it('says why the base did not come in', async () => {
+    const user = userEvent.setup()
+    answer(view({ previous: { ...merged, needsBase: true } }))
+    vi.mocked(octopus().workspaces.updateFromBase).mockResolvedValue({
+      ok: false,
+      code: 'updateFailed',
+      params: { base: 'origin/main', branch: 'octopus/anna', reason: 'CONFLICT (content): a.txt' },
+      error: 'Could not merge origin/main.'
+    })
+    const { onError } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Update from main' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(
+        expect.stringContaining('could not be merged into octopus/anna')
+      )
+    })
   })
 })
 

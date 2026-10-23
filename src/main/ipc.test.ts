@@ -447,6 +447,7 @@ describe('channel table', () => {
     'workspaces:commitAndPush',
     'workspaces:amendAndPush',
     'workspaces:push',
+    'workspaces:updateFromBase',
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
     'workspaces:closePullRequest',
@@ -2071,6 +2072,37 @@ describe('workspaces of a real project', () => {
     expect(left.stdout).toContain('loose.txt')
   })
 
+  // No remote to fetch from, so the base is the local branch: a commit made
+  // there after the workspace was cut is what must arrive in it.
+  it('brings the base into the branch', async () => {
+    const projectId = await addProject('updating')
+    const workspace = await createWorkspace(projectId)
+    const repo = join(dir, 'updating')
+    await writeFile(join(repo, 'later.txt'), 'later\n', 'utf8')
+    await run('git', ['add', '-A'], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'on the base later'], { cwd: repo })
+    const later = (await run('git', ['rev-parse', 'HEAD'], { cwd: repo })).stdout.trim()
+
+    await expect(invoke('workspaces:updateFromBase', workspace.id)).resolves.toMatchObject({
+      ok: true
+    })
+
+    await expect(
+      run('git', ['merge-base', '--is-ancestor', later, 'HEAD'], { cwd: workspace.path })
+    ).resolves.toBeDefined()
+  })
+
+  it('says why the base was not brought in', async () => {
+    const projectId = await addProject('unupdatable')
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'loose.txt'), 'not yet\n', 'utf8')
+
+    await expect(invoke('workspaces:updateFromBase', workspace.id)).resolves.toMatchObject({
+      ok: false,
+      code: 'uncommittedChanges'
+    })
+  })
+
   it('says why a push failed rather than swallowing it', async () => {
     const projectId = await addProject('unsendable')
     const workspace = await createWorkspace(projectId)
@@ -2327,7 +2359,8 @@ describe('workspaces of a real project', () => {
               isDraft: false,
               mergeable: 'MERGEABLE',
               mergeStateStatus: 'CLEAN',
-              reviewDecision: ''
+              reviewDecision: '',
+              headRefOid: 'abc123'
             }
           ])
         )

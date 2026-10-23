@@ -2862,7 +2862,8 @@ describe('App', () => {
           dirty: false,
           unpushedCommits: 0,
           ahead: 0,
-          base: 'main'
+          base: 'main',
+          previous: null
         }
       })
       vi.mocked(window.octopus.workspaces.pullRequestDetail).mockResolvedValue({
@@ -2971,7 +2972,8 @@ describe('App', () => {
         dirty: false,
         unpushedCommits: 0,
         ahead: 0,
-        base: 'main'
+        base: 'main',
+        previous: null
       }
     })
     vi.mocked(window.octopus.workspaces.pullRequestDetail).mockResolvedValue({

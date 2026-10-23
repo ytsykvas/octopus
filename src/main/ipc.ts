@@ -893,6 +893,11 @@ export function registerIpc(
     attempt(() => service.pushWorkspace(workspaceId))
   )
 
+  // The same: the base is the project's and the branch the workspace's.
+  host.handle('workspaces:updateFromBase', (_event, workspaceId: string) =>
+    attempt(() => service.updateWorkspaceFromBase(workspaceId))
+  )
+
   // The number becomes an argument to `gh`, so it is proved to be one before it
   // gets there rather than trusted because the renderer read it from us.
   host.handle('workspaces:pullRequestDetail', (_event, workspaceId: string, number: unknown) =>

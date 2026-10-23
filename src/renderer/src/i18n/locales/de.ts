@@ -568,6 +568,17 @@ export const de: Translation = {
     nothingToOpen:
       'Noch nichts zu öffnen. Dieser Branch hat keine Commits, die {{base}} nicht hat – erstelle zuerst einen.',
     willPush: 'Dieser Branch ist noch nicht auf GitHub. Beim Öffnen wird er gepusht.',
+    previousMerged:
+      '#{{number}} wurde gemergt. Was seitdem committet wurde, kann in einen neuen Pull Request aufgenommen werden.',
+    previousClosed:
+      '#{{number}} wurde geschlossen. Was seitdem committet wurde, kann in einen neuen Pull Request aufgenommen werden.',
+    openPrevious: '#{{number}} auf GitHub öffnen',
+    needsBaseWarning:
+      'Dieser Branch hat noch die Commits von #{{number}}, die {{base}} in anderer Form übernommen hat, daher würde ein neuer Pull Request diese Änderungen erneut zeigen. Übernimm zuerst {{base}}.',
+    updateNeedsClean:
+      'Committe die offenen Änderungen zuerst oder lege sie beiseite: {{base}} lässt sich nur in einen sauberen Branch übernehmen.',
+    updateFromBase: 'Von {{base}} aktualisieren',
+    updatingFromBase: 'Aktualisiere von {{base}}…',
     dirty:
       'Hier gibt es nicht committete Änderungen. Sie werden mit dem Pull Request committet – mit der Nachricht oben oder einer, die der Agent schreibt.',
     title: 'Titel',
@@ -1865,6 +1876,10 @@ export const de: Translation = {
     mergeFailed: 'GitHub hat #{{number}} nicht gemergt. Meldung: {{reason}}',
     requestNotOnBranch:
       'Pull Request #{{number}} liegt auf {{head}}, nicht auf {{branch}} dieses Workspaces. Es wurde nichts getan.',
+    updateFailed:
+      '{{base}} ließ sich nicht in {{branch}} mergen, daher wurde nichts geändert. Git meldet: {{reason}}',
+    updateLeftMerging:
+      '{{base}} ließ sich nicht in {{branch}} mergen, und der Merge ließ sich nicht rückgängig machen: Der Workspace steckt mitten im Merge. Löse ihn auf oder führe im Terminal git merge --abort aus. Git meldet: {{reason}}',
     headNotOnBranch:
       'HEAD ist nicht auf dem Branch {{branch}} dieses Workspaces. Es wurde nichts committet oder gepusht – checke ihn zuerst im Terminal aus.',
     closeFailed: 'GitHub hat #{{number}} nicht geschlossen. Meldung: {{reason}}',

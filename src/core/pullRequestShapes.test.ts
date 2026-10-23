@@ -724,6 +724,7 @@ describe('every branch of a project at once', () => {
     mergeable: 'MERGEABLE',
     mergeStateStatus: 'CLEAN',
     reviewDecision: '',
+    headRefOid: 'abc123',
     ...overrides
   })
 

@@ -18,6 +18,7 @@ import {
   createPullRequest,
   type GhExec,
   ghIn,
+  updateFromBase,
   closePullRequest,
   mergePullRequest,
   NewPullRequestSchema,
@@ -71,13 +72,17 @@ const OPENED = '2026-02-01T00:00:00Z'
 
 const owner = (branch: string): BranchOwner => ({ branch, createdAt: BEGAN, branchSince: null })
 
+/** A commit no clone has: what a request pushed from somewhere else names. */
+const ABSENT = '0'.repeat(40)
+
 const OPEN_PR = JSON.stringify([
   {
     number: 7,
     state: 'OPEN',
     title: 'Rename the thing',
     url: 'https://github.com/o/p/pull/7',
-    createdAt: OPENED
+    createdAt: OPENED,
+    headRefOid: ABSENT
   }
 ])
 
@@ -124,6 +129,45 @@ async function branchWithCommit(name = 'octopus/anna'): Promise<string> {
 
 const workExec = (): ReturnType<typeof gitIn> => gitIn(join(dir, 'work'))
 
+/** One request on the branch, as `gh pr list` answers, ending at `headRefOid`. */
+const listed = (state: string, headRefOid: string): string =>
+  JSON.stringify([{ number: 7, state, title: 't', url: 'u', createdAt: OPENED, headRefOid }])
+
+async function subjectOf(ref: string): Promise<string> {
+  return (
+    await run('git', ['log', '-1', '--format=%s', ref], { cwd: join(dir, 'work') })
+  ).stdout.trim()
+}
+
+async function tipOf(ref: string): Promise<string> {
+  return (await run('git', ['rev-parse', ref], { cwd: join(dir, 'work') })).stdout.trim()
+}
+
+/** Another commit on whatever HEAD is on. */
+async function commitOn(file: string): Promise<void> {
+  const work = join(dir, 'work')
+  await writeFile(join(work, file), `${file}\n`, 'utf8')
+  await run('git', ['add', '.'], { cwd: work })
+  await run('git', [...IDENTITY, 'commit', '-q', '-m', file], { cwd: work })
+}
+
+/** What GitHub's squash merge leaves behind: the content on `main`, the commits not. */
+async function squashIntoMain(branch: string): Promise<void> {
+  const work = join(dir, 'work')
+  await run('git', ['checkout', '-q', 'main'], { cwd: work })
+  await run('git', ['merge', '-q', '--squash', branch], { cwd: work })
+  await run('git', [...IDENTITY, 'commit', '-q', '-m', 'squashed'], { cwd: work })
+  await run('git', ['checkout', '-q', branch], { cwd: work })
+}
+
+/** What GitHub's merge button does with the default method, done locally. */
+async function mergeIntoMain(branch: string): Promise<void> {
+  const work = join(dir, 'work')
+  await run('git', ['checkout', '-q', 'main'], { cwd: work })
+  await run('git', [...IDENTITY, 'merge', '-q', '--no-ff', '-m', 'merge', branch], { cwd: work })
+  await run('git', ['checkout', '-q', branch], { cwd: work })
+}
+
 describe('reading a branch', () => {
   it('reports no pull request for a branch that has none', async () => {
     const branch = await branchWithCommit()
@@ -155,7 +199,7 @@ describe('reading a branch', () => {
       '--limit',
       '1',
       '--json',
-      'number,state,title,url,createdAt'
+      'number,state,title,url,createdAt,headRefOid'
     ])
   })
 
@@ -176,7 +220,7 @@ describe('reading a branch', () => {
   it('lowers the state `gh` shouts', async () => {
     const branch = await branchWithCommit()
     const merged = JSON.stringify([
-      { number: 7, state: 'MERGED', title: 't', url: 'u', createdAt: OPENED }
+      { number: 7, state: 'MERGED', title: 't', url: 'u', createdAt: OPENED, headRefOid: ABSENT }
     ])
 
     const view = await readPullRequest(
@@ -192,7 +236,14 @@ describe('reading a branch', () => {
   it("takes a request opened before the workspace began as somebody else's", async () => {
     const branch = await branchWithCommit()
     const earlier = JSON.stringify([
-      { number: 7, state: 'MERGED', title: 't', url: 'u', createdAt: '2025-12-01T00:00:00Z' }
+      {
+        number: 7,
+        state: 'MERGED',
+        title: 't',
+        url: 'u',
+        createdAt: '2025-12-01T00:00:00Z',
+        headRefOid: ABSENT
+      }
     ])
 
     const view = await readPullRequest(
@@ -465,6 +516,288 @@ describe('reading a branch', () => {
 
     await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
+    })
+  })
+})
+
+/*
+ * A request that is no longer open is the branch's current one only until the
+ * branch moves on. Merged and then committed to, the newest request on the
+ * branch was still the merged one, so the pane offered nothing but removing
+ * the workspace — and no way at all to open a request for the new work.
+ */
+describe('reading a branch that moved past its request', () => {
+  it('takes a merged request the branch has moved past as no longer current', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await mergeIntoMain(branch)
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.request).toBeNull()
+    // Only the commit after the merge: the merged ones are on `main` now.
+    expect(view.ahead).toBe(1)
+    expect(view.previous).toEqual({ number: 7, state: 'merged', url: 'u', needsBase: false })
+  })
+
+  /* A squash lands the content and not the commits, so the branch still has
+     every commit the request carried — and a new request would show them all
+     again beside the new work. That is what the pane offers to fix. */
+  it('says the base is needed after a request merged as a squash', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await squashIntoMain(branch)
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.previous).toMatchObject({ state: 'merged', needsBase: true })
+  })
+
+  /* Asked about the squash itself, the answer never changed: the request's
+     commits are never on the base afterwards, so the warning and its button
+     stayed after the button had done its work. */
+  it('stops asking for the base once it is in the branch', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await squashIntoMain(branch)
+    // Where GitHub's squash lands, and where the update fetches it from.
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: join(dir, 'work') })
+    await commitOn('b.txt')
+    await updateFromBase(branch, 'main', workExec(), workExec())
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.previous).toMatchObject({ state: 'merged', needsBase: false })
+  })
+
+  /* The pane reads against the tracking ref, which nothing fetches after a
+     merge on GitHub. Asked only whether the request's commits are on it, an
+     ordinary merge read as a squash; the branch already holding that base is
+     what says there is nothing to bring in. */
+  it('does not ask for a base the branch already holds, however stale', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    const stale = await tipOf('origin/main')
+    await mergeIntoMain(branch)
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: join(dir, 'work') })
+    await run('git', ['update-ref', 'refs/remotes/origin/main', stale], { cwd: join(dir, 'work') })
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'origin/main',
+      fakeGh({ list: listed('MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.previous).toMatchObject({ state: 'merged', needsBase: false })
+  })
+
+  it('keeps a merged request while the branch is where it was merged', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await mergeIntoMain(branch)
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.request?.state).toBe('merged')
+    expect(view.previous).toBeNull()
+  })
+
+  it('takes a closed request the branch has moved past as no longer current', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('CLOSED', head) }).gh,
+      workExec()
+    )
+
+    expect(view.request).toBeNull()
+    // Nothing of a closed request reached the base, so nothing comes back twice.
+    expect(view.previous).toEqual({ number: 7, state: 'closed', url: 'u', needsBase: false })
+  })
+
+  // New commits are what an open request is for: they land on it when pushed.
+  it('keeps an open request however far the branch has moved', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('OPEN', head) }).gh,
+      workExec()
+    )
+
+    expect(view.request?.state).toBe('open')
+  })
+
+  /* Pushed from another checkout, the request's last commit may not be in this
+     clone at all. That cannot show the branch moved past it, so the request
+     stays what it was rather than vanishing on a guess. */
+  it('keeps a merged request whose last commit this clone does not have', async () => {
+    const branch = await branchWithCommit()
+    await commitOn('b.txt')
+
+    const view = await readPullRequest(
+      owner(branch),
+      'main',
+      fakeGh({ list: listed('MERGED', ABSENT) }).gh,
+      workExec()
+    )
+
+    expect(view.request?.state).toBe('merged')
+  })
+})
+
+/*
+ * After a squash the branch still carries the commits the base took as one, so
+ * a new request would show them again. Bringing the base in first leaves the
+ * new request with only the new work.
+ */
+describe('updating a branch from its base', () => {
+  const work = (): string => join(dir, 'work')
+
+  /** A commit on `main` the remote has and this clone's tracking ref does not. */
+  async function baseMovedOnRemote(file: string, text: string): Promise<string> {
+    const stale = await tipOf('origin/main')
+    await run('git', ['checkout', '-q', 'main'], { cwd: work() })
+    await writeFile(join(work(), file), text, 'utf8')
+    await run('git', ['add', '.'], { cwd: work() })
+    await run('git', [...IDENTITY, 'commit', '-q', '-m', 'base moved'], { cwd: work() })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: work() })
+    const moved = await tipOf('main')
+    await run('git', ['update-ref', 'refs/remotes/origin/main', stale], { cwd: work() })
+    await run('git', ['checkout', '-q', 'octopus/anna'], { cwd: work() })
+    return moved
+  }
+
+  /** Whether `commit` is in HEAD's history. */
+  async function holds(commit: string): Promise<boolean> {
+    try {
+      await run('git', ['merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: work() })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Fetched first: the tracking ref is stale whenever somebody else merged,
+  // which after a squash is exactly when this is pressed.
+  it('fetches the base and merges it into the branch', async () => {
+    const branch = await branchWithCommit()
+    const moved = await baseMovedOnRemote('c.txt', 'base\n')
+
+    await updateFromBase(branch, 'origin/main', workExec(), workExec())
+
+    expect(await holds(moved)).toBe(true)
+    expect(await subjectOf('HEAD')).toBe(
+      "Merge remote-tracking branch 'origin/main' into octopus/anna"
+    )
+  })
+
+  /* A conflict left in the worktree is a half-finished merge in a directory an
+     agent is about to work in, with nothing in the pane saying so. Undone, the
+     branch is as it was and the reader is told why. */
+  it('undoes a merge that conflicts and says why', async () => {
+    const branch = await branchWithCommit()
+    await baseMovedOnRemote('a.txt', 'theirs\n')
+    const before = await tipOf('HEAD')
+
+    await expect(
+      updateFromBase(branch, 'origin/main', workExec(), workExec())
+    ).rejects.toMatchObject({
+      code: 'updateFailed',
+      params: { base: 'origin/main', branch }
+    })
+
+    expect(await tipOf('HEAD')).toBe(before)
+    await expect(
+      run('git', ['rev-parse', '-q', '--verify', 'MERGE_HEAD'], { cwd: work() })
+    ).rejects.toBeDefined()
+    expect((await run('git', ['status', '--porcelain'], { cwd: work() })).stdout).toBe('')
+  })
+
+  // Refused before the fetch: there is no reason to reach the network for a
+  // merge that is not going to happen.
+  it('refuses uncommitted work before asking the remote anything', async () => {
+    const branch = await branchWithCommit()
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+    const fetched: string[][] = []
+    const fetchGit: GitExec = (args) => {
+      fetched.push([...args])
+      return Promise.resolve('')
+    }
+
+    await expect(updateFromBase(branch, 'origin/main', workExec(), fetchGit)).rejects.toMatchObject(
+      { code: 'uncommittedChanges', params: { name: branch } }
+    )
+    expect(fetched).toEqual([])
+  })
+
+  it('refuses while HEAD is on another branch', async () => {
+    const branch = await branchWithCommit()
+    await run('git', ['checkout', '-q', '-b', 'side'], { cwd: work() })
+
+    await expect(
+      updateFromBase(branch, 'origin/main', workExec(), workExec())
+    ).rejects.toMatchObject({ code: 'headNotOnBranch' })
+  })
+
+  /* Not every refusal is a conflict — an unknown committer, a hook — and
+     there is then no merge to abort. git's own words say which it was. */
+  it('says what git said when the merge did not start', async () => {
+    const branch = await branchWithCommit()
+    const git: GitExec = (args) => {
+      if (args[0] === 'merge') return Promise.reject(new Error('Please tell me who you are'))
+      return workExec()(args)
+    }
+
+    await expect(updateFromBase(branch, 'main', git, git)).rejects.toMatchObject({
+      code: 'updateFailed',
+      params: { reason: 'Please tell me who you are' }
+    })
+  })
+
+  /* The abort runs while the failure is being reported, so it may not throw
+     over it — but a merge it could not undo is still in the worktree, and
+     saying the branch is as it was would then be false. */
+  it('says the worktree is mid-merge when the merge could not be undone', async () => {
+    const branch = await branchWithCommit()
+    await baseMovedOnRemote('a.txt', 'theirs\n')
+    const git: GitExec = (args) =>
+      args[1] === '--abort' ? Promise.reject(new Error('refused')) : workExec()(args)
+
+    await expect(updateFromBase(branch, 'origin/main', git, git)).rejects.toMatchObject({
+      code: 'updateLeftMerging',
+      params: { base: 'origin/main', branch }
     })
   })
 })
@@ -1506,7 +1839,8 @@ const REVIEW_FIELDS = {
   isDraft: false,
   mergeable: 'MERGEABLE',
   mergeStateStatus: 'CLEAN',
-  reviewDecision: ''
+  reviewDecision: '',
+  headRefOid: ABSENT
 }
 
 describe('every branch of a project at once', () => {
@@ -1529,7 +1863,7 @@ describe('every branch of a project at once', () => {
   it('asks once for every branch, not once per branch', async () => {
     const { gh, calls } = fakeGh({ list: LIST })
 
-    const answer = await readBranchRequests([], gh)
+    const answer = await readBranchRequests([], gh, workExec())
 
     expect(answer.requests).toEqual([
       {
@@ -1553,7 +1887,7 @@ describe('every branch of a project at once', () => {
   it('takes a smaller limit when one is given', async () => {
     const { gh, calls } = fakeGh({ list: LIST })
 
-    await readBranchRequests([], gh, 5)
+    await readBranchRequests([], gh, workExec(), 5)
 
     expect(calls[0]?.[calls[0].indexOf('--limit') + 1]).toBe('5')
   })
@@ -1561,19 +1895,86 @@ describe('every branch of a project at once', () => {
   it('says GitHub could not be asked when it refuses', async () => {
     const { gh } = fakeGh({ list: new Error('gh: no remote') })
 
-    await expect(readBranchRequests([], gh)).rejects.toMatchObject({ code: 'notConnected' })
+    await expect(readBranchRequests([], gh, workExec())).rejects.toMatchObject({
+      code: 'notConnected'
+    })
   })
 
   it('reports an answer it cannot read, and one shaped like something else', async () => {
     const unreadable = fakeGh({ list: 'not json' })
-    await expect(readBranchRequests([], unreadable.gh)).rejects.toMatchObject({
+    await expect(readBranchRequests([], unreadable.gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
     })
 
     const unexpected = fakeGh({ list: JSON.stringify({ pullRequests: [] }) })
-    await expect(readBranchRequests([], unexpected.gh)).rejects.toMatchObject({
+    await expect(readBranchRequests([], unexpected.gh, workExec())).rejects.toMatchObject({
       code: 'listFailed'
     })
+  })
+
+  /** One request on `branch`, as the project-wide list answers, ending at `head`. */
+  const listedFor = (branch: string, state: string, head: string): string =>
+    JSON.stringify([
+      {
+        headRefName: branch,
+        number: 7,
+        state,
+        url: 'https://e.test/7',
+        ...REVIEW_FIELDS,
+        headRefOid: head
+      }
+    ])
+
+  /* The row and the pane agree on one rule. A merged mark beside a branch that
+     has work again said it was finished, which the pane had stopped saying. */
+  it('drops the mark of a branch that moved past its merged request', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await mergeIntoMain(branch)
+    await commitOn('b.txt')
+
+    const answer = await readBranchRequests(
+      [owner(branch)],
+      fakeGh({ list: listedFor(branch, 'MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(answer.requests).toEqual([])
+  })
+
+  it('keeps the mark of a branch where it was merged', async () => {
+    const branch = await branchWithCommit()
+    const head = await tipOf(branch)
+    await mergeIntoMain(branch)
+
+    const answer = await readBranchRequests(
+      [owner(branch)],
+      fakeGh({ list: listedFor(branch, 'MERGED', head) }).gh,
+      workExec()
+    )
+
+    expect(answer.requests.map((request) => request.state)).toEqual(['merged'])
+  })
+
+  /* A hundred requests come back, most of them long merged on branches no
+     workspace holds. Asking git about each would be a hundred processes a
+     minute for marks nobody draws. */
+  it('asks git only about a finished request on a workspace branch', async () => {
+    const asked: string[][] = []
+    const git: GitExec = (args) => {
+      asked.push([...args])
+      return Promise.resolve('0')
+    }
+    const { gh } = fakeGh({
+      list: JSON.stringify([
+        { headRefName: 'mine', number: 7, state: 'OPEN', url: 'u', ...REVIEW_FIELDS },
+        { headRefName: 'theirs', number: 8, state: 'MERGED', url: 'u', ...REVIEW_FIELDS }
+      ])
+    })
+
+    await readBranchRequests([owner('mine')], gh, git)
+
+    expect(asked).toEqual([])
   })
 })
 
@@ -1608,7 +2009,7 @@ describe('the state map', () => {
       ['CLOSED', 'closed']
     ] as const) {
       const answer = JSON.stringify([
-        { number: 1, state: shouted, title: 't', url: 'u', createdAt: OPENED }
+        { number: 1, state: shouted, title: 't', url: 'u', createdAt: OPENED, headRefOid: ABSENT }
       ])
       const view = await readPullRequest(
         owner(branch),
@@ -1650,7 +2051,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    await expect(readBranchRequests([], gh, 2)).resolves.toMatchObject({ capped: true })
+    await expect(readBranchRequests([], gh, workExec(), 2)).resolves.toMatchObject({ capped: true })
   })
 
   it('says nothing of the sort when it came back short', async () => {
@@ -1661,7 +2062,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    const answer = await readBranchRequests([], gh, 2)
+    const answer = await readBranchRequests([], gh, workExec(), 2)
 
     expect(answer.capped).toBe(false)
     expect(answer.requests).toHaveLength(1)
@@ -1680,7 +2081,7 @@ describe('whether the branch list was all of them', () => {
       ])
     })
 
-    const answer = await readBranchRequests([], gh, 2)
+    const answer = await readBranchRequests([], gh, workExec(), 2)
 
     expect(answer.requests).toHaveLength(1)
     expect(answer.capped).toBe(true)

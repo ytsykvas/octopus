@@ -171,7 +171,8 @@ import {
   pushBranchTo,
   pushUrl,
   readPullRequest,
-  readPullRequestDetail
+  readPullRequestDetail,
+  updateFromBase
 } from './pullRequests.js'
 import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, keptIndexCopies } from './git.js'
@@ -1359,6 +1360,14 @@ export interface OctopusService {
    * commit message for them.
    */
   pushWorkspace(workspaceId: string): Promise<void>
+
+  /**
+   * Brings the project's base into the workspace's branch.
+   *
+   * What a request merged as a squash leaves for: the branch still carries the
+   * commits the base took as one, and a second request would show them again.
+   */
+  updateWorkspaceFromBase(workspaceId: string): Promise<void>
 
   /** Merges it. Answers with nothing — see `mergePullRequest` for why. */
   mergePullRequest(workspaceId: string, number: number, method: MergeMethod): Promise<void>
@@ -6152,6 +6161,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return pushBranch(workspace.branch, makeExec(workspace.path))
     },
 
+    async updateWorkspaceFromBase(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+      return updateFromBase(
+        workspace.branch,
+        await baseRefOf(project),
+        makeExec(workspace.path),
+        makeExec(workspace.path, FETCH_OPTIONS)
+      )
+    },
+
     readPullRequestDetail(workspaceId, number) {
       const workspace = requireWorkspace(workspaceId)
       return readPullRequestDetail(number, makeGh(workspace.path))
@@ -6191,7 +6211,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // From the checkout rather than from a worktree: this is a question about
       // the repository, and a project can be open with no workspace in it.
-      return readBranchRequests(workspacesOfProject(state, projectId), makeGh(project.repoPath))
+      return readBranchRequests(
+        workspacesOfProject(state, projectId),
+        makeGh(project.repoPath),
+        makeExec(project.repoPath)
+      )
     },
 
     async readFileTree(workspaceId) {

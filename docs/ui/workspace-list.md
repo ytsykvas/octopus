@@ -130,6 +130,13 @@ request, which is most branches most of the time — a mark for that would put a
 icon on every row and say nothing by being there. Every state goes out as a word
 in the label too.
 
+Nothing either on a branch that has **moved past** a request no longer open —
+merged or closed, and committed to since. The pull request tab has stopped
+calling such a branch merged and offers to open another, and a red mark beside
+it said the work was finished when there was new work on it. Only a workspace's
+own branch is asked about, one `git` process each: the list holds a hundred
+requests, most of them long merged on branches no row draws.
+
 It costs one `gh` call per project rather than one per workspace, on a minute's
 timer while the project is open — and for every other project too while the
 status bar shows, on the same clock rather than a second poller of its own.
