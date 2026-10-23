@@ -81,12 +81,23 @@ npm does not preserve the executable bit on the `spawn-helper` beside
 `pty.node`, so `pty.fork` fails with `posix_spawnp failed`. That message means
 "the build did not run", and the command above is the fix.
 
-In a fresh worktree `postinstall` may not run at all: npm's `allow-scripts`
-holds install scripts back (the `npm warn allow-scripts` lines at the end of
-`npm install`), which skips both the `node-pty` build and the Electron
-download. The symptom is a successful build followed by `npm run dev` failing
-with `Error: Electron uninstall`, or with `spawn .../Electron.app/... ENOENT`
-when `dist/` survived holding only `LICENSE` and `version`. Check for the app
+Since npm 11.20 a dependency's install scripts run only if `allowScripts` in
+`package.json` names it; anything else is skipped with an
+`npm warn install-scripts` line at the end of the install, and the install
+still succeeds. The field is the reviewed list: `node-pty` and `esbuild` are
+allowed, `electron-winstaller` (Windows packaging only) and `fsevents` (it
+ships its binary) are denied. Entries are by name, not version, so a version
+bump does not bring the skip back. After adding a dependency,
+`npm install-scripts ls` shows what is still unreviewed, and
+`npm install-scripts approve <pkg> --no-allow-scripts-pin` or
+`npm install-scripts deny <pkg>` records the decision. The project's own
+`postinstall` is not a dependency's and always runs.
+
+Electron is not among them: since 42 it has no install script and fetches its
+binary the first time something requires it. When that fetch has not happened
+or failed, a successful build is followed by `npm run dev` failing with
+`Error: Electron uninstall`, or with `spawn .../Electron.app/... ENOENT` when
+`dist/` survived holding only `LICENSE` and `version`. Check for the app
 itself, not the directory:
 
 ```bash
@@ -94,4 +105,5 @@ ls node_modules/electron/dist/Electron.app   # must exist
 node node_modules/electron/install.js
 ```
 
-`.octopus/scripts/setup.sh` does both checks for a workspace.
+`.octopus/scripts/setup.sh` checks for a workspace that `spawn-helper` is
+executable and that the app is there, and fetches the app when it is not.
