@@ -4,6 +4,7 @@ import type { AccountsStatus } from '@core/accounts.js'
 import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { WorkspaceDiff } from '@core/diff.js'
+import type { DraftEvent, DraftState } from '@core/pullRequestDraft.js'
 import type { PullRequestDetail } from '@core/pullRequestShapes.js'
 import type { Workspace } from '@core/store.js'
 
@@ -23,6 +24,8 @@ type Api = OctopusApi
  * so, and the rest are not obliged to describe a working application.
  */
 export function installOctopusStub(): Api {
+  draftListeners.clear()
+  nextDraft = WRITTEN
   const ok = <T>(value: T): Promise<{ ok: true; value: T }> => Promise.resolve({ ok: true, value })
   /** Subscriptions return their unsubscribe function, which components call. */
   const subscription = (): (() => void) => vi.fn()
@@ -140,15 +143,25 @@ export function installOctopusStub(): Api {
         })
       ),
       createPullRequest: vi.fn(() => ok('https://github.com/ytsykvas/octopus/pull/1')),
-      draftPullRequest: vi.fn(() =>
-        ok({
-          title: 'Written by the agent',
-          body: 'Because of this.',
-          // Not the title: a test of which one a commit went under cannot
-          // tell them apart when the two read the same.
-          commitMessage: 'Commit written by the agent'
-        })
-      ),
+      /* As main does it: answered once started, then announced — writing at
+         once, and what came of it a moment later unless a test holds it. */
+      draftPullRequest: vi.fn((workspaceId: string) => {
+        announceDraft({ workspaceId, state: { status: 'writing' } })
+        const outcome = nextDraft
+        if (outcome !== null) {
+          void Promise.resolve().then(() => {
+            announceDraft({ workspaceId, state: outcome })
+          })
+        }
+        return ok(undefined)
+      }),
+      drafts: vi.fn(() => ok([])),
+      onDraft: vi.fn((handler: (event: DraftEvent) => void) => {
+        draftListeners.add(handler)
+        return () => {
+          draftListeners.delete(handler)
+        }
+      }),
       commitAndPush: vi.fn(() => ok(undefined)),
       amendAndPush: vi.fn(() => ok(undefined)),
       push: vi.fn(() => ok(undefined)),
@@ -335,6 +348,33 @@ export function installOctopusStub(): Api {
 
   Object.defineProperty(window, 'octopus', { value: api, writable: true, configurable: true })
   return api
+}
+
+const WRITTEN: DraftState = {
+  status: 'written',
+  draft: {
+    title: 'Written by the agent',
+    body: 'Because of this.',
+    // Not the title: a test of which one a commit went under cannot tell them
+    // apart when the two read the same.
+    commitMessage: 'Commit written by the agent'
+  }
+}
+
+const draftListeners = new Set<(event: DraftEvent) => void>()
+let nextDraft: DraftState | null = WRITTEN
+
+/**
+ * What the next description asked for comes to. Null holds it at writing, so
+ * a test can do something in between and then `announceDraft` the outcome.
+ */
+export function answerDraft(outcome: DraftState | null): void {
+  nextDraft = outcome
+}
+
+/** Says to every window listening what main would say on `workspaces:draft`. */
+export function announceDraft(event: DraftEvent): void {
+  for (const listener of [...draftListeners]) listener(event)
 }
 
 /** The stub's own `window.octopus`, typed, for assertions inside a test. */

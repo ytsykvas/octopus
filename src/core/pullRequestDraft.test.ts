@@ -4,7 +4,16 @@ import { describe, expect, it } from 'vitest'
 import type { QueryFn } from './agent.js'
 import type { FileDiff, Hunk, WorkspaceDiff } from './diff.js'
 import { agentEnv } from './publishGuard.js'
-import { buildPrompt, draftPullRequest, parseDraft, renderDiff } from './pullRequestDraft.js'
+import {
+  buildPrompt,
+  createDraftRegistry,
+  type DraftedPullRequest,
+  type DraftEvent,
+  draftPullRequest,
+  parseDraft,
+  renderDiff
+} from './pullRequestDraft.js'
+import { WorkspaceError } from './workspaces.js'
 
 const TITLE_MARKER = '<<<OCTOPUS_TITLE>>>'
 const BODY_MARKER = '<<<OCTOPUS_BODY>>>'
@@ -478,5 +487,157 @@ describe('draftPullRequest', () => {
         code: 'draftUnreadable'
       }
     )
+  })
+})
+
+describe('createDraftRegistry', () => {
+  const written: DraftedPullRequest = { title: 'T', body: 'B', commitMessage: null }
+
+  /** A run the test settles by hand, and the events the registry sent. */
+  function setUp(): {
+    registry: ReturnType<typeof createDraftRegistry>
+    events: DraftEvent[]
+    held: () => {
+      run: () => Promise<DraftedPullRequest>
+      resolve: (draft: DraftedPullRequest) => void
+      reject: (error: unknown) => void
+      calls: () => number
+    }
+  } {
+    const events: DraftEvent[] = []
+    const registry = createDraftRegistry((event) => events.push(event))
+
+    return {
+      registry,
+      events,
+      held: () => {
+        let resolve: (draft: DraftedPullRequest) => void = () => undefined
+        let reject: (error: unknown) => void = () => undefined
+        let calls = 0
+        const promise = new Promise<DraftedPullRequest>((yes, no) => {
+          resolve = yes
+          reject = no
+        })
+        return {
+          run: () => {
+            calls += 1
+            return promise
+          },
+          resolve: (draft) => {
+            resolve(draft)
+          },
+          reject: (error) => {
+            reject(error)
+          },
+          calls: () => calls
+        }
+      }
+    }
+  }
+
+  /** Lets a settled run's callbacks have their turn. */
+  const settled = (): Promise<void> => new Promise((done) => setTimeout(done, 0))
+
+  it('says it is writing, then what it wrote', async () => {
+    const { registry, events, held } = setUp()
+    const answer = held()
+
+    registry.start('w1', answer.run)
+    expect(registry.list()).toEqual([{ workspaceId: 'w1', state: { status: 'writing' } }])
+
+    answer.resolve(written)
+    await settled()
+
+    expect(events).toEqual([
+      { workspaceId: 'w1', state: { status: 'writing' } },
+      { workspaceId: 'w1', state: { status: 'written', draft: written } }
+    ])
+    expect(registry.list()).toEqual([
+      { workspaceId: 'w1', state: { status: 'written', draft: written } }
+    ])
+  })
+
+  // A second press, or the same press from a second window, is the same
+  // question: it waits for the answer already coming rather than paying twice.
+  it('joins a description already being written rather than asking again', () => {
+    const { registry, events, held } = setUp()
+    const answer = held()
+
+    registry.start('w1', answer.run)
+    registry.start('w1', answer.run)
+
+    expect(answer.calls()).toBe(1)
+    expect(events).toHaveLength(1)
+  })
+
+  it('asks again once there is an answer, replacing it', async () => {
+    const { registry, held } = setUp()
+    const first = held()
+    registry.start('w1', first.run)
+    first.resolve(written)
+    await settled()
+
+    const second = held()
+    registry.start('w1', second.run)
+
+    expect(second.calls()).toBe(1)
+    expect(registry.list()).toEqual([{ workspaceId: 'w1', state: { status: 'writing' } }])
+  })
+
+  // The window explains it later, so the code has to survive the trip.
+  it('keeps why it failed, with its code', async () => {
+    const { registry, held } = setUp()
+    const answer = held()
+
+    registry.start('w1', answer.run)
+    answer.reject(new WorkspaceError('branchExists', { branch: 'x' }, 'branch exists'))
+    await settled()
+
+    expect(registry.list()).toEqual([
+      {
+        workspaceId: 'w1',
+        state: {
+          status: 'failed',
+          failure: {
+            ok: false,
+            error: 'branch exists',
+            code: 'branchExists',
+            params: { branch: 'x' }
+          }
+        }
+      }
+    ])
+  })
+
+  // Removed, or its request opened, while the agent was still writing: the
+  // late answer must not put back a description for something that is gone.
+  it('does not bring back a workspace forgotten while it was being written', async () => {
+    const { registry, events, held } = setUp()
+    const answer = held()
+
+    registry.start('w1', answer.run)
+    registry.forget('w1')
+    answer.resolve(written)
+    await settled()
+
+    expect(registry.list()).toEqual([])
+    expect(events.at(-1)).toEqual({ workspaceId: 'w1', state: null })
+  })
+
+  it('says nothing when forgetting a workspace it never had', () => {
+    const { registry, events } = setUp()
+
+    registry.forget('w1')
+
+    expect(events).toEqual([])
+  })
+
+  it('keeps each workspace to itself', () => {
+    const { registry, held } = setUp()
+
+    registry.start('w1', held().run)
+    registry.start('w2', held().run)
+
+    expect(registry.list().map((event) => event.workspaceId)).toEqual(['w1', 'w2'])
   })
 })

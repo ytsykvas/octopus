@@ -94,6 +94,7 @@ export const de: Translation = {
     lineInterrupted: 'Unterbrochen',
     lineIdle: 'Nicht gestartet',
     missingHint: 'Außerhalb der App gelöscht. Du kannst den Eintrag gefahrlos entfernen.',
+    describing: 'Der Agent schreibt die Beschreibung des Pull Requests',
     headElsewhere:
       'Der Worktree ist nicht auf {{branch}}. Was hier passiert, landet nicht im Branch dieses Workspaces.',
     changedFiles_one: '{{count}} Datei',

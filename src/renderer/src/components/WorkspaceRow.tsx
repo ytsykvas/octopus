@@ -10,6 +10,7 @@ import {
   MessageCircleQuestion,
   MoreHorizontal,
   Pencil,
+  Sparkles,
   Trash2
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -28,6 +29,7 @@ import {
 } from './agentStatus.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import { useWorkspaceAgents } from '../hooks/backgroundTasks.js'
+import { useDraftState } from '../hooks/pullRequestDrafts.js'
 import { RequestMark } from './RequestMark.js'
 import { NameEditor } from './NameEditor.js'
 
@@ -64,6 +66,11 @@ export function WorkspaceRow({
   // Agents a turn sent off, still at work after it ended: the reason the row
   // says "Working" with nothing visibly happening in the conversation.
   const agents = useWorkspaceAgents(workspace.id)
+  // Asked for in the PR tab and still being written. Shown here because the
+  // point of the agent going on in the background is that the user has gone
+  // somewhere else, and this row is what they can still see. Its going away is
+  // the sign the description is ready.
+  const describing = useDraftState(workspace.id)?.status === 'writing'
 
   if (editing) {
     return (
@@ -139,6 +146,17 @@ export function WorkspaceRow({
             )}
 
             <RequestMark request={request} />
+
+            {describing && (
+              <span
+                role="img"
+                aria-label={t('workspaces.describing')}
+                title={t('workspaces.describing')}
+                className="text-accent shrink-0"
+              >
+                <Sparkles aria-hidden size={11} className="animate-pulse" />
+              </span>
+            )}
 
             {/* The worktree is standing on some other branch, so the name on this
                 row is not where the work is going. Suppressed for a workspace

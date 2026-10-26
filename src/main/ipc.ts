@@ -36,6 +36,7 @@ import { RewindScopeSchema } from '../core/rewind.js'
 import { EnvBodySchema } from '../core/env.js'
 import { ProfileNameSchema } from '../core/envProfileNames.js'
 import type { RemoteRepository } from '../core/github.js'
+import type { DraftEvent } from '../core/pullRequestDraft.js'
 import {
   InstructionBodySchema,
   InstructionKindSchema,
@@ -160,6 +161,8 @@ export interface IpcHost {
   readonly broadcastChatsChanged: (event: ChatsChangedEvent) => void
   /** A conversation's background agents, gathered into one push per burst. */
   readonly broadcastTasks: (event: TasksEvent) => void
+  /** A workspace's pull-request description, as where it stands changes. */
+  readonly broadcastPullRequestDraft: (event: DraftEvent) => void
   /**
    * The config as it now stands, to every window.
    *
@@ -874,9 +877,16 @@ export function registerIpc(
 
   // Nothing to validate past the id: this one takes no user values, and what
   // comes back is checked where it is parsed rather than trusted from here.
+  // Answers once it has started; what the agent wrote is announced on
+  // `workspaces:draft`, so a window that moved on in between still hears it.
   host.handle('workspaces:draftPullRequest', (_event, workspaceId: string) =>
-    attempt(() => service.draftPullRequest(workspaceId))
+    attempt(() => {
+      service.draftPullRequest(workspaceId)
+    })
   )
+
+  // Read once by a window when it starts listening; the pushes keep it current.
+  host.handle('workspaces:drafts', () => attempt(() => service.listPullRequestDrafts()))
 
   host.handle('workspaces:commitAndPush', (_event, workspaceId: string, message: unknown) =>
     attempt(() => service.commitAndPushWorkspace(workspaceId, CommitMessageSchema.parse(message)))
@@ -999,6 +1009,7 @@ export function registerIpc(
   service.onChatStatus(host.broadcastChatStatus)
   service.onChatsChanged(host.broadcastChatsChanged)
   service.onTasks(host.broadcastTasks)
+  service.onPullRequestDraft(host.broadcastPullRequestDraft)
 
   // Listing does not create, opening does. The distinction is what keeps a
   // workspace nobody has spoken to free of a record and a transcript file.

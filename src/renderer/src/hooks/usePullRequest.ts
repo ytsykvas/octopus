@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 
+import { useDraftState } from './pullRequestDrafts.js'
 import { useErrorMessage } from './useErrorMessage.js'
 import { useTurnSettled } from './useTurnSettled.js'
 
@@ -15,8 +16,15 @@ export interface PullRequestController {
   readonly creating: boolean
   /** Opens one, and answers with its URL — or null when it did not. */
   readonly create: (draft: PullRequestDraft) => Promise<string | null>
-  /** True while the agent is writing a title and a description. */
+  /**
+   * True while the agent is writing a title and a description.
+   *
+   * Read from main rather than kept here: the agent goes on writing when the
+   * user looks at another workspace, and coming back has to say so.
+   */
   readonly drafting: boolean
+  /** What the agent wrote for this workspace, until the request is opened with it. */
+  readonly drafted: DraftedPullRequest | null
   /**
    * Why the last thing asked for did not happen — drafting or opening.
    *
@@ -30,10 +38,11 @@ export interface PullRequestController {
   /**
    * Asks the agent for a title and a description. Opens nothing.
    *
-   * Null when it failed, and the reason is in `error` — the form stays as the
-   * user left it, so a failure costs them nothing they had typed.
+   * What it writes arrives as `drafted`, and why it could not as `actionError`
+   * — the form stays as the user left it, so a failure costs them nothing they
+   * had typed.
    */
-  readonly draft: () => Promise<DraftedPullRequest | null>
+  readonly draft: () => void
   /** Asks again: after a merge, after a commit, or on the refresh control. */
   readonly refresh: () => void
 }
@@ -61,8 +70,8 @@ export function usePullRequest(
   const [view, setView] = useState<PullRequestView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const [drafting, setDrafting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const described = useDraftState(workspaceId)
 
   /*
    * The workspace the two above describe.
@@ -81,7 +90,6 @@ export function usePullRequest(
     // anything it was about to complain about. A refusal held over is a
     // sentence about a branch nobody is looking at.
     setCreating(false)
-    setDrafting(false)
     setActionError(null)
   }
 
@@ -164,29 +172,16 @@ export function usePullRequest(
     [workspaceId, apply, describeFailure]
   )
 
-  const draft = useCallback(async (): Promise<DraftedPullRequest | null> => {
-    if (workspaceId === null) return null
+  const draft = useCallback(() => {
+    if (workspaceId === null) return
 
-    // Before the await for the same reason, though this one only ever wrote a
-    // message: it had no check at all, so a description refused for the
-    // workspace being left was drawn against the one arrived at.
-    const attempt = ++generation.current
-
-    setDrafting(true)
+    // No generation taken: nothing comes back here to be dropped. What the
+    // agent writes is announced, and arrives through `useDraftState` for
+    // whichever workspace it was — on screen or not.
     setActionError(null)
-    const result = await window.octopus.workspaces.draftPullRequest(workspaceId)
-    if (attempt !== generation.current) return null
-
-    setDrafting(false)
-
-    if (!result.ok) {
-      setActionError(describeFailure(result))
-      return null
-    }
-
-    // Nothing is read again afterwards: this changed nothing on GitHub, and
-    // nothing about the branch is different for having been described.
-    return result.value
+    void window.octopus.workspaces.draftPullRequest(workspaceId).then((result) => {
+      if (!result.ok) setActionError(describeFailure(result))
+    })
   }, [workspaceId, describeFailure])
 
   const refresh = useCallback(() => {
@@ -202,8 +197,14 @@ export function usePullRequest(
     error,
     creating,
     create,
-    drafting,
-    actionError,
+    drafting: described?.status === 'writing',
+    drafted: described?.status === 'written' ? described.draft : null,
+    // Opening, or a refusal to start, is newer than a description that failed
+    // before it — and is what the form is waiting on. Silent while opening:
+    // the user has moved past the failed description by pressing Open.
+    actionError:
+      actionError ??
+      (described?.status === 'failed' && !creating ? describeFailure(described.failure) : null),
     draft,
     refresh
   }

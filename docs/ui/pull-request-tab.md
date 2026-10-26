@@ -63,6 +63,18 @@ its own, and the answer comes back into the form's fields, where it is read,
 changed or thrown away before anything is opened. Nothing is added to a
 conversation, so none is started for it either.
 
+**The draft belongs to the workspace, not to the pane.** Main runs it and keeps
+where it stands — writing, written, or refused with its reason — until the
+request is opened, the workspace is removed, or it is asked for again. The pane
+reads that through `useDraftState` and the `workspaces:draft` push. It used to
+be the reply to the press: looking at another workspace while the agent thought
+dropped the answer, though the query ran on to the end in main, and coming
+back offered to ask again. Now the pane coming back says _Writing…_, or fills
+the fields with what was written meanwhile, and the workspace row shows the
+agent at it (see [the workspace list](workspace-list.md)). A second press, or a
+second window, joins the run already going. What the user typed into the
+fields by hand is still the form's own and is not kept across a switch.
+
 It asks `gh` nothing while another tab is showing. The diff follows the same
 rule, and it matters more here: this leaves the machine, so a hidden tab would be
 a network call for every workspace opened. `⌘⇧P` selects it — the shortcut §10.8

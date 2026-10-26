@@ -6,7 +6,7 @@ import type { PullRequestView } from '@core/pullRequests.js'
 
 import { refuseSilence, TURN_DONE } from '../test/chat.js'
 import { held } from '../test/held.js'
-import { octopus } from '../test/octopus.js'
+import { announceDraft, answerDraft, octopus } from '../test/octopus.js'
 import { usePullRequest } from './usePullRequest.js'
 
 const VIEW: PullRequestView = {
@@ -125,7 +125,7 @@ describe('the pull request of a workspace', () => {
     await expect(result.current.create(DRAFT)).resolves.toBeNull()
     // The agent is not asked either: describing a branch there is no workspace
     // for would be a question with no subject.
-    await expect(result.current.draft()).resolves.toBeNull()
+    result.current.draft()
     expect(octopus().workspaces.pullRequest).not.toHaveBeenCalled()
     expect(octopus().workspaces.createPullRequest).not.toHaveBeenCalled()
     expect(octopus().workspaces.draftPullRequest).not.toHaveBeenCalled()
@@ -272,14 +272,13 @@ describe('the pull request of a workspace', () => {
 
   /*
    * Asking the agent to describe a branch takes a turn, which is long enough to
-   * open another workspace in. The description that comes back is about the
-   * branch that was left, and it had no check at all before this.
+   * open another workspace in. The description belongs to the branch it was
+   * asked about: not drawn on the one opened meanwhile, and not lost either —
+   * it was dropped here once, and coming back meant asking all over again.
    */
-  it('drops a description whose workspace changed while it was being written', async () => {
-    const slow = held<{ ok: false; error: string }>()
+  it('keeps a description to its own workspace while the user looks elsewhere', async () => {
+    answerDraft(null)
     vi.mocked(octopus().workspaces.pullRequest).mockResolvedValue({ ok: true, value: VIEW })
-    vi.mocked(octopus().workspaces.draftPullRequest).mockReturnValue(slow.promise)
-
     const { result, rerender } = renderHook(({ id }) => usePullRequest(id, true), {
       initialProps: { id: 'anna' }
     })
@@ -287,21 +286,83 @@ describe('the pull request of a workspace', () => {
       expect(result.current.view).not.toBeNull()
     })
 
-    let drafting: Promise<unknown> = Promise.resolve(null)
     act(() => {
-      drafting = result.current.draft()
+      result.current.draft()
     })
     expect(result.current.drafting).toBe(true)
 
     rerender({ id: 'bob' })
     expect(result.current.drafting).toBe(false)
 
-    await act(async () => {
-      slow.resolve({ ok: false, error: 'the agent is busy' })
-      await drafting
+    const written = { title: 'T', body: 'B', commitMessage: null }
+    act(() => {
+      announceDraft({ workspaceId: 'anna', state: { status: 'written', draft: written } })
+    })
+    expect(result.current.drafted).toBeNull()
+
+    rerender({ id: 'anna' })
+    expect(result.current.drafted).toEqual(written)
+  })
+
+  // Why it failed is said where it was asked, even after a visit elsewhere.
+  it('says why a description could not be written, on its own workspace only', () => {
+    const { result, rerender } = renderHook(({ id }) => usePullRequest(id, true), {
+      initialProps: { id: 'anna' }
+    })
+
+    act(() => {
+      announceDraft({
+        workspaceId: 'anna',
+        state: { status: 'failed', failure: { ok: false, error: 'busy', code: 'draftUnreadable' } }
+      })
+    })
+    expect(result.current.actionError).toMatch(/title and a body|answer/i)
+
+    rerender({ id: 'bob' })
+    expect(result.current.actionError).toBeNull()
+  })
+
+  // Pressing Open moves past a description that failed; it is not repeated
+  // under a request being opened.
+  it('keeps quiet about a failed description while a request is being opened', async () => {
+    const slow = held<{ ok: true; value: string }>()
+    vi.mocked(octopus().workspaces.createPullRequest).mockReturnValue(slow.promise)
+    const { result } = renderHook(() => usePullRequest('anna', true))
+    act(() => {
+      announceDraft({
+        workspaceId: 'anna',
+        state: { status: 'failed', failure: { ok: false, error: 'busy' } }
+      })
+    })
+    expect(result.current.actionError).not.toBeNull()
+
+    act(() => {
+      void result.current.create(DRAFT)
     })
 
     expect(result.current.actionError).toBeNull()
+    await act(async () => {
+      slow.resolve({ ok: true, value: 'https://x/pull/1' })
+      await Promise.resolve()
+    })
+  })
+
+  // Refused before anything started — no such workspace — so nothing will be
+  // announced, and the reply is the only place the reason is.
+  it('says why the agent could not be asked at all', async () => {
+    vi.mocked(octopus().workspaces.draftPullRequest).mockResolvedValue({
+      ok: false,
+      error: 'no such workspace'
+    })
+    const { result } = renderHook(() => usePullRequest('anna', true))
+
+    act(() => {
+      result.current.draft()
+    })
+
+    await waitFor(() => {
+      expect(result.current.actionError).toMatch(/no such workspace/)
+    })
   })
 
   // The same staleness one field over: a refusal belonging to the workspace

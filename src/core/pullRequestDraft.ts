@@ -23,6 +23,7 @@ import {
 import { branchGuard } from './branchGuard.js'
 import type { SettingSourceName } from './config.js'
 import type { WorkspaceDiff } from './diff.js'
+import { type Failure, failureOf } from './failure.js'
 import { GitHubError } from './github.js'
 import { describeError } from './persist.js'
 
@@ -304,4 +305,88 @@ export async function draftPullRequest(
   }
 
   return draft
+}
+
+/**
+ * Where a workspace's description stands.
+ *
+ * Kept by the service rather than by the window that asked, because the window
+ * moves on: a reply that belonged to a hook's state was dropped the moment the
+ * user looked at another workspace, while the query it answered ran to the end
+ * in this process anyway — the tokens spent, the text thrown away.
+ */
+export type DraftState =
+  | { readonly status: 'writing' }
+  | { readonly status: 'written'; readonly draft: DraftedPullRequest }
+  | { readonly status: 'failed'; readonly failure: Failure }
+
+/** A workspace's description as it now stands; null once it is gone. */
+export interface DraftEvent {
+  readonly workspaceId: string
+  readonly state: DraftState | null
+}
+
+export interface DraftRegistry {
+  /**
+   * Asks, unless an answer is already being written — then it is that one the
+   * asker gets. Answers nothing: the outcome is announced, because whoever
+   * asked may not be there to hear it.
+   */
+  start(workspaceId: string, run: () => Promise<DraftedPullRequest>): void
+  /** Every workspace with a description being written, written, or refused. */
+  list(): readonly DraftEvent[]
+  /** Done with it: the request was opened, or the workspace removed. */
+  forget(workspaceId: string): void
+}
+
+/**
+ * The descriptions in flight and the ones written, one per workspace.
+ *
+ * In memory only, like the background tasks: a query dies with the process
+ * that ran it, so there is nothing here for `state.json` to hold.
+ */
+export function createDraftRegistry(notify: (event: DraftEvent) => void): DraftRegistry {
+  /*
+   * Compared by identity when a run settles. A workspace forgotten while its
+   * description was being written — removed, or its request opened — must not
+   * be brought back by the answer arriving afterwards, and neither may an
+   * answer to a question that has since been asked again.
+   */
+  const entries = new Map<string, { state: DraftState }>()
+
+  function settle(workspaceId: string, entry: { state: DraftState }, state: DraftState): void {
+    if (entries.get(workspaceId) !== entry) return
+    entry.state = state
+    notify({ workspaceId, state })
+  }
+
+  return {
+    start(workspaceId, run) {
+      // A second press, or a second window, joins the run already going rather
+      // than paying for the same description twice.
+      if (entries.get(workspaceId)?.state.status === 'writing') return
+
+      const entry: { state: DraftState } = { state: { status: 'writing' } }
+      entries.set(workspaceId, entry)
+      notify({ workspaceId, state: entry.state })
+
+      void run().then(
+        (draft) => {
+          settle(workspaceId, entry, { status: 'written', draft })
+        },
+        (error: unknown) => {
+          settle(workspaceId, entry, { status: 'failed', failure: failureOf(error) })
+        }
+      )
+    },
+
+    list() {
+      return [...entries].map(([workspaceId, entry]) => ({ workspaceId, state: entry.state }))
+    },
+
+    forget(workspaceId) {
+      if (!entries.delete(workspaceId)) return
+      notify({ workspaceId, state: null })
+    }
+  }
 }
