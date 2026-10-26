@@ -999,6 +999,52 @@ describe('a different conversation in the same pane', () => {
   })
 
   /*
+   * The settings move a chat that never chose its own models, and the strip
+   * hands the pane the record again. The pair has to follow while the log, and
+   * anything the events moved on the pane's own copy, stay as they are.
+   */
+  it('takes the models the settings gave this conversation, and nothing else of the record', async () => {
+    const before = chat()
+    const kept: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the first one' }
+    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [kept] })
+    const { result, rerender } = renderHook(
+      ({ record }: { record: Chat }) =>
+        useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps: { record: before } }
+    )
+    await waitFor(() => {
+      expect(result.current.entries).toEqual([kept])
+    })
+    act(() => {
+      emitAgentEvent({ type: 'auto_mode_unavailable', reason: null, fallback: 'acceptEdits' })
+    })
+
+    rerender({ record: { ...before, model: 'sonnet', planModel: 'opus' } })
+
+    expect(result.current.chat).toMatchObject({
+      model: 'sonnet',
+      planModel: 'opus',
+      workingMode: 'acceptEdits'
+    })
+    // The log is the one that was read, with the event's own line after it.
+    expect(result.current.entries[0]).toEqual(kept)
+  })
+
+  it('does not carry the models of one conversation into the next one it is pointed at', () => {
+    const first = chat({ model: 'sonnet', planModel: 'opus' })
+    const second = chat({ id: 'chat-2', model: 'haiku', planModel: null })
+    const { result, rerender } = renderHook(
+      ({ record }: { record: Chat }) =>
+        useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps: { record: first } }
+    )
+
+    rerender({ record: second })
+
+    expect(result.current.chat).toMatchObject({ id: 'chat-2', model: 'haiku', planModel: null })
+  })
+
+  /*
    * A rewind re-reads the log, and the read can still be on its way when the
    * tab changes. Landing after the switch, it drew the conversation left
    * behind into the one now in front.

@@ -315,6 +315,30 @@ export function useChat(
     }
   }
 
+  /*
+   * The two models, when the settings moved them under this same conversation.
+   *
+   * The core moves a chat that never chose its own onto new settings and the
+   * strip reads the list again, so the record arrives here as a prop with a
+   * different pair. Only that pair is taken, not the record: the state beside
+   * it is fed by events (a fallback from auto, say) that a re-read made a moment
+   * earlier could be older than. A pair chosen from this pane is written to the
+   * core first, so it comes back as the same pair and changes nothing.
+   */
+  const initialModel = initial?.model ?? null
+  const initialPlanModel = initial?.planModel ?? null
+  const [shownModels, setShownModels] = useState({
+    model: initialModel,
+    planModel: initialPlanModel
+  })
+  if (shownModels.model !== initialModel || shownModels.planModel !== initialPlanModel) {
+    setShownModels({ model: initialModel, planModel: initialPlanModel })
+
+    if (initial !== null && initial.id === chat?.id) {
+      setChat({ ...chat, model: initial.model, planModel: initial.planModel })
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController()
     // Called rather than read: the narrowing TypeScript applies to a checked

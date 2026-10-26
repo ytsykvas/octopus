@@ -323,7 +323,15 @@ record costs one row.
 The record is created from `config.workingMode`, `config.effort`,
 `config.model` and `config.planModel`, so those are also what the composer shows
 until it exists — passed down from `App`,
-which is where the config is read. The footer named the schema's defaults for a
+which is where the config is read.
+
+The copy is not the end of it for the two models. A change of `config.model` or
+`config.planModel` moves every chat that holds exactly the pair the settings held
+just before — closed ones too — because a chat opened before the pair was saved
+had no split, and an approved plan then had nothing to switch to. Equality with
+the old settings stands in for "never chose its own", so no field says so; a chat
+picked by hand to those very values follows as well, which is what that pair
+already meant. The footer named the schema's defaults for a
 while instead, which made it lie about exactly one message: the first.
 
 Neither of those is ever null. `effort` was, meaning "leave it to the agent",

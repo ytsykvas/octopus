@@ -1364,7 +1364,7 @@ export const de: Translation = {
 
     planModel: 'Modell für Planung und Recherche',
     planModelHint:
-      'Womit ein neuer Chat plant und recherchiert – und auch Code schreibt, solange unten kein anderes Modell gewählt ist. Die Liste kommt vom Agenten selbst und bleibt leer, bis einmal eine Sitzung lief.',
+      'Womit ein neuer Chat plant und recherchiert – und auch Code schreibt, solange unten kein anderes Modell gewählt ist. Ein Chat, der noch auf der bisherigen Einstellung steht, folgt einer Änderung; einer, dessen Modelle in der eigenen Eingabe gewählt wurden, behält sie. Die Liste kommt vom Agenten selbst und bleibt leer, bis einmal eine Sitzung lief.',
     model: 'Modell für Code',
     modelHint:
       'Wird genutzt, solange Plan aus ist – so kann ein Modell den Plan ausdenken und ein anderes ihn umsetzen. Lass es wie beim Planen, um für beides ein Modell zu nutzen.',
