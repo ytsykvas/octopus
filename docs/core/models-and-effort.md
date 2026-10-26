@@ -55,8 +55,10 @@ planning. `sessionModel` folds them into the one the SDK takes — see
 return value is ever handed to `setModel` or to `SessionOptions.model`.
 
 Which means the effective model can move without anyone naming one, at exactly
-two moments: planning turned on or off, and a plan approved. `pushModel` handles
-both, and the guard in it is what keeps the paragraph above true — it sends
+three moments: planning turned on or off, a plan approved, and the settings
+changing under a chat that still holds the previous pair (`followModelSettings`,
+which moves the record and hands each chat to the same push). `pushModel` handles
+all three, and the guard in it is what keeps the paragraph above true — it sends
 nothing unless the value actually changed, so a conversation whose two jobs
 share a model is never pushed at, and a `/model` given to it still stands.
 "Changed" is measured against the value in force **just before this change's

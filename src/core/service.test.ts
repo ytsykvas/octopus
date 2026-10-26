@@ -10301,6 +10301,76 @@ describe('the agent chat', () => {
       })
     })
 
+    describe('when the model settings change', () => {
+      const split = { model: 'claude-sonnet-5', planModel: 'claude-opus-5' }
+
+      it('moves a chat that was still on the old settings, so an approved plan switches', async () => {
+        const { service, workspaceId, events } = await withWorkspace()
+        // Opened before the settings were saved: no split, as in the bug report.
+        const chat = await service.openChat(workspaceId)
+
+        await service.updateConfig(split)
+
+        expect(service.listChats(workspaceId)[0]).toMatchObject(split)
+
+        await service.setChatPlanMode(chat.id, true)
+        await service.sendToChat(chat.id, 'plan it')
+        const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
+        await service.answerPermission(await waitForRequest(events), 'allow')
+        await decision
+
+        expect(agent().requestedModels().at(-1)).toBe('claude-sonnet-5')
+      })
+
+      it('leaves a chat whose models were chosen in its own picker', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.setChatModels(chat.id, { model: 'claude-opus-5' })
+
+        await service.updateConfig(split)
+
+        expect(service.listChats(workspaceId)[0]).toMatchObject({
+          model: 'claude-opus-5',
+          planModel: null
+        })
+      })
+
+      it('moves a chat that was closed, which reopens on the current settings', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const first = await service.openChat(workspaceId)
+        await service.createChat(workspaceId)
+        await service.closeChat(first.id)
+
+        await service.updateConfig(split)
+
+        expect(await service.reopenChat(first.id)).toMatchObject(split)
+      })
+
+      it('tells a running session the model that is now in force, once', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'work')
+
+        await service.updateConfig(split)
+
+        // Planning is on in a new conversation, so the plan model is in force.
+        expect(agent().requestedModels()).toEqual(['claude-opus-5'])
+      })
+
+      it('says which workspace moved, and nothing when the models did not', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        await service.openChat(workspaceId)
+        const heard: string[] = []
+        service.onChatsChanged((event) => heard.push(event.workspaceId))
+
+        await service.updateConfig({ branchPrefix: 'octo/' })
+        expect(heard).toEqual([])
+
+        await service.updateConfig(split)
+        expect(heard).toEqual([workspaceId])
+      })
+    })
+
     it('starts the next session on the model the chat is now on', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)

@@ -3628,9 +3628,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * Tells a running session the model it should now be on, if that moved.
    *
-   * The two moments where the effective model changes without anyone naming
-   * one: planning turned on or off, and a plan approved. `before` is what was
-   * in force when the change was decided.
+   * The three moments where the effective model changes without anyone naming
+   * one: planning turned on or off, a plan approved, and the settings moving
+   * under a chat that follows them. `before` is what was in force when the
+   * change was decided.
    *
    * The guard is the whole reason `/model` still stands. A conversation whose
    * two jobs share a model runs that one whatever the toggles do, so nothing
@@ -3642,6 +3643,51 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (wanted === before) return
 
     await sessions.get(chatId)?.setModel(wanted)
+  }
+
+  /**
+   * Moves the conversations that never chose their own models onto the settings
+   * that just changed.
+   *
+   * A chat copies `model` and `planModel` once, when it is opened, so one
+   * opened before the pair was saved kept no split: an approved plan found
+   * nothing to switch and the whole conversation ran on the agent's default.
+   * "Never chose" is the chat holding exactly the pair the settings held a
+   * moment ago, which says it without a field of its own — a chat picked by
+   * hand to those very values follows too, and that pair already meant "what
+   * the settings say". Closed chats move as well, so a reopened one starts on
+   * the current pair like an untouched one.
+   *
+   * What was in force is read inside the commit, as `changeInForce` does, and
+   * `pushModel` keeps its guard: a session is told only if its effective model
+   * moved. The tab strip's announcement is sent by hand because
+   * `commitChats` announces a change of the set of tabs, and this is neither.
+   */
+  async function followModelSettings(before: Config, next: Config): Promise<void> {
+    if (before.model === next.model && before.planModel === next.planModel) return
+
+    const moved: { chatId: string; workspaceId: string; wasInForce: string | null }[] = []
+    await commit((current) => {
+      moved.length = 0
+      let changed = current
+      for (const chat of current.chats) {
+        if (chat.model !== before.model || chat.planModel !== before.planModel) continue
+
+        moved.push({
+          chatId: chat.id,
+          workspaceId: chat.workspaceId,
+          wasInForce: sessionModel(chat)
+        })
+        changed = updateChat(changed, chat.id, { model: next.model, planModel: next.planModel })
+      }
+      return changed
+    })
+
+    for (const { chatId, wasInForce } of moved) await pushModel(chatId, wasInForce)
+
+    for (const workspaceId of new Set(moved.map((each) => each.workspaceId))) {
+      for (const listener of chatsChangedListeners) listener({ workspaceId })
+    }
   }
 
   /**
@@ -5062,7 +5108,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async updateConfig(patch) {
+      const before = config
       const next = await applyConfig(() => patch)
+      await followModelSettings(before, next)
       await pushSkillsToRunning()
       return next
     },

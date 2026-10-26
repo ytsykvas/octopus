@@ -1724,7 +1724,7 @@ export const en = {
 
     planModel: 'Model for planning and research',
     planModelHint:
-      'What a new conversation plans and researches with, and writes code with too unless the model below says otherwise. The list is the agent’s own, so it is empty until a session has run once.',
+      'What a new conversation plans and researches with, and writes code with too unless the model below says otherwise. A conversation still on the previous setting follows a change; one whose models were picked in its own composer keeps them. The list is the agent’s own, so it is empty until a session has run once.',
     model: 'Model for writing code',
     modelHint:
       'Used while Plan is off, so a plan can be thought out by one model and carried out by another. Leave it the same as the plan to use one model for both.',
