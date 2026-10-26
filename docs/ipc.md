@@ -14,7 +14,9 @@ type Result<T> =
 ```
 
 Handlers do not throw. `attempt` in [`src/main/result.ts`](../src/main/result.ts)
-catches and converts, because an exception crossing IPC arrives as an opaque
+catches and converts — through `failureOf` in
+[`src/core/failure.ts`](../src/core/failure.ts), the one place that decides the
+shape, which a push carrying a failure uses too — because an exception crossing IPC arrives as an opaque
 Electron error with the original message mangled — the renderer could say
 nothing useful about it.
 
@@ -447,7 +449,7 @@ person types or pastes, and a chat message past 100,000 characters is what
 pasting a file looks like rather than a broken renderer. Under zod 4 a
 `ZodError`'s `message` **is** `JSON.stringify(issues)`, so those crossed
 uncoded and the window pasted an array of `origin` / `code` / `maximum` objects
-into its generic frame. `attempt` now flattens the issues the way `readJsonFile`
+into its generic frame. `failureOf` now flattens the issues the way `readJsonFile`
 already did and sends `valueRefused` with the reason, which is one code rather
 than one per site: the sentence differs because the reason does.
 

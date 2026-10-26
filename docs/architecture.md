@@ -173,7 +173,8 @@ one must not reach a command line. Anything that becomes a path, a process
 argument or a file is parsed with zod at that boundary.
 
 **Failures come back as values, not exceptions.** `attempt` in `main/result.ts`
-converts a throw into `{ ok: false, error, code }`. An exception thrown inside
+converts a throw into `{ ok: false, error, code }`, through `failureOf` in
+`core/failure.ts`, which a push carrying a failure uses as well. An exception thrown inside
 an IPC handler reaches the renderer as an opaque Electron error with the message
 mangled; the `code` is what lets the UI show a localised message instead.
 
