@@ -94,6 +94,7 @@ export const uk: Translation = {
     lineInterrupted: 'Перервано',
     lineIdle: 'Не розпочато',
     missingHint: 'Прибрано повз застосунок. Запис можна безпечно видалити.',
+    describing: 'Агент пише опис пул-реквесту',
     headElsewhere:
       'Робоче дерево не на гілці {{branch}}. Робота, зроблена тут, не потрапить у гілку цього воркспейса.',
     changedFiles_one: '{{count}} файл',

@@ -73,6 +73,16 @@ export function pushTasks(targets: readonly PushTarget[], event: unknown): void 
 }
 
 /**
+ * Where a workspace's pull-request description stands, whenever that changes.
+ *
+ * A push rather than the reply to the asking, because the window that asked
+ * may be showing another workspace by the time the agent has written it.
+ */
+export function pushPullRequestDraft(targets: readonly PushTarget[], event: unknown): void {
+  pushAll(targets, 'workspaces:draft', event)
+}
+
+/**
  * Which conversations a workspace has, when that set changes.
  *
  * Separate from `chats:status` on purpose: a status moves several times a turn

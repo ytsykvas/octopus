@@ -93,6 +93,14 @@ branch of every worktree and the parser already keeps it, so this is a
 comparison in the pass that already decides whether a directory is missing — not
 one more `git` per workspace on a row that is re-read after every agent turn.
 
+**A row says while its pull-request description is being written.** Asking
+the agent to describe a change in the PR tab runs on in main after the user
+looks at another workspace — that is the point of it — so the row is where they
+can still see it going on: a pulsing `Sparkles` beside the request mark, with
+the sentence as its label. Only while it is being written. The mark going away
+is the sign the text is ready, which needs no "seen" state to keep; a mark for
+a written description would stay on until the request was opened.
+
 **The change count follows the work.** It used to be read when the list was —
 on create, rename, remove and first load — and never again, so the agent could
 rewrite twenty files while the row went on saying what it said an hour ago,

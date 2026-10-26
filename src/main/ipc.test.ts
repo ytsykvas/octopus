@@ -21,6 +21,7 @@ import type { QueryFn } from '../core/agent.js'
 import type { Config } from '../core/config.js'
 import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import type { RemoteRepository } from '../core/github.js'
+import type { DraftEvent } from '../core/pullRequestDraft.js'
 import {
   createService as makeService,
   type OctopusService,
@@ -74,6 +75,8 @@ interface Harness {
   readonly chatsChangedEvents: ChatsChangedEvent[]
   /** Every push of a conversation's background agents. */
   readonly taskEvents: TasksEvent[]
+  /** Every push of where a workspace's pull-request description stands. */
+  readonly draftEvents: DraftEvent[]
   /** Every config a write announced, so a window that made no call can learn. */
   readonly configBroadcasts: Config[]
   /** Paths handed to the system, in order. */
@@ -98,6 +101,7 @@ function harness(): Harness {
   const chatStatusEvents: ChatStatusEvent[] = []
   const chatsChangedEvents: ChatsChangedEvent[] = []
   const taskEvents: TasksEvent[] = []
+  const draftEvents: DraftEvent[] = []
   const configBroadcasts: Config[] = []
   const opened: string[] = []
   const dialogOptions: OpenDialogOptions[] = []
@@ -111,6 +115,7 @@ function harness(): Harness {
     chatStatusEvents,
     chatsChangedEvents,
     taskEvents,
+    draftEvents,
     configBroadcasts,
     opened,
     dialogOptions,
@@ -136,6 +141,7 @@ function harness(): Harness {
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
       broadcastChatsChanged: (event) => chatsChangedEvents.push(event),
       broadcastTasks: (event) => taskEvents.push(event),
+      broadcastPullRequestDraft: (event) => draftEvents.push(event),
       broadcastConfig: (config) => configBroadcasts.push(config),
       openPath: (path) => {
         opened.push(path)
@@ -444,6 +450,7 @@ describe('channel table', () => {
     'workspaces:pullRequest',
     'workspaces:createPullRequest',
     'workspaces:draftPullRequest',
+    'workspaces:drafts',
     'workspaces:commitAndPush',
     'workspaces:amendAndPush',
     'workspaces:push',
@@ -1993,7 +2000,7 @@ describe('workspaces of a real project', () => {
     ).resolves.toMatchObject({ ok: false })
   })
 
-  it('asks the service to describe a branch, and passes the answer back', async () => {
+  it('asks the service to describe a branch, and announces what it wrote', async () => {
     const projectId = await addProject('describing')
     const workspace = await createWorkspace(projectId)
     await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
@@ -2008,8 +2015,21 @@ describe('workspaces of a real project', () => {
 
     await expect(invoke('workspaces:draftPullRequest', workspace.id)).resolves.toEqual({
       ok: true,
-      value: { title: 'Add a draft', body: 'Because.', commitMessage: 'Add a draft' }
+      value: undefined
     })
+
+    const written = {
+      workspaceId: workspace.id,
+      state: {
+        status: 'written',
+        draft: { title: 'Add a draft', body: 'Because.', commitMessage: 'Add a draft' }
+      }
+    }
+    await vi.waitFor(() => {
+      expect(bench.draftEvents).toContainEqual(written)
+    })
+    // And kept, for a window that starts listening only now.
+    await expect(invoke('workspaces:drafts')).resolves.toEqual({ ok: true, value: [written] })
   })
 
   it('commits everything in a workspace and pushes the branch', async () => {

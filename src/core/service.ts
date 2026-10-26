@@ -76,7 +76,12 @@ import {
   type WorkspaceDiff
 } from './diff.js'
 import { revertFile } from './revert.js'
-import { draftPullRequest, type DraftedPullRequest } from './pullRequestDraft.js'
+import {
+  createDraftRegistry,
+  type DraftedPullRequest,
+  type DraftEvent,
+  draftPullRequest
+} from './pullRequestDraft.js'
 import { isListening, type PortProbe, settlePort } from './ports.js'
 import {
   defaultStrayDeps,
@@ -1321,10 +1326,14 @@ export interface OctopusService {
   /**
    * Asks the agent for a title and a description for this branch.
    *
-   * Opens nothing and pushes nothing: the answer goes back to the form, where
-   * whoever asked can read it, change it, or throw it away.
+   * Opens nothing and pushes nothing. Returns once it has started: the answer
+   * is announced through `onPullRequestDraft` and kept until the request is
+   * opened or asked for again, because whoever asked may have moved to another
+   * workspace by the time it is written.
    */
-  draftPullRequest(workspaceId: string): Promise<DraftedPullRequest>
+  draftPullRequest(workspaceId: string): void
+  /** Every workspace's description being written, written or refused. */
+  listPullRequestDrafts(): readonly DraftEvent[]
 
   /**
    * The checks, the review and the mergeability of a request that exists.
@@ -1696,6 +1705,8 @@ export interface OctopusService {
   onChatStatus(handler: (event: ChatStatusEvent) => void): () => void
   /** A conversation's tasks, whenever they move — gathered, see `TASK_PUSH_MS` in `taskRegistry.ts`. */
   onTasks(handler: (event: TasksEvent) => void): () => void
+  /** A workspace's pull-request description, whenever where it stands changes. */
+  onPullRequestDraft(handler: (event: DraftEvent) => void): () => void
   /**
    * Which conversations a workspace has, when that set changes.
    *
@@ -1900,6 +1911,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const chatStatusListeners = new Set<(event: ChatStatusEvent) => void>()
   const chatsChangedListeners = new Set<(event: ChatsChangedEvent) => void>()
   const taskListeners = new Set<(event: TasksEvent) => void>()
+  const draftListeners = new Set<(event: DraftEvent) => void>()
+  const drafts = createDraftRegistry((event) => {
+    for (const listener of draftListeners) listener(event)
+  })
   const pending = new Map<string, PendingPermission>()
 
   /**
@@ -2203,6 +2218,46 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await removeEnvBlock(workspace.path, wasEnvFile)
       }
     }
+  }
+
+  /**
+   * The agent's title and description for a workspace — the query itself,
+   * which the draft registry runs on behalf of whoever asked.
+   */
+  async function describePullRequest(
+    workspace: Workspace,
+    project: Project
+  ): Promise<DraftedPullRequest> {
+    const [diff, changed, instruction, commitInstruction] = await Promise.all([
+      readDiffOf(workspace, project),
+      changeCount(workspace, makeExec, withIndexCopy),
+      // The same chain the pane reads and the prepared prompts send. These
+      // two called `effectiveInstruction` directly and so skipped the
+      // repository's own — the one layer that is a fact about the branch in
+      // front of you rather than a setting.
+      instructionFor(workspace, 'pullRequest'),
+      instructionFor(workspace, 'commitMessage')
+    ])
+
+    return draftPullRequest(
+      {
+        cwd: workspace.path,
+        instruction,
+        // Null is what tells the draft not to ask for a commit message: with
+        // a clean worktree the request carries what is already committed, and
+        // there is nothing for one to describe.
+        commitInstruction: changed > 0 ? commitInstruction : null,
+        diff,
+        branch: workspace.branch,
+        // The model a chat would start on. A description is the agent's
+        // ordinary work, and there is no reason it should be answered by a
+        // different model than the one that did the work being described.
+        model: config.model,
+        settingSources: await sourcesFor(workspace),
+        pushTargets: await pushTargets(makeExec(workspace.path))
+      },
+      runQuery
+    )
   }
 
   /**
@@ -6012,6 +6067,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // stop existing, and a live agent would keep a child process pointed at
       // a path that is no longer there.
       await closeChatsOf(workspaceId)
+      // Its description goes too. The query is left to finish — nothing here
+      // can stop it — but what it answers lands on nothing.
+      drafts.forget(workspaceId)
 
       // Also before it goes, and for the same reason — the script runs in the
       // worktree. Whatever it says, the removal continues: a workspace that
@@ -6102,47 +6160,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      return createPullRequest(
+      const url = await createPullRequest(
         { ...request, branch: workspace.branch, base: await baseRefOf(project) },
         makeGh(workspace.path),
         makeExec(workspace.path)
       )
+      // The description has gone out with the request; kept, it would fill the
+      // form offered for the next one after a merge.
+      drafts.forget(workspaceId)
+      return url
     },
 
-    async draftPullRequest(workspaceId) {
+    draftPullRequest(workspaceId) {
+      // Here rather than inside the run, so an id that names nothing is
+      // refused to whoever asked instead of announced to everyone.
       const workspace = requireWorkspace(workspaceId)
       const project = requireProject(workspace.projectId)
 
-      const [diff, changed, instruction, commitInstruction] = await Promise.all([
-        readDiffOf(workspace, project),
-        changeCount(workspace, makeExec, withIndexCopy),
-        // The same chain the pane reads and the prepared prompts send. These
-        // two called `effectiveInstruction` directly and so skipped the
-        // repository's own — the one layer that is a fact about the branch in
-        // front of you rather than a setting.
-        instructionFor(workspace, 'pullRequest'),
-        instructionFor(workspace, 'commitMessage')
-      ])
+      drafts.start(workspaceId, () => describePullRequest(workspace, project))
+    },
 
-      return draftPullRequest(
-        {
-          cwd: workspace.path,
-          instruction,
-          // Null is what tells the draft not to ask for a commit message: with
-          // a clean worktree the request carries what is already committed, and
-          // there is nothing for one to describe.
-          commitInstruction: changed > 0 ? commitInstruction : null,
-          diff,
-          branch: workspace.branch,
-          // The model a chat would start on. A description is the agent's
-          // ordinary work, and there is no reason it should be answered by a
-          // different model than the one that did the work being described.
-          model: config.model,
-          settingSources: await sourcesFor(workspace),
-          pushTargets: await pushTargets(makeExec(workspace.path))
-        },
-        runQuery
-      )
+    listPullRequestDrafts() {
+      return drafts.list()
     },
 
     commitAndPushWorkspace(workspaceId, message) {
@@ -7064,6 +7103,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     onTasks(handler) {
       taskListeners.add(handler)
       return () => taskListeners.delete(handler)
+    },
+
+    onPullRequestDraft(handler) {
+      draftListeners.add(handler)
+      return () => draftListeners.delete(handler)
     },
 
     onChatsChanged(handler) {

@@ -16,8 +16,16 @@ interface NewPullRequestFormProps {
   readonly onCreate: (draft: PullRequestDraft) => void
   /** True while the agent is writing, which the button says instead of guessing. */
   readonly drafting: boolean
-  /** Asks the agent for a title and a description. Null when it could not. */
-  readonly onDraft: () => Promise<DraftedPullRequest | null>
+  /**
+   * What the agent wrote, kept by main until the request is opened.
+   *
+   * A value rather than the reply to `onDraft`: the reply belonged to whoever
+   * was looking when it arrived, and the user may have been looking at another
+   * workspace — this form unmounted, the answer with nowhere to go.
+   */
+  readonly drafted: DraftedPullRequest | null
+  /** Asks the agent for a title and a description. */
+  readonly onDraft: () => void
   /** Why drafting or opening failed. Shown here, so the form survives it. */
   readonly actionError: string | null
   /** Opens the project's instructions, which is where the wording is decided. */
@@ -44,6 +52,7 @@ export function NewPullRequestForm({
   creating,
   onCreate,
   drafting,
+  drafted,
   onDraft,
   actionError,
   onEditInstructions,
@@ -51,12 +60,38 @@ export function NewPullRequestForm({
 }: NewPullRequestFormProps): React.JSX.Element {
   const { t } = useTranslation()
 
-  const [commitMessage, setCommitMessage] = useState('')
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
+  // Started from what the agent wrote, so coming back to a workspace whose
+  // description was finished elsewhere shows it rather than empty fields.
+  const [commitMessage, setCommitMessage] = useState(drafted?.commitMessage ?? '')
+  const [title, setTitle] = useState(drafted?.title ?? '')
+  const [body, setBody] = useState(drafted?.body ?? '')
   const [draft, setDraft] = useState(false)
   /** Whether what is in the fields was written by the agent rather than typed. */
-  const [written, setWritten] = useState(false)
+  const [written, setWritten] = useState(drafted !== null)
+
+  /*
+   * The answer last put into the fields, compared during render rather than
+   * applied from an effect — the same shape `usePullRequest` uses for its
+   * workspace. Starts as the one the fields started from, so a mount never
+   * applies it twice.
+   */
+  const [applied, setApplied] = useState(drafted)
+
+  if (drafted !== applied) {
+    setApplied(drafted)
+    if (drafted !== null) {
+      setTitle(drafted.title)
+      setBody(drafted.body)
+      /* Into the field, like the title and the description. It used to be
+         kept out of sight and committed under on the next press, so the one
+         text that stays in the history for good was the one nobody read. A
+         message typed before the answer arrived is the person's own and
+         stays. */
+      const message = drafted.commitMessage
+      if (message !== null && commitMessage.trim() === '') setCommitMessage(message)
+      setWritten(true)
+    }
+  }
 
   const committing = commitMessage.trim() !== ''
   const untitled = title.trim() === ''
@@ -75,22 +110,7 @@ export function NewPullRequestForm({
          * second press is the one that opens it.
          */
         if (untitled) {
-          void onDraft().then((written_) => {
-            if (written_ === null) return
-            setTitle(written_.title)
-            setBody(written_.body)
-            /* Into the field, like the title and the description. It used to
-               be kept out of sight and committed under on the next press, so
-               the one text that stays in the history for good was the one
-               nobody read. A message typed before the answer arrived is the
-               person's own and stays — read from the state as it is now, not
-               as it was when the button was pressed. */
-            const drafted = written_.commitMessage
-            if (drafted !== null) {
-              setCommitMessage((typed) => (typed.trim() === '' ? drafted : typed))
-            }
-            setWritten(true)
-          })
+          onDraft()
           return
         }
 

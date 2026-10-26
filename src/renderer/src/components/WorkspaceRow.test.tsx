@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { announceDraft } from '../test/octopus.js'
 import { task } from '../test/tasks.js'
 import { workspaceView } from '../test/workspaces.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
@@ -44,6 +45,31 @@ describe('WorkspaceRow', () => {
     renderRow({ selected: false })
 
     expect(screen.queryByRole('button', { current: true })).toBeNull()
+  })
+
+  /*
+   * The description goes on being written after the user leaves the PR tab,
+   * and this row is what they can still see. It says so while it lasts and
+   * stops when the text is ready.
+   */
+  it('says while the agent is writing its pull request description', () => {
+    renderRow({ workspace: workspaceView('anna') })
+    const workspaceId = workspaceView('anna').id
+
+    act(() => {
+      announceDraft({ workspaceId, state: { status: 'writing' } })
+    })
+    expect(
+      screen.getByRole('img', { name: 'The agent is writing the pull request description' })
+    ).toBeInTheDocument()
+
+    act(() => {
+      announceDraft({
+        workspaceId,
+        state: { status: 'written', draft: { title: 'T', body: 'B', commitMessage: null } }
+      })
+    })
+    expect(screen.queryByRole('img', { name: /writing the pull request/ })).toBeNull()
   })
 
   it('shows the branch on hover', () => {

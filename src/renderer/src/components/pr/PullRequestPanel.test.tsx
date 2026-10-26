@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -11,7 +11,7 @@ import type {
 
 import { quoteController } from '../../test/comments.js'
 import { held } from '../../test/held.js'
-import { octopus } from '../../test/octopus.js'
+import { announceDraft, answerDraft, octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { PullRequestPanel } from './PullRequestPanel.js'
 
@@ -476,9 +476,9 @@ describe('the pull request tab', () => {
     const user = userEvent.setup()
     // A clean worktree, so the agent was asked for no commit message — the
     // shape the service answers with when there is nothing to commit.
-    vi.mocked(octopus().workspaces.draftPullRequest).mockResolvedValue({
-      ok: true,
-      value: { title: 'Written by the agent', body: 'Because of this.', commitMessage: null }
+    answerDraft({
+      status: 'written',
+      draft: { title: 'Written by the agent', body: 'Because of this.', commitMessage: null }
     })
     answer(view())
     renderPanel()
@@ -494,14 +494,65 @@ describe('the pull request tab', () => {
     })
   })
 
+  /*
+   * Reported: asking, then looking at another workspace while the agent
+   * thought, threw the answer away — the query ran to the end in main, and
+   * coming back showed empty fields and the button offering to ask again.
+   */
+  it('keeps what the agent writes after the workspace was left and come back to', async () => {
+    const user = userEvent.setup()
+    answerDraft(null)
+    answer(view())
+    const { showWorkspace } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+    showWorkspace(workspaceView('bruno', { projectId: 'atlas' }))
+    // Still being written, and the pane coming back says so.
+    showWorkspace(anna)
+    expect(await screen.findByRole('button', { name: 'Writing…' })).toBeDisabled()
+
+    showWorkspace(workspaceView('bruno', { projectId: 'atlas' }))
+    act(() => {
+      announceDraft({
+        workspaceId: anna.id,
+        state: {
+          status: 'written',
+          draft: { title: 'Written by the agent', body: 'Because of this.', commitMessage: null }
+        }
+      })
+    })
+    showWorkspace(anna)
+
+    expect(await screen.findByLabelText('Title')).toHaveValue('Written by the agent')
+    expect(screen.getByLabelText('Description')).toHaveValue('Because of this.')
+  })
+
+  /*
+   * Asking again — the title cleared, the button pressed — puts the written
+   * draft back to being written. The fields keep what is in them until the new
+   * answer arrives, rather than blanking on the way.
+   */
+  it('keeps the fields while a second description is being written', async () => {
+    const user = userEvent.setup()
+    answer(view())
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Ask the agent to describe it' }))
+    await user.clear(await screen.findByDisplayValue('Written by the agent'))
+    answerDraft(null)
+    await user.click(screen.getByRole('button', { name: 'Ask the agent to describe it' }))
+
+    expect(await screen.findByRole('button', { name: 'Writing…' })).toBeDisabled()
+    expect(screen.getByLabelText('Description')).toHaveValue('Because of this.')
+  })
+
   // A failure must not cost the user anything: nothing was typed here, but the
   // form has to stay usable rather than wedge on an empty title.
   it('leaves the fields alone when the agent could not be asked', async () => {
     const user = userEvent.setup()
-    vi.mocked(octopus().workspaces.draftPullRequest).mockResolvedValue({
-      ok: false,
-      error: 'no subscription',
-      code: 'draftFailed'
+    answerDraft({
+      status: 'failed',
+      failure: { ok: false, error: 'no subscription', code: 'draftFailed' }
     })
     answer(view())
     renderPanel()

@@ -41,7 +41,7 @@ import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { CliPermission } from '@core/cliPermissions.js'
 import type { WorkspaceChanges } from '@core/diff.js'
 import type { MergeMethod, PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
-import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
+import type { DraftEvent } from '@core/pullRequestDraft.js'
 import type { PullRequestDetail, RerunScope } from '@core/pullRequestShapes.js'
 import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
@@ -593,12 +593,27 @@ const api = {
     /**
      * Asks the agent to write a title and a description for this branch.
      *
-     * Opens nothing — the answer goes into the form, to be read and edited.
+     * Opens nothing, and answers once it has started: what the agent writes
+     * arrives on `onDraft`, so it reaches the form even after the window has
+     * looked at another workspace in between.
      */
-    draftPullRequest: (workspaceId: string): Promise<Result<DraftedPullRequest>> =>
-      ipcRenderer.invoke('workspaces:draftPullRequest', workspaceId) as Promise<
-        Result<DraftedPullRequest>
-      >,
+    draftPullRequest: (workspaceId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:draftPullRequest', workspaceId) as Promise<Result<void>>,
+
+    /** Every workspace's description being written, written or refused. */
+    drafts: (): Promise<Result<readonly DraftEvent[]>> =>
+      ipcRenderer.invoke('workspaces:drafts') as Promise<Result<readonly DraftEvent[]>>,
+
+    /** A workspace's description, whenever where it stands changes. */
+    onDraft: (handler: (event: DraftEvent) => void): (() => void) => {
+      const listener = (_event: unknown, draft: DraftEvent): void => {
+        handler(draft)
+      }
+      ipcRenderer.on('workspaces:draft', listener)
+      return () => {
+        ipcRenderer.off('workspaces:draft', listener)
+      }
+    },
 
     /** Commits everything here and pushes the branch, to update a request. */
     commitAndPush: (workspaceId: string, message: string): Promise<Result<void>> =>

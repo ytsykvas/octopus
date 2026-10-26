@@ -112,6 +112,9 @@ export const en = {
        there is room for a tooltip, and it must not contradict them. Names the
        branch, because the row's own label is the workspace name and the branch
        is the thing that has been left behind. */
+    /* On the row while the agent writes the pull-request description asked
+       for in the PR tab, which goes on after the user has looked away. */
+    describing: 'The agent is writing the pull request description',
     headElsewhere:
       'The worktree is not on {{branch}}. Work done here will not go onto this workspace\u2019s branch.',
     // Ukrainian needs `few` and `many` as well; i18next picks the form that

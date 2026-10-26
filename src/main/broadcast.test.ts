@@ -4,6 +4,7 @@ import {
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
+  pushPullRequestDraft,
   pushTasks,
   pushConfig,
   pushSettingsOpen,
@@ -117,6 +118,15 @@ describe('what the main process pushes, and on which channel', () => {
     pushTasks([window], event)
 
     expect(window.sent).toEqual([['tasks:changed', event]])
+  })
+
+  it("announces where a workspace's pull-request description stands", () => {
+    const window = target()
+    const event = { workspaceId: 'planner/anna', state: { status: 'writing' } }
+
+    pushPullRequestDraft([window], event)
+
+    expect(window.sent).toEqual([['workspaces:draft', event]])
   })
 
   it("announces that a workspace's conversations changed", () => {

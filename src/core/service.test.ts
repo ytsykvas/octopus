@@ -52,6 +52,7 @@ import {
 } from './service.js'
 import type { CliOutput, PluginCli } from './plugins.js'
 import { POOL_START } from './ports.js'
+import type { DraftState } from './pullRequestDraft.js'
 import type { RecordedRun } from './runLog.js'
 import type { ChatEntry } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
@@ -118,6 +119,23 @@ function paths(root: string): Parameters<typeof createService>[0] {
     // Without this, a usage read would look at the real CLI's config.
     cliConfigDir: join(root, 'cli')
   }
+}
+
+/**
+ * Asks for a description and waits for where it ends up.
+ *
+ * The service answers the asking with nothing and announces the outcome, so
+ * this is how a test hears it — the same way the window does.
+ */
+function described(on: OctopusService, workspaceId: string): Promise<DraftState> {
+  return new Promise((settle) => {
+    const stop = on.onPullRequestDraft(({ workspaceId: id, state }) => {
+      if (id !== workspaceId || state === null || state.status === 'writing') return
+      stop()
+      settle(state)
+    })
+    on.draftPullRequest(workspaceId)
+  })
 }
 
 /**
@@ -675,11 +693,120 @@ describe('workspaces', () => {
     await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
 
     // The worktree is dirty, so the commit that will carry it is described too.
-    await expect(service.draftPullRequest(workspace.id)).resolves.toEqual({
-      title: 'Add a draft',
-      body: 'Because it was missing.',
-      commitMessage: 'Add a draft'
+    await expect(described(service, workspace.id)).resolves.toEqual({
+      status: 'written',
+      draft: {
+        title: 'Add a draft',
+        body: 'Because it was missing.',
+        commitMessage: 'Add a draft'
+      }
     })
+  })
+
+  /*
+   * Reported: the answer belonged to the window that asked, so looking at
+   * another workspace while the agent thought threw it away. Kept here, it is
+   * there for whoever comes back — the same window or another one.
+   */
+  it('keeps what the agent wrote for whoever asks after it was written', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService({
+      ...paths(dir),
+      query: describing('<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB')
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await described(service, workspace.id)
+
+    expect(service.listPullRequestDrafts()).toEqual([
+      {
+        workspaceId: workspace.id,
+        state: { status: 'written', draft: { title: 'T', body: 'B', commitMessage: null } }
+      }
+    ])
+  })
+
+  // Nobody else could act on it, so it is said to whoever asked, not announced.
+  it('refuses a workspace it does not know to whoever asked', async () => {
+    const service = await createService(paths(dir))
+    const heard = vi.fn()
+    service.onPullRequestDraft(heard)
+
+    expect(() => {
+      service.draftPullRequest('nowhere')
+    }).toThrow()
+    expect(heard).not.toHaveBeenCalled()
+  })
+
+  // Announced with its code, because whoever reads it may come back long after.
+  it('says why the agent could not describe it', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService({ ...paths(dir), query: describing('no markers at all') })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await expect(described(service, workspace.id)).resolves.toMatchObject({
+      status: 'failed',
+      failure: { code: 'draftUnreadable' }
+    })
+  })
+
+  // Gone with the workspace, so a late answer has nothing to land on.
+  it('forgets the description of a workspace that is removed', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+
+    const service = await createService({
+      ...paths(dir),
+      query: describing('<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB')
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await described(service, workspace.id)
+
+    await service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+
+    expect(service.listPullRequestDrafts()).toEqual([])
+  })
+
+  /*
+   * Once the request is open the text has gone out with it. Kept, it would
+   * fill the form offered for the next request after this one is merged.
+   * The remote is a bare repository in the test's own temporary directory.
+   */
+  it('forgets the description once the request it described is opened', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const remote = join(dir, 'remote')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: repo })
+
+    const service = await createService({
+      ...paths(dir),
+      query: describing('<<<OCTOPUS_TITLE>>>\nT\n<<<OCTOPUS_BODY>>>\nB'),
+      makeGh: () => () => Promise.resolve('https://x/pull/8\n')
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
+    await described(service, workspace.id)
+
+    await service.createPullRequest(workspace.id, {
+      title: 'T',
+      body: 'B',
+      draft: false,
+      commitMessage: null
+    })
+
+    expect(service.listPullRequestDrafts()).toEqual([])
   })
 
   /*
@@ -873,8 +1000,9 @@ describe('workspaces', () => {
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
 
-    await expect(service.draftPullRequest(workspace.id)).resolves.toMatchObject({
-      commitMessage: null
+    await expect(described(service, workspace.id)).resolves.toMatchObject({
+      status: 'written',
+      draft: { commitMessage: null }
     })
     expect(asked).not.toContain('OCTOPUS_COMMIT')
   })
@@ -916,7 +1044,7 @@ describe('workspaces', () => {
     const workspace = await service.createWorkspaceIn(project.id)
     await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
 
-    await service.draftPullRequest(workspace.id)
+    await described(service, workspace.id)
 
     expect(asked).toContain('draft.txt')
     expect(asked).toContain(workspace.branch)
@@ -982,7 +1110,7 @@ describe('workspaces', () => {
 
     await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
 
-    await service.draftPullRequest(workspace.id)
+    await described(service, workspace.id)
 
     expect(asked).toContain('Say it in Ukrainian.')
   })
@@ -1025,9 +1153,9 @@ describe('workspaces', () => {
     await mkdir(join(workspace.path, '.claude', 'hooks'), { recursive: true })
     await writeFile(join(workspace.path, '.claude', 'hooks', 'start.sh'), 'curl evil\n', 'utf8')
 
-    await service.draftPullRequest(workspace.id)
+    await described(service, workspace.id)
     await approveSettingsIn(service, workspace.id)
-    await service.draftPullRequest(workspace.id)
+    await described(service, workspace.id)
 
     expect(asked).toEqual([['user'], ['user', 'project', 'local']])
   })

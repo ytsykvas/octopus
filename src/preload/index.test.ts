@@ -285,6 +285,7 @@ describe('channel names', () => {
       () => method('workspaces', 'draftPullRequest')('w' as never),
       'workspaces:draftPullRequest'
     ],
+    ['workspaces.drafts', () => method('workspaces', 'drafts')(), 'workspaces:drafts'],
     [
       'workspaces.commitAndPush',
       () => method('workspaces', 'commitAndPush')('w' as never, 'Add a thing' as never),
@@ -669,6 +670,7 @@ describe('channel names', () => {
     'chats.onChanged',
     'chats.onUsageWindows',
     'workspaces.onStatus',
+    'workspaces.onDraft',
     'terminal.onData',
     'terminal.onExit',
     'accounts.signInCommand',
@@ -972,6 +974,24 @@ describe('the rest of the surface', () => {
 
     stop()
     expect(off).toHaveBeenCalledWith('tasks:changed', expect.any(Function))
+  })
+
+  // The description outlives the window that asked for it, so it is announced.
+  it('workspaces.onDraft delivers where a description stands and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('workspaces', 'onDraft')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'workspaces:draft')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    const draft = { workspaceId: 'planner/kyiv', state: { status: 'writing' } }
+    listener({}, draft)
+    expect(handler).toHaveBeenCalledWith(draft)
+
+    stop()
+    expect(off).toHaveBeenCalledWith('workspaces:draft', expect.any(Function))
   })
 
   // A fifth stream, because a conversation appearing or going is not a status:
