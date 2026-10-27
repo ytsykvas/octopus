@@ -24,6 +24,7 @@ function config(overrides: Partial<Config> = {}): Config {
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none',
+    agentProgressSummaries: true,
     workingMode: 'default',
     planExecutionMode: 'auto',
     effort: 'medium',
@@ -316,6 +317,16 @@ describe('Settings', () => {
     await user.click(screen.getByRole('button', { name: /^Everything/ }))
 
     expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ settingSources: 'all' })
+  })
+
+  it("switches the subagents' status lines off", async () => {
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'Agent')
+    await user.click(screen.getByRole('switch', { name: 'Subagent status lines' }))
+
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ agentProgressSummaries: false })
   })
 
   // Global rather than per workspace: being asked the same question on every

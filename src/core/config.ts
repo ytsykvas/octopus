@@ -132,6 +132,18 @@ export const ConfigSchema = z.object({
   settingSources: SettingSourcesModeSchema,
 
   /**
+   * Whether each running subagent gets a one-line status in the agent map.
+   *
+   * On by default, since the line is what tells a row from its neighbours when
+   * several run at once. A setting because it is not free: the SDK writes it
+   * from a fork of the subagent's own context every thirty seconds or so, a
+   * call for every agent alive, and somebody watching the usage limit may
+   * rather go without. Read as a session starts, so a change reaches the
+   * conversations started after it.
+   */
+  agentProgressSummaries: z.boolean().default(true),
+
+  /**
    * How much a new chat lets the agent do before asking.
    *
    * Global rather than per workspace: the answer is a working habit, and being
@@ -440,6 +452,7 @@ export function createDefaultConfig(
     rightPanelWidth: 360,
     rightPanelOpen: true,
     statusBarOpen: true,
+    agentProgressSummaries: true,
     notificationSound: true,
     notificationSoundId: 'chime',
     diffView: 'unified',

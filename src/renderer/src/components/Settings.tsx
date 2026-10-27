@@ -404,6 +404,17 @@ function AgentSection({
         />
       </Field>
 
+      <Field
+        label={t('settings.agentProgressSummaries')}
+        hint={t('settings.agentProgressSummariesHint')}
+      >
+        <Switch
+          checked={config.agentProgressSummaries}
+          onChange={(agentProgressSummaries) => void onChange({ agentProgressSummaries })}
+          label={t('settings.agentProgressSummaries')}
+        />
+      </Field>
+
       <div className="border-line border-t pt-6">
         {/* Planning is deliberately not a third choice here. Whether to plan is
             a judgement about one task, made with the toggle in the composer; a

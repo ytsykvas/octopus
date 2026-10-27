@@ -1368,6 +1368,10 @@ export const de: Translation = {
     settingSourcesAll: 'Alles',
     settingSourcesAllHint: 'Benutzer-, Projekt- und lokale Einstellungen – das, was die CLI lädt.',
 
+    agentProgressSummaries: 'Statuszeilen der Subagenten',
+    agentProgressSummariesHint:
+      'Eine Zusammenfassung in einem Satz unter jedem laufenden Subagenten in der Agentenübersicht. Sie kostet etwa alle dreißig Sekunden einen zusätzlichen Modellaufruf pro laufendem Subagenten – schalte sie aus, um das Nutzungslimit zu schonen; die Übersicht zeigt weiterhin den aktuellen Schritt jedes Agenten. Gilt für Unterhaltungen, die nach der Änderung beginnen.',
+
     effort: 'Standard-Aufwand',
     effortHint:
       'Wie viel Nachdenken ein neuer Chat verlangt. Danach lässt sich das für jeden Chat einzeln im Eingabefeld ändern.',

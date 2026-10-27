@@ -1732,6 +1732,10 @@ export const en = {
     settingSourcesAll: 'Everything',
     settingSourcesAllHint: 'User, project and local settings — what the plain CLI loads.',
 
+    agentProgressSummaries: 'Subagent status lines',
+    agentProgressSummariesHint:
+      "A one-sentence summary under each running subagent in the agent map. It costs one extra model call per running subagent about every thirty seconds, so switch it off to spare the usage limit; the map still shows each agent's current step. Applies to conversations started after the change.",
+
     effort: 'Default effort',
     effortHint:
       'How much thinking a new conversation asks for. Each one can then be changed on its own, from the composer.',

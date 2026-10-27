@@ -148,6 +148,12 @@ export interface SessionOptions {
    * a conversation by starting its session again (`service.ts`).
    */
   readonly autoCompactWindow: number | null
+  /**
+   * Whether each running subagent is given a one-line status, written from a
+   * fork of its own context. Read once, when the session starts: it is an
+   * option of the query, not a flag a running session takes.
+   */
+  readonly agentProgressSummaries: boolean
 }
 
 /** What the agent wants to do, as handed to whoever decides. */
@@ -947,9 +953,9 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
        * A sentence about what each running subagent is doing, written every
        * thirty seconds or so from a fork of its own context — what the agent
        * map shows under a row. The fork reuses the subagent's cache, so it is
-       * cheap, but it is not free, which is why it is said here.
+       * cheap, but it is not free, which is why it is a setting.
        */
-      agentProgressSummaries: true,
+      agentProgressSummaries: options.agentProgressSummaries,
       /*
        * The map has a Stop for each task, so the conversation's own Stop ends
        * the turn and nothing else. Without this the CLI kills every background
