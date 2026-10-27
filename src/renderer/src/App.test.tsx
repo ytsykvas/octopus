@@ -65,6 +65,7 @@ function config(overrides: Partial<Config> = {}): Config {
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     settingSources: 'none',
+    agentProgressSummaries: true,
     workingMode: 'default',
     planExecutionMode: 'auto',
     effort: 'medium',

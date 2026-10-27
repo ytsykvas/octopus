@@ -208,6 +208,7 @@ function fakeAgent(
       env: {},
       skillOverrides: {},
       autoCompactWindow: null,
+      agentProgressSummaries: true,
       ...overrides
     },
     {
@@ -1775,6 +1776,13 @@ describe('a session', () => {
     expect(agent.options().settings).toMatchObject({ autoCompactWindow: 500_000 })
   })
 
+  it("asks for the subagents' status lines unless the setting is off", () => {
+    expect(fakeAgent().agent.options()).toMatchObject({ agentProgressSummaries: true })
+    expect(fakeAgent({ agentProgressSummaries: false }).agent.options()).toMatchObject({
+      agentProgressSummaries: false
+    })
+  })
+
   // Null defers to the agent, and the flag layer outranks the user's own
   // files: anything said here, null included, would override `/autocompact`.
   it('says nothing about the window when none is chosen', () => {
@@ -2134,7 +2142,8 @@ describe('a session that will not close', () => {
         pushTargets: [],
         env: {},
         skillOverrides: {},
-        autoCompactWindow: null
+        autoCompactWindow: null,
+        agentProgressSummaries: true
       },
       {
         query: () => conversation,

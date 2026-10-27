@@ -138,6 +138,7 @@ describe('loadConfig', () => {
     expect(config.rightPanelWidth).toBe(360)
     expect(config.rightPanelOpen).toBe(true)
     expect(config.statusBarOpen).toBe(true)
+    expect(config.agentProgressSummaries).toBe(true)
     expect(config.notificationSound).toBe(true)
     expect(config.notificationSoundId).toBe('chime')
     expect(config.rightPanelTab).toBe('diff')

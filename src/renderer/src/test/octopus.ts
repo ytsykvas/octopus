@@ -430,6 +430,7 @@ function defaultConfig(): Config {
     language: 'en' as const,
     rightPanelOpen: true,
     statusBarOpen: true,
+    agentProgressSummaries: true,
     notificationSound: true,
     notificationSoundId: 'chime',
     rightPanelTab: 'diff' as const,

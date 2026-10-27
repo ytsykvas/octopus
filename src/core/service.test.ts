@@ -5606,6 +5606,15 @@ describe('the agent chat', () => {
       expect(service.listChats(workspaceId)[0]?.status).toBe('running')
     })
 
+    it("leaves the subagents' status lines out when the setting is off", async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ agentProgressSummaries: false })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+
+      expect(agent().options()).toMatchObject({ agentProgressSummaries: false })
+    })
+
     it('asks the session not to kill its agents on Stop', async () => {
       await withAgentAway()
 

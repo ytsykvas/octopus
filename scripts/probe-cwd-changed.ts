@@ -62,7 +62,8 @@ const session = startSession(
     pushTargets: [],
     env: {},
     skillOverrides: {},
-    autoCompactWindow: null
+    autoCompactWindow: null,
+    agentProgressSummaries: false
   },
   {
     query,

@@ -4925,7 +4925,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         // It runs one command about the account, not about the workspace.
         env: {},
         skillOverrides: {},
-        autoCompactWindow: null
+        autoCompactWindow: null,
+        // No map to draw a status line in, and one is a model call.
+        agentProgressSummaries: false
       },
       {
         query: runQuery,
@@ -5053,7 +5055,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         pushTargets: targets,
         env,
         skillOverrides: skillMapOf(chat),
-        autoCompactWindow: chat.autoCompactWindow
+        autoCompactWindow: chat.autoCompactWindow,
+        agentProgressSummaries: config.agentProgressSummaries
       },
       {
         query: runQuery,
