@@ -1082,6 +1082,7 @@ export const de: Translation = {
     expandAll: 'Alle Schritte zeigen (⌘O)',
     collapseAll: 'Alle Schritte einklappen (⌘O)',
     jumpToEnd: 'Zur neuesten Nachricht',
+    jumpToStart: 'Zur ersten Nachricht',
     previousMessage: 'Deine vorige Nachricht',
     nextMessage: 'Deine nächste Nachricht',
     workingElapsed: 'Arbeitet… {{elapsed}}',

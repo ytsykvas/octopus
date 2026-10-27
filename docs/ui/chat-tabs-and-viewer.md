@@ -6,8 +6,20 @@ different workspace is a different conversation, not a continuation. Without one
 the pane is not the chat at all but an empty state that offers to make one — see
 [Empty panes](empty-panes.md).
 
-**Its header is the strip of conversations**, and nothing else. A workspace holds
-up to three, and they run at once in the one worktree.
+**Its header is the strip of conversations**, with one button at the right end.
+A workspace holds up to three, and they run at once in the one worktree.
+
+The button is the way back to the first message: the log has a way down to the
+latest one, and in a long conversation the start was otherwise reachable only by
+scrolling. It is a quiet icon button, not the log's floating round one, because
+it sits in a header that does not move. The header belongs to `Chat` and the
+scroller to each `ChatSession`, so `Chat` keeps an empty slot at the row's end
+and the conversation on screen portals its button into it — the scroll and the
+pinning stay beside the scroller. It is drawn only while that conversation is in
+front and has entries, so a file opened over the chat, or an empty conversation,
+leaves no button that scrolls nothing. It is always enabled: a button that
+disabled itself at the top would drop the focus a keyboard user had just put on
+it.
 
 The branch used to be here, marked with a branch icon, and has moved to the
 title bar beside the project's directory: it says where the work lands, which is

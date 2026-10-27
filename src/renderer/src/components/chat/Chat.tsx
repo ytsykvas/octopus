@@ -129,6 +129,8 @@ export function Chat({
 }: ChatProps): React.JSX.Element {
   const { t } = useTranslation()
   const [reviewing, setReviewing] = useState(false)
+  // Where the visible conversation draws its way back to the first message.
+  const [headerEnd, setHeaderEnd] = useState<HTMLElement | null>(null)
   /*
    * The verdict, and the workspace it belongs to.
    *
@@ -197,6 +199,7 @@ export function Chat({
           notesWaiting={(tabKey) => codeNotes.pendingFor(tabKey).length}
         />
         <FileTabs files={files} />
+        <div ref={setHeaderEnd} className="ml-auto flex shrink-0 items-center pl-2" />
       </header>
 
       {/* Pinned under the header rather than inside the scroller, where
@@ -267,6 +270,7 @@ export function Chat({
           onWorkspacesChanged={onWorkspacesChanged}
           dismissedTips={dismissedTips}
           onDismissTip={onDismissTip}
+          headerEnd={headerEnd}
           // A path named in the log, as the right pane's tree opens one: one
           // click previews it, a second keeps it.
           onOpenFile={(path, pinned) => {

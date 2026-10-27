@@ -61,7 +61,11 @@ rows grow after they are laid out (markdown, code), so the one scroll to the
 end landed short; a `ResizeObserver` on the log's content scrolls again while
 the reader is still pinned. More than one screen above the end, a small round
 accent button with a cloud-and-arrow icon floats at the bottom-right of the
-log; it jumps straight to the end and pins it again. The log never scrolls
+log; it jumps straight to the end and pins it again. Its counterpart sits at the
+right end of the centre's header ([the strip](chat-tabs-and-viewer.md)) and
+jumps to the first message; it un-pins the log itself rather than waiting for
+the scroll event, or the observer above could pull the log back down first. The
+log never scrolls
 sideways (`overflow-x-hidden`): code, tables and diffs scroll inside their own
 box, long message text wraps, and a tool row's path truncates.
 
