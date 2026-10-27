@@ -1403,6 +1403,7 @@ export const en = {
     expandAll: 'Show every step (⌘O)',
     collapseAll: 'Fold every step (⌘O)',
     jumpToEnd: 'Jump to the latest message',
+    jumpToStart: 'Jump to the first message',
     previousMessage: 'Previous message you sent',
     nextMessage: 'Next message you sent',
     workingElapsed: 'Working… {{elapsed}}',

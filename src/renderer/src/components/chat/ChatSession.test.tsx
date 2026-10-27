@@ -919,6 +919,38 @@ describe('following the conversation', () => {
     expect(jump()).toBeNull()
   })
 
+  it('offers the way back to the first message from the header, and stays there', async () => {
+    const user = userEvent.setup()
+    givenChat([{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the very first' }])
+    await openLoadedChat()
+
+    const log = screen.getByRole('log')
+    const header = screen.getByRole('banner')
+    Object.defineProperty(log, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
+    log.scrollTop = 1700
+    fireEvent.scroll(log)
+
+    const jump = await screen.findByRole('button', { name: 'Jump to the first message' })
+    expect(header).toContainElement(jump)
+
+    await user.click(jump)
+
+    expect(log.scrollTop).toBe(0)
+    // Unpinned, or the next growth of the log would drag the reader back down.
+    Object.defineProperty(log, 'scrollHeight', { value: 2400, configurable: true })
+    fireEvent.scroll(log)
+    expect(log.scrollTop).toBe(0)
+    expect(screen.getByRole('button', { name: 'Jump to the latest message' })).toBeInTheDocument()
+  })
+
+  it('draws no way back to the first message in a conversation with nothing in it', async () => {
+    givenChat()
+    await openLoadedChat()
+
+    expect(screen.queryByRole('button', { name: 'Jump to the first message' })).toBeNull()
+  })
+
   /*
    * Reported from a running app: the menu on the context reading shut a few
    * times a second for as long as the agent was answering, and stayed open

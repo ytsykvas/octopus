@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronsDownUp, ChevronsUpDown, ChevronUp, CloudDownload } from 'lucide-react'
+import {
+  ArrowUpToLine,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  ChevronUp,
+  CloudDownload
+} from 'lucide-react'
 
 import {
   type Chat,
@@ -133,6 +141,13 @@ interface ChatSessionProps {
   readonly onDismissTip: (id: string) => void
   /** Opens a workspace-relative path in the centre: kept open, or as a preview. */
   readonly onOpenFile: (path: string, pinned: boolean) => void
+  /**
+   * The right end of the pane's header, where the way back to the first message
+   * is drawn. The header belongs to `Chat` and the scroller to this pane, so the
+   * pane on screen draws its button into a slot it is handed; null until the
+   * slot is mounted.
+   */
+  readonly headerEnd: HTMLElement | null
 }
 
 /**
@@ -168,7 +183,8 @@ export function ChatSession({
   onWorkspacesChanged,
   dismissedTips,
   onDismissTip,
-  onOpenFile
+  onOpenFile,
+  headerEnd
 }: ChatSessionProps): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -649,6 +665,18 @@ export function ChatSession({
     if (visible) measureFloating()
   }, [visible, chat.entries, measureFloating])
 
+  const jumpToStart = useCallback(() => {
+    const element = scroller.current
+    // Only reachable from a button drawn while the log is on screen; the guard
+    // is for the type.
+    /* v8 ignore next */
+    if (!element) return
+    element.scrollTop = 0
+    // Unpinned here and not left to the scroll event: the observer above can
+    // pull the log back down before that event arrives.
+    pinnedToBottom.current = false
+  }, [])
+
   const hasUserMessage = useMemo(
     () => chat.entries.some((entry) => entry.role === 'user'),
     [chat.entries]
@@ -657,6 +685,15 @@ export function ChatSession({
   return (
     <AgentsContext.Provider value={agentTasks}>
       <AgentLogContext.Provider value={chat.entries}>
+        {visible &&
+          headerEnd !== null &&
+          chat.entries.length > 0 &&
+          createPortal(
+            <IconButton label={t('chat.jumpToStart')} onClick={jumpToStart}>
+              <ArrowUpToLine aria-hidden size={14} />
+            </IconButton>,
+            headerEnd
+          )}
         <div
           aria-hidden={!visible}
           className={`min-h-0 flex-1 flex-col ${visible ? 'flex' : 'hidden'}`}
