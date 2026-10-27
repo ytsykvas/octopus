@@ -110,7 +110,7 @@ when an answer says something new, since the panel asks on every open.
 A **chat** is a conversation with one agent inside one workspace: `id`,
 `workspaceId`, `agent`, `status`, `interrupted`, `sessionId`, `model`, `planModel`, `effort`,
 `workingMode`, `planMode`, `autoCompactWindow`, `knownCommands`, `knownAgents`,
-`skillOverrides`, `createdAt`, `closedAt`.
+`skillOverrides`, `createdAt`, `lastTurnAt`, `closedAt`.
 
 **`autoCompactWindow` is where the conversation compacts itself** — one of
 `AUTO_COMPACT_WINDOWS` (300k to 800k), or null for the agent's own, which is the
@@ -144,6 +144,13 @@ entry of the agent's session it should still remember, handed over as
 `resumeSessionAt` when the next session starts, and cleared once a turn has run
 there. It defaults to null — a record from before rewinding existed was never
 rewound.
+
+**`lastTurnAt` is when a turn last started in the conversation**, or null if
+none has. It is what tells which of a workspace's conversations did the work, so
+a pull request is described by that one's model (see
+[the pull request tab](../ui/pull-request-tab.md)). On the record rather than in
+memory because a restart must not make the answer "nobody"; it defaults to null,
+so a record from before the field loads as one that has not spoken.
 
 **`closedAt` is null while a conversation is a tab** and the time it was closed
 otherwise. It defaults to null, so a record written before it existed loads as

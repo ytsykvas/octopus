@@ -59,6 +59,7 @@ import {
   isUsageCommand,
   isOpenChat,
   MAX_CHATS_PER_WORKSPACE,
+  latestWorkingChat,
   modeAfterPlan,
   newChat,
   sessionMode,
@@ -2239,6 +2240,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       instructionFor(workspace, 'commitMessage')
     ])
 
+    const worker = latestWorkingChat(allChatsOfWorkspace(state, workspace.id))
+
     return draftPullRequest(
       {
         cwd: workspace.path,
@@ -2249,10 +2252,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         commitInstruction: changed > 0 ? commitInstruction : null,
         diff,
         branch: workspace.branch,
-        // The model a chat would start on. A description is the agent's
-        // ordinary work, and there is no reason it should be answered by a
-        // different model than the one that did the work being described.
-        model: config.model,
+        // The model of the conversation that worked last. A description is the
+        // agent's ordinary work, and it should be answered by the model that
+        // did the work being described — which a chat switched off the
+        // settings' default is no longer. The default only stands in when no
+        // conversation here ever sent a message. The writing model, not the
+        // planning one: the change was written by it.
+        model: worker === null ? config.model : worker.model,
         settingSources: await sourcesFor(workspace),
         pushTargets: await pushTargets(makeExec(workspace.path))
       },
@@ -2966,7 +2972,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         changed = true
         // Any move at all means a session is speaking for it again, so a turn
         // the last run cut off is no longer the news — see `interrupted`.
-        return { ...chat, status, interrupted: false }
+        //
+        // A turn starting is also when the conversation counts as the one that
+        // worked last. Here rather than on every message because this move is a
+        // write already: stamping each message would rewrite the state file for
+        // one typed into a turn that is running, and the status guard above
+        // exists so that nothing is written for it.
+        return {
+          ...chat,
+          status,
+          interrupted: false,
+          ...(status === 'running' && { lastTurnAt: now() })
+        }
       })
       // The state as it was, so `commit` writes nothing for a status that is
       // already recorded — which is most of them: `running` is set again when

@@ -113,6 +113,7 @@ function storedChat(overrides: Partial<Chat> = {}): Chat {
     closedAt: null,
     aside: null,
     createdAt: '2026-08-07T12:00:00.000Z',
+    lastTurnAt: null,
     ...overrides
   }
 }
@@ -681,6 +682,7 @@ describe('chats', () => {
       closedAt: null,
       aside: null,
       createdAt: '2026-08-11T09:00:00.000Z',
+      lastTurnAt: null,
       ...overrides
     }
   }
@@ -989,6 +991,17 @@ describe('the remembered model list', () => {
     expect(state.chats[0]?.interrupted).toBe(false)
   })
 
+  // Written before the conversation that worked last could be told apart: none
+  // had a turn on record — and the file must still open.
+  it('loads a chat written before its last message was remembered', async () => {
+    const { lastTurnAt, ...older } = storedChat()
+    expect(lastTurnAt).toBeNull()
+    await writeFile(file, JSON.stringify({ ...withProject, chats: [older] }), 'utf8')
+
+    const state = await loadState(file)
+    expect(state.chats[0]?.lastTurnAt).toBeNull()
+  })
+
   // Written before a fork could start from a side answer: it was forked off
   // nothing — and the file must still open.
   it('loads a chat written before a fork could carry a side answer', async () => {
@@ -1062,7 +1075,8 @@ describe('the commands a chat remembers', () => {
     skillOverrides: {},
     closedAt: null,
     aside: null,
-    createdAt: '2026-08-11T09:00:00.000Z'
+    createdAt: '2026-08-11T09:00:00.000Z',
+    lastTurnAt: null
   }
 
   // Asked on every session start, so without this every restart of every

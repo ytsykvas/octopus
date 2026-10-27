@@ -4949,6 +4949,82 @@ describe('the agent chat', () => {
       session_id: 'sess-1'
     }) as unknown as SDKMessage
 
+  /*
+   * The description is written by the model that wrote the change, which is
+   * not the settings' default once a conversation was switched off it. Read
+   * from the session the draft starts, since that is where the model is set.
+   */
+  describe('the model that describes a pull request', () => {
+    /** Asks for a description and returns the model its session was started on. */
+    async function draftedWith(service: OctopusService, workspaceId: string): Promise<unknown> {
+      const known = agents.length
+      service.draftPullRequest(workspaceId)
+      await vi.waitFor(() => {
+        expect(agents).toHaveLength(known + 1)
+      })
+      return agents[known]?.options().model
+    }
+
+    it('is the one of the conversation that started a turn last', async () => {
+      let clock = '2026-10-27T10:00:00.000Z'
+      const { service, workspaceId } = await withWorkspace({ now: () => clock })
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      await service.setChatModels(first.id, { model: 'claude-sonnet-5' })
+      await service.setChatModels(second.id, { model: 'claude-opus-5' })
+
+      // The second tab spoke first, so the later message makes the first the one.
+      await service.sendToChat(second.id, 'work')
+      clock = '2026-10-27T11:00:00.000Z'
+      await service.sendToChat(first.id, 'more work')
+
+      await expect(draftedWith(service, workspaceId)).resolves.toBe('claude-sonnet-5')
+    })
+
+    it('is the writing model, not the one that plans', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5', planModel: 'claude-opus-5' })
+      await service.sendToChat(chat.id, 'work')
+
+      await expect(draftedWith(service, workspaceId)).resolves.toBe('claude-sonnet-5')
+    })
+
+    it('still counts a conversation closed after the work was done', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5' })
+      await service.sendToChat(chat.id, 'work')
+      // A workspace's last tab cannot be closed, so a second one stays open.
+      await service.createChat(workspaceId)
+      await service.closeChat(chat.id)
+
+      await expect(draftedWith(service, workspaceId)).resolves.toBe('claude-sonnet-5')
+    })
+
+    it("falls back to the settings' model when no conversation ever ran a turn", async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ model: 'claude-haiku-5-5' })
+      const chat = await service.openChat(workspaceId)
+      await service.setChatModels(chat.id, { model: 'claude-sonnet-5' })
+
+      await expect(draftedWith(service, workspaceId)).resolves.toBe('claude-haiku-5-5')
+    })
+
+    it('stamps the conversation when a turn starts, and not for a message typed into it', async () => {
+      let clock = '2026-10-27T10:00:00.000Z'
+      const { service, workspaceId } = await withWorkspace({ now: () => clock })
+      const chat = await service.openChat(workspaceId)
+      expect(service.listChats(workspaceId)[0]?.lastTurnAt).toBeNull()
+
+      await service.sendToChat(chat.id, 'work')
+      clock = '2026-10-27T10:05:00.000Z'
+      await service.sendToChat(chat.id, 'more work, while it runs')
+
+      expect(service.listChats(workspaceId)[0]?.lastTurnAt).toBe('2026-10-27T10:00:00.000Z')
+    })
+  })
+
   describe('a turn a pull request button started', () => {
     const ORIGIN = 'https://github.com/o/r.git'
 
@@ -7558,11 +7634,22 @@ describe('the agent chat', () => {
         expect(service.knownModels()).toHaveLength(1)
       })
 
-      const before = await readFile(join(dir, 'state.json'), 'utf8')
+      // The turn that starts again is a turn, and says so in `lastTurnAt`; the
+      // list is what must not move, so that is what is left out of the comparison.
+      const unstamped = async (): Promise<string> => {
+        const stored = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8')) as {
+          chats: Record<string, unknown>[]
+        }
+        return JSON.stringify({
+          ...stored,
+          chats: stored.chats.map((stored) => ({ ...stored, lastTurnAt: null }))
+        })
+      }
+      const before = await unstamped()
       await service.interruptChat(chat.id)
       await service.sendToChat(chat.id, 'again')
 
-      await expect(readFile(join(dir, 'state.json'), 'utf8')).resolves.toBe(before)
+      await expect(unstamped()).resolves.toBe(before)
     })
 
     /*
