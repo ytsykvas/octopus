@@ -165,6 +165,40 @@ describe('a file in front of the conversations', () => {
   })
 })
 
+describe('the way back to the first message', () => {
+  async function openTwoWithHistory(): Promise<void> {
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the very first' }]
+    })
+    render(<Pane />)
+    await waitFor(() => {
+      expect(screen.getAllByText('the very first')).toHaveLength(2)
+    })
+  }
+
+  // Both conversations stay mounted, so each would draw its own: the header
+  // holds one, for the conversation on screen.
+  it('is drawn once, at the end of the header, for the conversation on screen', async () => {
+    await openTwoWithHistory()
+
+    const jump = screen.getByRole('button', { name: 'Jump to the first message' })
+    expect(screen.getByRole('banner')).toContainElement(jump)
+  })
+
+  it('goes while a file is in front, when there is no log to scroll', async () => {
+    const user = userEvent.setup()
+    await openTwoWithHistory()
+
+    await user.click(screen.getByRole('button', { name: 'tree: a.ts' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Jump to the first message' })).toBeNull()
+    })
+  })
+})
+
 describe('the conversations that are not showing', () => {
   it('keeps them mounted and hides them', async () => {
     await openTwo()
