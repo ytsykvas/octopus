@@ -63,6 +63,12 @@ its own, and the answer comes back into the form's fields, where it is read,
 changed or thrown away before anything is opened. Nothing is added to a
 conversation, so none is started for it either.
 
+**It runs on the model of the conversation that worked last** — its writing
+model, not the planning one — so the description comes from the model that wrote
+the change, even after that tab was switched off the settings' default. "Last"
+is the greatest `lastTurnAt` among the workspace's conversations, closed ones
+included; with none that ever ran a turn, the settings' model stands in.
+
 **The draft belongs to the workspace, not to the pane.** Main runs it and keeps
 where it stands — writing, written, or refused with its reason — until the
 request is opened, the workspace is removed, or it is asked for again. The pane

@@ -323,6 +323,24 @@ export function storedModels(pair: JobPair<string>): {
 }
 
 /**
+ * The conversation that last sent a message, or null if none ever has.
+ *
+ * Closed ones count: a tab closed after the work was done is still the one
+ * that did it.
+ */
+export function latestWorkingChat(chats: readonly Chat[]): Chat | null {
+  let latest: Chat | null = null
+  let latestAt = ''
+  for (const chat of chats) {
+    // ISO timestamps in one zone sort as text; null never ran.
+    if (chat.lastTurnAt === null || chat.lastTurnAt <= latestAt) continue
+    latest = chat
+    latestAt = chat.lastTurnAt
+  }
+  return latest
+}
+
+/**
  * The tool the agent calls to hand a finished plan back.
  *
  * Named here rather than in `agent.ts` because the renderer needs it too, and
@@ -1004,6 +1022,18 @@ export const ChatSchema = z.object({
   skillOverrides: z.record(z.string(), z.boolean()).default({}),
   createdAt: z.iso.datetime(),
   /**
+   * When a turn last started in this conversation, or null if none has.
+   *
+   * What tells which of a workspace's conversations did the work, so a pull
+   * request is described by the model that wrote the change rather than by the
+   * settings' default. On the record because the in-memory activity clock is
+   * lost with the process, and a restart must not make the answer "nobody".
+   *
+   * Defaulted rather than migrated, the convention `StateSchema` states: a
+   * record written before the field existed simply has not had a turn since.
+   */
+  lastTurnAt: z.iso.datetime().nullable().default(null),
+  /**
    * When this conversation was closed, or null while it is open.
    *
    * A closed conversation keeps its record and its transcript so it can be
@@ -1142,7 +1172,8 @@ export function newChat(workspaceId: string, options: NewChatOptions): Chat {
     skillOverrides: {},
     closedAt: null,
     aside: null,
-    createdAt: options.createdAt
+    createdAt: options.createdAt,
+    lastTurnAt: null
   }
 }
 
@@ -1213,7 +1244,9 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     // because it was getting in the way is still in the way.
     skillOverrides: source.skillOverrides,
     aside: options.aside ?? null,
-    createdAt: options.createdAt
+    createdAt: options.createdAt,
+    // The fork has not spoken yet; the source's turns are the source's.
+    lastTurnAt: null
   }
 }
 

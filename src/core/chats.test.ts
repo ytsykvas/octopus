@@ -26,6 +26,7 @@ import {
   isClearCommand,
   isKnownCommand,
   isUsageCommand,
+  latestWorkingChat,
   MAX_CHAT_TITLE,
   MAX_CHATS_PER_WORKSPACE,
   modeAfterPlan,
@@ -80,7 +81,8 @@ describe('a new chat', () => {
       skillOverrides: {},
       closedAt: null,
       aside: null,
-      createdAt: '2026-08-11T09:00:00.000Z'
+      createdAt: '2026-08-11T09:00:00.000Z',
+      lastTurnAt: null
     })
   })
 
@@ -841,6 +843,52 @@ describe('what a change of models or efforts may carry', () => {
   })
 })
 
+describe('the conversation that worked last', () => {
+  const base = newChat('planner/kyiv', {
+    id: 'chat-1',
+    agent: 'claude',
+    workingMode: 'default',
+    effort: 'medium',
+    model: null,
+    planModel: null,
+    createdAt: '2026-10-27T09:00:00.000Z'
+  })
+  const spoke = (id: string, lastTurnAt: string | null): Chat => ({ ...base, id, lastTurnAt })
+
+  it('is nobody when no conversation ever ran a turn', () => {
+    expect(latestWorkingChat([])).toBeNull()
+    expect(latestWorkingChat([spoke('a', null), spoke('b', null)])).toBeNull()
+  })
+
+  it('is the one with the latest message, wherever it stands in the list', () => {
+    const chats = [
+      spoke('a', '2026-10-27T10:00:00.000Z'),
+      spoke('b', '2026-10-27T12:00:00.000Z'),
+      spoke('c', '2026-10-27T11:00:00.000Z'),
+      spoke('d', null)
+    ]
+
+    expect(latestWorkingChat(chats)?.id).toBe('b')
+  })
+
+  it('keeps the first of two that spoke at the same moment', () => {
+    const at = '2026-10-27T10:00:00.000Z'
+
+    expect(latestWorkingChat([spoke('a', at), spoke('b', at)])?.id).toBe('a')
+  })
+
+  it('starts a new chat and a fork without a turn run', () => {
+    expect(base.lastTurnAt).toBeNull()
+    expect(
+      forkChat(spoke('a', '2026-10-27T10:00:00.000Z'), {
+        id: 'fork',
+        sessionId: 'session-forked',
+        createdAt: '2026-10-27T13:00:00.000Z'
+      }).lastTurnAt
+    ).toBeNull()
+  })
+})
+
 describe('a conversation continuing another', () => {
   const source: Chat = {
     id: 'chat-1',
@@ -865,7 +913,8 @@ describe('a conversation continuing another', () => {
     skillOverrides: {},
     closedAt: null,
     aside: null,
-    createdAt: '2026-08-11T09:00:00.000Z'
+    createdAt: '2026-08-11T09:00:00.000Z',
+    lastTurnAt: null
   }
 
   const forked = forkChat(source, {
