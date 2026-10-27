@@ -232,7 +232,7 @@ const CONTEXT_LINES = 3
  * escapes through the parser. `--find-renames`: a moved file is one entry
  * rather than a deletion beside an addition.
  */
-const DIFF_FLAGS = [
+export const DIFF_FLAGS = [
   '--no-ext-diff',
   '--no-textconv',
   '--no-color',
@@ -251,7 +251,7 @@ const DIFF_FLAGS = [
  * `-z` covers the machine-readable outputs, but the unified diff has no such
  * option, and without this a Cyrillic filename reaches the parser as `\320\243`.
  */
-const RAW_PATHS = ['-c', 'core.quotePath=false'] as const
+export const RAW_PATHS = ['-c', 'core.quotePath=false'] as const
 
 /*
  * A read from inside a walk that has already checked its bounds.

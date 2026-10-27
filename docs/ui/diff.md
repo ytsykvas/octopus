@@ -186,6 +186,12 @@ Tokens then line up with lines **by number** rather than by walking, which is
 the whole difference: the tokens describe every line of the file and the hunks
 describe some of them, so there is no shared walk to keep in step.
 
+**The pane can be opened on one file from outside.** The viewer's "Show changes"
+hands it a path and a counter: the file is opened, a writers chip that hides it
+is cleared (one it is already in is left), and the list is scrolled to its header
+— once, on the first list that contains it. A request already standing when the
+pane mounts is not replayed.
+
 **Every file starts collapsed**, and what the core left undrawn is said in the
 header rather than quietly appearing unchanged. Opening the tab shows the list,
 not the lines: the reader picks what to read, and one long file no longer

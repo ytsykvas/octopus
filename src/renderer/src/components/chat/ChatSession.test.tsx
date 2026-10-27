@@ -106,6 +106,7 @@ function ChatPane({
       tabs={tabs}
       files={files}
       onError={onError}
+      onShowChanges={vi.fn()}
       draftOf={() => draft}
       onDraftLeave={onDraftLeave}
       comments={comments}

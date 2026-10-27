@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.js'
 import type { DirectoryListing, FileTreeSnapshot } from '@core/fileTree.js'
+import type { LineChanges } from '@core/lineChanges.js'
 import type { FileContent } from '@core/workspaceFiles.js'
 import type {
   AgentCommand,
@@ -784,7 +785,11 @@ const api = {
 
     /** A file for the viewer, or why it cannot be shown. */
     read: (workspaceId: string, path: string): Promise<Result<FileContent>> =>
-      ipcRenderer.invoke('files:read', workspaceId, path) as Promise<Result<FileContent>>
+      ipcRenderer.invoke('files:read', workspaceId, path) as Promise<Result<FileContent>>,
+
+    /** Which lines of a file differ from where the branch began, for the viewer to mark. */
+    lineChanges: (workspaceId: string, path: string): Promise<Result<LineChanges>> =>
+      ipcRenderer.invoke('files:lineChanges', workspaceId, path) as Promise<Result<LineChanges>>
   },
 
   attachments: {

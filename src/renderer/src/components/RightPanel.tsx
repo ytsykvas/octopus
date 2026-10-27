@@ -26,7 +26,7 @@ import { useServingPort } from '../hooks/useServingPort.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
-import { DiffPanel } from './diff/DiffPanel.js'
+import { DiffPanel, type DiffReveal } from './diff/DiffPanel.js'
 import { FilesPanel } from './files/FilesPanel.js'
 import { NotesPanel } from './NotesPanel.js'
 import { DisclosureButton } from './Disclosure.js'
@@ -236,6 +236,8 @@ interface RightPanelProps {
   readonly activeFilePath: string | null
   /** Opens a file in the centre — from the Files tab as a preview or kept, from a changed file's menu kept. */
   readonly onOpenFile: (path: string, pinned: boolean) => void
+  /** The file the Changes tab is asked to open on; a new `id` is a new request. */
+  readonly reveal: DiffReveal | null
   /** Attaches an absolute path to the conversation in front — the Files tab's "Add to chat". */
   readonly onAttachFile: (path: string) => void
   /** Brings the conversation in front of any open file, before a prompt is sent to it. */
@@ -284,6 +286,7 @@ export function RightPanel({
   activeFilePath,
   onOpenFile,
   onAttachFile,
+  reveal,
   onConversation,
   onError,
   server
@@ -722,6 +725,7 @@ export function RightPanel({
             revert={revert}
             onError={onError}
             onOpenFile={onOpenFile}
+            reveal={reveal}
           />
         </div>
 

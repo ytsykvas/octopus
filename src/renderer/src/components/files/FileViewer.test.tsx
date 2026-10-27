@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { LineChanges } from '@core/lineChanges.js'
 import type { FileContent } from '@core/workspaceFiles.js'
 
 import { octopus } from '../../test/octopus.js'
@@ -31,9 +32,11 @@ const TARGETS: readonly NoteTarget[] = [
 function renderViewer(path = 'src/a.ts'): {
   onError: ReturnType<typeof vi.fn>
   onNote: ReturnType<typeof vi.fn>
+  onShowChanges: ReturnType<typeof vi.fn>
 } {
   const onError = vi.fn()
   const onNote = vi.fn()
+  const onShowChanges = vi.fn()
   render(
     <FileViewer
       workspaceId={WORKSPACE}
@@ -41,9 +44,10 @@ function renderViewer(path = 'src/a.ts'): {
       onError={onError}
       targets={TARGETS}
       onNote={onNote}
+      onShowChanges={onShowChanges}
     />
   )
-  return { onError, onNote }
+  return { onError, onNote, onShowChanges }
 }
 
 /** The code column, which is the `<pre>` that is not the line numbers. */
@@ -420,5 +424,138 @@ describe('reviewing selected lines', () => {
     fireEvent.click(within(toolbar()).getByRole('button', { name: 'Copy path' }))
 
     expect(await within(toolbar()).findByRole('button', { name: 'Could not copy' })).toBeVisible()
+  })
+})
+
+describe('a file with lines the branch changed', () => {
+  const TEXT = 'one\ntwo\nthree\nfour\nfive\nsix\n'
+
+  const marking = (marks: LineChanges): void => {
+    answering({ kind: 'text', text: TEXT, bytes: TEXT.length })
+    vi.mocked(octopus().files.lineChanges).mockResolvedValue({ ok: true, value: marks })
+  }
+
+  /** What one layer draws, as `[kind, top, height]` read off the style that places it. */
+  const drawn = (layer: 'code' | 'gutter'): [string | null, string, string][] =>
+    [...document.querySelectorAll(`[data-marks="${layer}"] [data-change]`)].map((mark) => [
+      mark.getAttribute('data-change'),
+      (mark as HTMLElement).style.top,
+      (mark as HTMLElement).style.height
+    ])
+
+  it('tints each changed range behind the code, where the lines are', async () => {
+    marking({ added: [{ start: 3, end: 4 }], modified: [{ start: 1, end: 1 }], removedAfter: [] })
+
+    renderViewer()
+
+    // 12px of padding, then 18px a line: line 1 at 12, lines 3–4 start at 48.
+    await waitFor(() => {
+      expect(drawn('code')).toEqual([
+        ['modified', '12px', '18px'],
+        ['added', '48px', '36px']
+      ])
+    })
+  })
+
+  it('carries the same ranges into the number column, and marks a deletion there', async () => {
+    marking({ added: [{ start: 3, end: 4 }], modified: [], removedAfter: [5, 0] })
+
+    renderViewer()
+
+    // A deletion has no line to tint, so it is a line between two: after line 5
+    // is where line 6 starts, less one pixel to straddle the edge.
+    await waitFor(() => {
+      expect(drawn('gutter')).toEqual([
+        ['added', '48px', '36px'],
+        ['removed', '101px', '2px'],
+        ['removed', '11px', '2px']
+      ])
+    })
+    expect(drawn('code')).toEqual([['added', '48px', '36px']])
+  })
+
+  it('hides the marks from a screen reader and says what they come to in words', async () => {
+    marking({ added: [{ start: 3, end: 4 }], modified: [{ start: 1, end: 1 }], removedAfter: [5] })
+
+    renderViewer()
+
+    expect(await screen.findByText('3 lines changed')).toBeInTheDocument()
+    expect(screen.getByText('1 deletion')).toBeInTheDocument()
+    for (const layer of document.querySelectorAll('[data-marks]')) {
+      expect(layer).toHaveAttribute('aria-hidden', 'true')
+    }
+  })
+
+  it('says nothing, and draws nothing, for a file the branch has not touched', async () => {
+    marking({ added: [], modified: [], removedAfter: [] })
+
+    renderViewer()
+
+    await waitFor(() => {
+      expect(code()).toHaveTextContent('one two')
+    })
+    expect(document.querySelector('[data-marks]')).toBeNull()
+    expect(screen.queryByText(/changed/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/deletion/)).not.toBeInTheDocument()
+  })
+
+  it('draws the file as it always did when the marks could not be read', async () => {
+    answering({ kind: 'text', text: TEXT, bytes: TEXT.length })
+    vi.mocked(octopus().files.lineChanges).mockResolvedValue({ ok: false, error: 'no base' })
+
+    renderViewer()
+
+    await waitFor(() => {
+      expect(code()).toHaveTextContent('one two')
+    })
+    expect(document.querySelector('[data-marks]')).toBeNull()
+  })
+
+  describe('the way to the Changes pane', () => {
+    it('offers it, and names the file when it is asked for', async () => {
+      marking({ added: [], modified: [{ start: 2, end: 2 }], removedAfter: [] })
+
+      const { onShowChanges } = renderViewer('src/a.ts')
+      await userEvent.click(await screen.findByRole('button', { name: 'Show changes' }))
+
+      expect(onShowChanges).toHaveBeenCalledExactlyOnceWith('src/a.ts')
+    })
+
+    it('offers it for a file whose only change is a deletion', async () => {
+      marking({ added: [], modified: [], removedAfter: [3] })
+
+      renderViewer()
+
+      expect(await screen.findByRole('button', { name: 'Show changes' })).toBeInTheDocument()
+    })
+
+    it('does not offer it for a file the branch has not touched', async () => {
+      marking({ added: [], modified: [], removedAfter: [] })
+
+      renderViewer()
+      await waitFor(() => {
+        expect(code()).toHaveTextContent('one two')
+      })
+
+      expect(screen.queryByRole('button', { name: 'Show changes' })).not.toBeInTheDocument()
+    })
+
+    // A deleted file is in the pane's list, which is what the button leads to.
+    it('offers it for a file that has been deleted, which has no lines to mark', async () => {
+      answering({ kind: 'deleted', text: 'was here' })
+
+      renderViewer()
+
+      expect(await screen.findByRole('button', { name: 'Show changes' })).toBeInTheDocument()
+    })
+
+    it('does not offer it where the file could not be read', async () => {
+      vi.mocked(octopus().files.read).mockResolvedValue({ ok: false, error: 'no workspace' })
+
+      renderViewer()
+      await screen.findByText(/no workspace/)
+
+      expect(screen.queryByRole('button', { name: 'Show changes' })).not.toBeInTheDocument()
+    })
   })
 })

@@ -519,6 +519,19 @@ export const en = {
     plain: 'Shown without colours: the file is too large to highlight.',
     openExternally: 'Open in editor',
     reload: 'Reload',
+    showChanges: 'Show changes',
+    /* What the branch did to the open file, said in words as well as drawn: the
+       tint and the strip beside the numbers say nothing to a screen reader. A
+       deletion is counted apart because the lines are gone — it is a place in
+       the file, not a line of it. */
+    changedLines_one: '{{count}} line changed',
+    changedLines_few: '{{count}} lines changed',
+    changedLines_many: '{{count}} lines changed',
+    changedLines_other: '{{count}} lines changed',
+    removedGaps_one: '{{count}} deletion',
+    removedGaps_few: '{{count}} deletions',
+    removedGaps_many: '{{count}} deletions',
+    removedGaps_other: '{{count}} deletions',
     /* The toolbar over selected lines. */
     selection: 'Lines {{range}}',
     addTo: 'Add to {{name}}',

@@ -998,6 +998,10 @@ export function registerIpc(
     attempt(() => service.readWorkspaceFile(workspaceId, FilePathSchema.parse(path)))
   )
 
+  host.handle('files:lineChanges', (_event, workspaceId: string, path: unknown) =>
+    attempt(() => service.readLineChanges(workspaceId, FilePathSchema.parse(path)))
+  )
+
   // The agent chat. Everything the renderer sends here reaches a model or a
   // stored record, so each argument is validated rather than trusted.
   // Not every event is a window's business: see `isTaskFrame`.

@@ -465,6 +465,7 @@ describe('channel table', () => {
     'files:tree',
     'files:directory',
     'files:read',
+    'files:lineChanges',
     'chats:list',
     'chats:open',
     'chats:create',
@@ -2448,6 +2449,10 @@ describe('workspaces of a real project', () => {
       ok: true,
       value: { kind: 'text' }
     })
+    await expect(invoke('files:lineChanges', workspace.id, 'README.md')).resolves.toEqual({
+      ok: true,
+      value: { added: [], modified: [], removedAfter: [] }
+    })
   })
 
   // Refused at the boundary before the service sees it; the service then
@@ -2456,7 +2461,7 @@ describe('workspaces of a real project', () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
 
-    for (const channel of ['files:directory', 'files:read']) {
+    for (const channel of ['files:directory', 'files:read', 'files:lineChanges']) {
       expect(await invoke(channel, workspace.id, '')).toMatchObject({ ok: false })
       expect(await invoke(channel, workspace.id, 42)).toMatchObject({ ok: false })
     }

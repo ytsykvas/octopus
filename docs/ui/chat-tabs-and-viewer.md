@@ -132,6 +132,36 @@ Two `<pre>`s side by side rather than a row per line: a long file is a handful
 of elements, and a selection in the code never picks up the numbers. A deleted
 file opens onto what HEAD still holds, under a banner saying so.
 
+**The lines the branch changed are tinted, and the toolbar says how many.** A
+file opened from the tree looked the same whatever the agent had done to it, and
+what changed is the question a reader opens it with. The marks are measured
+against the same merge base as the Changes pane (`lineChanges.ts`), **not**
+against `HEAD` as the tree's marks are: a commit would otherwise empty the
+viewer while the pane still listed the file, and the button below would lead to
+lines the viewer had stopped showing. A tint behind the code and the same ranges
+in the number column, where a strip says which kind — blue for edited, green for
+new — and a red line between two lines marks a deletion, which has no line to
+tint. Drawn as one element per range behind the text (`ChangeMarks`), never per
+line, and memoised for the reason `ColouredLines` is: the viewer redraws on every
+move of a selection.
+
+It costs one `git diff -U0` and one listing for **this path only**, read with the
+text and applied in the same step so the marks never land on a file already
+drawn. Not asked for anything but text. A read that fails marks nothing and
+leaves the file standing, and one that finds what the last found hands the old
+object back (`useFileContent`), so a turn that did not touch the file redraws
+nothing. A renamed file is marked whole: a diff for one path cannot see the
+rename.
+
+**"Show changes" opens the Changes tab on this file.** Offered where the file has
+marks, or is deleted — a deleted file has none and is in the pane's list. The
+pane is unfolded onto the tab in the write ⌘⇧D makes, the file is opened and a
+writers filter that hides it is cleared, and the list is scrolled to it. A request
+is one the pane scrolls to once, on the first list that holds the file — the
+pane reads as it is shown, so the file the agent just wrote may only be in the
+read that follows — and it ends with the pane being put away, or another
+workspace, so a later read never moves a reader who has gone elsewhere.
+
 **Code review happens from the viewer.** Selecting lines floats a toolbar over
 them: a button per conversation of the workspace — "Add to Claude 2", the one
 in front last styled as the primary action — and "Copy path". A conversation's

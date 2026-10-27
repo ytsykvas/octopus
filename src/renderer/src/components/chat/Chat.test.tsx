@@ -28,10 +28,12 @@ const WORKSPACE = workspaceView('anna')
 /** The pane as `App` assembles it, tab strip and all. */
 function Pane({
   workspace = WORKSPACE,
-  onForget
+  onForget,
+  onShowChanges = vi.fn()
 }: {
   workspace?: WorkspaceView
   onForget?: (chatId: string) => void
+  onShowChanges?: (path: string) => void
 }): React.JSX.Element {
   const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
   const files = useFileTabs(workspace.id)
@@ -72,6 +74,7 @@ function Pane({
         focusComposer={false}
         projectEnvProfile="default"
         onWorkspacesChanged={vi.fn()}
+        onShowChanges={onShowChanges}
       />
       {/* What the right pane's tree does, reduced to a button. */}
       <button
@@ -546,5 +549,27 @@ describe('a note sent from the file viewer', () => {
     )
 
     expect(screen.queryByText('a.ts:2')).not.toBeInTheDocument()
+  })
+})
+
+describe('the way from the viewer to the Changes pane', () => {
+  it('hands the open file to whoever owns that pane', async () => {
+    vi.mocked(octopus().files.read).mockResolvedValue({
+      ok: true,
+      value: { kind: 'text', text: 'one\n', bytes: 4 }
+    })
+    vi.mocked(octopus().files.lineChanges).mockResolvedValue({
+      ok: true,
+      value: { added: [{ start: 1, end: 1 }], modified: [], removedAfter: [] }
+    })
+    const onShowChanges = vi.fn()
+    const user = userEvent.setup()
+    givenChats([chat()])
+    render(<Pane onShowChanges={onShowChanges} />)
+
+    await user.click(await screen.findByRole('button', { name: 'tree: a.ts' }))
+    await user.click(await screen.findByRole('button', { name: 'Show changes' }))
+
+    expect(onShowChanges).toHaveBeenCalledExactlyOnceWith('src/a.ts')
   })
 })
