@@ -404,7 +404,8 @@ function chatFixture(): Chat {
     skillOverrides: {},
     closedAt: null,
     aside: null,
-    createdAt: '2026-08-08T00:00:00.000Z'
+    createdAt: '2026-08-08T00:00:00.000Z',
+    lastTurnAt: null
   }
 }
 
