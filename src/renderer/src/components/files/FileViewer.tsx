@@ -1,6 +1,8 @@
-import { Copy, ExternalLink, MessageSquarePlus, RefreshCw } from 'lucide-react'
+import { Copy, ExternalLink, GitCompare, MessageSquarePlus, RefreshCw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import type { LineChanges } from '@core/lineChanges.js'
 
 import type { CodeNote } from '../../hooks/useCodeNotes.js'
 import { useFileContent } from '../../hooks/useFileContent.js'
@@ -9,6 +11,7 @@ import { NoteEditor } from '../NoteEditor.js'
 import { ColouredLines, useColouredText } from '../diff/colouredText.js'
 import { fileSize } from '../fileSize.js'
 import { IconButton, Notice } from '../paneControls.js'
+import { ChangeMarks } from './ChangeMarks.js'
 import { type CodeSelection, codeSelection, type LineGeometry } from './codeSelection.js'
 
 /** A conversation a note on the selected lines can be sent to. */
@@ -27,6 +30,8 @@ interface FileViewerProps {
   readonly targets: readonly NoteTarget[]
   /** Hands a note to one conversation. The file stays in front. */
   readonly onNote: (tabKey: string, note: CodeNote) => void
+  /** Opens the Changes pane on this file. */
+  readonly onShowChanges: (path: string) => void
 }
 
 /**
@@ -42,10 +47,11 @@ export function FileViewer({
   path,
   onError,
   targets,
-  onNote
+  onNote,
+  onShowChanges
 }: FileViewerProps): React.JSX.Element {
   const { t } = useTranslation()
-  const { content, error, reload, openExternally } = useFileContent(workspaceId, path)
+  const { content, changes, error, reload, openExternally } = useFileContent(workspaceId, path)
 
   const open = async (): Promise<void> => {
     const failure = await openExternally()
@@ -58,7 +64,15 @@ export function FileViewer({
 
     switch (content.kind) {
       case 'text':
-        return <Code path={path} text={content.text} targets={targets} onNote={onNote} />
+        return (
+          <Code
+            path={path}
+            text={content.text}
+            changes={changes}
+            targets={targets}
+            onNote={onNote}
+          />
+        )
       case 'binary':
         return <Notice>{t('viewer.binary', { size: fileSize(content.bytes) })}</Notice>
       case 'tooLarge':
@@ -80,7 +94,13 @@ export function FileViewer({
             <p className="bg-danger-bg text-danger border-line shrink-0 border-b px-4 py-1.5 text-[12px]">
               {t('viewer.deleted')}
             </p>
-            <Code path={path} text={content.text} targets={targets} onNote={onNote} />
+            <Code
+              path={path}
+              text={content.text}
+              changes={null}
+              targets={targets}
+              onNote={onNote}
+            />
           </>
         )
     }
@@ -92,6 +112,19 @@ export function FileViewer({
         <span className="text-ink-faint min-w-0 flex-1 truncate font-mono text-[11px]" title={path}>
           {path}
         </span>
+        <ChangeSummary changes={changes} />
+        {/* Only where the Changes pane has this file to show: a marked one, or a
+            deleted one, which has no lines to mark but is in its list. */}
+        {(hasMarks(changes) || content?.kind === 'deleted') && (
+          <IconButton
+            label={t('viewer.showChanges')}
+            onClick={() => {
+              onShowChanges(path)
+            }}
+          >
+            <GitCompare aria-hidden size={13} />
+          </IconButton>
+        )}
         <IconButton label={t('viewer.reload')} onClick={reload}>
           <RefreshCw aria-hidden size={13} />
         </IconButton>
@@ -101,6 +134,42 @@ export function FileViewer({
       </div>
       {body()}
     </div>
+  )
+}
+
+/** Whether there is anything to draw or say about. */
+function hasMarks(changes: LineChanges | null): changes is LineChanges {
+  return (
+    changes !== null &&
+    changes.added.length + changes.modified.length + changes.removedAfter.length > 0
+  )
+}
+
+/**
+ * What the marks come to, in words: the tint and the strip are decoration to
+ * anything that does not see them.
+ */
+function ChangeSummary({ changes }: { readonly changes: LineChanges | null }): React.JSX.Element {
+  const { t } = useTranslation()
+  const lines = [...(changes?.added ?? []), ...(changes?.modified ?? [])].reduce(
+    (total, range) => total + range.end - range.start + 1,
+    0
+  )
+  const gaps = changes?.removedAfter.length ?? 0
+
+  return (
+    <>
+      {lines > 0 && (
+        <span className="text-ink-faint shrink-0 text-[11px]">
+          {t('viewer.changedLines', { count: lines })}
+        </span>
+      )}
+      {gaps > 0 && (
+        <span className="text-ink-faint shrink-0 text-[11px]">
+          {t('viewer.removedGaps', { count: gaps })}
+        </span>
+      )}
+    </>
   )
 }
 
@@ -153,11 +222,14 @@ interface Writing extends CodeSelection {
 function Code({
   path,
   text,
+  changes,
   targets,
   onNote
 }: {
   readonly path: string
   readonly text: string
+  /** Which lines to tint; null for a file with none, or none that could be read. */
+  readonly changes: LineChanges | null
   readonly targets: readonly NoteTarget[]
   readonly onNote: (tabKey: string, note: CodeNote) => void
 }): React.JSX.Element {
@@ -169,6 +241,8 @@ function Code({
   const [selected, setSelected] = useState<CodeSelection | null>(null)
   const [writing, setWriting] = useState<Writing | null>(null)
   const [copied, setCopied] = useState<Copied>('idle')
+  // Nothing to draw is no layer at all rather than an empty one.
+  const marked = hasMarks(changes) ? changes : null
 
   /*
    * What is selected, watched rather than asked for — the diff's arrangement:
@@ -251,30 +325,37 @@ function Code({
         </p>
       )}
       <div ref={scroller} className="flex min-h-0 flex-1 overflow-auto">
-        <pre
-          aria-hidden
-          style={LINE_STYLE}
-          // Its own ground, or long lines scrolled sideways show through it.
-          className="text-ink-faint bg-canvas sticky left-0 shrink-0 pr-3 pl-4 text-right font-mono text-[12px] select-none"
-        >
-          {numbers}
-        </pre>
-        <pre
-          ref={code}
-          style={LINE_STYLE}
-          onCopy={(event) => {
-            const passage = codeSelection(event.currentTarget, window.getSelection(), LINE)
-            if (passage === null) return
-            event.clipboardData.setData(
-              'text/plain',
-              codeReference(path, passage.line, passage.endLine)
-            )
-            event.preventDefault()
-          }}
-          className="diff-code text-ink min-w-0 flex-1 pr-4 font-mono text-[12px]"
-        >
-          <ColouredLines lines={lines} tokens={tokens} />
-        </pre>
+        {/* As wide as the longest line, so what is drawn behind the text reaches
+            past the window when the lines do; `isolate` is what lets it sit
+            under the text without going behind the pane. */}
+        <div className="relative isolate flex w-max min-w-full">
+          {marked !== null && <ChangeMarks changes={marked} geometry={LINE} layer="code" />}
+          <pre
+            aria-hidden
+            style={LINE_STYLE}
+            // Its own ground, or long lines scrolled sideways show through it.
+            className="text-ink-faint bg-canvas sticky left-0 shrink-0 pr-3 pl-4 text-right font-mono text-[12px] select-none"
+          >
+            {marked !== null && <ChangeMarks changes={marked} geometry={LINE} layer="gutter" />}
+            {numbers}
+          </pre>
+          <pre
+            ref={code}
+            style={LINE_STYLE}
+            onCopy={(event) => {
+              const passage = codeSelection(event.currentTarget, window.getSelection(), LINE)
+              if (passage === null) return
+              event.clipboardData.setData(
+                'text/plain',
+                codeReference(path, passage.line, passage.endLine)
+              )
+              event.preventDefault()
+            }}
+            className="diff-code text-ink min-w-0 flex-1 pr-4 font-mono text-[12px]"
+          >
+            <ColouredLines lines={lines} tokens={tokens} />
+          </pre>
+        </div>
       </div>
 
       {/* Over the selection, where the eye already is. Above it unless that

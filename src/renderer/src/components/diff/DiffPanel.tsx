@@ -46,6 +46,17 @@ import { chatName } from '../chat/chatName.js'
  */
 const PUBLISH_ORDER: readonly PublishState[] = ['pushed', 'committed', 'uncommitted']
 
+/**
+ * A file the pane is asked to open on, from outside it.
+ *
+ * `id` rather than the path alone: asking twice for the same file — after the
+ * reader scrolled away from it, or closed it — has to be a new request.
+ */
+export interface DiffReveal {
+  readonly path: string
+  readonly id: number
+}
+
 interface DiffPanelProps {
   readonly workspace: WorkspaceView | null
   /** False while another tab is showing; the diff is not read behind one. */
@@ -63,6 +74,8 @@ interface DiffPanelProps {
   readonly onError: (message: string) => void
   /** Brings a file to the front of the centre, in the window's own viewer; `pinned` keeps it rather than previewing it. */
   readonly onOpenFile: (path: string, pinned: boolean) => void
+  /** Opens one file and brings it into view; a new `id` is a new request. */
+  readonly reveal?: DiffReveal | null
 }
 
 /**
@@ -82,7 +95,8 @@ export function DiffPanel({
   comments,
   revert,
   onError,
-  onOpenFile
+  onOpenFile,
+  reveal = null
 }: DiffPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -398,11 +412,65 @@ export function DiffPanel({
     [pending, editing, add, remove, lines, readDraft, onDraft, setEditing]
   )
 
+  /*
+   * Opened on one file from outside — the file viewer's "Show changes".
+   *
+   * Adjusted while rendering, as the workspace switch below is: the file has to
+   * be open, and the filter not hiding it, in the very render that draws the
+   * list, or the scroll would find nothing to scroll to. A request already
+   * seen when the pane mounted is not replayed, and one made with no workspace
+   * has nothing to open.
+   */
+  const [seenReveal, setSeenReveal] = useState(reveal?.id ?? null)
+  const [requested, setRequested] = useState<DiffReveal | null>(null)
+
+  if (reveal !== null && reveal.id !== seenReveal) {
+    setSeenReveal(reveal.id)
+    if (workspace) {
+      setRequested(reveal)
+      setChoicesIn((all) =>
+        new Map(all).set(workspace.id, new Map(all.get(workspace.id)).set(reveal.path, false))
+      )
+      // Only a filter that is hiding it: one the file is already in is the
+      // reader's way of reading, and is not undone to answer a different question.
+      if (chosenWriter !== null && !(workspace.writers[reveal.path] ?? []).includes(chosenWriter))
+        setChosenWriter(null)
+    }
+  }
+
   if ((workspace?.id ?? null) !== shownId) {
     setShownId(workspace?.id ?? null)
     setEditing(null)
     setSelected(null)
+    setRequested(null)
   }
+
+  // A request lives while the pane is on screen. One left standing would move a
+  // reader who had long since gone elsewhere, on whichever read first held the file.
+  if (!visible && requested !== null) setRequested(null)
+
+  /*
+   * Which request has been scrolled to. A ref, not state: it is written from an
+   * effect and read by the same one, and nothing draws from it.
+   *
+   * The file may not be in the list yet — the pane was behind another tab and
+   * reads as it is shown, and what the agent just wrote is in that read and
+   * not in the one on screen — so this waits for the list that holds it, once.
+   */
+  const scrolledFor = useRef<number | null>(null)
+  useEffect(() => {
+    const node = scroller.current
+    if (!node || requested === null || scrolledFor.current === requested.id) return
+
+    // Compared rather than put in a selector, which would need the path escaped.
+    const target = [...node.querySelectorAll('[data-path]')].find(
+      (element) => element.getAttribute('data-path') === requested.path
+    )
+    if (!target) return
+
+    scrolledFor.current = requested.id
+    target.scrollIntoView({ block: 'start' })
+  }, [requested, diff])
 
   if (!workspace) {
     return (

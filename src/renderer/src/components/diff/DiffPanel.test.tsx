@@ -2376,3 +2376,242 @@ describe('what has reached GitHub', () => {
     })
   })
 })
+
+describe('being opened on one file from outside', () => {
+  const files = (): ReturnType<typeof workspaceDiff> =>
+    workspaceDiff([fileDiff('src/a.ts'), fileDiff('src/b.ts')])
+
+  const panel = (
+    reveal: { path: string; id: number } | null,
+    visible = true,
+    workspace: typeof anna | null = anna
+  ): React.JSX.Element => (
+    <DiffPanel
+      workspace={workspace}
+      visible={visible}
+      view="unified"
+      onView={vi.fn()}
+      width={WIDE}
+      comments={commentController()}
+      revert={revertController()}
+      onError={vi.fn()}
+      onOpenFile={vi.fn()}
+      reveal={reveal}
+    />
+  )
+
+  /** The file the pane last scrolled to, by the path its header carries. */
+  const scrolledTo = (scroll: { mock: { contexts: unknown[] } }): (string | null)[] =>
+    scroll.mock.contexts.map((element) => (element as Element).getAttribute('data-path'))
+
+  it('opens that file and nothing else, and brings it into view', async () => {
+    answer(files())
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const { rerender } = render(panel(null))
+    await screen.findByRole('button', { name: 'src/b.ts' })
+
+    rerender(panel({ path: 'src/b.ts', id: 1 }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'src/b.ts' })).toHaveAttribute(
+        'aria-expanded',
+        'true'
+      )
+    })
+    expect(screen.getByRole('button', { name: 'src/a.ts' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    expect(scrolledTo(scroll)).toEqual(['src/b.ts'])
+    scroll.mockRestore()
+  })
+
+  it('does not take the reader back to the file on every later read', async () => {
+    answer(files())
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const { rerender } = render(panel(null))
+    await screen.findByRole('button', { name: 'src/b.ts' })
+    rerender(panel({ path: 'src/b.ts', id: 1 }))
+    await waitFor(() => {
+      expect(scroll).toHaveBeenCalledTimes(1)
+    })
+
+    emitTurnEnd()
+    await waitFor(() => {
+      expect(octopus().workspaces.changes).toHaveBeenCalledTimes(2)
+    })
+    rerender(panel({ path: 'src/b.ts', id: 1 }))
+
+    expect(scroll).toHaveBeenCalledTimes(1)
+    scroll.mockRestore()
+  })
+
+  it('goes again when the same file is asked for a second time', async () => {
+    answer(files())
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const { rerender } = render(panel(null))
+    await screen.findByRole('button', { name: 'src/b.ts' })
+    rerender(panel({ path: 'src/b.ts', id: 1 }))
+    await waitFor(() => {
+      expect(scroll).toHaveBeenCalledTimes(1)
+    })
+
+    // Closed and scrolled away from in the meantime.
+    fireEvent.click(screen.getByRole('button', { name: 'src/b.ts' }))
+    rerender(panel({ path: 'src/b.ts', id: 2 }))
+
+    await waitFor(() => {
+      expect(scroll).toHaveBeenCalledTimes(2)
+    })
+    expect(screen.getByRole('button', { name: 'src/b.ts' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+    scroll.mockRestore()
+  })
+
+  it('waits for the read when the file is not in the list it has yet', async () => {
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const { rerender } = render(panel(null))
+    await screen.findByRole('button', { name: 'src/a.ts' })
+
+    rerender(panel({ path: 'src/b.ts', id: 1 }))
+    expect(scroll).not.toHaveBeenCalled()
+
+    // What the agent wrote lands in the next reading.
+    answer(files())
+    emitTurnEnd()
+
+    await waitFor(() => {
+      expect(scrolledTo(scroll)).toEqual(['src/b.ts'])
+    })
+    scroll.mockRestore()
+  })
+
+  it('forgets the request once the pane is put away', async () => {
+    answer(workspaceDiff([fileDiff('src/a.ts')]))
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const { rerender } = render(panel(null))
+    await screen.findByRole('button', { name: 'src/a.ts' })
+    rerender(panel({ path: 'src/b.ts', id: 1 }))
+
+    rerender(panel({ path: 'src/b.ts', id: 1 }, false))
+    rerender(panel({ path: 'src/b.ts', id: 1 }, true))
+    answer(files())
+    emitTurnEnd()
+    await screen.findByRole('button', { name: 'src/b.ts' })
+
+    // Seen long after, it would move a reader who had moved on.
+    expect(scroll).not.toHaveBeenCalled()
+    scroll.mockRestore()
+  })
+
+  it('is not carried to another workspace', async () => {
+    answer(files())
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const { rerender } = render(panel(null))
+    await screen.findByRole('button', { name: 'src/b.ts' })
+
+    rerender(panel({ path: 'src/b.ts', id: 1 }, true, bob))
+    await screen.findByRole('button', { name: 'src/b.ts' })
+
+    expect(screen.getByRole('button', { name: 'src/a.ts' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    scroll.mockRestore()
+  })
+
+  it('is not replayed by a pane that only now saw it', async () => {
+    answer(files())
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+
+    render(panel({ path: 'src/b.ts', id: 7 }))
+    await screen.findByRole('button', { name: 'src/b.ts' })
+
+    expect(screen.getByRole('button', { name: 'src/b.ts' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    expect(scroll).not.toHaveBeenCalled()
+    scroll.mockRestore()
+  })
+
+  it('ignores a request made while there is no workspace, and does not keep it for the next', async () => {
+    answer(files())
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const { rerender } = render(panel(null, true, null))
+
+    rerender(panel({ path: 'src/b.ts', id: 1 }, true, null))
+    expect(screen.getByText('Nothing to compare yet')).toBeInTheDocument()
+
+    rerender(panel({ path: 'src/b.ts', id: 1 }, true, anna))
+    await screen.findByRole('button', { name: 'src/b.ts' })
+
+    expect(screen.getByRole('button', { name: 'src/b.ts' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    expect(scroll).not.toHaveBeenCalled()
+
+    // And the pane going back to none leaves nothing standing either.
+    rerender(panel(null, true, null))
+    expect(screen.getByText('Nothing to compare yet')).toBeInTheDocument()
+    scroll.mockRestore()
+  })
+
+  describe('with the list narrowed to one conversation', () => {
+    const shared = workspaceView('anna', {
+      chats: [chat('chat-1'), chat('chat-2')],
+      writers: { 'src/a.ts': ['chat-1'], 'src/b.ts': ['chat-2'] }
+    })
+
+    async function narrowedToFirst(): Promise<ReturnType<typeof render>> {
+      answer(files())
+      const view = render(panel(null, true, shared))
+      fireEvent.click(await screen.findByRole('button', { name: 'Claude 1' }))
+      expect(screen.queryByRole('button', { name: 'src/b.ts' })).not.toBeInTheDocument()
+      return view
+    }
+
+    it('widens it when it is hiding the file asked for', async () => {
+      const { rerender } = await narrowedToFirst()
+
+      rerender(panel({ path: 'src/b.ts', id: 1 }, true, shared))
+
+      expect(await screen.findByRole('button', { name: 'src/b.ts' })).toHaveAttribute(
+        'aria-expanded',
+        'true'
+      )
+    })
+
+    it('widens it for a file nobody is recorded as having written', async () => {
+      answer(workspaceDiff([fileDiff('src/a.ts'), fileDiff('src/b.ts'), fileDiff('src/c.ts')]))
+      const { rerender } = render(panel(null, true, shared))
+      fireEvent.click(await screen.findByRole('button', { name: 'Claude 1' }))
+      expect(screen.queryByRole('button', { name: 'src/c.ts' })).not.toBeInTheDocument()
+
+      rerender(panel({ path: 'src/c.ts', id: 1 }, true, shared))
+
+      expect(await screen.findByRole('button', { name: 'src/c.ts' })).toHaveAttribute(
+        'aria-expanded',
+        'true'
+      )
+    })
+
+    it('leaves it alone when the file is already in it', async () => {
+      const { rerender } = await narrowedToFirst()
+
+      rerender(panel({ path: 'src/a.ts', id: 1 }, true, shared))
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'src/a.ts' })).toHaveAttribute(
+          'aria-expanded',
+          'true'
+        )
+      })
+      expect(screen.queryByRole('button', { name: 'src/b.ts' })).not.toBeInTheDocument()
+    })
+  })
+})

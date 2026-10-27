@@ -40,6 +40,8 @@ interface ChatProps {
   readonly files: FileTabsController
   /** Says a failure in the window's banner — a file the system would not open. */
   readonly onError: (message: string | null) => void
+  /** Opens the right pane's Changes tab on a file the viewer is showing. */
+  readonly onShowChanges: (path: string) => void
   /**
    * What was in a tab's composer when it was last left.
    *
@@ -107,6 +109,7 @@ export function Chat({
   tabs,
   files,
   onError,
+  onShowChanges,
   draftOf,
   onDraftLeave,
   comments,
@@ -297,6 +300,7 @@ export function Chat({
             active: tab.key === tabs.activeKey
           }))}
           onNote={codeNotes.add}
+          onShowChanges={onShowChanges}
         />
       )}
     </div>

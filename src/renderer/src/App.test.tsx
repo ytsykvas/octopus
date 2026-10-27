@@ -2699,6 +2699,46 @@ describe('App', () => {
     expect(window.octopus.files.open).not.toHaveBeenCalled()
   })
 
+  // The viewer marks what the branch changed; this is its way to the whole picture.
+  it('opens the Changes tab on the file the viewer shows, from wherever the pane was', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.workspaces.changes).mockResolvedValue({
+      ok: true,
+      value: { diff: workspaceDiff([fileDiff('README.md')]), sides: {} }
+    })
+    vi.mocked(window.octopus.files.read).mockResolvedValue({
+      ok: true,
+      value: { kind: 'text', text: '# Planner', bytes: 9 }
+    })
+    vi.mocked(window.octopus.files.lineChanges).mockResolvedValue({
+      ok: true,
+      value: { added: [{ start: 1, end: 1 }], modified: [], removedAfter: [] }
+    })
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+    await user.click(await screen.findByRole('button', { name: 'Actions for README.md' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Open file' }))
+    await screen.findByText('# Planner')
+    await user.click(screen.getByRole('button', { name: 'Terminal' }))
+    vi.mocked(window.octopus.config.update).mockClear()
+
+    await user.click(await screen.findByRole('button', { name: 'Show changes' }))
+
+    expect(window.octopus.config.update).toHaveBeenLastCalledWith({
+      rightPanelTab: 'diff',
+      rightPanelOpen: true
+    })
+    // The file's header in the pane, not the tab above the viewer with its name.
+    await waitFor(() => {
+      expect(
+        screen
+          .getAllByRole('button', { name: 'README.md' })
+          .some((button) => button.getAttribute('aria-expanded') === 'true')
+      ).toBe(true)
+    })
+  })
+
   describe('a file opened from the tree', () => {
     async function openReadme(): Promise<ReturnType<typeof userEvent.setup>> {
       givenTwoProjects()

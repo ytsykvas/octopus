@@ -25,6 +25,7 @@ import { ProjectSettings, type SectionId as ProjectSection } from './components/
 import { ProjectTabs } from './components/ProjectTabs.js'
 import { PluginsWindow } from './components/plugins/PluginsWindow.js'
 import { RightPanel } from './components/RightPanel.js'
+import type { DiffReveal } from './components/diff/DiffPanel.js'
 import { ServerControls } from './components/ServerControls.js'
 import { type SectionId, Settings } from './components/Settings.js'
 import { Sidebar } from './components/Sidebar.js'
@@ -109,6 +110,13 @@ export function App(): React.JSX.Element {
   const plugins = usePlugins()
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /*
+   * The file the Changes tab is asked to open on, from the viewer.
+   *
+   * Held here because the viewer and the tab are far apart, and a counter beside
+   * the path because asking for the same file twice is two requests.
+   */
+  const [diffReveal, setDiffReveal] = useState<DiffReveal | null>(null)
   /*
    * Whether the right pane is showing, answered at once and saved behind.
    *
@@ -465,6 +473,16 @@ export function App(): React.JSX.Element {
       void updateConfig({ ...patch, rightPanelOpen: open })
     },
     [updateConfig]
+  )
+
+  // The viewer's "Show changes": the pane unfolded onto Changes, which opens the
+  // file in the same render it shows itself in — ⌘⇧D's own write plus the request.
+  const showChanges = useCallback(
+    (path: string) => {
+      showRightPanel(true, { rightPanelTab: 'diff' })
+      setDiffReveal((current) => ({ path, id: (current?.id ?? 0) + 1 }))
+    },
+    [showRightPanel]
   )
 
   /**
@@ -1094,6 +1112,7 @@ export function App(): React.JSX.Element {
               tabs={chatTabs}
               files={fileTabs}
               onError={setError}
+              onShowChanges={showChanges}
               draftOf={(tabKey) => drafts.get(`${selectedWorkspace.id}#${tabKey}`) ?? ''}
               onDraftLeave={(tabKey, text) => {
                 keepDraft(selectedWorkspace.id, tabKey, text)
@@ -1210,6 +1229,7 @@ export function App(): React.JSX.Element {
             else fileTabs.preview(path)
           }}
           onAttachFile={attachFile}
+          reveal={diffReveal}
           onError={setError}
           // The room the pane must leave alone. Folded away, the list takes
           // none of it — and the pane may have that room too.

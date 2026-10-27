@@ -1294,12 +1294,60 @@ describe('workspaces', () => {
       })
     })
 
+    it('marks the lines of a file the workspace has changed, and none for a path it has not', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      const readme = await readFile(join(workspace.path, 'README.md'), 'utf8')
+
+      await expect(service.readLineChanges(workspace.id, 'README.md')).resolves.toEqual({
+        added: [],
+        modified: [],
+        removedAfter: []
+      })
+
+      await writeFile(join(workspace.path, 'README.md'), `${readme}more\n`, 'utf8')
+      const lines = readme.split('\n').length
+
+      await expect(service.readLineChanges(workspace.id, 'README.md')).resolves.toEqual({
+        added: [{ start: lines, end: lines }],
+        modified: [],
+        removedAfter: []
+      })
+      // Nothing on disk to mark, whether it is gone or was never there.
+      await expect(service.readLineChanges(workspace.id, 'nothing.txt')).resolves.toEqual({
+        added: [],
+        modified: [],
+        removedAfter: []
+      })
+    })
+
+    it('does not count the lines of a file an untracked link points to outside the worktree', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      const outside = await mkdtemp(join(tmpdir(), 'octopus-outside-'))
+
+      try {
+        await writeFile(join(outside, 'secret.txt'), 'a\nb\nc\n', 'utf8')
+        // Untracked, so the one case in which the file is read rather than diffed.
+        await symlink(join(outside, 'secret.txt'), join(workspace.path, 'link.txt'))
+
+        await expect(service.readLineChanges(workspace.id, 'link.txt')).resolves.toEqual({
+          added: [],
+          modified: [],
+          removedAfter: []
+        })
+      } finally {
+        await rm(outside, { recursive: true, force: true })
+      }
+    })
+
     it('refuses a workspace that does not exist, for each read', async () => {
       const { service } = await withProject()
 
       await expect(service.readFileTree('missing')).rejects.toThrow()
       await expect(service.readWorkspaceDirectory('missing', 'a')).rejects.toThrow()
       await expect(service.readWorkspaceFile('missing', 'a')).rejects.toThrow()
+      await expect(service.readLineChanges('missing', 'a')).rejects.toThrow()
     })
   })
 

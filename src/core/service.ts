@@ -154,6 +154,7 @@ import { liveCount } from './backgroundTasks.js'
 import { createTaskRegistry, type TaskEnding, type TasksEvent } from './taskRegistry.js'
 import { type DirectoryListing, type FileTreeSnapshot, readFileTree } from './fileTree.js'
 import { type FileContent, readWorkspaceDirectory, readWorkspaceFile } from './workspaceFiles.js'
+import { type LineChanges, NO_LINE_CHANGES, readLineChanges } from './lineChanges.js'
 import {
   cloneRepository,
   listRepositories,
@@ -1444,6 +1445,15 @@ export interface OctopusService {
    * path arrives from a window that draws agent output.
    */
   readWorkspaceFile(workspaceId: string, path: string): Promise<FileContent>
+
+  /**
+   * Which lines of a file differ from where the workspace's branch began.
+   *
+   * The pane's own left-hand side, for one path: what the viewer marks is what
+   * the Changes pane would show. Contained like `readWorkspaceFile`, and a path
+   * with nothing on disk has nothing to mark.
+   */
+  readLineChanges(workspaceId: string, path: string): Promise<LineChanges>
 
   /**
    * The workspace's chat, created on first use.
@@ -6371,6 +6381,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async readWorkspaceFile(workspaceId, path) {
       const workspace = requireWorkspace(workspaceId)
       return readWorkspaceFile(workspace, path, makeExec(workspace.path))
+    },
+
+    async readLineChanges(workspaceId, path) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      const absolute = await fileInWorkspace(workspace, path)
+      if (absolute === null) return NO_LINE_CHANGES
+
+      // On the kept index copy, as the Changes read is: a viewer asking after
+      // every turn must not trip the index lock the agent's own git needs.
+      const baseBranch = await baseRefOf(project)
+      return withIndexCopy(workspace.path, makeExec, (exec) =>
+        readLineChanges(exec, { baseBranch, path, absolute })
+      )
     },
 
     async resolveWorkspaceFile(workspaceId, path) {

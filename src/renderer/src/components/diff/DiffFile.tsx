@@ -261,7 +261,8 @@ export const DiffFile = memo(function DiffFile({
   }
 
   return (
-    <div className="border-line border-b">
+    // The address the pane scrolls to when it is opened on this file from outside.
+    <div data-path={file.path} className="border-line border-b">
       <div className="bg-surface border-line sticky top-0 z-10 border-b px-2 py-1.5">
         <div className="flex items-center gap-2">
           <DisclosureButton

@@ -211,7 +211,8 @@ export function installOctopusStub(): Api {
       open: vi.fn(() => ok(undefined)),
       tree: vi.fn(() => ok({ entries: [], statuses: {}, untrackedFolders: [], truncated: false })),
       directory: vi.fn(() => ok({ entries: [], truncated: false })),
-      read: vi.fn(() => ok({ kind: 'text' as const, text: '', bytes: 0 }))
+      read: vi.fn(() => ok({ kind: 'text' as const, text: '', bytes: 0 })),
+      lineChanges: vi.fn(() => ok({ added: [], modified: [], removedAfter: [] }))
     },
     attachments: {
       paste: vi.fn(() => ok('/tmp/paste.png')),

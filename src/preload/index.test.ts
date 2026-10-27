@@ -356,6 +356,11 @@ describe('channel names', () => {
       'files:directory'
     ],
     ['files.read', () => method('files', 'read')('w' as never, 'a.ts' as never), 'files:read'],
+    [
+      'files.lineChanges',
+      () => method('files', 'lineChanges')('w' as never, 'a.ts' as never),
+      'files:lineChanges'
+    ],
     ['chats.list', () => method('chats', 'list')('w' as never), 'chats:list'],
     ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],
     ['chats.create', () => method('chats', 'create')('w' as never), 'chats:create'],
