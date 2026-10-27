@@ -10458,6 +10458,128 @@ describe('the agent chat', () => {
       })
     })
 
+    /*
+     * The `opusPlan` preset puts a session on the CLI's own `opusplan` alias, so
+     * that the CLI — not a name sent at the moment a plan is approved — moves the
+     * model between planning and writing.
+     */
+    describe('the opusplan preset', () => {
+      const OPUS_PAIR: ModelInfo[] = [
+        { value: 'opus', displayName: 'Opus', description: '' },
+        { value: 'sonnet', displayName: 'Sonnet', description: '' }
+      ]
+      const MODEL_COMMAND: SlashCommand[] = [{ name: 'model', description: '', argumentHint: '' }]
+
+      it('puts the first message sent while planning on the alias, once', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        await service.updateConfig({ opusPlan: true })
+        const chat = await service.openChat(workspaceId)
+
+        await service.sendToChat(chat.id, 'plan it')
+        expect(agent().requestedModels()).toEqual(['opusplan'])
+
+        await service.sendToChat(chat.id, 'and again')
+        expect(agent().requestedModels()).toEqual(['opusplan'])
+      })
+
+      it('does nothing while the preset is off', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+
+        await service.sendToChat(chat.id, 'plan it')
+
+        expect(agent().requestedModels()).toEqual([])
+      })
+
+      it('waits for a message sent while planning', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        await service.updateConfig({ opusPlan: true })
+        const chat = await service.openChat(workspaceId)
+        await service.setChatPlanMode(chat.id, false)
+
+        await service.sendToChat(chat.id, 'just do it')
+        expect(agent().requestedModels()).toEqual([])
+
+        await service.setChatPlanMode(chat.id, true)
+        await service.sendToChat(chat.id, 'now plan')
+        expect(agent().requestedModels()).toEqual(['opusplan'])
+      })
+
+      // The reason for the preset: a name sent behind the approval is the race.
+      it('leaves the model to the CLI when a plan is approved', async () => {
+        const { service, workspaceId, events } = await withWorkspace()
+        await service.updateConfig({
+          opusPlan: true,
+          model: 'claude-sonnet-5',
+          planModel: 'claude-opus-5'
+        })
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'plan it')
+
+        const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
+        await service.answerPermission(await waitForRequest(events), 'allow')
+        await decision
+
+        expect(agent().requestedModels()).toEqual(['opusplan'])
+      })
+
+      it('gives way to a model chosen by hand, and does not come back', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        await service.updateConfig({ opusPlan: true })
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'plan it')
+
+        await service.setChatModels(chat.id, { model: 'claude-opus-5' })
+        await service.sendToChat(chat.id, 'carry on')
+
+        expect(agent().requestedModels()).toEqual(['opusplan', 'claude-opus-5'])
+      })
+
+      // `/model opusplan` typed by hand is the same alias: the record catching
+      // up with it is not a second instruction to the session.
+      it('takes the record following a typed /model opusplan for no new choice', async () => {
+        const { service, workspaceId, events } = await withWorkspace()
+        offered = () => Promise.resolve(OPUS_PAIR)
+        offeredCommands = () => Promise.resolve(MODEL_COMMAND)
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'hello')
+        // The session announces its lists once its first init has arrived.
+        agent().emit(initMessage)
+        await vi.waitFor(() => {
+          expect(service.knownModels()).toHaveLength(2)
+          expect(service.chatCommands(chat.id)).toHaveLength(1)
+        })
+
+        await service.sendToChat(chat.id, '/model opusplan')
+        await service.setChatModels(chat.id, { model: 'sonnet', planModel: 'opus' })
+        expect(agent().requestedModels()).toEqual([])
+
+        const decision = agent().ask('ExitPlanMode', { plan: 'a plan' })
+        await service.answerPermission(await waitForRequest(events), 'allow')
+        await decision
+        expect(agent().requestedModels()).toEqual([])
+      })
+
+      it('treats a pair other than the alias’s as a choice', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        offered = () => Promise.resolve(OPUS_PAIR)
+        offeredCommands = () => Promise.resolve(MODEL_COMMAND)
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'hello')
+        // The session announces its lists once its first init has arrived.
+        agent().emit(initMessage)
+        await vi.waitFor(() => {
+          expect(service.knownModels()).toHaveLength(2)
+          expect(service.chatCommands(chat.id)).toHaveLength(1)
+        })
+
+        await service.sendToChat(chat.id, '/model opusplan')
+        await service.setChatModels(chat.id, { model: 'opus', planModel: 'sonnet' })
+
+        expect(agent().requestedModels()).toEqual(['sonnet'])
+      })
+    })
+
     it('starts the next session on the model the chat is now on', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
@@ -13510,6 +13632,91 @@ describe('the agent chat', () => {
       const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
 
       await expect(service.forkChat('chat-nowhere')).rejects.toBeInstanceOf(WorkspaceError)
+    })
+
+    /*
+     * Carrying out a plan is not a fork: the executor is given the plan and
+     * nothing of the planning, and starts on the model that writes code.
+     */
+    describe('handing a plan to a new conversation', () => {
+      const split = { model: 'claude-sonnet-5', planModel: 'claude-opus-5' }
+
+      it('starts clean: no session forked, no history copied', async () => {
+        const forks: string[] = []
+        const service = await forkingService((id) => {
+          forks.push(id)
+          return Promise.resolve({ sessionId: 'sess-forked' })
+        })
+        const { workspaceId, chatId } = await started(service)
+
+        const handed = await service.handOffPlan(chatId, 'acceptEdits')
+
+        expect(forks).toEqual([])
+        expect(handed).toMatchObject({
+          sessionId: null,
+          planMode: false,
+          workingMode: 'acceptEdits',
+          title: null
+        })
+        expect(service.listChats(workspaceId)).toHaveLength(2)
+        await expect(service.chatHistory(handed.id)).resolves.toEqual([])
+      })
+
+      it('says the set of conversations changed', async () => {
+        const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+        const { workspaceId, chatId } = await started(service)
+        const changes: ChatsChangedEvent[] = []
+        service.onChatsChanged((event) => changes.push(event))
+
+        await service.handOffPlan(chatId, 'auto')
+
+        expect(changes).toEqual([{ workspaceId }])
+      })
+
+      // The point of it: not planning, so the first message runs on the model
+      // that writes code, and nothing is resumed.
+      it('runs its first message on the model that writes the code', async () => {
+        const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+        await service.updateConfig(split)
+        const { chatId } = await started(service)
+
+        const handed = await service.handOffPlan(chatId, 'acceptEdits')
+        await service.sendToChat(handed.id, 'Carry out this plan')
+
+        // The second session: the first is the conversation that planned.
+        expect(agents[1]?.options().model).toBe('claude-sonnet-5')
+        expect(agents[1]?.options().resume).toBeUndefined()
+      })
+
+      it('does not put the opusplan preset on a conversation that is not planning', async () => {
+        const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+        await service.updateConfig({ ...split, opusPlan: true })
+        const { chatId } = await started(service)
+
+        const handed = await service.handOffPlan(chatId, 'acceptEdits')
+        await service.sendToChat(handed.id, 'Carry out this plan')
+
+        expect(agents[1]?.requestedModels()).toEqual([])
+      })
+
+      it('honours the cap', async () => {
+        const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+        const { workspaceId, chatId } = await started(service)
+        await service.createChat(workspaceId)
+        await service.createChat(workspaceId)
+
+        await expect(service.handOffPlan(chatId, 'auto')).rejects.toMatchObject({
+          code: 'tooManyChats'
+        })
+      })
+
+      it('refuses an id nothing answers to', async () => {
+        const service = await forkingService(() => Promise.resolve({ sessionId: 'sess-forked' }))
+
+        await expect(service.handOffPlan('chat-nowhere', 'auto')).rejects.toBeInstanceOf(
+          WorkspaceError
+        )
+      })
     })
 
     describe('off a side answer', () => {

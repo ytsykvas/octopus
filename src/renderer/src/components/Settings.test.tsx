@@ -29,6 +29,7 @@ function config(overrides: Partial<Config> = {}): Config {
     effort: 'medium',
     model: null,
     planModel: null,
+    opusPlan: false,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
     dismissedTips: [],
@@ -500,6 +501,47 @@ describe('Settings', () => {
       await user.click(await screen.findByRole('button', { name: 'Same as plan' }))
 
       expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ model: 'opus[1m]', planModel: null })
+    })
+
+    // A preset for the pair below it: it writes the pair it stands for, so the
+    // composer’s panels draw what is running.
+    it('turns the opusplan preset on together with the pair it stands for', async () => {
+      const user = userEvent.setup()
+      const props = await withCatalogue()
+
+      await openSection(user, 'Claude')
+      await user.click(
+        await screen.findByRole('switch', { name: 'Opus for planning, Sonnet for the work' })
+      )
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
+        opusPlan: true,
+        model: 'sonnet',
+        planModel: 'opus[1m]'
+      })
+    })
+
+    it('turns the preset off without touching the pair', async () => {
+      const user = userEvent.setup()
+      const props = await withCatalogue({
+        config: config({ opusPlan: true, model: 'sonnet', planModel: 'opus[1m]' })
+      })
+
+      await openSection(user, 'Claude')
+      await user.click(
+        await screen.findByRole('switch', { name: 'Opus for planning, Sonnet for the work' })
+      )
+
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({ opusPlan: false })
+    })
+
+    it('leaves the rows to the CLI while the preset is on', async () => {
+      const user = userEvent.setup()
+      await withCatalogue({ config: config({ opusPlan: true }) })
+
+      await openSection(user, 'Claude')
+
+      expect(await screen.findByRole('button', { name: 'Same as plan' })).toBeDisabled()
     })
 
     // They sit with the account the agent runs on, not among the behaviour

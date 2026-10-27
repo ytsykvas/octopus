@@ -1723,6 +1723,9 @@ export const en = {
     effortHint:
       'How much thinking a new conversation asks for. Each one can then be changed on its own, from the composer.',
 
+    opusPlan: 'Opus for planning, Sonnet for the work',
+    opusPlanHint:
+      'Puts a conversation on Claude Code’s own opusplan preset: Opus while planning, Sonnet once the plan is approved. It takes effect with the first message sent in plan mode, and Claude Code does the switching itself. The two models below are set for you and cannot be changed while this is on.',
     planModel: 'Model for planning and research',
     planModelHint:
       'What a new conversation plans and researches with, and writes code with too unless the model below says otherwise. A conversation still on the previous setting follows a change; one whose models were picked in its own composer keeps them. The list is the agent’s own, so it is empty until a session has run once.',

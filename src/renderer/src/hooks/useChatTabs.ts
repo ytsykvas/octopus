@@ -131,21 +131,6 @@ export interface ForkedPlan {
   readonly message: string
 }
 
-/**
- * Starts a freshly forked conversation on a plan.
- *
- * The mode first, so the turn the message opens already runs in it. Only when
- * it differs: a fork keeps its source's working mode, and asking for the one it
- * has is a round trip that can only fail.
- */
-async function carryOut(chat: Chat, { mode, message }: ForkedPlan): Promise<Result<unknown>> {
-  if (mode !== chat.workingMode) {
-    const moved = await window.octopus.chats.setWorkingMode(chat.id, mode)
-    if (!moved.ok) return moved
-  }
-  return window.octopus.chats.send(chat.id, message)
-}
-
 /** The key the first tab carries before it has a record of its own. */
 const FIRST_TAB = 'first'
 
@@ -476,17 +461,13 @@ export function useChatTabs(
    * the user never saw open.
    */
   const forkThen = useCallback(
-    async (
-      chatId: string,
-      aside: SideExchange | undefined,
-      start?: (chat: Chat) => Promise<Result<unknown>>
-    ) => {
+    async (make: () => Promise<Result<Chat>>, start?: (chat: Chat) => Promise<Result<unknown>>) => {
       const id = shown.current
       /* v8 ignore next */
       if (id === null) return false
 
       report.current(null)
-      const forked = await window.octopus.chats.fork(chatId, aside)
+      const forked = await make()
       if (shown.current !== id) return false
 
       if (!forked.ok) {
@@ -506,13 +487,19 @@ export function useChatTabs(
   )
 
   const fork = useCallback(
-    (chatId: string, aside?: SideExchange) => forkThen(chatId, aside),
+    (chatId: string, aside?: SideExchange) =>
+      forkThen(() => window.octopus.chats.fork(chatId, aside)),
     [forkThen]
   )
 
   const forkPlan = useCallback(
-    (chatId: string, plan: ForkedPlan) =>
-      forkThen(chatId, undefined, (chat) => carryOut(chat, plan)),
+    (chatId: string, { mode, message }: ForkedPlan) =>
+      // The mode is the new chat's own from the start, so the message that
+      // opens its first turn already runs in it.
+      forkThen(
+        () => window.octopus.chats.handOffPlan(chatId, mode),
+        (chat) => window.octopus.chats.send(chat.id, message)
+      ),
     [forkThen]
   )
 

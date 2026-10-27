@@ -70,8 +70,9 @@ interface PlanDialogProps {
  * planning, so a button saying so was the same decision offered twice; the note
  * travels to the agent as the refusal's reason, and the plan it comes back with
  * raises this dialog again. Forking carries the plan out in a new conversation
- * that remembers this one, while this one stays in planning — for a plan worth
- * keeping the planning context clean of the work.
+ * that is given the plan and nothing else, while this one stays in planning —
+ * for a plan worth keeping the planning context clean of the work, and the
+ * work free of the planning.
  *
  * Executing out of planning goes on in `acceptEdits`, whatever the
  * conversation was asking before — the composer's one mode control has no

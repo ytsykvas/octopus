@@ -271,6 +271,13 @@ const api = {
     fork: (chatId: string, aside?: SideExchange): Promise<Result<Chat>> =>
       ipcRenderer.invoke('chats:fork', chatId, aside) as Promise<Result<Chat>>,
 
+    /**
+     * A new chat that carries out this one's plan knowing only the plan, on the
+     * model that writes code; `mode` is what follows the plan.
+     */
+    handOffPlan: (chatId: string, mode: WorkingMode): Promise<Result<Chat>> =>
+      ipcRenderer.invoke('chats:handOffPlan', chatId, mode) as Promise<Result<Chat>>,
+
     /** Closes a chat's tab and keeps it, history included; refuses the last one. */
     close: (chatId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('chats:close', chatId) as Promise<Result<void>>,

@@ -469,6 +469,7 @@ describe('channel table', () => {
     'chats:open',
     'chats:create',
     'chats:fork',
+    'chats:handOffPlan',
     'chats:close',
     'chats:closed',
     'chats:reopen',
@@ -2746,6 +2747,24 @@ describe('the agent chat', () => {
     await expect(invoke('chats:fork', opened.value.id, null)).resolves.toMatchObject({
       ok: false,
       code: 'nothingToFork'
+    })
+  })
+
+  // The mode becomes the new chat's own, so its shape is checked here; a
+  // well-formed one gets a chat that knows nothing of the one it came from.
+  it('hands a plan to a new chat, checking the mode it is carried out in', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = (await invoke('chats:open', workspace.id)) as { ok: true; value: { id: string } }
+
+    await expect(
+      invoke('chats:handOffPlan', opened.value.id, 'acceptEdits')
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { workingMode: 'acceptEdits', sessionId: null, planMode: false }
+    })
+    await expect(invoke('chats:handOffPlan', opened.value.id, 'anything')).resolves.toMatchObject({
+      ok: false
     })
   })
 
