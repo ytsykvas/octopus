@@ -24,6 +24,7 @@ import {
   type Effort,
   type JobPair,
   modelPair,
+  opusPlanPair,
   planInForce,
   type PlanExecutionMode,
   storedModels,
@@ -532,11 +533,30 @@ function DefaultModels({
       ...(index === 0 && row.description !== '' && { hint: row.description })
     }))
 
+  // The pair the alias stands for, or nothing when the catalogue has no Opus and
+  // Sonnet to name: the switch then only turns the alias on.
+  const alias = opusPlanPair(models)
+
   return (
     <>
       <div className="border-line border-t pt-6">
+        {/* A preset for the two fields below rather than a third kind of choice:
+            turning it on writes the pair it stands for, so the panels in the
+            composer draw what is running. While it is on the rows are the CLI's
+            to move, so they stop answering. */}
+        <Field label={t('settings.opusPlan')} hint={t('settings.opusPlanHint')}>
+          <Switch
+            checked={config.opusPlan}
+            onChange={(opusPlan) => void onChange(opusPlan ? { opusPlan, ...alias } : { opusPlan })}
+            label={t('settings.opusPlan')}
+          />
+        </Field>
+      </div>
+
+      <div className="border-line border-t pt-6">
         <Field label={t('settings.planModel')} hint={t('settings.planModelHint')}>
           <RadioList<string>
+            disabled={config.opusPlan}
             value={plan}
             options={named(planRows)}
             onChange={(value) => {
@@ -549,6 +569,7 @@ function DefaultModels({
       <div className="border-line border-t pt-6">
         <Field label={t('settings.model')} hint={t('settings.modelHint')}>
           <RadioList<string>
+            disabled={config.opusPlan}
             value={config.planModel === null ? NO_SPLIT : pair.work}
             options={[{ value: NO_SPLIT, label: t('chat.modelsSameAsPlan') }, ...named(codeRows)]}
             onChange={(value) => {
@@ -839,9 +860,12 @@ function ReadOnlyRow({ label, value }: { label: string; value: string }): React.
 function RadioList<T extends string>({
   value,
   options,
-  onChange
+  onChange,
+  disabled = false
 }: {
   value: T
+  /** Shown but not answerable: the choice is being made by something else. */
+  disabled?: boolean
   /** The hint is optional: a scale whose labels are the whole story needs none. */
   options: readonly { value: T; label: string; hint?: string }[]
   onChange: (value: T) => void
@@ -852,10 +876,11 @@ function RadioList<T extends string>({
         <button
           key={option.value}
           type="button"
+          disabled={disabled}
           onClick={() => {
             onChange(option.value)
           }}
-          className={`focus-ring border-line block w-full rounded-[var(--radius-control)] border px-3 py-2 text-left transition-colors ${
+          className={`focus-ring border-line block w-full rounded-[var(--radius-control)] border px-3 py-2 text-left transition-colors disabled:pointer-events-none disabled:opacity-50 ${
             value === option.value ? 'row-selected' : 'hover:bg-muted'
           }`}
         >

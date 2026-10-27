@@ -799,6 +799,30 @@ function firstListed(
   return candidates.find((candidate) => models.some((model) => model.value === candidate))
 }
 
+/** The alias the CLI answers to for "Opus in plan mode, else Sonnet". */
+export const OPUS_PLAN_ALIAS = 'opusplan'
+
+/**
+ * The pair of catalogue models an `opusplan` alias stands for, or null when the
+ * catalogue cannot express it.
+ *
+ * Null whenever either half is missing, so a record never holds a name the
+ * panel cannot tick.
+ */
+export function opusPlanPair(
+  models: readonly AgentModel[],
+  alias: string = OPUS_PLAN_ALIAS
+): { model: string; planModel: string } | null {
+  const names = OPUS_PLAN.get(alias)
+  if (names === undefined) return null
+
+  const planModel = firstListed(models, names.plan)
+  const model = firstListed(models, names.code)
+  if (planModel === undefined || model === undefined) return null
+
+  return { model, planModel }
+}
+
 /**
  * What `/model opusplan` means for a chat's two model settings, or null when
  * the message is not that.
@@ -809,10 +833,9 @@ function firstListed(
  * writing — is exactly what the alias asks for, and without it the panel drew
  * Opus on both rows over a session running two models.
  *
- * Null whenever the catalogue cannot express the pair, so a record never holds
- * a name the panel cannot tick. The argument is matched exactly: whether the
- * CLI accepts other spellings is not measured, and mirroring a command it
- * refused would put a split in the panel over a session that did not take it.
+ * The argument is matched exactly: whether the CLI accepts other spellings is
+ * not measured, and mirroring a command it refused would put a split in the
+ * panel over a session that did not take it.
  */
 export function opusPlanSplit(
   text: string,
@@ -825,14 +848,7 @@ export function opusPlanSplit(
   const [, argument, ...rest] = text.trim().split(/\s+/)
   if (argument === undefined || rest.length > 0) return null
 
-  const alias = OPUS_PLAN.get(argument)
-  if (alias === undefined) return null
-
-  const planModel = firstListed(models, alias.plan)
-  const model = firstListed(models, alias.code)
-  if (planModel === undefined || model === undefined) return null
-
-  return { model, planModel }
+  return opusPlanPair(models, argument)
 }
 
 /**
@@ -1206,6 +1222,17 @@ export interface ForkChatOptions {
  * conversation planning the old one's task.
  */
 export function forkChat(source: Chat, options: ForkChatOptions): Chat {
+  return carryOver(source, options)
+}
+
+/**
+ * What a new conversation keeps of the one it came from; `forkChat` and
+ * `planHandOff` differ only in whether there is a session to continue.
+ */
+function carryOver(
+  source: Chat,
+  options: Omit<ForkChatOptions, 'sessionId'> & { readonly sessionId: string | null }
+): Chat {
   return {
     id: options.id,
     workspaceId: source.workspaceId,
@@ -1247,6 +1274,34 @@ export function forkChat(source: Chat, options: ForkChatOptions): Chat {
     createdAt: options.createdAt,
     // The fork has not spoken yet; the source's turns are the source's.
     lastTurnAt: null
+  }
+}
+
+export interface PlanHandOffOptions {
+  readonly id: string
+  readonly createdAt: string
+  /** What follows the plan — `modeAfterPlan`'s answer, which the window has already worked out. */
+  readonly workingMode: WorkingMode
+}
+
+/**
+ * Builds the conversation that carries out a plan another one made.
+ *
+ * Not `forkChat`: a fork remembers everything the source did, and what the
+ * executor needs is the plan alone. The planning — the files read, the
+ * alternatives dropped — is context that costs tokens on every turn after it and
+ * pulls the model back towards the approach that was rejected.
+ *
+ * So there is no session to resume, no history copied and no name, and
+ * `planMode` is off: `sessionModel` and `effortInForce` then answer with the
+ * models that write code, from the first message. Everything else that
+ * describes how the work is run comes along, as it does for a fork, because it
+ * is the same work in the same place.
+ */
+export function planHandOff(source: Chat, options: PlanHandOffOptions): Chat {
+  return {
+    ...carryOver(source, { id: options.id, sessionId: null, createdAt: options.createdAt }),
+    workingMode: options.workingMode
   }
 }
 

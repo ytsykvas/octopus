@@ -576,26 +576,26 @@ export function ChatSession({
     },
     [record, planExecutionMode, setMode, sendMessage, t]
   )
-  // The same plan carried out in a fork instead, while this conversation stays
-  // in planning. Stopped only once the fork is under way: the turn here is
-  // blocked on the plan's question, and an interrupt is what lets it go without
-  // an answer the agent would act on — "keep planning" would set it planning
-  // again, and approving would start the very work the fork now does. A fork
-  // that did not start leaves the question standing, so nothing is lost.
+  // The same plan carried out in a new conversation instead, while this one
+  // stays in planning. Stopped only once the new one is under way: the turn
+  // here is blocked on the plan's question, and an interrupt is what lets it go
+  // without an answer the agent would act on — "keep planning" would set it
+  // planning again, and approving would start the very work the new one now
+  // does. One that did not start leaves the question standing, so nothing is
+  // lost.
   //
-  // An edited plan travels in the message, since the fork's agent only ever
-  // saw the original. `modeAfterPlan` is the rule `executePlan` applies, and
-  // it already answers the conversation's own mode when it was not planning.
+  // The message carries the whole plan, the user's rewrite when there is one:
+  // the new conversation remembers nothing of this one, so a title pointing at
+  // a plan it never saw would send it looking for something that is not there.
+  // `modeAfterPlan` is the rule `executePlan` applies, and it already answers
+  // the conversation's own mode when it was not planning.
   const { interrupt } = chat
   const forkPlan = useCallback(
     async (plan: string, edited: string | null) => {
       // A plan is only ever asked about in a conversation that has a record.
       /* v8 ignore next */
       if (record === null) return
-      const message =
-        edited === null
-          ? t('chat.executePlanMessage', { title: planTitle(plan) })
-          : t('chat.executePlanEditedMessage', { plan: edited })
+      const message = t('chat.executePlanEditedMessage', { plan: edited ?? plan })
       const started = await onForkPlan(record.id, {
         mode: modeAfterPlan(record, planExecutionMode),
         message

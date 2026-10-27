@@ -70,6 +70,7 @@ function config(overrides: Partial<Config> = {}): Config {
     effort: 'medium',
     model: null,
     planModel: null,
+    opusPlan: false,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
     dismissedTips: [],

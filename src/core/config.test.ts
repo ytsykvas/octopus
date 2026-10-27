@@ -477,6 +477,16 @@ describe('loading a config from an older version', () => {
     await expect(loadConfig(file)).resolves.toMatchObject({ planExecutionMode: 'auto' })
   })
 
+  // Written before the opusplan preset existed: off, as it was.
+  it('loads a config written before the opusplan preset', async () => {
+    const file = join(dir, 'config.json')
+    const older: Record<string, unknown> = { ...createDefaultConfig('ytsykvas', NOW, () => UUID) }
+    delete older.opusPlan
+    await writeFile(file, JSON.stringify(older), 'utf8')
+
+    await expect(loadConfig(file)).resolves.toMatchObject({ opusPlan: false })
+  })
+
   it('leaves a current config untouched on disk', async () => {
     const file = join(dir, 'config.json')
     const current = {

@@ -1035,6 +1035,11 @@ export function registerIpc(
     attempt(() => service.forkChat(chatId, SideExchangeSchema.nullish().parse(aside) ?? undefined))
   )
 
+  // The mode becomes the new chat's, so it is checked here like the aside above.
+  host.handle('chats:handOffPlan', (_event, chatId: string, mode: unknown) =>
+    attempt(() => service.handOffPlan(chatId, WorkingModeSchema.parse(mode)))
+  )
+
   host.handle('chats:close', (_event, chatId: string) => attempt(() => service.closeChat(chatId)))
 
   // Closing keeps the conversation, so these two are how it comes back. Ids

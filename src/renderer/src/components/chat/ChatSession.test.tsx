@@ -1943,15 +1943,17 @@ describe('the permission mode', () => {
     async function planWaiting(): Promise<void> {
       givenChat([], { planMode: true, workingMode: 'default', sessionId: 'sess-1' })
       await openLoadedChat()
-      vi.mocked(octopus().chats.fork).mockResolvedValue({
+      vi.mocked(octopus().chats.handOffPlan).mockResolvedValue({
         ok: true,
-        value: chat({ id: 'chat-2', sessionId: 'sess-2' })
+        value: chat({ id: 'chat-2', sessionId: null })
       })
       emitAgentEvent(planRequest)
       await screen.findByRole('button', { name: 'Fork in new chat' })
     }
 
-    it('starts the fork on the plan in Accept edits, and stops this turn', async () => {
+    // A new conversation knows nothing of this one, so the message is the plan
+    // itself rather than a title pointing at it.
+    it('hands the whole plan to a new chat in Accept edits, and stops this turn', async () => {
       const user = userEvent.setup()
       await planWaiting()
 
@@ -1960,18 +1962,20 @@ describe('the permission mode', () => {
       await waitFor(() => {
         expect(octopus().chats.interrupt).toHaveBeenCalledWith(CHAT_ID)
       })
-      expect(octopus().chats.fork).toHaveBeenCalledWith(CHAT_ID, undefined)
-      expect(octopus().chats.setWorkingMode).toHaveBeenCalledWith('chat-2', 'acceptEdits')
+      expect(octopus().chats.handOffPlan).toHaveBeenCalledWith(CHAT_ID, 'acceptEdits')
+      expect(octopus().chats.fork).not.toHaveBeenCalled()
+      // The mode is the new chat's from its creation, not moved afterwards.
+      expect(octopus().chats.setWorkingMode).not.toHaveBeenCalled()
       expect(octopus().chats.send).toHaveBeenCalledWith(
         'chat-2',
-        'Carry out the plan “Normalising the locales”.'
+        'Carry out this plan:\n\n# Normalising the locales'
       )
       expect(octopus().chats.answerPermission).not.toHaveBeenCalled()
       // Still planning here: only the fork was moved on.
       expect(screen.getByRole('button', { name: /^Permissions:/ })).toHaveTextContent('Plan')
     })
 
-    // The fork's agent only ever saw the original, so it is given the rewrite.
+    // The new chat never saw the original, so it is given the rewrite.
     it('sends the plan as the user rewrote it', async () => {
       const user = userEvent.setup()
       await planWaiting()
@@ -1995,7 +1999,10 @@ describe('the permission mode', () => {
     it('leaves this turn waiting when the fork fails', async () => {
       const user = userEvent.setup()
       await planWaiting()
-      vi.mocked(octopus().chats.fork).mockResolvedValue({ ok: false, error: 'no such session' })
+      vi.mocked(octopus().chats.handOffPlan).mockResolvedValue({
+        ok: false,
+        error: 'no such chat'
+      })
 
       await user.click(screen.getByRole('button', { name: 'Fork in new chat' }))
 

@@ -1363,6 +1363,9 @@ export const de: Translation = {
     effortHint:
       'Wie viel Nachdenken ein neuer Chat verlangt. Danach lässt sich das für jeden Chat einzeln im Eingabefeld ändern.',
 
+    opusPlan: 'Opus für die Planung, Sonnet für die Arbeit',
+    opusPlanHint:
+      'Stellt einen Chat auf Claude Codes eigenes Preset opusplan: Opus beim Planen, Sonnet nach der Freigabe des Plans. Es gilt ab der ersten Nachricht im Plan-Modus, und Claude Code wechselt das Modell selbst. Die beiden Modelle unten werden automatisch gesetzt und sind bei aktivem Preset nicht änderbar.',
     planModel: 'Modell für Planung und Recherche',
     planModelHint:
       'Womit ein neuer Chat plant und recherchiert – und auch Code schreibt, solange unten kein anderes Modell gewählt ist. Ein Chat, der noch auf der bisherigen Einstellung steht, folgt einer Änderung; einer, dessen Modelle in der eigenen Eingabe gewählt wurden, behält sie. Die Liste kommt vom Agenten selbst und bleibt leer, bis einmal eine Sitzung lief.',

@@ -159,6 +159,10 @@ rows those are is the catalogue's to say (`opus[1m]` where there is no plain
 `opus`), and where it cannot express the pair nothing changes. Any other
 `/model` still moves only the chip.
 
+Settings → Claude has the same alias as a switch, **Opus for planning, Sonnet
+for the work**. It writes that pair and, while it is on, the two lists under it
+are disabled — the CLI moves the model, not the lists (`docs/core/models-and-effort.md`).
+
 The pair is written planning first and stops at a refusal, so a failed write
 never leaves half of it: the panel is either as it was or has the planning model
 set and the writing one on the default, with the error on the banner.
@@ -207,13 +211,16 @@ composer's own send button (`SendButton`, green like every send) in its corner.
 It is never disabled: a plan sent back with nothing written is still an answer.
 
 Beside Execute (green) sits **Fork in new chat** (the accent): the plan is
-carried out in a fork of the conversation while this one stays in planning.
-`useChatTabs.forkPlan` forks, moves the fork to the mode above, sends it the
-plan — the rewrite in full when the user edited it, since the fork never saw
-it — and only then shows the tab, so the pane reads the message with the
-history. The source's turn is then stopped rather than answered: either answer
-would set its agent working again. A fork that fails to start leaves the
-question standing. Both buttons are held while a fork is on its way.
+carried out in a new conversation while this one stays in planning. It is not a
+fork in the agent's sense: `useChatTabs.forkPlan` asks for `handOffPlan`, which
+makes a conversation with no session, no history and no name, in the mode above
+and **not planning** — so its first message already runs on the model that
+writes code, not the one that planned. It is sent the whole plan — the rewrite
+when the user edited it, since the new chat saw neither — and only then is the
+tab shown, so the pane reads the message with the history. The source's turn is
+then stopped rather than answered: either answer would set its agent working
+again. A chat that fails to start leaves the question standing. Both buttons
+are held while it is on its way.
 
 **Only out of planning, and never down from `Auto`.** The agent may call the
 plan tool from any mode, and handing over there would let it raise a

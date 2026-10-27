@@ -54,6 +54,7 @@ import {
   effortInForce,
   EXIT_PLAN_MODE,
   forkChat as forkChatRecord,
+  planHandOff,
   isClearCommand,
   isKnownCommand,
   isUsageCommand,
@@ -62,6 +63,9 @@ import {
   latestWorkingChat,
   modeAfterPlan,
   newChat,
+  OPUS_PLAN_ALIAS,
+  opusPlanPair,
+  opusPlanSplit,
   sessionMode,
   sessionModel,
   windowStrayed,
@@ -1470,6 +1474,15 @@ export interface OctopusService {
    */
   forkChat(chatId: string, aside?: SideExchange): Promise<Chat>
   /**
+   * A new conversation that carries out a plan this one made, knowing the plan
+   * and nothing else.
+   *
+   * Unlike a fork it starts no session and copies no history, and it is not
+   * planning, so its first message already runs on the model that writes code.
+   * `workingMode` is what follows the plan — the caller has worked that out.
+   */
+  handOffPlan(chatId: string, workingMode: WorkingMode): Promise<Chat>
+  /**
    * Gives a conversation a name of its own, or takes it back.
    *
    * An empty name is not a refusal but a request: it clears the field, and the
@@ -1894,6 +1907,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * would call a figure from an hour ago fresh.
    */
   const modelHeardAt = new WeakMap<AgentSession, number>()
+
+  /**
+   * Sessions running on the CLI's `opusplan` alias, which moves between Opus and
+   * Sonnet with the mode on its own.
+   *
+   * Keyed by the session rather than the chat so that a restart, which is a new
+   * process on a model of its own, forgets it without anybody remembering to.
+   */
+  const onOpusPlan = new WeakSet<AgentSession>()
+  /**
+   * Sessions the `opusPlan` preset has already been decided for: put on the
+   * alias, or left off it by a model chosen by hand.
+   *
+   * Apart from `onOpusPlan` because a choice made in the panel must outlast the
+   * next message — otherwise the first message after it would put the alias
+   * back over what was just picked.
+   */
+  const opusPlanSettled = new WeakSet<AgentSession>()
 
   /**
    * Conversations in auto mode because a plan was carried out in it, not
@@ -3659,7 +3690,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     const wanted = sessionModel(requireChat(chatId))
     if (wanted === before) return
 
-    await sessions.get(chatId)?.setModel(wanted)
+    // On the alias the CLI moves the model with the mode itself, and a name sent
+    // from here would pin the session to one of the two halves.
+    const running = sessions.get(chatId)
+    if (running !== undefined && onOpusPlan.has(running)) return
+
+    await running?.setModel(wanted)
   }
 
   /**
@@ -6469,6 +6505,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return chat
     },
 
+    async handOffPlan(chatId, workingMode) {
+      const source = requireOpenChat(chatId)
+
+      const chat = planHandOff(source, { id: uuid(), createdAt: now(), workingMode })
+      await addChatCapped(chat)
+      return chat
+    },
+
     async renameChat(chatId, title) {
       requireChat(chatId)
 
@@ -6678,6 +6722,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * code models differ, where leaving the model alone would run the plan
        * on the model that wrote it. That is not a re-assertion but a second
        * instruction, given later than `/model` was, and the later one wins.
+       *
+       * Not for a session on the `opusplan` alias (`onOpusPlan`): there the CLI
+       * moves the model with the mode, and sending a name would end that.
        */
       /*
        * Effort is re-asserted for the same reason the mode is, and unlike the
@@ -6705,6 +6752,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
 
       const session = running ?? (await sessionFor(chat, workspace))
+
+      /*
+       * The `opusPlan` preset: the first message of a session sent while
+       * planning puts it on the CLI's `opusplan` alias, once.
+       *
+       * Once because the alias is the CLI's to run from there; and settled the
+       * same way when a model is chosen by hand, so the choice is not undone by
+       * the next message. Before the send, so that message already goes to Opus.
+       */
+      if (config.opusPlan && chat.planMode && !opusPlanSettled.has(session)) {
+        opusPlanSettled.add(session)
+        await session.setModel(OPUS_PLAN_ALIAS)
+        onOpusPlan.add(session)
+      }
 
       /*
        * `/usage` is answered here, and the message is not sent on.
@@ -6764,6 +6825,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         clearRequests.add(chatId)
       }
       session.send(prompted, messageId)
+      // A typed `/model opusplan` puts the session on the alias too, and the
+      // window mirrors it into the record (`ChatSession`).
+      if (opusPlanSplit(text, chat.knownCommands, state.knownModels) !== null) {
+        onOpusPlan.add(session)
+        opusPlanSettled.add(session)
+      }
       if (pushTo !== null) publishAfterTurn.set(chatId, pushTo)
 
       openTurn(chatId)
@@ -6834,10 +6901,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       requireChat(chatId)
       await commit((current) => updateChat(current, chatId, models))
 
+      const running = sessions.get(chatId)
+      if (running === undefined) return
+
+      // The pair the alias stands for is the record catching up with a session
+      // already on it — a typed `/model opusplan`, or the preset — not a choice.
+      const alias = opusPlanPair(state.knownModels)
+      const mirrors =
+        alias !== null &&
+        onOpusPlan.has(running) &&
+        models.model === alias.model &&
+        models.planModel === alias.planModel
+      if (mirrors) return
+
+      // A choice by hand takes the session off the alias, and keeps the preset
+      // from putting it back at the next message.
+      onOpusPlan.delete(running)
+      opusPlanSettled.add(running)
+
       // The effective model rather than the one just stored: a conversation
       // planning under a split runs the plan model, and choosing the one that
       // writes the code must not drag the current turn off it.
-      await sessions.get(chatId)?.setModel(sessionModel(requireChat(chatId)))
+      await running.setModel(sessionModel(requireChat(chatId)))
     },
 
     knownModels() {

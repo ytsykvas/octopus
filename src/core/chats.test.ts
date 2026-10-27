@@ -20,6 +20,7 @@ import {
   EffortSchema,
   findAgentModel,
   forkChat,
+  planHandOff,
   sameModel,
   ChatMessageSchema,
   ChatSchema,
@@ -32,6 +33,7 @@ import {
   modeAfterPlan,
   modelPair,
   newChat,
+  opusPlanPair,
   opusPlanSplit,
   PERMISSION_MODES,
   PermissionAnswerSchema,
@@ -1006,6 +1008,60 @@ describe('a conversation continuing another', () => {
     expect(forked.aside).toBeNull()
   })
 
+  /*
+   * The executor of a plan needs the plan and nothing else. A fork carries the
+   * whole conversation, planning included, which costs tokens on every turn and
+   * keeps the model that planned in the room.
+   */
+  describe('handing a plan to a new chat', () => {
+    const handedOver = planHandOff(source, {
+      id: 'chat-4',
+      createdAt: '2026-08-11T11:00:00.000Z',
+      workingMode: 'auto'
+    })
+
+    it('continues no session and keeps no name or rewind', () => {
+      expect(handedOver.sessionId).toBeNull()
+      expect(handedOver.resumeAt).toBeNull()
+      expect(handedOver.title).toBeNull()
+      expect(handedOver.aside).toBeNull()
+    })
+
+    it('is its own idle record, not planning', () => {
+      expect(handedOver).toMatchObject({
+        id: 'chat-4',
+        workspaceId: 'planner/kyiv',
+        status: 'idle',
+        planMode: false,
+        closedAt: null,
+        lastTurnAt: null,
+        createdAt: '2026-08-11T11:00:00.000Z'
+      })
+    })
+
+    // The point of it: with planning off, the model that writes code is the one
+    // in force from the first message.
+    it('runs on the model and effort that write code', () => {
+      expect(sessionModel(handedOver)).toBe('opus')
+      expect(effortInForce(handedOver)).toBe('high')
+    })
+
+    it('is carried out in the mode it was given', () => {
+      expect(handedOver.workingMode).toBe('auto')
+    })
+
+    it('keeps how the work is run', () => {
+      expect(handedOver).toMatchObject({
+        model: source.model,
+        planModel: source.planModel,
+        planEffort: source.planEffort,
+        autoCompactWindow: source.autoCompactWindow,
+        knownCommands: source.knownCommands,
+        knownAgents: source.knownAgents
+      })
+    })
+  })
+
   describe('off a side answer', () => {
     const fromAside = (question: string): Chat =>
       forkChat(source, {
@@ -1149,6 +1205,12 @@ describe('reading /model opusplan as a split', () => {
       )
     ).toBeNull()
     expect(opusPlanSplit('/model opusplan', NO_COMMANDS, [])).toBeNull()
+  })
+
+  it('gives the pair the alias stands for without a command', () => {
+    expect(opusPlanPair(CATALOGUE)).toEqual({ planModel: 'opus[1m]', model: 'sonnet' })
+    expect(opusPlanPair(CATALOGUE, 'sonnet')).toBeNull()
+    expect(opusPlanPair([])).toBeNull()
   })
 
   it('reads the command with whitespace around it', () => {

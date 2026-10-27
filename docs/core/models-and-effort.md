@@ -32,6 +32,25 @@ through `setModels` once the send has been accepted. It is the
 window's job rather than the core's because nothing tells a window that a record
 changed; a write made in `sendToChat` would never have reached the panel.
 
+**A plan handed to a new chat starts out of planning.** `planHandOff` builds the
+record with `planMode` off, so `sessionModel` and `effortInForce` answer with
+`model` and `effort` from its first message — the executor is on the model that
+writes code without anyone pushing it there, and the `opusPlan` preset leaves
+it alone because that waits for a message sent while planning.
+
+**The `opusPlan` preset puts a session on that alias by itself.** With the
+setting on (`config.opusPlan`, Settings → Claude), the first message a session
+gets while the chat is planning is preceded by `setModel('opusplan')`, once per
+session (`opusPlanSettled`). From then on the CLI moves between Opus and Sonnet
+with the mode, so `pushModel` sends nothing to a session in `onOpusPlan`: a name
+sent at the moment a plan is approved is what raced. Turning the setting on also
+writes the pair the alias stands for (`opusPlanPair`) into the settings, so the
+panels draw what is running. A typed `/model opusplan` puts the session on the
+alias the same way, and the record catching up with it in `setChatModels` is
+recognised by the pair and sends nothing. A different pair chosen by hand takes
+the session off the alias, and the preset does not put it back at the next
+message. Both sets are keyed by the session, so a restart forgets them.
+
 The pair is written **in one call**. Two calls, one per field, each pushed the
 effective model to the running session, so a refusal of the second left half a
 split behind that the session had already been told — Sonnet under both jobs,

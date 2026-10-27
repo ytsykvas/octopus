@@ -315,6 +315,11 @@ decision about a particular task, forking out of a settled plan to try the other
 approach is the likeliest reason to fork at all, and two tabs bearing one name
 is a strip that cannot be read.
 
+A chat made to carry out a plan (`planHandOff`) is the same record with less:
+no `sessionId`, no history and no name, `planMode` off and the working mode the
+plan asked for. It is not a fork because the executor needs the plan alone; the
+planning would cost tokens on every later turn.
+
 A chat is created by the **first thing done to it**, not by the workspace: the
 first message, or choosing a setting in the composer before sending one. A
 workspace nobody has touched has no record and no transcript, so the state

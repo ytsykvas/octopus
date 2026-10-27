@@ -360,6 +360,11 @@ describe('channel names', () => {
     ['chats.open', () => method('chats', 'open')('w' as never), 'chats:open'],
     ['chats.create', () => method('chats', 'create')('w' as never), 'chats:create'],
     ['chats.fork', () => method('chats', 'fork')('c' as never), 'chats:fork'],
+    [
+      'chats.handOffPlan',
+      () => method('chats', 'handOffPlan')('c' as never, 'default' as never),
+      'chats:handOffPlan'
+    ],
     ['chats.close', () => method('chats', 'close')('c' as never), 'chats:close'],
     ['chats.closed', () => method('chats', 'closed')('w' as never), 'chats:closed'],
     [

@@ -187,6 +187,19 @@ export const ConfigSchema = z.object({
   planModel: z.string().min(1).nullable().default(null),
 
   /**
+   * The CLI's own `opusplan` alias in place of a split octopus drives itself.
+   *
+   * With it on, a session's first message in plan mode puts the session on the
+   * alias, and from then on the CLI moves between Opus and Sonnet with the mode.
+   * That is the one switch octopus does not have to get right: asking the
+   * session for a new model at the moment a plan is approved is what raced.
+   *
+   * `model` and `planModel` still hold the pair the alias stands for, so the
+   * panels draw what is running.
+   */
+  opusPlan: z.boolean().default(false),
+
+  /**
    * What the user has answered "always" for, and how narrow each answer is.
    *
    * Kept here rather than inside the SDK's own permission rules, because
@@ -417,6 +430,7 @@ export function createDefaultConfig(
     // split between planning and writing.
     model: null,
     planModel: null,
+    opusPlan: false,
     alwaysAllowedTools: [],
     disabledSkillDefaults: [],
     dismissedTips: [],

@@ -1105,7 +1105,7 @@ describe('continuing a conversation in a new tab', () => {
 })
 
 describe('carrying a plan out in a new tab', () => {
-  const PLAN = { mode: 'acceptEdits', message: 'Carry out the plan “Tests”.' } as const
+  const PLAN = { mode: 'acceptEdits', message: 'Carry out this plan:\n\n# Tests' } as const
 
   async function opened(onError = vi.fn()): Promise<ReturnType<typeof open>> {
     givenChats([chat({ sessionId: 'sess-1' })])
@@ -1113,22 +1113,23 @@ describe('carrying a plan out in a new tab', () => {
     await waitFor(() => {
       expect(rendered.result.current.tabs[0]?.id).toBe('chat-1')
     })
-    vi.mocked(octopus().chats.fork).mockResolvedValue({
+    vi.mocked(octopus().chats.handOffPlan).mockResolvedValue({
       ok: true,
-      value: chat({ id: 'chat-2', sessionId: 'sess-2' })
+      value: chat({ id: 'chat-2', sessionId: null })
     })
-    givenChats([chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2', sessionId: 'sess-2' })])
+    givenChats([chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2', sessionId: null })])
     return rendered
   }
 
-  // The mode before the message, so the turn the message opens runs in it; the
-  // message before the tab is shown, so the pane reads it with the history.
-  it('moves the fork to the mode, tells it the plan, then shows it', async () => {
+  // The new chat is made in the mode, so there is nothing to move afterwards;
+  // the message goes before the tab is shown, so the pane reads it with the
+  // history.
+  it('makes the chat in the mode, tells it the plan, then shows it', async () => {
     const { result } = await opened()
     const order: string[] = []
-    vi.mocked(octopus().chats.setWorkingMode).mockImplementation((id, mode) => {
-      order.push(`mode ${id} ${mode}`)
-      return Promise.resolve({ ok: true, value: undefined })
+    vi.mocked(octopus().chats.handOffPlan).mockImplementation((id, mode) => {
+      order.push(`hand off ${id} ${mode}`)
+      return Promise.resolve({ ok: true, value: chat({ id: 'chat-2', sessionId: null }) })
     })
     vi.mocked(octopus().chats.send).mockImplementation((id, text) => {
       order.push(`send ${id} ${text}`)
@@ -1138,7 +1139,7 @@ describe('carrying a plan out in a new tab', () => {
       order.push('list')
       return Promise.resolve({
         ok: true,
-        value: [chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2', sessionId: 'sess-2' })]
+        value: [chat({ sessionId: 'sess-1' }), chat({ id: 'chat-2', sessionId: null })]
       })
     })
 
@@ -1147,44 +1148,16 @@ describe('carrying a plan out in a new tab', () => {
       started = await result.current.forkPlan('chat-1', PLAN)
     })
 
-    expect(octopus().chats.fork).toHaveBeenCalledWith('chat-1', undefined)
-    expect(order).toEqual(['mode chat-2 acceptEdits', `send chat-2 ${PLAN.message}`, 'list'])
+    expect(order).toEqual(['hand off chat-1 acceptEdits', `send chat-2 ${PLAN.message}`, 'list'])
+    expect(octopus().chats.fork).not.toHaveBeenCalled()
+    expect(octopus().chats.setWorkingMode).not.toHaveBeenCalled()
     expect(result.current.activeKey).toBe('chat-2')
     expect(started).toBe(true)
   })
 
-  // A fork keeps its source's working mode; asking for it again is a round
-  // trip that can only fail.
-  it('leaves the mode alone when the fork is already in it', async () => {
-    const { result } = await opened()
-
-    await act(async () => {
-      await result.current.forkPlan('chat-1', { ...PLAN, mode: 'default' })
-    })
-
-    expect(octopus().chats.setWorkingMode).not.toHaveBeenCalled()
-    expect(octopus().chats.send).toHaveBeenCalledWith('chat-2', PLAN.message)
-  })
-
-  // The fork exists either way, so it is shown; what did not happen is said,
+  // The chat exists either way, so it is shown; what did not happen is said,
   // and the answer tells the caller to leave the source's question standing.
-  it('shows the fork and says so when the mode cannot be set', async () => {
-    const onError = vi.fn()
-    const { result } = await opened(onError)
-    vi.mocked(octopus().chats.setWorkingMode).mockResolvedValue({ ok: false, error: 'no mode' })
-
-    let started = true
-    await act(async () => {
-      started = await result.current.forkPlan('chat-1', PLAN)
-    })
-
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining('no mode'))
-    expect(octopus().chats.send).not.toHaveBeenCalled()
-    expect(result.current.activeKey).toBe('chat-2')
-    expect(started).toBe(false)
-  })
-
-  it('shows the fork and says so when the plan cannot be sent', async () => {
+  it('shows the chat and says so when the plan cannot be sent', async () => {
     const onError = vi.fn()
     const { result } = await opened(onError)
     vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'agent is gone' })
@@ -1199,9 +1172,9 @@ describe('carrying a plan out in a new tab', () => {
     expect(started).toBe(false)
   })
 
-  it('sends nothing when the agent cannot fork', async () => {
+  it('sends nothing when the chat cannot be made', async () => {
     const { result } = await opened()
-    vi.mocked(octopus().chats.fork).mockResolvedValue({ ok: false, error: 'no such session' })
+    vi.mocked(octopus().chats.handOffPlan).mockResolvedValue({ ok: false, error: 'too many' })
 
     let started = true
     await act(async () => {
