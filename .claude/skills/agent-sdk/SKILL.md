@@ -149,13 +149,40 @@ Alternatively call `session.streamInput(...)` on an existing session object.
 ## Session control
 
 - `session.interrupt()` — stop the current work;
-- `session.setModel(model)` — switch models mid-flight;
+- `session.setModel(model)` — switch models mid-flight, and mid-turn: see below;
 - `session.setPermissionMode(mode)` — a `PermissionMode` from `sdk.d.ts`:
   `'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto'`;
 - `session.close()` — **mandatory** when a workspace is removed or archived.
 
 An unclosed `query()` leaves a live child process behind. Every workspace must
 close its own session in its own teardown.
+
+**`setModel` and `setPermissionMode` do not land alike.** The mode rewrites the
+session's live permission context, so the next permission check — mid-turn
+included — sees it. The model is checked (catalogue, organisation limits, a
+`PreModelSwitch` hook, and a call to the API for anything but an alias), then
+becomes the live model that the request loop reads before **every request**. So a
+switch lands inside a running turn, on a cache of its own (a prompt cache belongs
+to one model, and the first request on another writes the whole context again),
+and across model families the CLI appends a line naming the switch to the
+conversation. Nothing about the model should be sent at a moment the user did
+not mean it; `docs/core/models-and-effort.md` holds the plan model back for that
+reason.
+
+That is read from the binary, not measured on a session — and the protocol's own
+text for `set_model` says "subsequent conversation turns", which is the gentler
+reading and not what the code does. Treat the stricter one as true until a
+session shows otherwise.
+
+**The CLI's behaviour is readable, and nothing else says it.** The platform
+package (`node_modules/@anthropic-ai/claude-agent-sdk-<platform>/claude`, or
+`app.asar.unpacked` in a packaged build) is one executable with its JavaScript
+inside as plain text; the version is in it (`VERSION:"2.1.…"`). Search it with
+Python over `mmap` — BSD `grep` refuses a repetition above 255 — and anchor on a
+string rather than a name: minified names repeat from one module to the next, so
+`Bgs` is one function in one place and another elsewhere. Read the binary the
+app _runs_, which is the one `agentBinary.ts` resolves, and not one on the
+machine's `PATH`: the two differ in version.
 
 **There is no `setEffort`, and nothing else settings-shaped has a method here.**
 Effort is a start-up option; moving it on a running session goes through

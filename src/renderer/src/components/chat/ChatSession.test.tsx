@@ -1730,6 +1730,54 @@ describe('the permission mode', () => {
     expect(screen.getByRole('dialog')).not.toHaveTextContent('/model')
   })
 
+  /*
+   * The plan model goes out with the next message, so until then the session
+   * runs the other one and nobody typed a `/model` to put it there. The same
+   * reading blames `/model` without the flag, which is what makes the other
+   * half of the pair worth anything.
+   */
+  it.each([
+    { modelHeld: false, chip: 'Sonnet', blamed: true },
+    // The default row wears the name of the model it resolves to.
+    { modelHeld: true, chip: 'Opus (1M context)', blamed: false }
+  ])(
+    'names $chip and blames /model: $blamed, with the model held: $modelHeld',
+    async ({ modelHeld, chip, blamed }) => {
+      const user = userEvent.setup()
+      givenLiveCatalogue()
+      vi.mocked(octopus().chats.usage).mockResolvedValue({
+        ok: true,
+        value: {
+          context: {
+            percentage: 8,
+            usedTokens: 16_000,
+            maxTokens: 200_000,
+            compactsAt: null,
+            autoCompactOn: null,
+            model: 'claude-sonnet-5',
+            modelWindow: null
+          },
+          autoCompact: null,
+          modelHeld
+        }
+      })
+      givenChat()
+      await openLoadedChat()
+      await waitFor(() => {
+        expect(octopus().chats.usage).toHaveBeenCalled()
+      })
+
+      await user.click(await screen.findByRole('button', { name: 'Model' }))
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent(chip)
+      })
+      const dialog = screen.getByRole('dialog')
+      if (blamed) expect(dialog).toHaveTextContent('/model')
+      else expect(dialog).not.toHaveTextContent('/model')
+    }
+  )
+
   // The plan is the choice and the writing follows it, so with no split one
   // pick moves both — in a single write.
   it('sends the model chosen for planning as the one both jobs share', async () => {

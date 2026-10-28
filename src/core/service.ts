@@ -722,6 +722,13 @@ export interface SessionUsage {
   readonly context: ContextUsage | null
   /** Where the conversation compacts, or null with no session to say. */
   readonly autoCompact: AutoCompactView | null
+  /**
+   * The session is still on the model it had before planning began, and the
+   * plan model goes out with the next message (`heldOnSession`). While it is
+   * true the reading's `model` is not what the next message runs on, so the
+   * window must not read the difference as a `/model`. Absent means false.
+   */
+  readonly modelHeld?: boolean
 }
 
 /**
@@ -1935,6 +1942,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * back over what was just picked.
    */
   const opusPlanSettled = new WeakSet<AgentSession>()
+  /**
+   * Sessions whose plan model has been decided but not sent, with the model
+   * and effort they are actually running on.
+   *
+   * The mode reaches a session at once, and the model does not: the CLI
+   * switches it before the very next request, mid-turn, onto a cache of its own
+   * — a pass through plan on the way round the mode cycle would pay for the
+   * whole context twice and leave a line about it in the conversation. So
+   * planning with a split holds the push until a message is sent, and sends it
+   * then; `settleJob` is the one place that does.
+   *
+   * Keyed by the session for the reason `onOpusPlan` is: a restart is a new
+   * process that starts on what the record says, and forgets this unaided.
+   */
+  const heldOnSession = new WeakMap<AgentSession, InForce>()
 
   /**
    * Conversations in auto mode because a plan was carried out in it, not
@@ -3555,10 +3577,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (patch.workingMode !== undefined) autoFromPlan.delete(chatId)
     const before = await changeInForce(chatId, () => patch)
 
-    // Applied to the running session too, so the choice takes effect on the
-    // current turn rather than only on the next one. Read back after the write
-    // rather than merged by hand: the session wants both halves, and only one
-    // of them is in the patch.
+    // The mode is applied to the running session at once: the CLI reads it on
+    // the next permission check, mid-turn, so the choice governs what the agent
+    // may do from now on. Read back after the write rather than merged by hand:
+    // the session wants both halves, and only one of them is in the patch.
     const session = sessions.get(chatId)
     if (session) {
       if (patch.workingMode === 'auto' && previous !== 'auto') {
@@ -3567,8 +3589,61 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         await assertMode(chatId, session)
       }
     }
-    await pushModel(chatId, before.model)
-    await pushEffort(chatId, before.effort)
+
+    // The model and the effort are not. Moving to the plan model is held for
+    // the next message (`heldOnSession`); moving off it is sent now, because
+    // the plan model must not be the one to start editing.
+    if (session && holdsPlanJob(chatId, session, before)) return
+
+    await settleJob(chatId, before)
+  }
+
+  /**
+   * Decides whether the model and effort that planning calls for wait for the
+   * next message, and records that they do.
+   *
+   * What is compared is what the session is *running*, which is what it was
+   * told last — the held figure when a job is already waiting, otherwise what
+   * the record said just before this change. Not the record: a pass through
+   * plan and out again must find the two equal and send nothing.
+   *
+   * Never for a session on the `opusplan` alias, where the CLI moves the model
+   * with the mode itself and there is nothing to hold; the session's own
+   * reading is then already the truth.
+   */
+  function holdsPlanJob(chatId: string, session: AgentSession, before: InForce): boolean {
+    const chat = requireChat(chatId)
+    if (!chat.planMode || onOpusPlan.has(session)) return false
+
+    const running = heldOnSession.get(session) ?? before
+    const wanted = inForce(chat)
+    if (wanted.model === running.model && wanted.effort === running.effort) return false
+
+    heldOnSession.set(session, running)
+    return true
+  }
+
+  /**
+   * Sends what the record now puts in force to the session, and forgets the
+   * job that was waiting.
+   *
+   * `before` is what the record said when the change was decided; when a job
+   * was held, the session is on what it recorded instead, which is the figure
+   * the guards in `pushModel` and `pushEffort` have to compare with.
+   */
+  async function settleJob(chatId: string, before: InForce): Promise<void> {
+    const session = sessions.get(chatId)
+    const running = (session && heldOnSession.get(session)) ?? before
+    if (session) heldOnSession.delete(session)
+
+    await pushModel(chatId, running.model)
+    await pushEffort(chatId, running.effort)
+  }
+
+  /** A job for this conversation's running session is waiting for a message. */
+  function isHeld(chatId: string): boolean {
+    const session = sessions.get(chatId)
+    return session !== undefined && heldOnSession.has(session)
   }
 
   /**
@@ -3746,7 +3821,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return changed
     })
 
-    for (const { chatId, wasInForce } of moved) await pushModel(chatId, wasInForce)
+    // A held job compares with what the session runs, not with this change's
+    // starting point, so the next message settles it from the record instead.
+    for (const { chatId, wasInForce } of moved) {
+      if (!isHeld(chatId)) await pushModel(chatId, wasInForce)
+    }
 
     for (const workspaceId of new Set(moved.map((each) => each.workspaceId))) {
       for (const listener of chatsChangedListeners) listener({ workspaceId })
@@ -6751,6 +6830,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * on the model that wrote it. That is not a re-assertion but a second
        * instruction, given later than `/model` was, and the later one wins.
        *
+       * Going *into* planning, that instruction waits for this message
+       * (`settleJob` below): the CLI switches the model before its next
+       * request, mid-turn, so sending it with the mode would put a turn that
+       * is already running onto a cold cache. Going out of planning it goes at
+       * once.
+       *
        * Not for a session on the `opusplan` alias (`onOpusPlan`): there the CLI
        * moves the model with the mode, and sending a name would end that.
        */
@@ -6775,6 +6860,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const running = sessions.get(chatId)
       if (running) {
+        // The plan model the mode change held back, before the message it was
+        // held for. Nothing when none is held, so the model stays unasserted.
+        await settleJob(chatId, inForce(requireChat(chatId)))
         await assertMode(chatId, running)
         await running.setEffort(effortInForce(chat))
       }
@@ -6915,8 +7003,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Through the same guard as the two toggles: while planning is on and a
       // plan effort is set, changing the working one moves nothing that is
       // running, and pushing it would drop the session to the wrong level
-      // mid-plan.
-      await pushEffort(chatId, before.effort)
+      // mid-plan. A job held for the next message is compared with what the
+      // session runs, not with this change, and the message settles it.
+      if (!isHeld(chatId)) await pushEffort(chatId, before.effort)
     },
 
     async setChatAutoCompact(chatId, window) {
@@ -6946,6 +7035,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // from putting it back at the next message.
       onOpusPlan.delete(running)
       opusPlanSettled.add(running)
+
+      // The record is what the next message sends while a plan model is held.
+      if (isHeld(chatId)) return
 
       // The effective model rather than the one just stored: a conversation
       // planning under a split runs the plan model, and choosing the one that
@@ -7085,16 +7177,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           return { planMode: false, workingMode }
         })
 
-        // The model leaves planning with the record. Before the reply, never
-        // after it: the reply is what releases the tool call, so a model sent
-        // behind it would reach a session already editing files on the model
-        // that wrote the plan. The reply carries a mode and has no field for a
-        // model, so this is the closest to riding along that there is.
-        await pushModel(request.chatId, before.model)
-        // Effort leaves planning with the model, and for the same reason: the
-        // reply is what releases the tool call, so anything sent after it
-        // reaches a session already editing files at the level the plan wanted.
-        await pushEffort(request.chatId, before.effort)
+        // The model and the effort leave planning with the record. Before the
+        // reply, never after it: the reply is what releases the tool call, so
+        // anything sent behind it would reach a session already editing files
+        // on the model that wrote the plan, at the level the plan wanted. The
+        // reply carries a mode and has no field for either, so this is the
+        // closest to riding along that there is. A plan model still held back
+        // by the mode change was never sent, and settles to nothing.
+        await settleJob(request.chatId, before)
       }
 
       const chat = findChat(state, request.chatId)
@@ -7216,10 +7306,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // create a record for a workspace nobody has spoken to, which is the very
       // thing `openChat`'s laziness exists to avoid. A conversation whose
       // session was let go answers with the reading it last gave.
-      if (!session) return lastUsage.get(chatId) ?? { context: null, autoCompact: null }
+      // A job was held for the session that is gone, and the one that replaces
+      // it starts on what the record says.
+      if (!session) {
+        const last = lastUsage.get(chatId)
+        return last ? { ...last, modelHeld: false } : { context: null, autoCompact: null }
+      }
 
       const context = await session.contextUsage()
       if (context === null) return { context: null, autoCompact: null }
+
+      // Read after the await, with the reading: a message sent while it was
+      // being taken settles the job, and a stale `true` would hide a model the
+      // window should be naming.
+      const modelHeld = heldOnSession.has(session)
 
       if (context.model !== null && context.modelWindow !== null) {
         modelWindows.set(context.model, context.modelWindow)
@@ -7253,7 +7353,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         })
       }
 
-      const usage = { context, autoCompact }
+      const usage = { context, autoCompact, modelHeld }
       lastUsage.set(chatId, usage)
       return usage
     },

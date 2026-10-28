@@ -143,12 +143,19 @@ reaches the footer with the context reading, which is already refreshed on every
 ticking the record and says so in a line above the columns ("This session is
 running Sonnet: /model chose it for this session only"); without it the panel
 read as the model the next message runs on, and the chip contradicted it. Two
-things keep the line from blaming a `/model` nobody typed. A pick in the panel,
-a plan model or a mode moves the session at once, so the reading is taken again
-as soon as the core has applied it, and the model it named before is forgotten
-until then — it waited for the next turn's result, and the panel, open after
-the pick, named the model just left. And with no catalogue yet there is no line:
-the default row has no model behind it to compare with.
+things keep the line from blaming a `/model` nobody typed. A pick in the panel
+or a mode moves the session at once, so the reading is taken again as soon as
+the core has applied it, and the model it named before is forgotten until then —
+it waited for the next turn's result, and the panel, open after the pick, named
+the model just left. And with no catalogue yet there is no line: the default row
+has no model behind it to compare with.
+
+**A plan model is the exception: it waits for the next message.** Turning
+planning on moves the mode at once and holds the model back (`heldOnSession`,
+`docs/core/models-and-effort.md`), so for a while the session runs the other
+model and nobody typed a `/model`. The reading carries `modelHeld` for that
+stretch, and the window then drops the running model it would have compared
+with: the chip names what the next message runs on, and the line is not drawn.
 
 **`/model opusplan` is the one command the panel follows.** The alias means Opus
 while planning and Sonnet otherwise, which is precisely a split, and left to the
