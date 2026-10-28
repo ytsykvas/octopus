@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
+import type { ContextUsage } from '@core/agent.js'
 import type { AutoCompactView } from '@core/autoCompact.js'
 import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
@@ -18,6 +19,8 @@ const FULL: SessionUsage = {
     percentage: 48,
     usedTokens: 48_000,
     maxTokens: 200_000,
+    compactsAt: null,
+    autoCompactOn: null,
     model: 'claude-opus-5',
     modelWindow: null
   },
@@ -251,6 +254,8 @@ describe('the way out of a full context window', () => {
         percentage: 92,
         usedTokens: 184_000,
         maxTokens: 200_000,
+        compactsAt: null,
+        autoCompactOn: null,
         model: 'claude-opus-5',
         modelWindow: null
       },
@@ -494,6 +499,87 @@ describe('where the conversation compacts', () => {
     await open()
 
     expect(screen.queryByText(/not the chosen/)).not.toBeInTheDocument()
+  })
+
+  /*
+   * A 500k window compacts at 487k, not at 500k: the reading counts to the
+   * second, and a menu that only named the first left a conversation at 91%
+   * looking like one that had stopped compacting.
+   */
+  describe('where it fires', () => {
+    const reading = (): HTMLElement => screen.getByRole('button', { name: /Context 48%/ })
+
+    const compacting = (
+      context: Partial<ContextUsage> = {},
+      autoCompact: Partial<AutoCompactView> = {}
+    ): SessionUsage => ({
+      ...view({ chosen: 500_000, effective: 500_000, modelWindow: 1_000_000, ...autoCompact }),
+      context: {
+        ...FULL.context!,
+        maxTokens: 500_000,
+        compactsAt: 487_000,
+        autoCompactOn: true,
+        ...context
+      }
+    })
+
+    it('names the point on the control, beside the counts', () => {
+      renderAttic(compacting())
+
+      expect(reading()).toHaveAttribute('title', 'Context window — 48k of 500k, compacts at 487k')
+    })
+
+    it('says in the menu where the window compacts', async () => {
+      renderAttic(compacting())
+      await open()
+
+      expect(
+        screen.getByText(
+          'Compacts on its own at 487k, which the figure above counts to. A change starts the session again; the conversation is kept.'
+        )
+      ).not.toHaveClass('text-warning')
+    })
+
+    // A CLI that predates the threshold counts to the window, so there is no
+    // point to name and the plain note stands.
+    it('keeps the plain note and title when the agent names no point', async () => {
+      renderAttic(compacting({ compactsAt: null, autoCompactOn: null }))
+      await open()
+
+      expect(reading()).toHaveAttribute('title', 'Context window — 48k of 500k')
+      expect(
+        screen.getByText(
+          'When this conversation is compacted on its own. A change starts the session again; the conversation is kept.'
+        )
+      ).toBeInTheDocument()
+    })
+
+    it('warns that nothing compacts when auto-compact is off', async () => {
+      renderAttic(compacting({ compactsAt: null, autoCompactOn: false }))
+      await open()
+
+      expect(
+        screen.getByText(
+          'Auto-compact is off: DISABLE_AUTO_COMPACT / DISABLE_COMPACT or the autoCompactEnabled setting says so. A window chosen here does nothing until it is turned back on.'
+        )
+      ).toHaveClass('text-warning')
+      expect(screen.queryByText(/Compacts on its own at/)).not.toBeInTheDocument()
+    })
+
+    // No window is in force when none fires, so which variable outranks the
+    // choice is beside the point until compaction is back on.
+    it('puts that ahead of a variable that outranks the choice', async () => {
+      renderAttic(
+        compacting(
+          { compactsAt: null, autoCompactOn: false },
+          { override: { value: '400000', from: null } }
+        )
+      )
+      await open()
+
+      expect(screen.getByText(/Auto-compact is off:/)).toBeInTheDocument()
+      expect(screen.queryByText(/decides instead/)).not.toBeInTheDocument()
+    })
   })
 
   it('offers no windows without a session to say where it compacts', async () => {

@@ -971,6 +971,8 @@ describe('following the conversation', () => {
           percentage: 8,
           usedTokens: 16_000,
           maxTokens: 200_000,
+          compactsAt: null,
+          autoCompactOn: null,
           model: 'claude-opus-5',
           modelWindow: null
         },
@@ -1703,6 +1705,8 @@ describe('the permission mode', () => {
           percentage: 8,
           usedTokens: 16_000,
           maxTokens: 200_000,
+          compactsAt: null,
+          autoCompactOn: null,
           model,
           modelWindow: null
         },
@@ -2952,6 +2956,8 @@ describe('choosing where the conversation compacts', () => {
           percentage: 8,
           usedTokens: 16_000,
           maxTokens: 1_000_000,
+          compactsAt: null,
+          autoCompactOn: null,
           model: 'claude-opus-5',
           modelWindow: 1_000_000
         },

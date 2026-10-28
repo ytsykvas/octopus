@@ -17,6 +17,8 @@ const READING: SessionUsage = {
     percentage: 48,
     usedTokens: 48_000,
     maxTokens: 200_000,
+    compactsAt: null,
+    autoCompactOn: null,
     model: 'claude-opus-5',
     modelWindow: null
   },
@@ -126,6 +128,32 @@ describe('what the running session says about usage', () => {
     // The window and the model did not move, and neither did the round trip.
     expect(result.current.context?.maxTokens).toBe(200_000)
     expect(octopus().chats.usage).toHaveBeenCalledTimes(1)
+  })
+
+  // The reading counts to where the agent compacts, so the figure a compaction
+  // leaves is counted to it as well. 97 400 is 20% of a 487k threshold and 19%
+  // of the 500k window; the second would then jump when the next turn read it.
+  it('counts the figure after a compaction to the threshold when there is one', async () => {
+    answering({
+      ...READING,
+      context: { ...READING.context!, maxTokens: 500_000, compactsAt: 487_000, autoCompactOn: true }
+    })
+    const { result } = renderHook(() => useSessionUsage(CHAT))
+    await waitFor(() => {
+      expect(result.current.context?.compactsAt).toBe(487_000)
+    })
+
+    act(() => {
+      emit({
+        type: 'conversation_compacted',
+        trigger: 'auto',
+        preTokens: 487_000,
+        postTokens: 97_400
+      })
+    })
+
+    expect(result.current.context?.percentage).toBe(20)
+    expect(result.current.context?.maxTokens).toBe(500_000)
   })
 
   // A compaction can arrive before any reading has: there is no window to

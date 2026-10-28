@@ -933,11 +933,14 @@ export const uk: Translation = {
 
     context: 'Контекст',
     contextTitle: 'Вікно контексту — {{used}} з {{total}}',
+    contextTitleCompactsAt: 'Вікно контексту — {{used}} з {{total}}, стискається на {{threshold}}',
     contextCompactNote: 'Агент лишає собі стислий переказ розмови й працює далі.',
     contextClearNote: 'Агент забуває цю розмову, а її запис видаляється.',
     autoCompactTitle: 'Автокомпакт',
     autoCompactNote:
       'Коли розмова стискається сама. Зміна перезапускає сесію; розмова зберігається.',
+    autoCompactNoteAt:
+      'Стискається сама на {{threshold}} — до цього рахується показник вище. Зміна перезапускає сесію; розмова зберігається.',
     autoCompactAuto: 'Авто',
     autoCompactAutoNote: 'Як вирішить Claude Code',
     autoCompactAutoNow: 'Як вирішить Claude Code — зараз {{window}}',
@@ -950,6 +953,8 @@ export const uk: Translation = {
     autoCompactMismatch: 'Діє {{effective}}, а не вибране {{chosen}}.',
     autoCompactMismatchRetry:
       'Діє {{effective}}, а не вибране {{chosen}}. Виберіть його ще раз, щоб почати сесію заново.',
+    autoCompactOff:
+      'Автокомпакт вимкнено: так кажуть {{variables}} або налаштування autoCompactEnabled. Вибране тут вікно нічого не змінює, доки його не ввімкнуть знову.',
     clearTitle: 'Очистити цю розмову?',
     clearMessage: 'Агент почне спочатку, не пам’ятаючи нічого зі сказаного тут.',
     clearDetail: 'Запис розмови видаляється разом із нею, і повернути його не вийде.',

@@ -1233,6 +1233,7 @@ export const en = {
 
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
+    contextTitleCompactsAt: 'Context window — {{used}} of {{total}}, compacts at {{threshold}}',
     /* The second lines of the menu the reading opens. The commands themselves
        are not here: they are the CLI's own names, printed the way the
        suggestion list prints them, and a translated `/clear` would be a
@@ -1244,6 +1245,8 @@ export const en = {
     autoCompactTitle: 'Auto-compact',
     autoCompactNote:
       'When this conversation is compacted on its own. A change starts the session again; the conversation is kept.',
+    autoCompactNoteAt:
+      'Compacts on its own at {{threshold}}, which the figure above counts to. A change starts the session again; the conversation is kept.',
     autoCompactAuto: 'Auto',
     autoCompactAutoNote: 'As Claude Code decides',
     autoCompactAutoNow: 'As Claude Code decides — now {{window}}',
@@ -1256,6 +1259,8 @@ export const en = {
     autoCompactMismatch: 'In effect: {{effective}}, not the chosen {{chosen}}.',
     autoCompactMismatchRetry:
       'In effect: {{effective}}, not the chosen {{chosen}}. Choose it again to start the session over.',
+    autoCompactOff:
+      'Auto-compact is off: {{variables}} or the autoCompactEnabled setting says so. A window chosen here does nothing until it is turned back on.',
     clearTitle: 'Clear this conversation?',
     clearMessage: 'The agent starts again with no memory of what was said here.',
     clearDetail: 'The log is deleted with it, and cannot be brought back.',

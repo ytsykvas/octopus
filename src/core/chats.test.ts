@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AGENT_KINDS,
+  AUTO_COMPACT_OFF_VARIABLES,
   AUTO_COMPACT_WINDOWS,
   AutoCompactWindowSchema,
   type AgentCommand,
@@ -13,6 +14,7 @@ import {
   ChatModelsSchema,
   choosePlan,
   chooseWork,
+  contextShare,
   DEFAULT_MODEL,
   defaultAgentModel,
   effortInForce,
@@ -1285,5 +1287,34 @@ describe('windowStrayed', () => {
 
   it('says nothing when nothing was chosen', () => {
     expect(windowStrayed({ chosen: null, effective: 450_000, modelWindow: null })).toBe(false)
+  })
+})
+
+describe('contextShare', () => {
+  // The case the function exists for: 456 534 tokens in a 500k window is 91% of
+  // the window, but 94% of the way to the 487k at which the agent compacts.
+  it('counts the way to the point it is given', () => {
+    expect(contextShare(456_534, 487_000)).toBe(94)
+    expect(contextShare(456_534, 500_000)).toBe(91)
+  })
+
+  it('rounds to a whole percent', () => {
+    expect(contextShare(1, 3)).toBe(33)
+    expect(contextShare(2, 3)).toBe(67)
+  })
+
+  it('starts at nothing', () => {
+    expect(contextShare(0, 487_000)).toBe(0)
+  })
+
+  // Between the turn that crossed the line and the one that compacts.
+  it('stops at a hundred when the context is past the point', () => {
+    expect(contextShare(500_000, 487_000)).toBe(100)
+  })
+})
+
+describe('the variables that switch compaction off', () => {
+  it('names the two the agent reads', () => {
+    expect(AUTO_COMPACT_OFF_VARIABLES).toEqual(['DISABLE_AUTO_COMPACT', 'DISABLE_COMPACT'])
   })
 })

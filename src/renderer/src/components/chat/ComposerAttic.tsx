@@ -1,8 +1,10 @@
 import { ChevronDown, Eraser, FoldVertical, Paperclip } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import type { ContextUsage } from '@core/agent.js'
 import type { AutoCompactView } from '@core/autoCompact.js'
 import {
+  AUTO_COMPACT_OFF_VARIABLES,
   AUTO_COMPACT_VARIABLE,
   AUTO_COMPACT_WINDOWS,
   type AutoCompactWindow,
@@ -158,7 +160,7 @@ export function ComposerAttic({
    * it is taken out, so nothing could start one that would notice — and a
    * choice here is what does, the same window included.
    */
-  const windowRows = (view: AutoCompactView): MenuAction[] => {
+  const windowRows = (view: AutoCompactView, reading: ContextUsage): MenuAction[] => {
     const tooLarge = (window: number): boolean =>
       view.modelWindow !== null && window > view.modelWindow
 
@@ -173,7 +175,7 @@ export function ComposerAttic({
             ? t('chat.autoCompactAutoNow', { window: formatTokens(view.effective) })
             : t('chat.autoCompactAutoNote'),
         selected: view.chosen === null,
-        section: windowSection(view),
+        section: windowSection(view, reading),
         onSelect: () => {
           onAutoCompact(null)
         }
@@ -199,14 +201,25 @@ export function ComposerAttic({
   /**
    * What the group needs saying, most pressing first.
    *
-   * A variable outranking the choice beats everything: nothing here can be in
-   * force while it is set. Then a choice still waiting for the turn to end.
-   * Then a window that is not the one chosen for any other reason — the model
-   * holding less, or something this did not foresee — said as a measurement
-   * rather than left as a silent disagreement with the tick.
+   * Compaction being off beats everything: no window is in force when none
+   * fires, so a note about which one is would describe a choice with no effect.
+   * Then a variable outranking the choice: nothing here can be in force while
+   * it is set. Then a choice still waiting for the turn to end. Then a window
+   * that is not the one chosen for any other reason — the model holding less,
+   * or something this did not foresee — said as a measurement rather than left
+   * as a silent disagreement with the tick. Failing all of them, where it does
+   * compact, which is what the figure on the strip counts to.
    */
-  const windowSection = (view: AutoCompactView): MenuSection => {
+  const windowSection = (view: AutoCompactView, reading: ContextUsage): MenuSection => {
     const title = t('chat.autoCompactTitle')
+
+    if (reading.autoCompactOn === false) {
+      return {
+        title,
+        warning: true,
+        note: t('chat.autoCompactOff', { variables: AUTO_COMPACT_OFF_VARIABLES.join(' / ') })
+      }
+    }
 
     if (view.override !== null) {
       const values = {
@@ -237,7 +250,14 @@ export function ComposerAttic({
       }
     }
 
-    return { title, note: t('chat.autoCompactNote') }
+    // Unknown from a CLI that predates the threshold, which is when the figure
+    // counts to the window instead and there is no point to name.
+    if (reading.compactsAt === null) return { title, note: t('chat.autoCompactNote') }
+
+    return {
+      title,
+      note: t('chat.autoCompactNoteAt', { threshold: formatTokens(reading.compactsAt) })
+    }
   }
 
   return (
@@ -266,7 +286,7 @@ export function ComposerAttic({
                   void onSend(COMPACT)
                 }
               },
-              ...(autoCompact === null ? [] : windowRows(autoCompact)),
+              ...(autoCompact === null ? [] : windowRows(autoCompact, context)),
               {
                 // Last, and in the danger colour: of the two it is the one
                 // that loses something, and the reader should land first on
@@ -294,10 +314,18 @@ export function ComposerAttic({
                 // taking the figure away from the reader who is told it rather
                 // than shown it. The title stays what it was, and with text
                 // content present it is read as the description.
-                title={t('chat.contextTitle', {
-                  used: formatTokens(context.usedTokens),
-                  total: formatTokens(context.maxTokens)
-                })}
+                title={
+                  context.compactsAt === null
+                    ? t('chat.contextTitle', {
+                        used: formatTokens(context.usedTokens),
+                        total: formatTokens(context.maxTokens)
+                      })
+                    : t('chat.contextTitleCompactsAt', {
+                        used: formatTokens(context.usedTokens),
+                        total: formatTokens(context.maxTokens),
+                        threshold: formatTokens(context.compactsAt)
+                      })
+                }
                 // `px-1 py-0.5` gives the hover surface something to hold and
                 // the negative margins cancel it exactly, so the reading stays
                 // on the strip's own inset and the strip does not grow taller.
