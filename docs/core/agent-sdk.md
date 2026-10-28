@@ -152,7 +152,9 @@ to be asked for together, so a turn's end cost the slower of them; they are
 asked for separately now, by the two things that want them. Loading a project's
 own settings does not move either figure: the same numbers come back from an
 empty directory and from a repository with a `CLAUDE.md`, skills, hooks and
-MCP servers.
+MCP servers. Its reply also names `autoCompactThreshold` and
+`isAutoCompactEnabled`, which is where the gauge learns the point it counts to
+(see [the composer](../ui/composer.md)).
 
 **And the whole of a read was measured later**, when the account block turned
 out to be lagging: `query()` to answer, including spawning the CLI, is

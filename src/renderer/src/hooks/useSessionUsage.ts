@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { contextShare } from '@core/chats.js'
 import type { SessionUsage } from '@core/service.js'
 import { onChatEvent } from './chatEvents.js'
 
@@ -115,7 +116,12 @@ export function useSessionUsage(chatId: string | null, asked = 0): SessionUsage 
                 context: {
                   ...current.context,
                   usedTokens: postTokens,
-                  percentage: Math.round((postTokens / current.context.maxTokens) * 100)
+                  // To the same point the reading counts to, or the figure
+                  // would jump when the next turn read it again.
+                  percentage: contextShare(
+                    postTokens,
+                    current.context.compactsAt ?? current.context.maxTokens
+                  )
                 }
               }
         )

@@ -3112,10 +3112,113 @@ describe('reading how full the context window is', () => {
       percentage: 2,
       usedTokens: 23_921,
       maxTokens: 1_000_000,
+      compactsAt: 967_000,
+      autoCompactOn: true,
       model: 'claude-opus-5[1m]',
       // Nothing to go on before a turn has said what the model holds.
       modelWindow: null
     })
+  })
+
+  /*
+   * The case this reading was changed for. A 500k window compacts at 487k, so
+   * 456 534 tokens is 91% of the window the CLI reports and 94% of the way to
+   * where it acts; the first made a conversation that was about to compact
+   * look like one that had stopped.
+   */
+  it('counts the share to where the agent compacts, not to its window', async () => {
+    const usage = await readContextUsage(
+      queryAnswering({
+        getContextUsage: () =>
+          Promise.resolve({
+            ...CONTEXT_RESPONSE,
+            totalTokens: 456_534,
+            maxTokens: 500_000,
+            percentage: 91,
+            autoCompactThreshold: 487_000
+          })
+      })
+    )
+
+    expect(usage).toMatchObject({
+      percentage: 94,
+      usedTokens: 456_534,
+      maxTokens: 500_000,
+      compactsAt: 487_000
+    })
+  })
+
+  // Between the turn that crossed the line and the one that compacts.
+  it('stops the share at a hundred once the context is past the threshold', async () => {
+    const usage = await readContextUsage(
+      queryAnswering({
+        getContextUsage: () =>
+          Promise.resolve({
+            ...CONTEXT_RESPONSE,
+            totalTokens: 490_000,
+            autoCompactThreshold: 487_000
+          })
+      })
+    )
+
+    expect(usage?.percentage).toBe(100)
+  })
+
+  // An agent that is off names no point to count to, and a share of a threshold
+  // it would never act on is not one to draw — even if a threshold came along.
+  it('keeps the agent’s own share when auto-compact is off', async () => {
+    const { autoCompactThreshold, ...off } = CONTEXT_RESPONSE
+    void autoCompactThreshold
+
+    await expect(
+      readContextUsage(
+        queryAnswering({
+          getContextUsage: () => Promise.resolve({ ...off, isAutoCompactEnabled: false })
+        })
+      )
+    ).resolves.toMatchObject({ percentage: 2, compactsAt: null, autoCompactOn: false })
+
+    await expect(
+      readContextUsage(
+        queryAnswering({
+          getContextUsage: () =>
+            Promise.resolve({ ...CONTEXT_RESPONSE, isAutoCompactEnabled: false, percentage: 7 })
+        })
+      )
+    ).resolves.toMatchObject({ percentage: 7, compactsAt: null, autoCompactOn: false })
+  })
+
+  // The fields arrived after the rest of the response, and the CLI is
+  // versioned apart from this package.
+  it('says nothing of the threshold when the CLI does not', async () => {
+    const { autoCompactThreshold, isAutoCompactEnabled, ...older } = CONTEXT_RESPONSE
+    void autoCompactThreshold
+    void isAutoCompactEnabled
+
+    await expect(
+      readContextUsage(queryAnswering({ getContextUsage: () => Promise.resolve(older) }))
+    ).resolves.toMatchObject({ percentage: 2, compactsAt: null, autoCompactOn: null })
+  })
+
+  it('takes no threshold that is not a point to count to', async () => {
+    for (const autoCompactThreshold of ['487000', 0, -1, null]) {
+      await expect(
+        readContextUsage(
+          queryAnswering({
+            getContextUsage: () => Promise.resolve({ ...CONTEXT_RESPONSE, autoCompactThreshold })
+          })
+        )
+      ).resolves.toMatchObject({ percentage: 2, compactsAt: null, autoCompactOn: true })
+    }
+
+    await expect(
+      readContextUsage(
+        queryAnswering({
+          getContextUsage: () =>
+            Promise.resolve({ ...CONTEXT_RESPONSE, isAutoCompactEnabled: 'yes' })
+        })
+      )
+    ).resolves.toMatchObject({ autoCompactOn: null, compactsAt: 967_000 })
   })
 
   /*

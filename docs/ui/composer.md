@@ -62,7 +62,7 @@ composer has more room above it than below, or the glow ran into the rule along
 its top.
 
 **The composer has an attic**, a strip above the field mirroring the settings
-footer below it: how full this conversation's context window is on the left, and
+footer below it: how far this conversation is from compacting itself on the left, and
 on the right the skills it may reach for, the paperclip, and a refusal when the
 account has one. The reading is one step fainter than the pickers underneath,
 which are clicked where it is mostly read — mostly, because it is also the way
@@ -154,7 +154,21 @@ the thing it exists to justify, and someone who compacts to make room and sees
 no change runs it again for another minute and another dollar. The figure comes
 from the boundary's own `postTokens`, which is right whether or not the agent's
 own accounting has caught up, where asking again would put the stale number
-back. The log gains a line for the same event, beside the one `/clear` draws.
+back. It is counted to the same point the reading counts to, or the figure would
+jump when the next turn read it again. The log gains a line for the same event,
+beside the one `/clear` draws.
+
+**The share counts to where the agent compacts, not to its window.**
+`getContextUsage` answers `percentage` against the window (`maxTokens`), but the
+agent acts at `autoCompactThreshold`: the window less the room a summary needs,
+13 000 tokens in 2.1.311. A 500k conversation at 456k read 91% and sat there,
+which looked like an agent that had stopped compacting; counted to the threshold
+it reads 94%, and the next turn is the one that compacts. So `readContextUsage`
+counts the share itself (`contextShare`, never past 100, since the context can
+sit beyond the line until the turn that acts) whenever the agent names a
+threshold, and keeps the agent's own percentage when it does not — switched off,
+which also sends no threshold, or a CLI that predates the fields. The tooltip
+names the point beside the counts.
 
 **Clicking the context share opens the two commands that change it.** It is the
 one figure on the strip that can be acted on — the account's windows empty on a
@@ -171,6 +185,10 @@ turn pays for a context it mostly no longer reads. The menu is wider than the
 app's others (`width` on `DropdownMenu`) so the group's notes fit, and the group
 says, most pressing first:
 
+- that **auto-compact is off** — `DISABLE_AUTO_COMPACT`, `DISABLE_COMPACT` or
+  the `autoCompactEnabled` setting, as `isAutoCompactEnabled` reports it — as a
+  warning. Nothing fires, so no window is in force and the note outranks the
+  ones below, which would describe a choice with no effect;
 - that **`CLAUDE_CODE_AUTO_COMPACT_WINDOW` decides instead**, naming the value
   and where it is set — the environment, or the `env` block of a settings file
   the session reads. Measured, it outranks anything a session is told. The rows
@@ -191,13 +209,15 @@ says, most pressing first:
   started over for that very reading has read it again: a stray no new session
   clears — a model holding less before any turn has said how much, a managed
   settings file the start does not read — costs one restart to find out, and
-  choosing it again after that changes nothing.
+  choosing it again after that changes nothing;
+- failing all of those, **where it does compact**, from the same threshold the
+  strip counts to.
 
 A window above what the model holds is greyed with that figure, since the
 agent would cut it down anyway. _Auto_ says what it amounts to while it is the
 choice. Choosing starts the session again (see `setChatAutoCompact`); the
-reading is then asked for again, because "Context N%" is measured against the
-window. The old process ends with SIGTERM, which the SDK reports as a failure;
+reading is then asked for again, because "Context N%" counts to the point the
+window puts the compaction at. The old process ends with SIGTERM, which the SDK reports as a failure;
 a session closed on purpose says nothing of it, so the restart leaves no error
 in the log.
 

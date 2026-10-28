@@ -37,7 +37,7 @@ import type {
   FileRewind,
   PermissionMode
 } from './chats.js'
-import { sessionEffort } from './chats.js'
+import { contextShare, sessionEffort } from './chats.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
@@ -393,10 +393,26 @@ export interface UsageReadOptions {
 
 /** How full a conversation's context window is, and what is filling it. */
 export interface ContextUsage {
-  /** Whole percent, as the agent itself rounds it. */
+  /**
+   * Whole percent of the way to `compactsAt`, so 100 means the next turn
+   * compacts. Counted to the window only where the agent names no point, which
+   * is when it will not compact at all or is too old to say where.
+   */
   readonly percentage: number
   readonly usedTokens: number
+  /** The window compaction is measured against, which is not where it fires. */
   readonly maxTokens: number
+  /**
+   * Where the agent compacts on its own, or null when it will not — switched
+   * off, or a CLI that predates the field.
+   *
+   * Short of `maxTokens` by the room a summary needs (13 000 in 2.1.311), which
+   * is why a conversation at 91% of its window had not compacted yet: the
+   * agent's own reading counted to the window, and the gauge repeated it.
+   */
+  readonly compactsAt: number | null
+  /** Whether the agent compacts on its own, or null when it did not say. */
+  readonly autoCompactOn: boolean | null
   /**
    * The model the session is actually running, in full — `claude-haiku-4-5…`.
    *
@@ -410,7 +426,7 @@ export interface ContextUsage {
   /**
    * How much the model itself can hold, or null until a turn has said.
    *
-   * Not `maxTokens`, which is the window compaction is measured against and
+   * Not `maxTokens`, which is the window the threshold is taken from and
    * shrinks with it — nor `rawMaxTokens`, which measured the same. The model's
    * own limit is only in a turn's result (`modelUsage[model].contextWindow`):
    * 1M for Opus 5.5, 200k for Haiku 4.5. A window chosen above it is cut down
@@ -460,8 +476,12 @@ type UsageCapable = Partial<
  *
  * Measured against a live session rather than assumed: the response is far
  * wider than the type declares — a hundred grid squares for the CLI's own bar
- * chart, a category breakdown, memory files, MCP tools. Four fields are taken
- * and the rest deliberately stops here.
+ * chart, a category breakdown, memory files, MCP tools. The rest stops here.
+ *
+ * The share is counted to where the agent compacts, not to the window it
+ * reports: `percentage` in the response is the latter, and a conversation
+ * shown at 91% that then sat there was read as an agent that had stopped
+ * compacting.
  */
 export async function readContextUsage(
   conversation: Query,
@@ -475,10 +495,24 @@ export async function readContextUsage(
   try {
     const usage = await ask.call(conversation)
     const model = typeof usage.model === 'string' && usage.model !== '' ? usage.model : null
+    // Defended like `model`: the CLI is versioned apart from this package. An
+    // agent that is off sends no threshold, and one that is on but too old to
+    // send it leaves the window as the only point there is.
+    const autoCompactOn =
+      typeof usage.isAutoCompactEnabled === 'boolean' ? usage.isAutoCompactEnabled : null
+    const compactsAt =
+      autoCompactOn !== false &&
+      typeof usage.autoCompactThreshold === 'number' &&
+      usage.autoCompactThreshold > 0
+        ? usage.autoCompactThreshold
+        : null
     return {
-      percentage: usage.percentage,
+      percentage:
+        compactsAt === null ? usage.percentage : contextShare(usage.totalTokens, compactsAt),
       usedTokens: usage.totalTokens,
       maxTokens: usage.maxTokens,
+      compactsAt,
+      autoCompactOn,
       // Defended rather than taken: this arrived later than the rest of the
       // response, so a CLI a few versions back answers without it.
       model,

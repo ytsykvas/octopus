@@ -265,6 +265,8 @@ describe('sending', () => {
           percentage: 48,
           usedTokens: 48_000,
           maxTokens: 200_000,
+          compactsAt: null,
+          autoCompactOn: null,
           model: 'claude-opus-5',
           modelWindow: null
         },
@@ -474,7 +476,15 @@ describe('review notes riding with the message', () => {
     const { onSend } = renderComposer({
       notes: [NOTE],
       usage: {
-        context: { percentage: 48, usedTokens: 9, maxTokens: 20, model: null, modelWindow: null },
+        context: {
+          percentage: 48,
+          usedTokens: 9,
+          maxTokens: 20,
+          compactsAt: null,
+          autoCompactOn: null,
+          model: null,
+          modelWindow: null
+        },
         autoCompact: null
       }
     })
@@ -527,6 +537,8 @@ describe('while the agent is working', () => {
           percentage: 91,
           usedTokens: 182_000,
           maxTokens: 200_000,
+          compactsAt: null,
+          autoCompactOn: null,
           model: 'claude-opus-5',
           modelWindow: null
         },

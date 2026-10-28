@@ -961,11 +961,15 @@ export const de: Translation = {
 
     context: 'Kontext',
     contextTitle: 'Kontextfenster – {{used}} von {{total}}',
+    contextTitleCompactsAt:
+      'Kontextfenster – {{used}} von {{total}}, komprimiert bei {{threshold}}',
     contextCompactNote: 'Der Agent behält eine Zusammenfassung des Chats und macht weiter.',
     contextClearNote: 'Der Agent vergisst diesen Chat, und der Verlauf wird gelöscht.',
     autoCompactTitle: 'Auto-Komprimierung',
     autoCompactNote:
       'Wann dieser Chat von selbst komprimiert wird. Eine Änderung startet die Sitzung neu; der Chat bleibt erhalten.',
+    autoCompactNoteAt:
+      'Komprimiert sich selbst bei {{threshold}} – bis dahin zählt die Anzeige oben. Eine Änderung startet die Sitzung neu; der Chat bleibt erhalten.',
     autoCompactAuto: 'Auto',
     autoCompactAutoNote: 'Wie Claude Code entscheidet',
     autoCompactAutoNow: 'Wie Claude Code entscheidet – jetzt {{window}}',
@@ -978,6 +982,8 @@ export const de: Translation = {
     autoCompactMismatch: 'Aktiv: {{effective}}, nicht das gewählte {{chosen}}.',
     autoCompactMismatchRetry:
       'Aktiv: {{effective}}, nicht das gewählte {{chosen}}. Wähle es erneut, um die Sitzung neu zu starten.',
+    autoCompactOff:
+      'Auto-Komprimierung ist aus: {{variables}} oder die Einstellung autoCompactEnabled sagt es so. Ein hier gewähltes Fenster bewirkt nichts, bis sie wieder eingeschaltet ist.',
     clearTitle: 'Diesen Chat leeren?',
     clearMessage: 'Der Agent beginnt neu, ohne Erinnerung an das hier Gesagte.',
     clearDetail: 'Der Verlauf wird mitgelöscht und lässt sich nicht wiederherstellen.',

@@ -432,6 +432,26 @@ export type AutoCompactWindow = z.infer<typeof AutoCompactWindowSchema>
 export const AUTO_COMPACT_VARIABLE = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW'
 
 /**
+ * The variables that switch compaction off altogether, whatever window is
+ * chosen. Here for the same reason as the one above: the window names them in
+ * the message saying nothing will compact.
+ */
+export const AUTO_COMPACT_OFF_VARIABLES = ['DISABLE_AUTO_COMPACT', 'DISABLE_COMPACT'] as const
+
+/**
+ * How far along the way to `against` a context has come, in whole percent.
+ *
+ * Capped at 100 because the context can sit past the point where the agent
+ * compacts for as long as it takes the next turn to begin, and "101%" would
+ * say the figure is wrong rather than that compaction is due. Here so the core
+ * that reads the agent's figure and the window that moves it after a
+ * compaction round alike.
+ */
+export function contextShare(used: number, against: number): number {
+  return Math.min(100, Math.round((used / against) * 100))
+}
+
+/**
  * Whether a session measures against another window than its choice gives.
  *
  * The choice capped by what the model holds is what should be in force, and a

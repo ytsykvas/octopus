@@ -6713,6 +6713,8 @@ describe('the agent chat', () => {
           percentage: 2,
           usedTokens: 23_921,
           maxTokens: 1_000_000,
+          compactsAt: 967_000,
+          autoCompactOn: true,
           model: 'claude-opus-5[1m]',
           modelWindow: null
         },
