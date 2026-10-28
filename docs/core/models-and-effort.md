@@ -51,6 +51,11 @@ recognised by the pair and sends nothing. A different pair chosen by hand takes
 the session off the alias, and the preset does not put it back at the next
 message. Both sets are keyed by the session, so a restart forgets them.
 
+The price of the alias is the hold it cannot have. The CLI resolves it for each
+request from the live mode, so a pass through plan while a turn runs reaches
+the request it lands on — nothing here can wait for a message, because nothing
+here is the one sending the model.
+
 The pair is written **in one call**. Two calls, one per field, each pushed the
 effective model to the running session, so a refusal of the second left half a
 split behind that the session had already been told — Sonnet under both jobs,
@@ -88,11 +93,40 @@ wanted equal to what it had read, sent nothing back — the record said planning
 was off over a session still on the plan model.
 
 That is a change **this application made and knows the moment of**, which is the
-whole difference from re-asserting per message: sending a message moves nothing,
-so a push there would still be undoing `/model` and nothing else. On an approved
-plan it goes out **before** the permission reply resolves — the reply is what
-releases the tool call, and there is no `updatedModel` to ride along with the
-mode the way `updatedPermissions` carries it.
+whole difference from re-asserting per message: sending a message moves nothing
+of its own, so a push there would still be undoing `/model` and nothing else —
+the one thing it does send is what a mode change held back, below. On an
+approved plan it goes out **before** the permission reply resolves — the reply
+is what releases the tool call, and there is no `updatedModel` to ride along
+with the mode the way `updatedPermissions` carries it.
+
+**Going into planning, the push waits for the next message.** The CLI applies
+`set_model` to the session's live model, which its request loop reads before
+every request, mid-turn included. A prompt cache belongs to one model, so a
+switch while a turn runs makes the very next request write the whole context
+again, and a switch across model families leaves a line naming it in the
+conversation. The mode cycle passes through plan on the way from `acceptEdits`
+to `auto`, so pushing with the mode paid that for a keystroke. (Read from the
+CLI 2.1.308 binary rather than measured on a session, and the protocol's own
+text says "subsequent turns" — the gentler reading, and not what the code does.
+`.claude/skills/agent-sdk` says how to read it.)
+
+So `applyMode` sets the mode at once and, with planning on and a model or effort
+in force that differs from what the session is _running_, holds the difference in
+`heldOnSession` instead of pushing it. `settleJob` sends it just before the next
+message, in `sendToChat`. The comparison is against what the session is running
+— the held figure when one waits — and never against the record, so a pass
+through plan and out again finds the two equal and sends nothing.
+
+Out of planning goes at once, because the plan model must not be the one to
+start editing; so does an approved plan, through `settleJob` as well, and a job
+still held then settles to nothing. While one is held, `setChatModels`,
+`setChatEfforts` and `followModelSettings` change the record and send nothing,
+and the message sends what it says by then. A session on the `opusplan` alias is
+never held. `heldOnSession` is keyed by the session, so a restart — a new
+process, started on what the record says — forgets it unaided.
+`SessionUsage.modelHeld` tells the window that the model the context reading
+names is not one a `/model` chose (`docs/ui/chat-pickers.md`).
 
 ## Two efforts, and one of them folded into two
 
@@ -108,8 +142,8 @@ Two cases rather than `sessionModel`'s three. There is no "the agent's own
 default" here, because effort is always a level and `null` can mean nothing but
 "no split".
 
-`pushEffort` is `pushModel`'s twin, at the same two moments and with the same
-guard: a conversation whose two jobs share an effort is never pushed at, so
+`pushEffort` is `pushModel`'s twin, at the same two moments, with the same guard
+and the same hold: a conversation whose two jobs share an effort is never pushed at, so
 `/effort` given to one still stands for its turn. It also runs on the setter,
 which the model pair does not need — setting the working level while a
 plan is being made must move nothing, and the guard is what says so.

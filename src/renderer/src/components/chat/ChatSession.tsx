@@ -952,7 +952,10 @@ export function ChatSession({
               // What the session reports it is running, which the chip shows when it
               // differs from what was chosen here. It rides in with the context
               // reading, so it refreshes on the same `result` the token count does.
-              activeModel={usage.context?.model ?? null}
+              // Not while the plan model is held for the next message: the session
+              // is on the other model for now, nobody typed a `/model`, and the chip
+              // names what the next message runs on.
+              activeModel={usage.modelHeld === true ? null : (usage.context?.model ?? null)}
               commands={commands}
               agents={agents}
               usage={usage}

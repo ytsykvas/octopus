@@ -4626,6 +4626,11 @@ describe('the agent chat', () => {
     }[]
     /** Models asked for mid-session; `undefined` is "back to the default". */
     readonly requestedModels: () => (string | undefined)[]
+    /**
+     * Models asked for and messages received, in the order they happened —
+     * `model:<name>` and `message:<text>` — for what has to come before what.
+     */
+    readonly timeline: () => string[]
     readonly options: () => Record<string, unknown>
     /** How many times the session was told to load the plugins again. */
     readonly pluginReloads: () => number
@@ -4701,6 +4706,7 @@ describe('the agent chat', () => {
       const modes: string[] = []
       const flagSettings: { effortLevel?: string; skillOverrides?: Record<string, string> }[] = []
       const requestedModels: (string | undefined)[] = []
+      const timeline: string[] = []
       let interrupted = 0
       const stoppedTasks: string[] = []
       let closed = 0
@@ -4719,6 +4725,7 @@ describe('the agent chat', () => {
           if (typeof content === 'string') {
             sent.push(content)
             sentIds.push(message.uuid)
+            timeline.push(`message:${content}`)
           }
         }
       })()
@@ -4805,6 +4812,7 @@ describe('the agent chat', () => {
         sideAsks: () => sideAsks,
         flagSettings: () => flagSettings,
         requestedModels: () => requestedModels,
+        timeline: () => timeline,
         modes: () => modes,
         options: () => options,
         pluginReloads: () => pluginReloads
@@ -4837,6 +4845,7 @@ describe('the agent chat', () => {
         },
         setModel: (model: string | undefined) => {
           requestedModels.push(model)
+          timeline.push(`model:${String(model)}`)
           return Promise.resolve()
         },
         supportedModels: () => offered(),
@@ -6725,7 +6734,8 @@ describe('the agent chat', () => {
           override: null,
           pending: false,
           settled: false
-        }
+        },
+        modelHeld: false
       })
     })
 
@@ -6762,7 +6772,8 @@ describe('the agent chat', () => {
 
       expect(await service.sessionUsage(chat.id)).toEqual({
         context: expect.objectContaining({ percentage: 2 }),
-        autoCompact: expect.objectContaining({ effective: 1_000_000 })
+        autoCompact: expect.objectContaining({ effective: 1_000_000 }),
+        modelHeld: false
       })
     })
 
@@ -10582,6 +10593,25 @@ describe('the agent chat', () => {
         expect(agent().requestedModels()).toEqual(['opusplan'])
       })
 
+      // The CLI moves the model with the mode there, at once, so nothing is
+      // held for a message and the window has no waiting model to name.
+      it('holds nothing for a session on the alias when planning starts', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        await service.updateConfig({
+          opusPlan: true,
+          model: 'claude-sonnet-5',
+          planModel: 'claude-opus-5'
+        })
+        const chat = await service.openChat(workspaceId)
+        await service.sendToChat(chat.id, 'plan it')
+        await service.setChatPlanMode(chat.id, false)
+
+        await service.setChatPlanMode(chat.id, true)
+
+        await expect(service.sessionUsage(chat.id)).resolves.toMatchObject({ modelHeld: false })
+        expect(agent().requestedModels()).toEqual(['opusplan'])
+      })
+
       it('gives way to a model chosen by hand, and does not come back', async () => {
         const { service, workspaceId } = await withWorkspace()
         await service.updateConfig({ opusPlan: true })
@@ -10686,34 +10716,208 @@ describe('the agent chat', () => {
       expect(agent().options()).not.toHaveProperty('model')
     })
 
-    it('moves a running session onto the plan model when planning starts', async () => {
-      const { service, workspaceId } = await withWorkspace()
-      const chat = await service.openChat(workspaceId)
-      // A new conversation starts out planning; this one is about the mode it falls back to.
-      await service.setChatPlanMode(chat.id, false)
-      await service.setChatModels(chat.id, { model: 'claude-sonnet-5', planModel: 'claude-opus-5' })
-      await service.sendToChat(chat.id, 'work')
+    /*
+     * Held for the next message, not sent with the mode. The CLI switches the
+     * model before its next request, mid-turn, onto a cache of its own — a
+     * turn already running would pay for the whole context again, and each
+     * pass through plan on the way round the mode cycle would leave a line
+     * about it in the conversation.
+     */
+    describe('the plan model going out', () => {
+      // A conversation that writes on Sonnet and plans on Opus, with its
+      // session running in the writing mode.
+      async function splitSession(extra: ServiceOptions = {}): Promise<{
+        service: OctopusService
+        workspaceId: string
+        chatId: string
+        events: ChatEvent[]
+      }> {
+        const { service, workspaceId, events } = await withWorkspace(extra)
+        const chat = await service.openChat(workspaceId)
+        // A new conversation starts out planning; this one is about the mode it falls back to.
+        await service.setChatPlanMode(chat.id, false)
+        await service.setChatModels(chat.id, {
+          model: 'claude-sonnet-5',
+          planModel: 'claude-opus-5'
+        })
+        await service.sendToChat(chat.id, 'work')
+        return { service, workspaceId, chatId: chat.id, events }
+      }
 
-      await service.setChatPlanMode(chat.id, true)
+      // The first of the two comes before the second, whatever else is between.
+      function expectBefore(first: string, second: string): void {
+        const line = agent().timeline()
+        expect(line).toContain(first)
+        expect(line).toContain(second)
+        expect(line.indexOf(first)).toBeLessThan(line.indexOf(second))
+      }
 
-      expect(agent().requestedModels()).toEqual(['claude-opus-5'])
-      expect(agent().modes()).toEqual(['plan'])
-    })
+      it('waits for the next message when planning starts, and goes out ahead of it', async () => {
+        const { service, chatId } = await splitSession()
 
-    it('moves it back when planning stops', async () => {
-      const { service, workspaceId } = await withWorkspace()
-      const chat = await service.openChat(workspaceId)
-      // A new conversation starts out planning; this one is about the mode it falls back to.
-      await service.setChatPlanMode(chat.id, false)
-      await service.setChatModels(chat.id, { planModel: 'claude-opus-5' })
-      await service.sendToChat(chat.id, 'work')
+        await service.setChatPlanMode(chatId, true)
 
-      await service.setChatPlanMode(chat.id, true)
-      await service.setChatPlanMode(chat.id, false)
+        // The mode is the session's at once; the model is not.
+        expect(agent().modes()).toEqual(['plan'])
+        expect(agent().requestedModels()).toEqual([])
+
+        await service.sendToChat(chatId, 'plan it')
+
+        expect(agent().requestedModels()).toEqual(['claude-opus-5'])
+        await vi.waitFor(() => {
+          expect(agent().timeline()).toContain('message:plan it')
+        })
+        expectBefore('model:claude-opus-5', 'message:plan it')
+      })
+
+      // The renderer's own steps for acceptEdits → plan → auto: planning on,
+      // then the working mode, then planning off. Nothing was said to the
+      // session about a model, so there is nothing to take back.
+      it('sends no model for a pass through planning on the way round the cycle', async () => {
+        const { service, workspaceId, chatId } = await splitSession()
+
+        await service.setChatWorkingMode(chatId, 'acceptEdits')
+        await service.setChatPlanMode(chatId, true)
+        await service.setChatWorkingMode(chatId, 'auto')
+        await service.setChatPlanMode(chatId, false)
+        await service.sendToChat(chatId, 'go on')
+
+        expect(agent().modes().at(-1)).toBe('auto')
+        expect(service.listChats(workspaceId)[0]?.planMode).toBe(false)
+        expect(agent().requestedModels()).toEqual([])
+      })
+
+      it('moves back when planning stops, at once', async () => {
+        const { service, chatId } = await splitSession()
+        await service.setChatPlanMode(chatId, true)
+        await service.sendToChat(chatId, 'plan it')
+
+        await service.setChatPlanMode(chatId, false)
+
+        // Not held: the plan model must not be the one to start editing.
+        expect(agent().requestedModels()).toEqual(['claude-opus-5', 'claude-sonnet-5'])
+      })
 
       // Undefined is how the session is told to go back to the agent's own
-      // choice, which is what this chat's coding model is.
-      expect(agent().requestedModels()).toEqual(['claude-opus-5', undefined])
+      // choice, which is what a chat that never named its coding model has.
+      it('hands the choice back to the agent when the chat names no coding model', async () => {
+        const { service, workspaceId } = await withWorkspace()
+        const chat = await service.openChat(workspaceId)
+        await service.setChatPlanMode(chat.id, false)
+        await service.setChatModels(chat.id, { planModel: 'claude-opus-5' })
+        await service.sendToChat(chat.id, 'work')
+        await service.setChatPlanMode(chat.id, true)
+        await service.sendToChat(chat.id, 'plan it')
+
+        await service.setChatPlanMode(chat.id, false)
+
+        expect(agent().requestedModels()).toEqual(['claude-opus-5', undefined])
+      })
+
+      it('sends nothing when a plan is approved before a message carried the plan model', async () => {
+        const { service, chatId, events } = await splitSession()
+        await service.setChatPlanMode(chatId, true)
+
+        const decision = agent().ask('ExitPlanMode', { plan: 'do the thing' })
+        const requestId = await waitForRequest(events)
+        await service.answerPermission(requestId, 'allow')
+        await decision
+
+        expect(agent().requestedModels()).toEqual([])
+      })
+
+      // The record is what the message sends: a plan model chosen while the
+      // first is still held replaces it, and nothing is sent in between.
+      it('sends the plan model the chat holds at the time of the message', async () => {
+        const { service, chatId } = await splitSession()
+        await service.setChatPlanMode(chatId, true)
+
+        await service.setChatModels(chatId, { planModel: 'claude-haiku-4-5' })
+
+        expect(agent().requestedModels()).toEqual([])
+        await service.sendToChat(chatId, 'plan it')
+        expect(agent().requestedModels()).toEqual(['claude-haiku-4-5'])
+      })
+
+      it('moves the settings for the chats that follow them, once the message is sent', async () => {
+        const { service, chatId } = await splitSession()
+        await service.updateConfig({ model: 'claude-sonnet-5', planModel: 'claude-opus-5' })
+        await service.setChatPlanMode(chatId, true)
+
+        await service.updateConfig({ planModel: 'claude-haiku-4-5' })
+
+        expect(agent().requestedModels()).toEqual([])
+        await service.sendToChat(chatId, 'plan it')
+        expect(agent().requestedModels()).toEqual(['claude-haiku-4-5'])
+      })
+
+      it('holds the planning effort the same way', async () => {
+        const { service, chatId } = await splitSession()
+        await service.setChatEfforts(chatId, { effort: 'low', planEffort: 'max' })
+        const before = agent().flagSettings().length
+
+        await service.setChatPlanMode(chatId, true)
+        await service.setChatEfforts(chatId, { planEffort: 'xhigh' })
+
+        expect(agent().flagSettings()).toHaveLength(before)
+        await service.sendToChat(chatId, 'plan it')
+        expect(agent().flagSettings().at(-1)).toMatchObject({ effortLevel: 'xhigh' })
+      })
+
+      // A restart is a new process that starts on what the record says, so
+      // it needs nothing sent and there is nothing to carry over.
+      it('is forgotten when the session is started again', async () => {
+        const { service, workspaceId, chatId } = await splitSession()
+        agent().emit(initMessage)
+        agent().emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+        })
+        await service.setChatPlanMode(chatId, true)
+
+        await service.setChatAutoCompact(chatId, 300_000)
+        await service.sendToChat(chatId, 'plan it')
+
+        expect(agents).toHaveLength(2)
+        expect(agents[1]?.options().model).toBe('claude-opus-5')
+        expect(agents[1]?.requestedModels()).toEqual([])
+      })
+
+      it('tells the window the model it names is the one the next message runs on', async () => {
+        const { service, chatId } = await splitSession()
+
+        await service.setChatPlanMode(chatId, true)
+        await expect(service.sessionUsage(chatId)).resolves.toMatchObject({ modelHeld: true })
+
+        await service.sendToChat(chatId, 'plan it')
+        await expect(service.sessionUsage(chatId)).resolves.toMatchObject({ modelHeld: false })
+      })
+
+      // The reading let go with its session is the one it gave while the model
+      // was held, and the session that replaces it starts on the record.
+      it('says nothing is held once the session that held it is let go', async () => {
+        const { service, workspaceId, chatId } = await splitSession({
+          idleReleaseMs: 150,
+          idleSweepMs: 20,
+          readingFreshMs: 10_000
+        })
+        agent().emit(initMessage)
+        agent().emit(resultMessage)
+        await vi.waitFor(() => {
+          expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+        })
+        await service.setChatPlanMode(chatId, true)
+        await expect(service.sessionUsage(chatId)).resolves.toMatchObject({ modelHeld: true })
+
+        await vi.waitFor(() => {
+          expect(agents[0]?.closed()).toBe(1)
+        })
+
+        await expect(service.sessionUsage(chatId)).resolves.toMatchObject({
+          context: expect.objectContaining({ percentage: 2 }),
+          modelHeld: false
+        })
+      })
     })
 
     /*
@@ -10849,7 +11053,9 @@ describe('the agent chat', () => {
       })
     })
 
-    it('raises to the planning effort when planning is turned on', async () => {
+    // With the model: planning's effort is part of the same held job, so a
+    // pass through plan moves neither.
+    it('raises to the planning effort with the next message after planning is turned on', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
       // A new conversation starts out planning; this one is about the mode it falls back to.
@@ -10858,7 +11064,9 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'work')
 
       await service.setChatPlanMode(chat.id, true)
+      expect(agent().flagSettings()).toEqual([])
 
+      await service.sendToChat(chat.id, 'plan it')
       expect(agent().flagSettings().at(-1)).toMatchObject({ effortLevel: 'max' })
     })
 
