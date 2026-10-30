@@ -75,6 +75,7 @@ import { type AutoCompactView, findWindowOverride, type WindowOverride } from '.
 import { cliConfigDir, readCachedUsageAt } from './cliUsageCache.js'
 import { type EditTarget, readChangeContext, readEditTarget, writtenPath } from './changeContext.js'
 import {
+  mergeBase,
   readWorkspaceChanges,
   readWorkspaceDiff,
   type WorkspaceChanges,
@@ -2327,6 +2328,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       },
       runQuery
     )
+  }
+
+  /**
+   * Where the workspace's branch began, for the tree's marks and the viewer's
+   * deleted files. Null when the base cannot be found, and both then fall back
+   * to HEAD as they did before — a base the user can fix in the project's
+   * settings is the Changes tab's to complain about, not the tree's.
+   */
+  async function branchBaseOf(exec: GitExec, project: Project): Promise<string | null> {
+    const baseBranch = await baseRefOf(project)
+    try {
+      return await mergeBase(exec, baseBranch)
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -6452,8 +6468,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async readFileTree(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
       // On the kept index copy, as every read a turn's end sets off is.
-      return withIndexCopy(workspace.path, makeExec, readFileTree)
+      return withIndexCopy(workspace.path, makeExec, async (exec) =>
+        readFileTree(exec, await branchBaseOf(exec, project))
+      )
     },
 
     async readWorkspaceDirectory(workspaceId, path) {
@@ -6462,7 +6481,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async readWorkspaceFile(workspaceId, path) {
       const workspace = requireWorkspace(workspaceId)
-      return readWorkspaceFile(workspace, path, makeExec(workspace.path))
+      const exec = makeExec(workspace.path)
+      const found = await readWorkspaceFile(workspace, path, exec)
+      if (found.kind !== 'missing') return found
+
+      // Only a file that is not there can be one deleted in a commit, so the
+      // base is looked up for that alone — not on every file a click opens.
+      const project = requireProject(workspace.projectId)
+      return readWorkspaceFile(workspace, path, exec, await branchBaseOf(exec, project))
     },
 
     async readLineChanges(workspaceId, path) {

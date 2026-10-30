@@ -1265,6 +1265,51 @@ describe('workspaces', () => {
       expect(tree.statuses).toEqual({ 'fresh.ts': 'untracked' })
     })
 
+    it('marks what the workspace committed, against where it began', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      await writeFile(join(workspace.path, 'branch.ts'), 'x\n', 'utf8')
+      await run('git', ['add', '-A'], { cwd: workspace.path })
+      await run('git', ['commit', '-q', '-m', 'branch'], { cwd: workspace.path })
+      await writeFile(join(workspace.path, 'fresh.ts'), 'x\n', 'utf8')
+
+      const tree = await service.readFileTree(workspace.id)
+
+      expect(tree.statuses).toEqual({ 'branch.ts': 'added', 'fresh.ts': 'untracked' })
+    })
+
+    it('marks against HEAD alone when the base cannot be found', async () => {
+      const repo = join(dir, 'planner')
+      await initRepo(repo)
+      await run('git', ['branch', 'develop'], { cwd: repo })
+      const service = await createService(paths(dir))
+      const project = await service.addProjectFromPath(repo)
+      await service.updateProjectById(project.id, { baseBranch: 'develop' })
+      const workspace = await service.createWorkspaceIn(project.id)
+      await writeFile(join(workspace.path, 'branch.ts'), 'x\n', 'utf8')
+      await run('git', ['add', '-A'], { cwd: workspace.path })
+      await run('git', ['commit', '-q', '-m', 'branch'], { cwd: workspace.path })
+      await run('git', ['branch', '-D', 'develop'], { cwd: repo })
+      await writeFile(join(workspace.path, 'fresh.ts'), 'x\n', 'utf8')
+
+      const tree = await service.readFileTree(workspace.id)
+
+      expect(tree.statuses).toEqual({ 'fresh.ts': 'untracked' })
+    })
+
+    it('shows a file deleted in a commit as the base had it', async () => {
+      const { service, projectId } = await withProject()
+      const workspace = await service.createWorkspaceIn(projectId)
+      const readme = await readFile(join(workspace.path, 'README.md'), 'utf8')
+      await run('git', ['rm', '-q', 'README.md'], { cwd: workspace.path })
+      await run('git', ['commit', '-q', '-m', 'drop it'], { cwd: workspace.path })
+
+      await expect(service.readWorkspaceFile(workspace.id, 'README.md')).resolves.toEqual({
+        kind: 'deleted',
+        text: readme
+      })
+    })
+
     it('lists a folder of the workspace from disk', async () => {
       const { service, projectId } = await withProject()
       const workspace = await service.createWorkspaceIn(projectId)

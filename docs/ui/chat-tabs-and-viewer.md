@@ -135,10 +135,10 @@ file opens onto what HEAD still holds, under a banner saying so.
 **The lines the branch changed are tinted, and the toolbar says how many.** A
 file opened from the tree looked the same whatever the agent had done to it, and
 what changed is the question a reader opens it with. The marks are measured
-against the same merge base as the Changes pane (`lineChanges.ts`), **not**
-against `HEAD` as the tree's marks are: a commit would otherwise empty the
-viewer while the pane still listed the file, and the button below would lead to
-lines the viewer had stopped showing. A tint behind the code and the same ranges
+against the same merge base as the Changes pane (`lineChanges.ts`), as the
+tree's marks are: against `HEAD` a commit would empty the viewer while the pane
+still listed the file, and the button below would lead to lines the viewer had
+stopped showing. A tint behind the code and the same ranges
 in the number column, where a strip says which kind — blue for edited, green for
 new — and a red line between two lines marks a deletion, which has no line to
 tint. Drawn as one element per range behind the text (`ChangeMarks`), never per

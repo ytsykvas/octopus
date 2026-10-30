@@ -203,6 +203,37 @@ describe('readWorkspaceFile', () => {
       })
     })
 
+    it('shows the base’s version of a file deleted in a commit', async () => {
+      await writeFile(join(dir, 'gone.ts'), 'at the base\n', 'utf8')
+      await commit()
+      const base = (await exec(['rev-parse', 'HEAD'])).trim()
+      await git('rm', '-q', 'gone.ts')
+      await commit()
+
+      await expect(readWorkspaceFile(workspace, 'gone.ts', exec, base)).resolves.toEqual({
+        kind: 'deleted',
+        text: 'at the base\n'
+      })
+      // Without a base there is nothing earlier than HEAD to look at.
+      await expect(readWorkspaceFile(workspace, 'gone.ts', exec)).resolves.toEqual({
+        kind: 'missing'
+      })
+    })
+
+    it('prefers what HEAD holds to what the base had', async () => {
+      await writeFile(join(dir, 'gone.ts'), 'at the base\n', 'utf8')
+      await commit()
+      const base = (await exec(['rev-parse', 'HEAD'])).trim()
+      await writeFile(join(dir, 'gone.ts'), 'on the branch\n', 'utf8')
+      await commit()
+      await unlink(join(dir, 'gone.ts'))
+
+      await expect(readWorkspaceFile(workspace, 'gone.ts', exec, base)).resolves.toEqual({
+        kind: 'deleted',
+        text: 'on the branch\n'
+      })
+    })
+
     // A name is not a pattern. `z?` as a pattern also matches `z1`, which
     // sorts first and would be the record read.
     it('reads a name with pattern characters literally', async () => {
