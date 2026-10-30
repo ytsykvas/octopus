@@ -79,17 +79,23 @@ is written where the caret is, with the same spacing as a path
 (`insertAtCaret` in `attachments.ts`, which `insertPaths` is now made of), so a
 prompt dropped into the middle of a sentence reads as part of it.
 
-The pills lie along a quarter of a circle above and to the left of the button —
-the corner the composer's attic sits in is where there is room — and each flies
-out of the button a rung after the one above (`fan-in` in `styles.css`). **As
-many fit as fit whole**: a rung is kept only when its pill clears the top of the
-area by the margin and the narrowest pill clears the left, so none is ever cut
-off by an edge. The rest go behind a last-but-one pill, "More… (N)", which opens
-a list of only what did not fit, under the sections "This project" and
+The pills lie on a circle round the button, close to it: **from 9 o'clock to 12
+first**, which is the quarter above and to the left, where the composer's attic
+sits and there is room. A few prompts stay there. **When there are more, the fan
+goes on from 12 to 3**, as far round as there are prompts and room, so it fills
+by what there is rather than by a fixed shape. Each pill flies out of the button
+a rung after the one above (`fan-in` in `styles.css`). **As many fit as fit
+whole**: a rung is kept only when its pill clears the top of the area by the
+margin and the narrowest pill clears the edge it grows towards — the left on the
+left half, the right on the right — so none is ever cut off. The radius is 140:
+a pill and its air are 28 px, so it is also how many rungs a quarter holds, five;
+nearer the button holds fewer, and further holds more but reaches away from the
+control it belongs to. The rest go behind a last-but-one pill, "More… (N)", which
+opens a list of only what did not fit, under the sections "This project" and
 "Everywhere"; the last pill is always the way to the settings that keep and order
 them. That last one is **not a pill**: it is a larger circle with a gear and no
 words, because it is not one of the prompts and should read as the fan's own
-control, the same place however many prompts there are (it keeps its words in the
+control — always the end of the fan, wherever that is (it keeps its words in the
 list). A prompt marked for the plan carries the plan's icon, the one the mode
 picker uses, so the two kinds tell apart at a glance. The pills wear **the
 project's colour** — the same wash as the sent bubble and the active tab — which

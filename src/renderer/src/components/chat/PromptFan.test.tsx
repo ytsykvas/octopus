@@ -50,8 +50,13 @@ function place(button: HTMLElement, at: { top: number; left: number }): void {
   })
 }
 
-/** Roomy: six rungs, as the composer's corner is in a window of a normal size. */
-const ROOMY = { top: 600, left: 700 }
+/**
+ * The composer's corner: room above and to the left, none to the right — five
+ * rungs, the left quarter, from 9 o'clock to 12.
+ */
+const ROOMY = { top: 600, left: 980 }
+/** Room all round: the right quarter as well, 12 o'clock to 3, nine rungs in all. */
+const OPEN = { top: 600, left: 500 }
 /** Too close to the top for a single rung. */
 const CRAMPED = { top: 4, left: 700 }
 
@@ -155,10 +160,10 @@ describe('opening the fan', () => {
     expect(first).toHaveClass('fan-in')
     expect(first?.style.getPropertyValue('--fan-index')).toBe('0')
     expect(second?.style.getPropertyValue('--fan-index')).toBe('1')
-    // The button's centre is at (712, 612); the top pill's right edge is at 712.
+    // The button's centre is at (992, 612); the top pill's right edge is at 992.
     expect(first?.style.getPropertyValue('--fan-from-x')).toBe('0px')
-    expect(first?.style.getPropertyValue('--fan-from-y')).toBe('168px')
-    expect(second?.style.getPropertyValue('--fan-from-x')).toBe('93px')
+    expect(first?.style.getPropertyValue('--fan-from-y')).toBe('140px')
+    expect(second?.style.getPropertyValue('--fan-from-x')).toBe('84px')
   })
 
   it('closes on a second click on the button', async () => {
@@ -245,8 +250,8 @@ describe('more than the fan has room for', () => {
 
     await user.click(button())
 
-    // Six rungs: four prompts, "more", settings.
-    expect(pills()).toEqual(['P1', 'P2', 'P3', 'P4', 'More… (5)', 'Manage prompts…'])
+    // Five rungs: three prompts, "more", settings.
+    expect(pills()).toEqual(['P1', 'P2', 'P3', 'More… (6)', 'Manage prompts…'])
   })
 
   it('opens a list of only what did not fit, under the sections they came from', async () => {
@@ -258,9 +263,9 @@ describe('more than the fan has room for', () => {
     const { button, onPick } = await renderFan()
 
     await user.click(button())
-    await user.click(screen.getByRole('menuitem', { name: 'More… (5)' }))
+    await user.click(screen.getByRole('menuitem', { name: 'More… (6)' }))
 
-    expect(pills().slice(0, 5)).toEqual(['P5', 'P6', 'P7', 'P8', 'P9'])
+    expect(pills().slice(0, 6)).toEqual(['P4', 'P5', 'P6', 'P7', 'P8', 'P9'])
     expect(screen.getByText('This project')).toBeInTheDocument()
     expect(screen.getByText('Everywhere')).toBeInTheDocument()
 
@@ -351,7 +356,7 @@ describe('in the plan dialog', () => {
 
     await user.click(button())
 
-    expect(pills()).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'More… (3)'])
+    expect(pills()).toEqual(['T1', 'T2', 'T3', 'T4', 'More… (4)'])
   })
 })
 
@@ -609,5 +614,93 @@ describe('how the pills look', () => {
     await user.click(button())
 
     expect(screen.getByRole('menu').style.getPropertyValue('--project-color')).toBe('')
+  })
+})
+
+// From 9 o'clock to 12 first, and on to 3 when there are more than that holds.
+describe('as far round as there are prompts', () => {
+  const titles = (count: number): Prompt[] =>
+    Array.from({ length: count }, (_, index) => prompt(`P${String(index + 1)}`))
+
+  const items = (): HTMLElement[] => screen.getAllByRole('menuitem')
+
+  it('stays on the left quarter while a few fit there', async () => {
+    answering(titles(3), [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ at: OPEN })
+
+    await user.click(button())
+
+    expect(items()).toHaveLength(4)
+    for (const item of items()) {
+      expect(item.style.right).not.toBe('')
+      expect(item.style.left).toBe('')
+    }
+  })
+
+  // The button's centre is at (512, 612): the first rung of the right quarter is
+  // 84 to the right of it, and its pill grows away from the button.
+  it('goes on round to the right when the left quarter is full', async () => {
+    answering(titles(8), [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ at: OPEN })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'Manage prompts…'])
+    expect(items()[4]?.style.right).not.toBe('')
+    expect(items()[5]?.style.left).toBe('596px')
+    expect(items()[5]?.style.right).toBe('')
+  })
+
+  it('flies a right-hand pill in from the left, out of the button', async () => {
+    answering(titles(8), [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ at: OPEN })
+
+    await user.click(button())
+
+    expect(items()[5]?.style.getPropertyValue('--fan-from-x')).toBe('-84px')
+  })
+
+  it('puts the way to settings at the far end', async () => {
+    answering(titles(8), [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ at: OPEN })
+
+    await user.click(button())
+
+    expect(items().at(-1)).toHaveAccessibleName('Manage prompts…')
+    expect(items().at(-1)?.style.left).not.toBe('')
+  })
+
+  it('falls back to "more" only when the whole half circle is full', async () => {
+    answering(titles(12), [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ at: OPEN })
+
+    await user.click(button())
+
+    expect(pills()).toEqual([
+      'P1',
+      'P2',
+      'P3',
+      'P4',
+      'P5',
+      'P6',
+      'P7',
+      'More… (5)',
+      'Manage prompts…'
+    ])
+  })
+
+  it('keeps to the left where the button has no room on its right', async () => {
+    answering(titles(8), [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    for (const item of items()) expect(item.style.left).toBe('')
   })
 })

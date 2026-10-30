@@ -26,7 +26,6 @@ interface PromptFanProps {
 const LIST_MAX_HEIGHT = 320
 const LIST_WIDTH = 260
 const GAP = 6
-const ORIGIN = { top: 0, left: 0 }
 
 /** Everything worked out when the fan opens, so nothing is measured while it draws. */
 interface Opened {
@@ -123,7 +122,10 @@ export function PromptFan({
 
     const rect = trigger.getBoundingClientRect()
     const dialog = trigger.closest('dialog')
-    const bounds = dialog === null ? ORIGIN : dialog.getBoundingClientRect()
+    const bounds =
+      dialog === null
+        ? { top: 0, left: 0, right: window.innerWidth }
+        : dialog.getBoundingClientRect()
     const above = rect.top - GAP - LIST_MAX_HEIGHT >= FAN_MARGIN
     const right = window.innerWidth - rect.right
 
@@ -254,11 +256,17 @@ export function PromptFan({
                 const entry = entries[index]
                 if (entry === undefined) return null
 
+                // A pill on the left half grows away from the button towards the
+                // left, so it is fixed by its right edge; one on the right half
+                // grows towards the right, and is fixed by its left.
+                const edge: React.CSSProperties =
+                  slot.side === 'left' ? { right: opened.width - slot.x } : { left: slot.x }
+
                 // Each pill is fixed to its own place on the arc and flies out of
                 // the button, a rung after the one above.
                 const style = {
+                  ...edge,
                   top: slot.top,
-                  right: opened.width - slot.right,
                   maxWidth: slot.maxWidth,
                   '--fan-index': String(index),
                   '--fan-from-x': `${String(slot.fromX)}px`,
