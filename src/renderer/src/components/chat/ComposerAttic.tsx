@@ -282,6 +282,10 @@ export function ComposerAttic({
           // they go out as the text of an ordinary message, which is what a
           // slash command is in this app.
           <>
+            {/* Before the share it explains, and only with something to open. */}
+            {context.breakdown !== null && (
+              <ContextPanel breakdown={context.breakdown} usedTokens={context.usedTokens} />
+            )}
             <DropdownMenu
               align="left"
               width={MENU_WIDTH}
@@ -359,10 +363,6 @@ export function ComposerAttic({
                 </button>
               )}
             />
-            {/* Beside the share it explains, and only with something to open. */}
-            {context.breakdown !== null && (
-              <ContextPanel breakdown={context.breakdown} usedTokens={context.usedTokens} />
-            )}
           </>
         )}
 

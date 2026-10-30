@@ -686,6 +686,16 @@ describe('what fills the window', () => {
     expect(button()).toBeInTheDocument()
   })
 
+  // The maintainer's call: the icon leads, and the share it explains follows.
+  it('comes before the share on the strip', () => {
+    renderAttic(withBreakdown(BREAKDOWN))
+
+    const reading = screen.getByRole('button', { name: /Context 48%/ })
+    const panel = screen.getByRole('button', { name: 'What fills the context' })
+
+    expect(panel.compareDocumentPosition(reading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   // A CLI that sends no readable breakdown still has a share to show; the
   // button for a panel with nothing in it is the thing to leave out.
   it('is left out when the reading has none', () => {
