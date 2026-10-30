@@ -53,6 +53,14 @@ export function tailPath(path: string, segments = 2): string {
     .join('/')
 }
 
+/**
+ * How much smaller `after` is than `before`, in whole percent; 0 when it is not
+ * smaller, or `before` is nothing.
+ */
+export function savedShare(before: number, after: number): number {
+  return before <= 0 || after >= before ? 0 : Math.round((1 - after / before) * 100)
+}
+
 /** Below this a share is unremarkable; at it, worth noticing. */
 const NOTICEABLE = 60
 /** At this, worth acting on before it decides for you. */

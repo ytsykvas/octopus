@@ -311,7 +311,10 @@ which it is.
 **A compaction is drawn as what was asked, what it saved and what was kept.**
 The line where the conversation was summarised says by how much; below it,
 folded, is "What the agent kept" — the summary from `PostCompact`, which runs
-long and is read when something seems forgotten.
+long and is read when something seems forgotten. A sent `/compact` is drawn as
+a card naming what was asked and the instructions after it (`compactRequest`),
+the sent text kept whole in its title; the line's saving is a percentage
+(`savedShare`).
 
 **A subagent's work is inside the call that started it.** Its messages arrive on
 the conversation's own stream, told apart only by the id of that call

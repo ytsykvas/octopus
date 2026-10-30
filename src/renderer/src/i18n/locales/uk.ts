@@ -916,8 +916,11 @@ export const uk: Translation = {
       'Claude Code зупинили ззовні — система чи інша програма. Надішліть повідомлення, щоб продовжити; розмова збережена.',
     processFailed:
       'Claude Code завершився з помилкою (код {{code}}). Надішліть повідомлення, щоб спробувати ще раз; розмова збережена.',
-    compactedBy: 'Агент підсумував усе вище, щоб звільнити місце — {{before}} стало {{after}}',
+    compactedBy:
+      'Агент підсумував усе вище, щоб звільнити місце — {{before}} стало {{after}} (−{{saved}}%)',
     compactSummaryTitle: 'Що агент лишив собі',
+    compactRequestTitle: 'Стиснути розмову',
+    compactRequestAll: 'Усе, своїми словами агента',
     refusalSwapped:
       '{{from}} відмовилася від цього ходу, тож його взяла {{to}} — і решту цієї розмови теж',
     refusalSwappedLocally:

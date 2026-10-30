@@ -933,8 +933,10 @@ export const de: Translation = {
     processFailed:
       'Claude Code wurde mit einem Fehler beendet (Code {{code}}). Schick eine Nachricht, um es erneut zu versuchen; der Chat bleibt erhalten.',
     compactedBy:
-      'Der Agent hat alles oben zusammengefasst, um Platz zu schaffen – aus {{before}} wurden {{after}}',
+      'Der Agent hat alles oben zusammengefasst, um Platz zu schaffen – aus {{before}} wurden {{after}} (−{{saved}}%)',
     compactSummaryTitle: 'Was der Agent behalten hat',
+    compactRequestTitle: 'Chat komprimieren',
+    compactRequestAll: 'Alles, in den Worten des Agenten',
 
     refusalSwapped:
       '{{from}} hat diese Runde abgelehnt, also hat {{to}} sie übernommen – und den Rest dieses Chats',

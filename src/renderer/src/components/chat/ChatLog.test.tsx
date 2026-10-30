@@ -501,6 +501,31 @@ describe('a message carrying notes on code', () => {
   })
 })
 
+// Drawn as what was asked rather than as a command: the instructions are the
+// part worth reading, and the text that went to the agent stays in the title.
+describe('a /compact the user sent', () => {
+  const user = (text: string): ChatEntry => ({ role: 'user', at: AT, text })
+
+  it('draws the instructions under the name of what was asked', () => {
+    renderLog({ entries: [user('/compact drop the npm test output')] })
+
+    expect(screen.getByText('Compact the conversation')).toBeInTheDocument()
+    const instructions = screen.getByText('drop the npm test output')
+    expect(screen.queryByText(/^\/compact/)).not.toBeInTheDocument()
+    expect(instructions.closest('[title]')).toHaveAttribute(
+      'title',
+      '/compact drop the npm test output'
+    )
+  })
+
+  it('says a bare /compact keeps all of it', () => {
+    renderLog({ entries: [user('/compact')] })
+
+    expect(screen.getByText('Compact the conversation')).toBeInTheDocument()
+    expect(screen.getByText("All of it, in the agent's words")).toBeInTheDocument()
+  })
+})
+
 describe('what the log shows', () => {
   it('shows what the user said and what came back', () => {
     renderLog({
@@ -1389,6 +1414,8 @@ describe('what the log shows', () => {
     expect(screen.getByText(/summarised/)).toBeVisible()
     // The same formatter the turn footer uses: `74k`, not `73,984`.
     expect(screen.getByText(/74k/)).toBeVisible()
+    // 73 984 down to 16 023 is a saving of 78%, and the sign is a real minus.
+    expect(screen.getByText(/\(−78%\)/)).toBeVisible()
   })
 
   // The summary is what the agent now knows of everything above. It runs long

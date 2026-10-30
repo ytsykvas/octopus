@@ -11,6 +11,7 @@ import {
   formatResetAt,
   formatTokens,
   localDayKey,
+  savedShare,
   tailPath,
   usageFill,
   usageLevel,
@@ -330,5 +331,25 @@ describe('a long path, shortened', () => {
 
   it('does not count a trailing slash as a segment', () => {
     expect(tailPath('/w/')).toBe('w')
+  })
+})
+
+describe('how much a compaction saved', () => {
+  it('says how much smaller the context became, in whole percent', () => {
+    expect(savedShare(84_000, 9000)).toBe(89)
+  })
+
+  it('says nothing was saved when the size did not change', () => {
+    expect(savedShare(1000, 1000)).toBe(0)
+  })
+
+  // A summary longer than what it summarised saved nothing; a negative saving
+  // would print as "−−20%".
+  it('says nothing was saved when the context grew', () => {
+    expect(savedShare(1000, 1200)).toBe(0)
+  })
+
+  it('says nothing was saved from nothing', () => {
+    expect(savedShare(0, 0)).toBe(0)
   })
 })

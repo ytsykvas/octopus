@@ -6,6 +6,7 @@ import {
   Eraser,
   FileCode2,
   FolderGit2,
+  FoldVertical,
   Map,
   Play,
   Repeat,
@@ -41,12 +42,12 @@ import { shown } from '../diff/shown.js'
 import { NOTHING_STREAMING, type StreamStore, streamOf } from '../../hooks/useStreaming.js'
 import { sameMap, sameSet, useSameValue } from '../../hooks/useSameValue.js'
 import { DaySeparator } from './DayChip.js'
-import { exitCodeOf, formatClock, formatFullTime, formatTokens } from './format.js'
+import { exitCodeOf, formatClock, formatFullTime, formatTokens, savedShare } from './format.js'
 import { Markdown } from './Markdown.js'
 import { BLOCK_PART, DAY_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
-import { type MessageBlock, messageBlocks } from './userMessage.js'
+import { compactRequest, type MessageBlock, messageBlocks } from './userMessage.js'
 import { splitStreamed } from './streamedText.js'
 import { type Expansion, ExpandContext, FileLinkContext, useExpanded } from './expansion.js'
 import {
@@ -749,6 +750,27 @@ function UserMessage({
 }
 
 function UserBubble({ text }: { text: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  const compact = compactRequest(text)
+
+  // A `/compact` is drawn as what was asked: the instructions are the part worth
+  // reading. The exact text the agent got stays in the title, so nothing sent
+  // is hidden (§4).
+  if (compact !== null) {
+    return (
+      <div
+        title={text}
+        className="bubble-sent flex max-w-full min-w-0 flex-col gap-1 self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap wrap-anywhere"
+      >
+        <span className="text-ink-soft flex items-center gap-1.5 text-[11px] font-medium">
+          <FoldVertical aria-hidden size={12} />
+          {t('chat.compactRequestTitle')}
+        </span>
+        <p>{compact.instructions ?? t('chat.compactRequestAll')}</p>
+      </div>
+    )
+  }
+
   const blocks = messageBlocks(text)
   // Nothing recognised: the characters exactly as they were typed.
   const plain = blocks.every(
@@ -1231,7 +1253,8 @@ function CompactedRow({
         ? t('chat.compacted')
         : t('chat.compactedBy', {
             before: formatTokens(preTokens),
-            after: formatTokens(postTokens)
+            after: formatTokens(postTokens),
+            saved: savedShare(preTokens, postTokens)
           })}
     </p>
   )
