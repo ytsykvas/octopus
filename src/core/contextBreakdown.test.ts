@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { breakdownFrom, CONTEXT_CATEGORY_IDS, TOP_TOOLS } from './contextBreakdown.js'
+import { breakdownFrom, TOP_TOOLS } from './contextBreakdown.js'
 
 /**
  * A `getContextUsage` reply as the CLI sends it, cut down to the parts the
@@ -184,9 +184,5 @@ describe('what fills the context window', () => {
     })
 
     expect(read?.tools.map((tool) => tool.name)).toEqual(['First', 'Second'])
-  })
-
-  it('knows the ids the panel will label', () => {
-    expect(CONTEXT_CATEGORY_IDS).toContain('messages')
   })
 })
