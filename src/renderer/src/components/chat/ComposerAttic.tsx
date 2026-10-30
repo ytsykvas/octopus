@@ -17,6 +17,7 @@ import { useConfirm } from '../../hooks/useConfirm.js'
 import { AgentsChip } from './AgentsChip.js'
 import { DropdownMenu, type MenuAction, type MenuSection } from '../DropdownMenu.js'
 import { formatTokens, usageTone } from './format.js'
+import { PromptFan } from './PromptFan.js'
 import { SkillsPanel } from './SkillsPanel.js'
 
 interface ComposerAtticProps {
@@ -46,6 +47,12 @@ interface ComposerAtticProps {
   readonly onRefreshSkills: () => void
   /** Where the panel sends someone who has no skills to switch yet. */
   readonly onOpenSettings: () => void
+  /** Which project's prompts the fan offers, besides the installation's. */
+  readonly projectId: string
+  /** Writes a chosen prompt's text into the field, where its caret is. */
+  readonly onInsert: (text: string) => void
+  /** Where the fan sends someone who has no prompts yet, or wants to order them. */
+  readonly onOpenPromptSettings: () => void
   /** Opens the file dialog. The paperclip is the visible way in of three. */
   readonly onAttach: () => void
   /** Where this conversation compacts itself; null hands it back to the agent. */
@@ -98,6 +105,9 @@ export function ComposerAttic({
   onToggleSkill,
   onRefreshSkills,
   onOpenSettings,
+  projectId,
+  onInsert,
+  onOpenPromptSettings,
   onAttach,
   onAutoCompact
 }: ComposerAtticProps): React.JSX.Element {
@@ -361,6 +371,8 @@ export function ComposerAttic({
             onOpen={onRefreshSkills}
             onOpenSettings={onOpenSettings}
           />
+
+          <PromptFan projectId={projectId} onPick={onInsert} onManage={onOpenPromptSettings} />
 
           {/* One of three ways in, and the least used: a file is more often
               dragged onto the composer or pasted into it. It is here because it

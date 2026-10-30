@@ -9,6 +9,7 @@ import type { GitHubErrorCode } from '@core/github.js'
 import type { InvalidFileCode } from '@core/persist.js'
 import type { PluginErrorCode } from '@core/plugins.js'
 import type { ProjectValidationCode } from '@core/projects.js'
+import type { PromptErrorCode } from '@core/prompts.js'
 import type { RepoConfigCode } from '@core/repoConfig.js'
 import type { LibraryErrorCode } from '@core/library.js'
 import type { SkillErrorCode } from '@core/skills.js'
@@ -45,6 +46,7 @@ type CoreErrorCode =
   // becomes something the window can say.
   | 'valueRefused'
   | ProjectValidationCode
+  | PromptErrorCode
   | RepoConfigCode
   | SkillErrorCode
   | StateConflictCode
@@ -66,6 +68,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   libraryNameInvalid: { name: 'Ship It' },
   libraryExists: { name: 'ship' },
   libraryMissing: null,
+  promptMissing: null,
   libraryTooLarge: { limit: '64000' },
   libraryUrlRefused: { url: 'https://example.test/ship.md' },
   librarySubagentNeedsDescription: null,

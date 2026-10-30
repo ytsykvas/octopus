@@ -63,6 +63,7 @@ import type { LibraryDocument, LibraryEntry, LibraryImport, LibraryPreview } fro
 import type { AttachmentStore } from '@core/attachments.js'
 import type { FormValues } from '@core/elicitation.js'
 import type { LibraryKind } from '@core/libraryNames.js'
+import type { Prompt, PromptDraft } from '@core/promptSchema.js'
 import type { Store } from '@core/stores.js'
 import type { InstructionSource } from '@core/instructionSources.js'
 import type { UsageWindows } from '@core/usage.js'
@@ -910,6 +911,30 @@ const api = {
      */
     inspect: (kind: LibraryKind, request: LibraryImport): Promise<Result<LibraryPreview>> =>
       ipcRenderer.invoke('library:inspect', kind, request) as Promise<Result<LibraryPreview>>
+  },
+
+  /**
+   * Saved prompts: text inserted into a field, kept per store.
+   *
+   * Apart from `library` because a command is expanded by the CLI where the
+   * user cannot see it and a prompt is not — nothing here reaches a session.
+   */
+  prompts: {
+    list: (store: Store): Promise<Result<Prompt[]>> =>
+      ipcRenderer.invoke('prompts:list', store) as Promise<Result<Prompt[]>>,
+
+    create: (store: Store, draft: PromptDraft): Promise<Result<Prompt>> =>
+      ipcRenderer.invoke('prompts:create', store, draft) as Promise<Result<Prompt>>,
+
+    update: (store: Store, id: string, draft: PromptDraft): Promise<Result<Prompt>> =>
+      ipcRenderer.invoke('prompts:update', store, id, draft) as Promise<Result<Prompt>>,
+
+    remove: (store: Store, id: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('prompts:remove', store, id) as Promise<Result<void>>,
+
+    /** The whole new order, as a drop gives it. */
+    reorder: (store: Store, orderedIds: readonly string[]): Promise<Result<void>> =>
+      ipcRenderer.invoke('prompts:reorder', store, orderedIds) as Promise<Result<void>>
   },
 
   skills: {

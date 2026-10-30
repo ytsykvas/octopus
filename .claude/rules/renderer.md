@@ -30,7 +30,11 @@ classes and components are listed in the `ui-component` skill.
 - **The `react-hooks` rules are strict:** no `setState` in an effect — derive
   during render or set in the handler — and no reading a ref during render.
 - **A floating panel is portalled into the body**, positioned against the
-  window, and uses `useAnchoredPanel` unless it is a `DropdownMenu`.
+  window, and uses `useAnchoredPanel` unless it is a `DropdownMenu` — or the
+  prompt fan, whose pills sit on an arc rather than in a box. All three dismiss
+  through `useDismiss` and close when their anchor moves through
+  `useCloseOnMove`, and a panel opened from inside a `<dialog>` is portalled
+  into that dialog, or `showModal()` leaves it inert.
 - **Tests query by role, label, title or text**, never by class name. The
   selected row, tab and rail item carry `aria-current`.
 - **The renderer has its own vitest config.** Run one file with

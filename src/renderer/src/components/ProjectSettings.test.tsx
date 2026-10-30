@@ -1901,3 +1901,18 @@ describe('the commands section', () => {
     )
   })
 })
+
+describe('the prompts section', () => {
+  // This project's own list, which comes first in the fan; and with no note
+  // about "that project", because this is that project.
+  it('opens on the store this project alone reaches', async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Prompts')
+
+    expect(await screen.findByText('No prompts yet.')).toBeInTheDocument()
+    expect(screen.queryByText(/live in that project/)).not.toBeInTheDocument()
+    expect(octopus().prompts.list).toHaveBeenCalledWith({ kind: 'project', projectId: 'planner' })
+  })
+})

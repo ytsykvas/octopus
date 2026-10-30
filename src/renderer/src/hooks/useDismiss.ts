@@ -35,7 +35,13 @@ export function useDismiss(
     }
 
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onDismiss()
+      if (event.key !== 'Escape') return
+
+      // Claimed, so the `<dialog>` this popup may sit in does not take the same
+      // key as its own `cancel`: closing a menu must not close — or, in the
+      // plan dialog, answer — the dialog under it.
+      event.preventDefault()
+      onDismiss()
     }
 
     window.addEventListener('mousedown', onPointerDown)

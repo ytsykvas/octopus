@@ -270,6 +270,28 @@ export function installOctopusStub(): Api {
       inspect: vi.fn(() => ok({ name: 'ship', description: '', text: '' }))
     },
 
+    prompts: {
+      list: vi.fn(() => ok([])),
+      create: vi.fn(() =>
+        ok({
+          id: '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
+          title: 'Review',
+          text: 'Look it over.',
+          forPlan: false
+        })
+      ),
+      update: vi.fn(() =>
+        ok({
+          id: '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
+          title: 'Review',
+          text: 'Look it over.',
+          forPlan: false
+        })
+      ),
+      remove: vi.fn(() => ok(undefined)),
+      reorder: vi.fn(() => ok(undefined))
+    },
+
     skills: {
       list: vi.fn(() => ok([])),
       read: vi.fn(() =>

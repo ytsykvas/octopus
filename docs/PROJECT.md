@@ -721,8 +721,10 @@ Everything under one directory:
 ~/.octopus/
   config.json                global settings
   state.json                 workspaces, session ids, statuses
+  prompts.json               saved prompts for every project
   projects/<slug>/
     carry                    which of the checkout's files travel into a workspace
+    prompts.json             this project's saved prompts; goes with the project
     envs/                    named sets of variables, one appended to every workspace's .env
       default
     scripts/setup.sh

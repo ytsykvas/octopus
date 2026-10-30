@@ -41,6 +41,41 @@ describe('useDismiss', () => {
     expect(onDismiss).toHaveBeenCalledOnce()
   })
 
+  // A popup inside a `<dialog>` — the sound picker in Settings, the prompt fan
+  // in the plan dialog — shares the key with the dialog's own `cancel`. The
+  // dialog treats an unhandled Escape as "close me", and in the plan dialog that
+  // answers the agent: so the key is claimed by the popup it closed.
+  it('claims the Escape it closes on, so a dialog underneath stays open', () => {
+    const onDismiss = vi.fn()
+    render(<Popup open onDismiss={onDismiss} />)
+
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    window.dispatchEvent(escape)
+
+    expect(onDismiss).toHaveBeenCalledOnce()
+    expect(escape.defaultPrevented).toBe(true)
+  })
+
+  it('leaves Escape alone while it is closed', () => {
+    const onDismiss = vi.fn()
+    render(<Popup open={false} onDismiss={onDismiss} />)
+
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    window.dispatchEvent(escape)
+
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect(escape.defaultPrevented).toBe(false)
+  })
+
+  it('leaves the other keys alone', () => {
+    render(<Popup open onDismiss={vi.fn()} />)
+
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })
+    window.dispatchEvent(enter)
+
+    expect(enter.defaultPrevented).toBe(false)
+  })
+
   it('dismisses when a click lands outside it', async () => {
     const user = userEvent.setup()
     const onDismiss = vi.fn()

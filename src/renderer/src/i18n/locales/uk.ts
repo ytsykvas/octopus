@@ -148,6 +148,7 @@ export const uk: Translation = {
     sectionEnv: 'Env',
     sectionSkills: 'Скіли',
     sectionLibrary: 'Команди',
+    sectionPrompts: 'Промпти',
     sectionInstructions: 'Інструкції',
     sectionRepository: 'Репозиторій',
     sectionDanger: 'Небезпечна зона',
@@ -1282,6 +1283,7 @@ export const uk: Translation = {
     sectionAgent: 'Агент',
     sectionSkills: 'Скіли',
     sectionLibrary: 'Команди',
+    sectionPrompts: 'Промпти',
     sectionInstructions: 'Інструкції',
     sectionAccounts: 'Claude',
     sectionAbout: 'Про застосунок',
@@ -1589,6 +1591,41 @@ export const uk: Translation = {
     noDescription: 'Про себе він нічого не каже.'
   },
 
+  /* Збережені промпти: текст, який вставляється в поле, окремо від команд
+     бібліотеки, бо агент тут нічого не розгортає. */
+  prompts: {
+    intro:
+      'Текст, який одним кліком вставляється в повідомлення чи в уточнення плану. На відміну від команди, він з\u2019являється в полі як текст, який можна змінити перед відправкою.',
+    globalNote:
+      'Промпти окремого проєкту \u2014 у налаштуваннях цього проєкту, і у віялі вони йдуть першими.',
+    orderHint:
+      'Перетягуйте, щоб змінити порядок. Віяло показує стільки, скільки вміщається, починаючи згори списку.',
+    reorderHandle: 'Змінити позицію \u00ab{{title}}\u00bb (Alt+\u2191 / Alt+\u2193)',
+    add: 'Додати промпт',
+    empty: 'Промптів ще немає.',
+    edit: 'Змінити \u00ab{{title}}\u00bb',
+    remove: 'Видалити \u00ab{{title}}\u00bb',
+    removeTitle: 'Видалити \u00ab{{title}}\u00bb?',
+    removeMessage: 'Промпт буде видалено.',
+    removeConfirm: 'Видалити',
+    removeCancel: 'Скасувати',
+    planBadge: 'План',
+    editorNew: 'Новий промпт',
+    editorEdit: 'Редагування промпту',
+    forPlan: 'Для уточнень плану',
+    forPlanHint: 'Також пропонується в модалці плану, біля поля уточнень.',
+    title: 'Назва',
+    titleHint: 'Показується на кнопці у віялі.',
+    text: 'Текст',
+    save: 'Зберегти',
+    cancel: 'Скасувати',
+    pick: 'Збережені промпти',
+    sectionProject: 'Цей проєкт',
+    sectionGlobal: 'Загальні',
+    more: 'Ще\u2026 ({{count}})',
+    manage: 'Керувати промптами\u2026'
+  },
+
   elicitation: {
     from: 'Запитання від {{server}}',
     optional: '{{label}} (необовʼязково)',
@@ -1813,6 +1850,7 @@ export const uk: Translation = {
       '\u201c{{url}}\u201d не вдалося прочитати. Завантажуються лише https-адреси, що віддають один markdown-файл.',
     librarySubagentNeedsDescription:
       'Субагентові потрібен frontmatter з описом того, коли ним користуватися, — інакше агент ніколи до нього не звернеться.',
+    promptMissing: 'Цього промпту вже немає.',
     branchMissing:
       '\u0423 \u0446\u044c\u043e\u043c\u0443 \u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0456\u0457 \u043d\u0435\u043c\u0430\u0454 \u0433\u0456\u043b\u043a\u0438 \u00ab{{branch}}\u00bb. \u041e\u0431\u0435\u0440\u0456\u0442\u044c \u0431\u0430\u0437\u043e\u0432\u0443 \u0433\u0456\u043b\u043a\u0443, \u044f\u043a\u0430 \u0432 \u043d\u044c\u043e\u043c\u0443 \u0454, \u043f\u0435\u0440\u0448 \u043d\u0456\u0436 \u043f\u0435\u0440\u0435\u043d\u0430\u0446\u0456\u043b\u044e\u0432\u0430\u0442\u0438 \u043f\u0440\u043e\u0454\u043a\u0442.',
     draftFailed:
