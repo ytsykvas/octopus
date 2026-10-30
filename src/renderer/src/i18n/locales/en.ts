@@ -1242,6 +1242,21 @@ export const en = {
     contextClearNote: 'The agent forgets this conversation, and the log goes with it.',
     contextCompactFocusNote:
       'Puts /compact in the field: write after it what the summary must keep.',
+    contextBreakdownTitle: 'What fills the context',
+    contextBreakdownCategories: 'By kind',
+    contextBreakdownMemoryFiles: 'Memory files',
+    contextBreakdownMcpServers: 'MCP servers',
+    contextBreakdownTools: 'Heaviest tools',
+    contextBreakdownRewindNote:
+      'To forget everything after a message, rewind from that message in the conversation.',
+    contextCategorySystemPrompt: 'System prompt',
+    contextCategorySystemTools: 'System tools',
+    contextCategoryMcpTools: 'MCP tools',
+    contextCategoryMcpInstructions: 'MCP instructions',
+    contextCategoryCustomAgents: 'Custom agents',
+    contextCategoryMemoryFiles: 'Memory files',
+    contextCategorySkills: 'Skills',
+    contextCategoryMessages: 'Messages',
     /* The window group in the same menu. The values print through
        `formatTokens`, so only the words around them are here. */
     autoCompactTitle: 'Auto-compact',

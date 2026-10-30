@@ -938,6 +938,21 @@ export const uk: Translation = {
     contextClearNote: 'Агент забуває цю розмову, а її запис видаляється.',
     contextCompactFocusNote:
       'Вставляє /compact у поле: допишіть після нього, що має лишитися в переказі.',
+    contextBreakdownTitle: 'Що заповнює контекст',
+    contextBreakdownCategories: 'За видом',
+    contextBreakdownMemoryFiles: "Файли пам'яті",
+    contextBreakdownMcpServers: 'MCP-сервери',
+    contextBreakdownTools: 'Найважчі інструменти',
+    contextBreakdownRewindNote:
+      'Щоб забути все після певного повідомлення, перемотайте розмову з нього.',
+    contextCategorySystemPrompt: 'Системний промпт',
+    contextCategorySystemTools: 'Системні інструменти',
+    contextCategoryMcpTools: 'Інструменти MCP',
+    contextCategoryMcpInstructions: 'Інструкції MCP',
+    contextCategoryCustomAgents: 'Власні агенти',
+    contextCategoryMemoryFiles: "Файли пам'яті",
+    contextCategorySkills: 'Скіли',
+    contextCategoryMessages: 'Повідомлення',
     autoCompactTitle: 'Автокомпакт',
     autoCompactNote:
       'Коли розмова стискається сама. Зміна перезапускає сесію; розмова зберігається.',

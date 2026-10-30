@@ -187,6 +187,20 @@ draft (`withCompact`), and a draft already there becomes the focus rather than
 being overwritten, because only the field knows the draft and the caret. A
 `/compact` sent bare would compact with nothing said about what to keep.
 
+**What fills the window sits beside the share.** A button with the layers icon
+opens a panel of the same reply the share is counted from — `getContextUsage`
+already carries a breakdown, and a second call for it would cost another
+650ms — read by `contextBreakdown.ts` into four sections: the kinds of row, the
+memory files, the MCP servers, and the five heaviest tools. A section with no
+rows is not drawn, and the button is absent when the CLI sent no breakdown the
+core could read, since a panel with nothing in it has nothing to open on. Every
+row is a share of what the window holds, in one neutral colour:
+`warning` and `danger` already say how full the window is, and painting a kind
+of row with them would claim something about it that is not so. The footer names
+the way to forget what follows a message — rewinding from that message in the
+log — rather than offering a control of its own, because no API takes a single
+message out of the middle.
+
 **The same menu chooses where the conversation compacts itself**: _Auto_ and
 300k, 400k, 500k, 600k, 800k, as radio rows in a group of their own between the
 two commands. Left alone, a 1M model compacts near 967k, by which point every

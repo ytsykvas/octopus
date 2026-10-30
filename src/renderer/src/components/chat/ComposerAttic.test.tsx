@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { ContextUsage } from '@core/agent.js'
+import type { ContextBreakdown } from '@core/contextBreakdown.js'
 import type { AutoCompactView } from '@core/autoCompact.js'
 import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
@@ -652,5 +653,50 @@ describe('where the conversation compacts', () => {
     await open()
 
     expect(screen.getByRole('menu')).toHaveStyle({ width: '360px' })
+  })
+})
+
+describe('what fills the window', () => {
+  const BREAKDOWN: ContextBreakdown = {
+    categories: [{ id: 'messages', tokens: 40_000 }],
+    memoryFiles: [],
+    mcpServers: [],
+    tools: []
+  }
+  const withBreakdown = (breakdown: ContextBreakdown | null): SessionUsage => ({
+    ...FULL,
+    context: {
+      percentage: 48,
+      usedTokens: 48_000,
+      maxTokens: 200_000,
+      compactsAt: null,
+      autoCompactOn: null,
+      model: 'claude-opus-5',
+      modelWindow: null,
+      breakdown
+    }
+  })
+  const button = (): HTMLElement | null =>
+    screen.queryByRole('button', { name: 'What fills the context' })
+
+  // It sits beside the share it explains, so it appears with it.
+  it('sits beside the share when the reading has a breakdown', () => {
+    renderAttic(withBreakdown(BREAKDOWN))
+
+    expect(button()).toBeInTheDocument()
+  })
+
+  // A CLI that sends no readable breakdown still has a share to show; the
+  // button for a panel with nothing in it is the thing to leave out.
+  it('is left out when the reading has none', () => {
+    renderAttic(withBreakdown(null))
+
+    expect(button()).not.toBeInTheDocument()
+  })
+
+  it('is left out with the share when nothing has been read', () => {
+    renderAttic(NOTHING)
+
+    expect(button()).not.toBeInTheDocument()
   })
 })

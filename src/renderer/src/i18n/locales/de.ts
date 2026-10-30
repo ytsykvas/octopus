@@ -967,6 +967,21 @@ export const de: Translation = {
     contextClearNote: 'Der Agent vergisst diesen Chat, und der Verlauf wird gelöscht.',
     contextCompactFocusNote:
       'Setzt /compact ins Feld: dahinter steht, was die Zusammenfassung behalten soll.',
+    contextBreakdownTitle: 'Was den Kontext füllt',
+    contextBreakdownCategories: 'Nach Art',
+    contextBreakdownMemoryFiles: 'Memory-Dateien',
+    contextBreakdownMcpServers: 'MCP-Server',
+    contextBreakdownTools: 'Schwerste Tools',
+    contextBreakdownRewindNote:
+      'Um alles nach einer Nachricht zu vergessen, spulen Sie im Chat zu dieser Nachricht zurück.',
+    contextCategorySystemPrompt: 'Systemprompt',
+    contextCategorySystemTools: 'System-Tools',
+    contextCategoryMcpTools: 'MCP-Tools',
+    contextCategoryMcpInstructions: 'MCP-Anweisungen',
+    contextCategoryCustomAgents: 'Eigene Agenten',
+    contextCategoryMemoryFiles: 'Memory-Dateien',
+    contextCategorySkills: 'Skills',
+    contextCategoryMessages: 'Nachrichten',
     autoCompactTitle: 'Auto-Komprimierung',
     autoCompactNote:
       'Wann dieser Chat von selbst komprimiert wird. Eine Änderung startet die Sitzung neu; der Chat bleibt erhalten.',
