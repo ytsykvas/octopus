@@ -1618,7 +1618,12 @@ export const uk: Translation = {
     titleHint: 'Показується на кнопці у віялі.',
     text: 'Текст',
     save: 'Зберегти',
-    cancel: 'Скасувати'
+    cancel: 'Скасувати',
+    pick: 'Збережені промпти',
+    sectionProject: 'Цей проєкт',
+    sectionGlobal: 'Загальні',
+    more: 'Ще\u2026 ({{count}})',
+    manage: 'Керувати промптами\u2026'
   },
 
   elicitation: {

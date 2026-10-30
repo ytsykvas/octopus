@@ -70,18 +70,32 @@ export interface NoteIntros {
 }
 
 /**
- * Puts the notes into the message that carries them.
+ * Writes words into a draft at the caret, set apart from the ones on either
+ * side.
  *
- * They become text rather than anything hidden. §4 is explicit that nothing
- * implicit reaches the agent, and the message the user can read back in the log
- * is the whole of what was sent — the same reasoning that has `/clear` go out
- * as the characters the user typed rather than as a command this app dispatches.
- *
- * The quoted code is what the note was written against, kept from the moment it
- * was written: by the time the agent reads it the file may have moved on, and a
- * line number on its own would point at whatever now sits there. The same is
- * true of a review comment, which is why GitHub's own hunk travels with it.
+ * What a file's path and a saved prompt are both inserted with: "compare `a.png`
+ * with" is a sentence, and so is a prompt dropped into the middle of one. A
+ * space is added only where there is not whitespace already — a newline counts —
+ * and the caret lands after the one that follows, so the next word typed is a
+ * word of its own. A caret left past the text, the draft having shortened under
+ * it, writes at the end.
  */
+export function insertAtCaret(
+  draft: string,
+  caret: number,
+  written: string
+): { readonly draft: string; readonly caret: number } {
+  const at = Math.min(caret, draft.length)
+  const before = draft.slice(0, at)
+  const after = draft.slice(at)
+
+  const lead = before === '' || /\s$/.test(before) ? '' : ' '
+  const trail = /^\s/.test(after) ? '' : ' '
+  const inserted = `${lead}${written}${trail}`
+
+  return { draft: `${before}${inserted}${after}`, caret: at + inserted.length }
+}
+
 /**
  * Writes the paths of files pointed at into a draft, at the caret.
  *
@@ -100,20 +114,24 @@ export function insertPaths(
   caret: number,
   paths: readonly string[]
 ): { readonly draft: string; readonly caret: number } {
-  const at = Math.min(caret, draft.length)
-  const before = draft.slice(0, at)
-  const after = draft.slice(at)
+  const quoted = paths.map((path) => (/\s/.test(path) ? `\`${path}\`` : path))
 
-  // Set apart from the words on either side, and no further: a space is added
-  // only where there is not one already, and the caret lands after the one that
-  // follows, so the next word typed is a word of its own.
-  const lead = before === '' || /\s$/.test(before) ? '' : ' '
-  const trail = /^\s/.test(after) ? '' : ' '
-  const written = `${lead}${paths.map((path) => (/\s/.test(path) ? `\`${path}\`` : path)).join(' ')}${trail}`
-
-  return { draft: `${before}${written}${after}`, caret: at + written.length }
+  return insertAtCaret(draft, caret, quoted.join(' '))
 }
 
+/**
+ * Puts the notes into the message that carries them.
+ *
+ * They become text rather than anything hidden. §4 is explicit that nothing
+ * implicit reaches the agent, and the message the user can read back in the log
+ * is the whole of what was sent — the same reasoning that has `/clear` go out
+ * as the characters the user typed rather than as a command this app dispatches.
+ *
+ * The quoted code is what the note was written against, kept from the moment it
+ * was written: by the time the agent reads it the file may have moved on, and a
+ * line number on its own would point at whatever now sits there. The same is
+ * true of a review comment, which is why GitHub's own hunk travels with it.
+ */
 export function withNotes(text: string, notes: readonly ChatNote[], intros: NoteIntros): string {
   if (notes.length === 0) return text
 

@@ -68,6 +68,39 @@ account has one. The reading is one step fainter than the pickers underneath,
 which are clicked where it is mostly read — mostly, because it is also the way
 out of what it reports.
 
+**A saved prompt is chosen from a fan of pills over a button in the attic,
+and is written into the field as text.** The button sits in the right-hand group,
+ahead of the paperclip: both put something into the field, and the paperclip is
+the least used of the strip. A prompt is **not** a command, and that is the
+difference the whole feature rests on: `/ship` goes out as the characters
+typed and is expanded by the CLI where the sender never sees what it said, while
+a prompt lands in the field as text they can read and change before it goes. It
+is written where the caret is, with the same spacing as a path
+(`insertAtCaret` in `attachments.ts`, which `insertPaths` is now made of), so a
+prompt dropped into the middle of a sentence reads as part of it.
+
+The pills lie along a quarter of a circle above and to the left of the button —
+the corner the composer's attic sits in is where there is room — and each flies
+out of the button a rung after the one above (`fan-in` in `styles.css`). **As
+many fit as fit whole**: a rung is kept only when its pill clears the top of the
+area by the margin and the narrowest pill clears the left, so none is ever cut
+off by an edge. The rest go behind a last-but-one pill, "More… (N)", which opens
+a list of only what did not fit, under the sections "This project" and
+"Everywhere"; the last pill is always the way to the settings that keep and order
+them. The arithmetic is pure (`fanSlots` and `fanItems` in `chat/fan.ts`), so it
+is tested as numbers and the component only draws.
+
+**The order is the priority.** The project's own prompts come first, then the
+installation's, each as the Prompts section lists them — so dragging one up in
+Settings is how it is made easier to reach, and there is no second field for it.
+The lists are read again each time the fan opens, which is why a prompt saved a
+moment ago is there without anything telling the composer: a subscription would
+be a second way for the same list to go stale, for a list looked at a few times
+an hour.
+
+With no room above the button at all — a window squeezed short — the fan opens
+as the list, and nothing about it differs but the shape.
+
 **A file is attached by pointing at it, not by copying it.** The paperclip is
 one of four ways in: a file can be dragged onto the composer, added from the
 Files tab's right-click menu or, for a screenshot, pasted straight into the

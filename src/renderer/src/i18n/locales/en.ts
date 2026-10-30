@@ -2067,7 +2067,12 @@ export const en = {
     titleHint: 'Shown on the button in the fan.',
     text: 'Text',
     save: 'Save',
-    cancel: 'Cancel'
+    cancel: 'Cancel',
+    pick: 'Saved prompts',
+    sectionProject: 'This project',
+    sectionGlobal: 'Everywhere',
+    more: 'More\u2026 ({{count}})',
+    manage: 'Manage prompts\u2026'
   },
 
   elicitation: {

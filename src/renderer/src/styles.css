@@ -911,6 +911,24 @@
   animation: drawer-in 160ms ease-out;
 }
 
+/* The prompt fan (PromptFan.tsx): each pill flies out of the button that opened
+   it, a rung after the one above. `both` holds a pill in its first frame for
+   the length of its delay, so none shows in its place before its turn; under
+   "Reduce motion" the rule below removes the animation and every pill is simply
+   there. The offsets are set on the pill, since where the button is from each
+   one's own place is different for each. */
+@keyframes fan-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--fan-from-x), var(--fan-from-y)) scale(0.6);
+  }
+}
+
+.fan-in {
+  animation: fan-in 180ms ease-out both;
+  animation-delay: calc(var(--fan-index) * 24ms);
+}
+
 /* Nothing moves on its own for anybody who has asked the system for less
    motion: every animation at once, so a spinner written tomorrow needs nothing
    of its own (docs/ui/motion.md). `!important` because a class such as

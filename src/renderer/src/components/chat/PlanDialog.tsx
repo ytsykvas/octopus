@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { WorkingMode } from '@core/chats.js'
@@ -8,8 +8,17 @@ import { Modal } from '../Modal.js'
 import { SendButton } from './SendButton.js'
 import { isSubmitEnter } from './submitKey.js'
 import { Markdown } from './Markdown.js'
+import { insertAtCaret } from './attachments.js'
+import { PromptFan } from './PromptFan.js'
 
 interface PlanDialogProps {
+  /**
+   * The project whose saved prompts the field offers, beside the installation's.
+   * Only the ones marked for the plan: this is where a plan is decided about,
+   * and a prompt for something else is a distraction at the moment the agent is
+   * blocked on the answer.
+   */
+  readonly projectId: string
   /** The plan as the agent wrote it. */
   readonly plan: string
   /**
@@ -87,6 +96,7 @@ interface PlanDialogProps {
  * on screen.
  */
 export function PlanDialog({
+  projectId,
   plan,
   text,
   onText,
@@ -111,6 +121,32 @@ export function PlanDialog({
 
   const keepPlanning = (): void => {
     onKeepPlanning(feedback.trim())
+  }
+
+  const feedbackField = useRef<HTMLTextAreaElement>(null)
+  /** Where the caret was last seen in the field, for a prompt written in from the fan. */
+  const caret = useRef(feedback.length)
+  /** Where the caret goes once the next value has been written, or null. */
+  const caretAfterWrite = useRef<number | null>(null)
+
+  // After the value has been drawn: a caret set before it would be set in the
+  // text as it was, and moved again by the new value.
+  useEffect(() => {
+    if (caretAfterWrite.current === null) return
+
+    feedbackField.current?.setSelectionRange(caretAfterWrite.current, caretAfterWrite.current)
+    caretAfterWrite.current = null
+  }, [feedback])
+
+  // A saved prompt is written where the caret is, as the composer's is — text
+  // the reader can still change before the note goes, and sent as the reason the
+  // plan was sent back.
+  const insertPrompt = (promptText: string): void => {
+    const next = insertAtCaret(feedback, caret.current, promptText)
+    caret.current = next.caret
+    caretAfterWrite.current = next.caret
+    onFeedback(next.draft)
+    feedbackField.current?.focus()
   }
 
   const edited = changed ? text.trim() : null
@@ -190,10 +226,17 @@ export function PlanDialog({
         <div className="relative mt-1">
           <textarea
             id="plan-feedback"
+            ref={feedbackField}
             value={feedback}
             placeholder={t('chat.planFeedbackPlaceholder')}
             onChange={(event) => {
+              caret.current = event.target.selectionStart
               onFeedback(event.target.value)
+            }}
+            // The caret also moves without the text changing — arrows, a click —
+            // and a prompt chosen from the fan is written at it.
+            onSelect={(event) => {
+              caret.current = event.currentTarget.selectionStart
             }}
             // The composer's keys, so there is one convention rather than two —
             // and with no second button, this is what sends the note at all.
@@ -207,12 +250,13 @@ export function PlanDialog({
             // `block`: an inline textarea leaves a descender gap under it, which
             // makes the wrapper taller than the field and drops the button,
             // positioned from the wrapper's bottom, below the text's line.
-            className="focus-ring border-line bg-surface field-sizing-content block max-h-40 min-h-[2.5rem] w-full resize-none rounded-[var(--radius-control)] border py-1.5 pr-10 pl-2.5 outline-none"
+            className="focus-ring border-line bg-surface field-sizing-content block max-h-40 min-h-[2.5rem] w-full resize-none rounded-[var(--radius-control)] border py-1.5 pr-16 pl-2.5 outline-none"
           />
           {/* Beside the field it answers, as in the composer: the key is not
               the only way to send the note. Never disabled — a plan sent back
               with nothing written is a valid answer. */}
-          <span className="absolute right-2 bottom-2">
+          <span className="absolute right-2 bottom-2 flex items-center gap-1">
+            <PromptFan projectId={projectId} planOnly onPick={insertPrompt} />
             <SendButton label={t('chat.planSendFeedback')} onClick={keepPlanning} />
           </span>
         </div>

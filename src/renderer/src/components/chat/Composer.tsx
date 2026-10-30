@@ -23,7 +23,7 @@ import type { ChatMode } from '../../hooks/useChat.js'
 
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { useLatest } from '../../hooks/useLatest.js'
-import { type ChatNote, insertPaths, withNotes } from './attachments.js'
+import { type ChatNote, insertAtCaret, insertPaths, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { EffortPicker } from './EffortPicker.js'
@@ -130,6 +130,10 @@ interface ComposerProps {
   readonly onRefreshSkills: () => void
   /** Where the skills panel sends someone who has none to switch yet. */
   readonly onOpenSettings: () => void
+  /** The project whose saved prompts the fan offers, beside the installation's. */
+  readonly projectId: string
+  /** Where the fan sends someone who has no prompts yet, or wants to order them. */
+  readonly onOpenPromptSettings: () => void
   /** Answers whether the message went; the field and the notes clear only then. */
   readonly onSend: (text: string) => Promise<boolean>
   /** A `/btw`, taken aside before the notes are wrapped around it. */
@@ -251,6 +255,8 @@ export function Composer({
   onToggleSkill,
   onRefreshSkills,
   onOpenSettings,
+  projectId,
+  onOpenPromptSettings,
   onSend,
   onSideQuestion,
   onStop,
@@ -311,6 +317,19 @@ export function Composer({
     textarea.current?.setSelectionRange(caretAfterWrite.current, caretAfterWrite.current)
     caretAfterWrite.current = null
   }, [draft])
+
+  // A saved prompt chosen from the fan is written where the caret is, as a path
+  // is — text the reader can still change before it goes, not a command the
+  // agent expands out of sight. The body of the `files` effect below, in a
+  // handler: this one is asked for by a click, not handed over by a prop.
+  const insertPrompt = (text: string): void => {
+    const next = insertAtCaret(latest.current, caretRef.current, text)
+    latest.current = next.draft
+    caretAfterWrite.current = next.caret
+    setDraft(next.draft)
+    setCaret(next.caret)
+    textarea.current?.focus()
+  }
 
   // Replaces the draft, as Claude Code's own rewind does: the message is what
   // was asked for back, and the field is where it is edited. Written through
@@ -600,6 +619,9 @@ export function Composer({
           onToggleSkill={onToggleSkill}
           onRefreshSkills={onRefreshSkills}
           onOpenSettings={onOpenSettings}
+          projectId={projectId}
+          onInsert={insertPrompt}
+          onOpenPromptSettings={onOpenPromptSettings}
           onAttach={onAttachFiles}
           onAutoCompact={onAutoCompact}
         />

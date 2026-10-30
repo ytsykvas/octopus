@@ -1652,7 +1652,12 @@ export const de: Translation = {
     titleHint: 'Steht auf der Schaltfläche im Fächer.',
     text: 'Text',
     save: 'Speichern',
-    cancel: 'Abbrechen'
+    cancel: 'Abbrechen',
+    pick: 'Gespeicherte Prompts',
+    sectionProject: 'Dieses Projekt',
+    sectionGlobal: '\u00dcberall',
+    more: 'Mehr\u2026 ({{count}})',
+    manage: 'Prompts verwalten\u2026'
   },
 
   elicitation: {

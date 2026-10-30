@@ -1131,6 +1131,9 @@ export function App(): React.JSX.Element {
               onOpenSkillSettings={() => {
                 setSettingsSection('skills')
               }}
+              onOpenPromptSettings={() => {
+                setSettingsSection('prompts')
+              }}
               focusComposer={selectedWorkspace.id === freshWorkspaceId}
               projectEnvProfile={selectedProject.envProfile}
               onWorkspacesChanged={() => {

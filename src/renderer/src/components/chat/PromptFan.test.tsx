@@ -1,0 +1,505 @@
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+
+import type { Prompt } from '@core/promptSchema.js'
+
+import { octopus } from '../../test/octopus.js'
+import { PromptFan } from './PromptFan.js'
+
+let made = 0
+
+function prompt(title: string, overrides: Partial<Prompt> = {}): Prompt {
+  made += 1
+
+  return {
+    id: `00000000-0000-4000-8000-${String(made).padStart(12, '0')}`,
+    title,
+    text: `${title} text`,
+    forPlan: false,
+    ...overrides
+  }
+}
+
+/** Answers by the store asked about, as the real bridge does. */
+function answering(project: readonly Prompt[], global: readonly Prompt[]): void {
+  vi.mocked(octopus().prompts.list).mockImplementation((store) =>
+    Promise.resolve({ ok: true, value: [...(store.kind === 'global' ? global : project)] })
+  )
+}
+
+interface Rendered {
+  readonly onPick: ReturnType<typeof vi.fn>
+  readonly onManage: ReturnType<typeof vi.fn>
+  readonly container: HTMLElement
+  readonly button: () => HTMLElement
+}
+
+/** Where the button is, as jsdom measures nothing: the fan is laid out from this. */
+function place(button: HTMLElement, at: { top: number; left: number }): void {
+  vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
+    top: at.top,
+    left: at.left,
+    right: at.left + 24,
+    bottom: at.top + 24,
+    width: 24,
+    height: 24,
+    x: at.left,
+    y: at.top,
+    toJSON: () => ({})
+  })
+}
+
+/** Roomy: six rungs, as the composer's corner is in a window of a normal size. */
+const ROOMY = { top: 600, left: 700 }
+/** Too close to the top for a single rung. */
+const CRAMPED = { top: 4, left: 700 }
+
+async function renderFan(
+  options: {
+    readonly planOnly?: boolean
+    readonly manage?: boolean
+    readonly at?: { top: number; left: number }
+    readonly inDialog?: boolean
+  } = {}
+): Promise<Rendered> {
+  const onPick = vi.fn()
+  const onManage = vi.fn()
+
+  const fan = (
+    <PromptFan
+      projectId="planner"
+      onPick={onPick}
+      {...(options.planOnly === true && { planOnly: true })}
+      {...(options.manage !== false && { onManage })}
+    />
+  )
+  const { container } = render(options.inDialog === true ? <dialog open>{fan}</dialog> : fan)
+
+  await waitFor(() => {
+    expect(octopus().prompts.list).toHaveBeenCalledTimes(2)
+  })
+  // The lists are drawn a moment after they are read; a button that appears
+  // only once there is something to offer has to be waited for.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+
+  const button = (): HTMLElement => screen.getByRole('button', { name: 'Saved prompts' })
+  if (screen.queryByRole('button', { name: 'Saved prompts' }) !== null) {
+    place(button(), options.at ?? ROOMY)
+  }
+
+  return { onPick, onManage, container, button }
+}
+
+const pills = (): string[] => screen.getAllByRole('menuitem').map((pill) => pill.textContent)
+
+describe('opening the fan', () => {
+  it('lays the project’s prompts out first, then the installation’s, in their order', async () => {
+    answering([prompt('Review'), prompt('Tests')], [prompt('Explain')])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    expect(screen.getByRole('menu', { name: 'Saved prompts' })).toBeInTheDocument()
+    expect(pills()).toEqual(['Review', 'Tests', 'Explain', 'Manage prompts…'])
+  })
+
+  it('reads the lists again as it opens, so a prompt just saved is there', async () => {
+    answering([], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    answering([prompt('Fresh')], [])
+    await user.click(button())
+
+    expect(await screen.findByRole('menuitem', { name: 'Fresh' })).toBeInTheDocument()
+    expect(octopus().prompts.list).toHaveBeenCalledTimes(4)
+  })
+
+  it('says only the title on a pill, and the whole of it on hover', async () => {
+    answering([prompt('Tighten the plan')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    const pill = screen.getByRole('menuitem', { name: 'Tighten the plan' })
+    expect(pill).toHaveAttribute('title', 'Tighten the plan')
+    expect(pill).not.toHaveTextContent('text')
+  })
+
+  // Each pill flies out of the button, a rung after the one above.
+  it('sets each pill’s place in the order and its flight from the button', async () => {
+    answering([prompt('A'), prompt('B')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    const [first, second] = screen.getAllByRole('menuitem')
+    expect(first).toHaveClass('fan-in')
+    expect(first?.style.getPropertyValue('--fan-index')).toBe('0')
+    expect(second?.style.getPropertyValue('--fan-index')).toBe('1')
+    // The button's centre is at (712, 612); the top pill's right edge is at 712.
+    expect(first?.style.getPropertyValue('--fan-from-x')).toBe('0px')
+    expect(first?.style.getPropertyValue('--fan-from-y')).toBe('168px')
+    expect(second?.style.getPropertyValue('--fan-from-x')).toBe('93px')
+  })
+
+  it('closes on a second click on the button', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+    await user.click(button())
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('has the button say whether it is open', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+    expect(button()).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(button())
+
+    expect(button()).toHaveAttribute('aria-expanded', 'true')
+  })
+})
+
+describe('choosing a prompt', () => {
+  it('hands over its text and closes', async () => {
+    answering([prompt('Review', { text: 'Look it over.' })], [])
+    const user = userEvent.setup()
+    const { button, onPick } = await renderFan()
+
+    await user.click(button())
+    await user.click(screen.getByRole('menuitem', { name: 'Review' }))
+
+    expect(onPick).toHaveBeenCalledWith('Look it over.')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+})
+
+describe('the way to settings', () => {
+  it('goes there and closes', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button, onManage } = await renderFan()
+
+    await user.click(button())
+    await user.click(screen.getByRole('menuitem', { name: 'Manage prompts…' }))
+
+    expect(onManage).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('is the only pill when there is nothing saved yet', async () => {
+    answering([], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['Manage prompts…'])
+  })
+
+  it('is not there when nobody is told where it goes', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ manage: false })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['A'])
+  })
+})
+
+describe('more than the fan has room for', () => {
+  const many = Array.from({ length: 9 }, (_, index) => `P${String(index + 1)}`)
+
+  it('keeps the first ones, then "more", then the way to settings', async () => {
+    answering(
+      many.slice(0, 5).map((title) => prompt(title)),
+      many.slice(5).map((title) => prompt(title))
+    )
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    // Six rungs: four prompts, "more", settings.
+    expect(pills()).toEqual(['P1', 'P2', 'P3', 'P4', 'More… (5)', 'Manage prompts…'])
+  })
+
+  it('opens a list of only what did not fit, under the sections they came from', async () => {
+    answering(
+      many.slice(0, 5).map((title) => prompt(title)),
+      many.slice(5).map((title) => prompt(title))
+    )
+    const user = userEvent.setup()
+    const { button, onPick } = await renderFan()
+
+    await user.click(button())
+    await user.click(screen.getByRole('menuitem', { name: 'More… (5)' }))
+
+    expect(pills().slice(0, 5)).toEqual(['P5', 'P6', 'P7', 'P8', 'P9'])
+    expect(screen.getByText('This project')).toBeInTheDocument()
+    expect(screen.getByText('Everywhere')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('menuitem', { name: 'P7' }))
+    expect(onPick).toHaveBeenCalledWith('P7 text')
+  })
+
+  it('names no section that has nothing in the list', async () => {
+    answering(
+      many.map((title) => prompt(title)),
+      []
+    )
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+    await user.click(screen.getByRole('menuitem', { name: /^More/ }))
+
+    expect(screen.getByText('This project')).toBeInTheDocument()
+    expect(screen.queryByText('Everywhere')).not.toBeInTheDocument()
+  })
+
+  it('names the installation’s only, when the project has none among the rest', async () => {
+    answering(
+      [prompt('P1')],
+      many.slice(1).map((title) => prompt(title))
+    )
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+    await user.click(screen.getByRole('menuitem', { name: /^More/ }))
+
+    expect(screen.queryByText('This project')).not.toBeInTheDocument()
+    expect(screen.getByText('Everywhere')).toBeInTheDocument()
+  })
+})
+
+describe('with no room above the button', () => {
+  it('opens the list at once, with everything in it and the way to settings last', async () => {
+    answering([prompt('A')], [prompt('B')])
+    const user = userEvent.setup()
+    const { button, onManage } = await renderFan({ at: CRAMPED })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['A', 'B', 'Manage prompts…'])
+    expect(screen.getByText('This project')).toBeInTheDocument()
+    expect(screen.getAllByRole('menuitem')[0]?.style.getPropertyValue('--fan-index')).toBe('')
+
+    await user.click(screen.getByRole('menuitem', { name: 'Manage prompts…' }))
+    expect(onManage).toHaveBeenCalledOnce()
+  })
+})
+
+describe('in the plan dialog', () => {
+  it('offers only what is marked for it, and no way to settings', async () => {
+    answering(
+      [prompt('Review'), prompt('Tighten', { forPlan: true })],
+      [prompt('Cut', { forPlan: true })]
+    )
+    const user = userEvent.setup()
+    const { button } = await renderFan({ planOnly: true })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['Tighten', 'Cut'])
+  })
+
+  it('is not there at all when nothing is marked for it', async () => {
+    answering([prompt('Review')], [prompt('Explain')])
+    const { container } = await renderFan({ planOnly: true })
+
+    // The lists have been read and there is still nothing to show.
+    await waitFor(() => {
+      expect(octopus().prompts.list).toHaveBeenCalledTimes(2)
+    })
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('shows "more" alone when the rest do not fit, and no settings pill beside it', async () => {
+    const marked = Array.from({ length: 8 }, (_, index) =>
+      prompt(`T${String(index + 1)}`, { forPlan: true })
+    )
+    answering(marked, [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ planOnly: true })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'More… (3)'])
+  })
+})
+
+describe('in a dialog', () => {
+  // `showModal()` makes everything outside the dialog inert, so a fan drawn
+  // into the body would be there and could not be reached.
+  it('is drawn into the dialog the button is in', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ inDialog: true })
+
+    await user.click(button())
+
+    const dialog = document.querySelector('dialog') as HTMLElement
+    expect(dialog).toContainElement(screen.getByRole('menu'))
+  })
+
+  it('is drawn into the page otherwise', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    expect(document.body).toContainElement(screen.getByRole('menu'))
+    expect(document.querySelector('dialog')).toBeNull()
+  })
+})
+
+describe('the keyboard', () => {
+  it('starts on the first pill', async () => {
+    answering([prompt('A'), prompt('B')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    expect(screen.getByRole('menuitem', { name: 'A' })).toHaveFocus()
+  })
+
+  it('goes down and right to the next, and wraps round', async () => {
+    answering([prompt('A'), prompt('B')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+    await user.click(button())
+
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('menuitem', { name: 'B' })).toHaveFocus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('menuitem', { name: 'Manage prompts…' })).toHaveFocus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('menuitem', { name: 'A' })).toHaveFocus()
+  })
+
+  it('goes up and left to the one before, and wraps round', async () => {
+    answering([prompt('A'), prompt('B')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+    await user.click(button())
+
+    await user.keyboard('{ArrowUp}')
+    expect(screen.getByRole('menuitem', { name: 'Manage prompts…' })).toHaveFocus()
+    await user.keyboard('{ArrowLeft}')
+    expect(screen.getByRole('menuitem', { name: 'B' })).toHaveFocus()
+  })
+
+  it('leaves the other keys to the browser', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+    await user.click(button())
+
+    await user.keyboard('a')
+
+    expect(screen.getByRole('menuitem', { name: 'A' })).toHaveFocus()
+  })
+
+  it('chooses with Enter', async () => {
+    answering([prompt('A', { text: 'Do A.' })], [])
+    const user = userEvent.setup()
+    const { button, onPick } = await renderFan()
+    await user.click(button())
+
+    await user.keyboard('{Enter}')
+
+    expect(onPick).toHaveBeenCalledWith('Do A.')
+  })
+
+  it('moves to the list’s first row when "more" opens it', async () => {
+    answering(
+      Array.from({ length: 9 }, (_, index) => prompt(`P${String(index + 1)}`)),
+      []
+    )
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+    await user.click(button())
+
+    await user.click(screen.getByRole('menuitem', { name: /^More/ }))
+
+    expect(screen.getAllByRole('menuitem')[0]).toHaveFocus()
+  })
+})
+
+describe('closing', () => {
+  it('closes on Escape, and only the fan', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ inDialog: true })
+    await user.click(button())
+
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    act(() => {
+      window.dispatchEvent(escape)
+    })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(escape.defaultPrevented).toBe(true)
+  })
+
+  it('closes on a click beside it, and stays on a click inside', async () => {
+    answering([prompt('A'), prompt('B')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+    await user.click(button())
+
+    // On the menu itself rather than on a pill: nothing is chosen.
+    fireEvent.mouseDown(screen.getByRole('menu'))
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+
+    fireEvent.mouseDown(document.body)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  // Its pills are fixed to where the button was.
+  it('closes when the window is resized', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+    await user.click(button())
+
+    fireEvent(window, new Event('resize'))
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('starts afresh the next time it opens, on the fan and not the list', async () => {
+    answering(
+      Array.from({ length: 9 }, (_, index) => prompt(`P${String(index + 1)}`)),
+      []
+    )
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+    await user.click(button())
+    await user.click(screen.getByRole('menuitem', { name: /^More/ }))
+    await user.keyboard('{Escape}')
+
+    await user.click(button())
+
+    expect(
+      within(screen.getByRole('menu')).getByRole('menuitem', { name: /^More/ })
+    ).toBeInTheDocument()
+  })
+})

@@ -644,6 +644,27 @@ describe('App', () => {
     expect(screen.getByText('Skills everywhere')).toBeInTheDocument()
   })
 
+  // The fan's last pill: the only way from the list of prompts to the place the
+  // list is kept, and ordered, which only the window knows how to get to.
+  it('opens the settings on prompts from the composer’s fan', async () => {
+    vi.mocked(window.octopus.chats.list).mockResolvedValue({
+      ok: true,
+      value: [chat({ workspaceId: 'planner/anna' })]
+    })
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+
+    const [button] = await screen.findAllByRole('button', { name: 'Saved prompts' })
+    if (!button) throw new Error('the composer has no prompts button')
+    await user.click(button)
+    await user.click(await screen.findByRole('menuitem', { name: 'Manage prompts…' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByText(/live in that project/)).toBeInTheDocument()
+  })
+
   /*
    * The heads-up is answered in the conversation and kept in the config, three
    * components apart — each half is tested where it lives, and this is the wire
