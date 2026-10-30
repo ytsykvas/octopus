@@ -395,6 +395,56 @@ describe('DropdownMenu', () => {
     })
   })
 
+  // Two commands that belong together, like compacting all of a conversation
+  // or saying first what to drop: one row, half the width each, two buttons
+  // side by side and never one inside the other.
+  describe('two items in one row', () => {
+    const pair = (first: () => void, second: () => void): MenuAction[] => [
+      {
+        id: 'all',
+        label: 'Compact all',
+        onSelect: first,
+        beside: { id: 'explain', label: 'Explain compact', onSelect: second }
+      }
+    ]
+
+    it('draws both as items of the same row', async () => {
+      renderMenu(pair(vi.fn(), vi.fn()))
+      await userEvent.click(triggerButton())
+
+      const all = screen.getByRole('menuitem', { name: 'Compact all' })
+      const explain = screen.getByRole('menuitem', { name: 'Explain compact' })
+
+      expect(all.parentElement).toBe(explain.parentElement)
+    })
+
+    it('chooses the second alone, and closes', async () => {
+      const first = vi.fn()
+      const second = vi.fn()
+      renderMenu(pair(first, second))
+      await userEvent.click(triggerButton())
+
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Explain compact' }))
+
+      expect(second).toHaveBeenCalledOnce()
+      expect(first).not.toHaveBeenCalled()
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    })
+
+    it('chooses the first alone, and closes', async () => {
+      const first = vi.fn()
+      const second = vi.fn()
+      renderMenu(pair(first, second))
+      await userEvent.click(triggerButton())
+
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Compact all' }))
+
+      expect(first).toHaveBeenCalledOnce()
+      expect(second).not.toHaveBeenCalled()
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    })
+  })
+
   /*
    * Twenty rows are taller than the space under a trigger in the middle of the
    * settings dialog. Counted at full height, the menu would flip above for no
