@@ -386,6 +386,8 @@ import {
   discardWorkspace,
   ensureRemovable,
   fileInWorkspace,
+  holdsLeftovers,
+  isOrphaned,
   reconcile,
   checkedOutBranches,
   viewOf,
@@ -6306,6 +6308,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async workspaceHasChanges(workspaceId) {
       const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      // A folder git has let go of has no changes to count, only files it is
+      // about to take with it — and `git status` there would answer for
+      // whatever lies above the folder, or fail and read as clean.
+      if (await isOrphaned(makeExec(project.repoPath), workspace.path)) {
+        return holdsLeftovers(workspace.path)
+      }
+
       return (await changeCount(workspace, makeExec, withIndexCopy)) > 0
     },
 

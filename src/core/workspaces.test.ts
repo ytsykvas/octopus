@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -17,7 +17,10 @@ import {
   countChanges,
   fileInWorkspace,
   createWorkspace,
+  discardWorkspace,
   freshBase,
+  holdsLeftovers,
+  isOrphaned,
   reconcile,
   checkedOutBranches,
   viewOf,
@@ -820,6 +823,135 @@ describe('removeWorkspace', () => {
       removeWorkspace(workspace, { repository: exec, workspace: gitIn(workspace.path) })
     ).resolves.toBeUndefined()
     await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+  })
+
+  /*
+   * Reported three times in two days: "is not a working tree" on a folder that
+   * was still on disk. A removal that stopped while something kept writing into
+   * the tree had dropped git's part and left the files, and every retry hit the
+   * same refusal. Reproduced the way git leaves it — the worktree removed, then
+   * the directory standing again with what was written after.
+   */
+  async function leaveHalfDeleted(workspace: Workspace, files: readonly string[]): Promise<void> {
+    await exec(['worktree', 'remove', '--force', workspace.path])
+    await mkdir(workspace.path, { recursive: true })
+    for (const file of files) await writeFile(join(workspace.path, file), 'left\n', 'utf8')
+  }
+
+  const exists = (path: string): Promise<boolean> =>
+    access(path).then(
+      () => true,
+      () => false
+    )
+
+  // Files that were never under git are what is about to go, so this is the
+  // same refusal a dirty tree gets, and nothing is deleted before it.
+  it('refuses a half-deleted worktree that still holds files', async () => {
+    const workspace = await create()
+    await leaveHalfDeleted(workspace, ['plan.md'])
+
+    const error = await removeWorkspace(workspace, {
+      repository: exec,
+      workspace: gitIn(workspace.path)
+    }).catch((cause: unknown) => cause)
+
+    expect((error as WorkspaceError).code).toBe('uncommittedChanges')
+    await expect(exists(join(workspace.path, 'plan.md'))).resolves.toBe(true)
+  })
+
+  it('removes a half-deleted worktree and its files once forced', async () => {
+    const workspace = await create()
+    await leaveHalfDeleted(workspace, ['plan.md'])
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: gitIn(workspace.path) },
+      { force: true, deleteBranch: true, baseBranch: 'main' }
+    )
+
+    await expect(exists(workspace.path)).resolves.toBe(false)
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  it('removes a half-deleted worktree that holds nothing without being forced', async () => {
+    const workspace = await create()
+    await leaveHalfDeleted(workspace, [])
+
+    await removeWorkspace(workspace, { repository: exec, workspace: gitIn(workspace.path) })
+
+    await expect(exists(workspace.path)).resolves.toBe(false)
+  })
+
+  // The branch of a worktree being discarded must not be what decides whether
+  // the files go: discarding asks nothing, so a caller that skipped
+  // `ensureRemovable` and did not force still keeps them.
+  it('leaves the files of a half-deleted worktree when discarding without force', async () => {
+    const workspace = await create()
+    await leaveHalfDeleted(workspace, ['plan.md'])
+
+    await expect(
+      discardWorkspace(workspace, { repository: exec, workspace: gitIn(workspace.path) })
+    ).rejects.toThrow(/not a working tree/)
+    await expect(exists(join(workspace.path, 'plan.md'))).resolves.toBe(true)
+  })
+
+  describe('isOrphaned', () => {
+    it('is true for a directory git does not list', async () => {
+      const workspace = await create()
+      await leaveHalfDeleted(workspace, [])
+
+      await expect(isOrphaned(exec, workspace.path)).resolves.toBe(true)
+    })
+
+    it('is false for a worktree git lists', async () => {
+      const workspace = await create()
+
+      await expect(isOrphaned(exec, workspace.path)).resolves.toBe(false)
+    })
+
+    // git keeps listing a worktree whose directory was deleted by hand, and
+    // that path cannot be resolved — it must not hide the orphan beside it.
+    it('is true beside a worktree git lists whose directory has gone', async () => {
+      const orphan = await create()
+      const vanished = await create()
+      await rm(vanished.path, { recursive: true, force: true })
+      await leaveHalfDeleted(orphan, [])
+
+      await expect(isOrphaned(exec, orphan.path)).resolves.toBe(true)
+    })
+
+    it('is false for a directory that is gone', async () => {
+      await expect(isOrphaned(exec, join(dir, 'nowhere'))).resolves.toBe(false)
+    })
+
+    // Not being able to ask says nothing about the directory, and the answer
+    // that deletes it must never come from silence.
+    it('is false when git cannot be asked', async () => {
+      const workspace = await create()
+      await leaveHalfDeleted(workspace, ['plan.md'])
+      const broken: GitExec = () => Promise.reject(new Error('not a repository'))
+
+      await expect(isOrphaned(broken, workspace.path)).resolves.toBe(false)
+    })
+  })
+
+  describe('holdsLeftovers', () => {
+    it('sees a file', async () => {
+      await writeFile(join(dir, 'file.txt'), 'x', 'utf8')
+      const folder = join(dir, 'folder')
+      await mkdir(folder)
+      await writeFile(join(folder, 'file.txt'), 'x', 'utf8')
+
+      await expect(holdsLeftovers(folder)).resolves.toBe(true)
+    })
+
+    it('is false for an empty folder and for one that is not there', async () => {
+      const folder = join(dir, 'empty')
+      await mkdir(folder)
+
+      await expect(holdsLeftovers(folder)).resolves.toBe(false)
+      await expect(holdsLeftovers(join(dir, 'nowhere'))).resolves.toBe(false)
+    })
   })
 
   // Absence is forgiven; a refusal is not. A tree holding changes still has
