@@ -91,6 +91,18 @@ describe('a new prompt', () => {
     })
   })
 
+  // What is saved is what core keeps: space around the words is not part of them.
+  it('hands over the words without the space around them', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderEditor()
+
+    await user.type(titleField(), '  Review  ')
+    await user.type(textField(), '\n  Look it over.  \n')
+    await user.click(saveButton())
+
+    expect(onSave).toHaveBeenCalledWith({ title: 'Review', text: 'Look it over.', forPlan: false })
+  })
+
   // A refusal is the caller's to say, and the dialog stays so it can be fixed.
   it('stays open when the save is refused', async () => {
     const user = userEvent.setup()

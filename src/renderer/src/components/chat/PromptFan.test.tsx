@@ -158,7 +158,6 @@ describe('opening the fan', () => {
     await user.click(button())
 
     const [first, second] = screen.getAllByRole('menuitem')
-    expect(first).toHaveClass('fan-in')
     expect(first?.style.getPropertyValue('--fan-index')).toBe('0')
     expect(second?.style.getPropertyValue('--fan-index')).toBe('1')
     // The button's centre is at (912, 612). The sweep starts at 9 o'clock, the

@@ -3542,6 +3542,17 @@ describe('the saved prompts channels', () => {
     await expect(invoke('prompts:reorder', GLOBAL, 'x')).resolves.toMatchObject({ ok: false })
   })
 
+  // The order arrives from a window that draws agent output, so its length is
+  // bounded at the bridge rather than trusted.
+  it('refuses an order longer than any list could be', async () => {
+    const many = Array.from({ length: 1001 }, () => UUID)
+
+    await expect(invoke('prompts:reorder', GLOBAL, many)).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:reorder', GLOBAL, many.slice(1))).resolves.toMatchObject({
+      ok: true
+    })
+  })
+
   it('reports a prompt that is not there with its code', async () => {
     await expect(invoke('prompts:remove', GLOBAL, UUID)).resolves.toMatchObject({
       ok: false,
