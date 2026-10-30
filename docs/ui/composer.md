@@ -80,22 +80,22 @@ is written where the caret is, with the same spacing as a path
 prompt dropped into the middle of a sentence reads as part of it.
 
 The pills lie on a circle round the button, close to it, and are **read the way
-a clock is: from 9 o'clock round to 3, in one unbroken sweep** — up the quarter
-above and to the left, where the composer's attic sits and there is room, then on
-past 12 and down the right side. The prompts fill that sweep in their order and
-stop where they do, so a few sit on the left and many go on round to the right.
-An earlier shape ran from 12 down to 9 and then started the right side again from
-the top; on screen that was two piles rather than one fan. So did a round arc read
-in the right order: each side's pills grow outwards from the button, and with the
-top pill hanging off the left the two sides sat far apart with nothing over the
-button to join them. The pill at the top is now **centred** over the button, so it
-spans both sides, and the arc is **narrower than it is tall** (`FAN_SPREAD`, 0.6),
-which keeps the sides near the button and near each other. Each pill flies out of the button
+a clock is: from 9 o'clock round, in one unbroken sweep** — up the left to 12,
+down the right past 3 to 6, straight below the button, and up the left again to
+just under 9. The prompts fill that sweep in their order and stop where they do,
+so a few sit on the upper left and many go on round. The lower half lies over the
+field for as long as the fan is open; a pill that would run past the window's
+edge is left out, and what does not fit goes behind "More…". Two earlier shapes
+read as two piles rather than one fan: running from 12 down to 9 and starting the
+right side again from the top, and a round arc whose sides — each growing
+outwards from the button — sat far apart with nothing over it. Hence the pills at
+12 and 6 are **centred** on the button and join the sides, and the circle is
+**narrower than it is tall** (`FAN_SPREAD`, 0.6). Each pill flies out of the button
 a rung after the one before it (`fan-in` in `styles.css`). **As many fit as fit
 whole**: a rung is kept only when its pill clears the top of the area by the
-margin and the narrowest pill clears the edge it grows towards — the left on the
+margin, does not run past the bottom, and the narrowest pill clears the edge it grows towards — the left on the
 left half, the right on the right — so none is ever cut off. The radius is 140:
-a pill and its air are 28 px, so it is also how many rungs a quarter holds, five;
+a pill and its air are 28 px, so the circle has eleven rows, and twenty slots at most;
 nearer the button holds fewer, and further holds more but reaches away from the
 control it belongs to. The rest go behind a last-but-one pill, "More… (N)", which
 opens a list of only what did not fit, under the sections "This project" and

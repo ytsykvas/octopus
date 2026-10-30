@@ -124,7 +124,7 @@ export function PromptFan({
     const dialog = trigger.closest('dialog')
     const bounds =
       dialog === null
-        ? { top: 0, left: 0, right: window.innerWidth }
+        ? { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight }
         : dialog.getBoundingClientRect()
     const above = rect.top - GAP - LIST_MAX_HEIGHT >= FAN_MARGIN
     const right = window.innerWidth - rect.right

@@ -51,14 +51,15 @@ function place(button: HTMLElement, at: { top: number; left: number }): void {
 }
 
 /**
- * The composer's corner: room above and to the left, none for the right quarter
- * — five rungs, from 9 o'clock up to the top of the arc.
+ * Near the window's bottom-right corner: room above and to the left only — five
+ * slots, from just above 9 o'clock up to the top of the circle.
  */
-const ROOMY = { top: 600, left: 900 }
-/** Room all round: the right quarter as well, 12 o'clock to 3, nine rungs in all. */
+const ROOMY = { top: 740, left: 900 }
+/**
+ * Room all round but at the very bottom: nineteen slots, the whole circle but
+ * the pill straight below the button, which would run past the window's edge.
+ */
 const OPEN = { top: 600, left: 500 }
-/** Too close to the top for a single rung. */
-const CRAMPED = { top: 4, left: 700 }
 
 async function renderFan(
   options: {
@@ -306,11 +307,12 @@ describe('more than the fan has room for', () => {
   })
 })
 
-describe('with no room above the button', () => {
+// jsdom measures a dialog as nothing at all, which leaves no room round the button.
+describe('with no room round the button', () => {
   it('opens the list at once, with everything in it and the way to settings last', async () => {
     answering([prompt('A')], [prompt('B')])
     const user = userEvent.setup()
-    const { button, onManage } = await renderFan({ at: CRAMPED })
+    const { button, onManage } = await renderFan({ inDialog: true })
 
     await user.click(button())
 
@@ -320,6 +322,33 @@ describe('with no room above the button', () => {
 
     await user.click(screen.getByRole('menuitem', { name: 'Manage prompts…' }))
     expect(onManage).toHaveBeenCalledOnce()
+  })
+})
+
+describe('where the list opens', () => {
+  const list = (): HTMLElement => screen.getByRole('menu').firstElementChild as HTMLElement
+
+  // Above the button where it has the room, ending 6 above its top edge.
+  it('opens above the button when there is room for it there', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ inDialog: true })
+
+    await user.click(button())
+
+    expect(list().style.bottom).toBe(`${String(window.innerHeight - 740 + 6)}px`)
+    expect(list().style.top).toBe('')
+  })
+
+  it('opens below the button when there is no room above it', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ inDialog: true, at: { top: 100, left: 700 } })
+
+    await user.click(button())
+
+    expect(list().style.top).toBe(`${String(100 + 24 + 6)}px`)
+    expect(list().style.bottom).toBe('')
   })
 })
 
@@ -542,7 +571,7 @@ describe('how the pills look', () => {
   it('keeps the words on it in the list, where there is a row for it', async () => {
     answering([prompt('A')], [])
     const user = userEvent.setup()
-    const { button } = await renderFan({ at: CRAMPED })
+    const { button } = await renderFan({ inDialog: true })
 
     await user.click(button())
 
@@ -569,7 +598,7 @@ describe('how the pills look', () => {
   it('puts the plan icon on a row of the list too', async () => {
     answering([prompt('Tighten', { forPlan: true })], [])
     const user = userEvent.setup()
-    const { button } = await renderFan({ at: CRAMPED })
+    const { button } = await renderFan({ inDialog: true })
 
     await user.click(button())
 
@@ -597,8 +626,7 @@ describe('how the pills look', () => {
     const user = userEvent.setup()
     const { button } = await renderFan({
       projectColor: 'rgb(10, 20, 30)',
-      inDialog: true,
-      at: CRAMPED
+      inDialog: true
     })
 
     await user.click(button())
@@ -640,9 +668,9 @@ describe('as far round as there are prompts', () => {
     }
   })
 
-  // The button's centre is at (512, 612): the top of the arc is centred over it,
-  // and the first rung of the right quarter is 50 to its right, growing away.
-  it('goes on round to the right when the left quarter is full', async () => {
+  // The button's centre is at (512, 612): the top of the circle is centred over
+  // it, and the first row of the right side is 50 to its right, growing away.
+  it('goes on round to the right when the upper left is full', async () => {
     answering(titles(8), [])
     const user = userEvent.setup()
     const { button } = await renderFan({ at: OPEN })
@@ -650,10 +678,10 @@ describe('as far round as there are prompts', () => {
     await user.click(button())
 
     expect(pills()).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'Manage prompts…'])
-    expect(items()[3]?.style.right).not.toBe('')
-    expect(items()[4]?.style.left).toBe('512px')
-    expect(items()[5]?.style.left).toBe('562px')
-    expect(items()[5]?.style.right).toBe('')
+    expect(items()[4]?.style.right).not.toBe('')
+    expect(items()[5]?.style.left).toBe('512px')
+    expect(items()[6]?.style.left).toBe('562px')
+    expect(items()[6]?.style.right).toBe('')
   })
 
   it('flies a right-hand pill in from the left, out of the button', async () => {
@@ -663,7 +691,7 @@ describe('as far round as there are prompts', () => {
 
     await user.click(button())
 
-    expect(items()[5]?.style.getPropertyValue('--fan-from-x')).toBe('-50px')
+    expect(items()[6]?.style.getPropertyValue('--fan-from-x')).toBe('-50px')
   })
 
   it('puts the way to settings at the far end', async () => {
@@ -677,24 +705,32 @@ describe('as far round as there are prompts', () => {
     expect(items().at(-1)?.style.left).not.toBe('')
   })
 
-  it('falls back to "more" only when the whole half circle is full', async () => {
-    answering(titles(12), [])
+  // Past 3 o'clock, down below the button and up the left again towards 9.
+  it('goes on below the button and back up the left', async () => {
+    answering(titles(18), [])
     const user = userEvent.setup()
     const { button } = await renderFan({ at: OPEN })
 
     await user.click(button())
 
-    expect(pills()).toEqual([
-      'P1',
-      'P2',
-      'P3',
-      'P4',
-      'P5',
-      'P6',
-      'P7',
-      'More… (5)',
-      'Manage prompts…'
-    ])
+    expect(items()).toHaveLength(19)
+    // Below the button, up the left: 112 under its centre at 612, then 84, then
+    // 56 for the last prompt; settings take the row 28 under it, next to 9.
+    expect(items()[15]?.style.top).toBe(`${String(612 + 112 - 12)}px`)
+    expect(items()[15]?.style.right).not.toBe('')
+    expect(items()[17]?.style.top).toBe(`${String(612 + 56 - 12)}px`)
+    expect(items()[18]).toHaveAccessibleName('Manage prompts…')
+  })
+
+  it('falls back to "more" only when the whole circle is full', async () => {
+    answering(titles(25), [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ at: OPEN })
+
+    await user.click(button())
+
+    expect(pills()).toHaveLength(19)
+    expect(pills().slice(-2)).toEqual(['More… (8)', 'Manage prompts…'])
   })
 
   it('keeps to the left where the button has no room on its right', async () => {
