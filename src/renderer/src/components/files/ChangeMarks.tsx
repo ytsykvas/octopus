@@ -44,7 +44,7 @@ export const ChangeMarks = memo(function ChangeMarks({
           key={`m${String(range.start)}`}
           data-change="modified"
           style={{ top: top(range.start), height: (range.end - range.start + 1) * geometry.height }}
-          className={`bg-diff-added-bg absolute inset-x-0 ${gutter ? 'border-info border-l-2' : ''}`}
+          className={`bg-diff-added-bg absolute inset-x-0 ${gutter ? 'border-warning border-l-2' : ''}`}
         />
       ))}
       {changes.added.map((range) => (

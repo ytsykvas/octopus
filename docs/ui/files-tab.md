@@ -5,13 +5,18 @@ while hidden like every tab of the pane, so the open folders and the scroll
 position survive a look elsewhere; the open folders are remembered per
 workspace too.
 
-**The marks are measured against HEAD**, not against the base branch the
-Changes tab uses. The tree answers "what have I not committed", which is what an
-editor's explorer means by a coloured name; Changes answers "what will this
-branch deliver". After a commit the tree goes clean while Changes still lists
-the files — both right, and not a bug. The colours and letters come from
-`statusMarks.ts`: green for new, blue for edited, red for deleted and
-conflicted, the conflict marked `!` because a diff against a merge base never
+**The marks are measured against where the branch began** — the same starting
+point the Changes tab and the viewer use — so a commit does not empty the tree
+while Changes still lists the file. They were measured against HEAD at first,
+as an editor's explorer does, and a branch of committed work then showed nothing
+at all. The marks come from the same `--name-status` read as the Changes tab; an
+untracked file and a conflict, which no diff sees, come from `git status`, and a
+file edited and put back the way the base had it carries no mark. With no base
+to be found the tree marks against HEAD, as it used to. A file deleted in a
+commit stays in the tree, struck through, and opens on the last version the
+branch had. The colours and letters come from
+`statusMarks.ts`: green for new, amber for edited — the colour Changes gives what is not
+yet committed — red for deleted and conflicted, the conflict marked `!` because a diff against a merge base never
 sees one. The letters are the ones editors draw — git's `M A D R C T`, `U` for
 untracked, `!` for a conflict — in every language; only the word said after the
 name is translated. The Ukrainian initial for "changed" was `З`, which before a

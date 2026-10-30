@@ -124,20 +124,24 @@ async function absent(root: string, path: string): Promise<boolean> {
 }
 
 /**
- * The version HEAD holds of a file that is gone from disk.
+ * The version a commit holds of a file that is gone from disk.
  *
  * `ls-tree` first, for the object's type and size, so a folder or a submodule
  * is not mistaken for a file and an enormous blob is declined before it is
  * read. `ls-tree` matches its paths literally — no globbing — so a file called
  * `*.ts` names itself and nothing else; the test pins it.
  *
- * Null when HEAD has no such file — the repository has no commits, the path was
- * never committed, or it is not a regular blob.
+ * Null when that commit has no such file — the repository has no commits, the
+ * path was never committed, or it is not a regular blob.
  */
-async function committed(exec: GitExec, path: string): Promise<FileContent | null> {
+async function committed(
+  exec: GitExec,
+  path: string,
+  revision: string
+): Promise<FileContent | null> {
   let listing: string
   try {
-    listing = await exec(['ls-tree', '-l', '-z', 'HEAD', '--', path])
+    listing = await exec(['ls-tree', '-l', '-z', revision, '--', path])
   } catch {
     // No HEAD yet. There is no earlier version to show, which is an answer.
     return null
@@ -170,7 +174,8 @@ const BINARY_SNIFF_CHARS = 8_000
 export async function readWorkspaceFile(
   workspace: Workspace,
   path: string,
-  exec: GitExec
+  exec: GitExec,
+  baseCommit: string | null = null
 ): Promise<FileContent> {
   const real = await fileInWorkspace(workspace, path)
 
@@ -182,7 +187,15 @@ export async function readWorkspaceFile(
      * the worktree is also null above, and is not a deletion.
      */
     if (!insideWorktree(path) || !(await absent(workspace.path, path))) return { kind: 'missing' }
-    return (await committed(exec, path)) ?? { kind: 'missing' }
+    // A file deleted in a commit is no longer in HEAD, and the tree marks it
+    // as deleted all the same, so its last version is the one where the branch
+    // began.
+    return (
+      (await committed(exec, path, 'HEAD')) ??
+      (baseCommit === null ? null : await committed(exec, path, baseCommit)) ?? {
+        kind: 'missing'
+      }
+    )
   }
 
   const facts = await stat(real)
