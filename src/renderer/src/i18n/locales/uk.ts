@@ -148,6 +148,7 @@ export const uk: Translation = {
     sectionEnv: 'Env',
     sectionSkills: 'Скіли',
     sectionLibrary: 'Команди',
+    sectionPrompts: 'Промпти',
     sectionInstructions: 'Інструкції',
     sectionRepository: 'Репозиторій',
     sectionDanger: 'Небезпечна зона',
@@ -1282,6 +1283,7 @@ export const uk: Translation = {
     sectionAgent: 'Агент',
     sectionSkills: 'Скіли',
     sectionLibrary: 'Команди',
+    sectionPrompts: 'Промпти',
     sectionInstructions: 'Інструкції',
     sectionAccounts: 'Claude',
     sectionAbout: 'Про застосунок',
@@ -1587,6 +1589,36 @@ export const uk: Translation = {
     inspectAction: 'Прочитати',
     importAction: 'Імпортувати',
     noDescription: 'Про себе він нічого не каже.'
+  },
+
+  /* Збережені промпти: текст, який вставляється в поле, окремо від команд
+     бібліотеки, бо агент тут нічого не розгортає. */
+  prompts: {
+    intro:
+      'Текст, який одним кліком вставляється в повідомлення чи в уточнення плану. На відміну від команди, він з\u2019являється в полі як текст, який можна змінити перед відправкою.',
+    globalNote:
+      'Промпти окремого проєкту \u2014 у налаштуваннях цього проєкту, і у віялі вони йдуть першими.',
+    orderHint:
+      'Перетягуйте, щоб змінити порядок. Віяло показує стільки, скільки вміщається, починаючи згори списку.',
+    reorderHandle: 'Змінити позицію \u00ab{{title}}\u00bb (Alt+\u2191 / Alt+\u2193)',
+    add: 'Додати промпт',
+    empty: 'Промптів ще немає.',
+    edit: 'Змінити \u00ab{{title}}\u00bb',
+    remove: 'Видалити \u00ab{{title}}\u00bb',
+    removeTitle: 'Видалити \u00ab{{title}}\u00bb?',
+    removeMessage: 'Промпт буде видалено.',
+    removeConfirm: 'Видалити',
+    removeCancel: 'Скасувати',
+    planBadge: 'План',
+    editorNew: 'Новий промпт',
+    editorEdit: 'Редагування промпту',
+    forPlan: 'Для уточнень плану',
+    forPlanHint: 'Також пропонується в модалці плану, біля поля уточнень.',
+    title: 'Назва',
+    titleHint: 'Показується на кнопці у віялі.',
+    text: 'Текст',
+    save: 'Зберегти',
+    cancel: 'Скасувати'
   },
 
   elicitation: {

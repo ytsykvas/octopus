@@ -149,6 +149,7 @@ export const de: Translation = {
     sectionEnv: 'Env',
     sectionSkills: 'Skills',
     sectionLibrary: 'Befehle',
+    sectionPrompts: 'Prompts',
     sectionInstructions: 'Anweisungen',
     sectionRepository: 'Repository',
     sectionDanger: 'Gefahrenzone',
@@ -1309,6 +1310,7 @@ export const de: Translation = {
     sectionAgent: 'Agent',
     sectionSkills: 'Skills',
     sectionLibrary: 'Befehle',
+    sectionPrompts: 'Prompts',
     sectionInstructions: 'Anweisungen',
     sectionAccounts: 'Claude',
     sectionAbout: 'Über',
@@ -1621,6 +1623,36 @@ export const de: Translation = {
     inspectAction: 'Lesen',
     importAction: 'Importieren',
     noDescription: 'Ohne Beschreibung.'
+  },
+
+  /* Gespeicherte Prompts: Text, der in ein Feld eingefügt wird, getrennt von den
+     Befehlen der Bibliothek, weil der Agent hier nichts ausführt. */
+  prompts: {
+    intro:
+      'Text, den du mit einem Klick in eine Nachricht oder eine Plankorrektur einfügst. Anders als ein Befehl landet er als Text im Feld und lässt sich vor dem Senden ändern.',
+    globalNote:
+      'Prompts für ein einzelnes Projekt stehen in dessen Einstellungen und kommen im Fächer zuerst.',
+    orderHint:
+      'Zum Umsortieren ziehen. Der Fächer zeigt so viele, wie hineinpassen, von oben in dieser Liste.',
+    reorderHandle: '\u201e{{title}}\u201c verschieben (Alt+\u2191 / Alt+\u2193)',
+    add: 'Prompt hinzufügen',
+    empty: 'Noch keine Prompts.',
+    edit: '\u201e{{title}}\u201c bearbeiten',
+    remove: '\u201e{{title}}\u201c entfernen',
+    removeTitle: '\u201e{{title}}\u201c entfernen?',
+    removeMessage: 'Der Prompt wird gelöscht.',
+    removeConfirm: 'Entfernen',
+    removeCancel: 'Abbrechen',
+    planBadge: 'Plan',
+    editorNew: 'Neuer Prompt',
+    editorEdit: 'Prompt bearbeiten',
+    forPlan: 'Für Planänderungen',
+    forPlanHint: 'Wird auch im Plandialog neben dem Korrekturfeld angeboten.',
+    title: 'Titel',
+    titleHint: 'Steht auf der Schaltfläche im Fächer.',
+    text: 'Text',
+    save: 'Speichern',
+    cancel: 'Abbrechen'
   },
 
   elicitation: {

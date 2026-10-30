@@ -190,6 +190,7 @@ export const en = {
     /* Commands and subagents together. Named for the half the reader types,
        because that is the one they go looking for. */
     sectionLibrary: 'Commands',
+    sectionPrompts: 'Prompts',
     sectionInstructions: 'Instructions',
     sectionRepository: 'Repository',
     sectionDanger: 'Danger zone',
@@ -1670,6 +1671,7 @@ export const en = {
     /* Commands and subagents together. Named for the half the reader types,
        because that is the one they go looking for. */
     sectionLibrary: 'Commands',
+    sectionPrompts: 'Prompts',
     sectionInstructions: 'Instructions',
     /* The global one. What a project's own instruction overrides, and what
        applies wherever a project has not written one. */
@@ -2037,6 +2039,35 @@ export const en = {
     inspectAction: 'Read it',
     importAction: 'Import',
     noDescription: 'It describes itself as nothing.'
+  },
+
+  /* Saved prompts: text inserted into a field, apart from the library's
+     commands because nothing here is expanded by the agent. */
+  prompts: {
+    intro:
+      'Text you insert into a message or a plan correction with one click. Unlike a command, it lands in the field as text you can change before sending.',
+    globalNote:
+      'Prompts for a single project live in that project\u2019s settings, and come first in the fan.',
+    orderHint: 'Drag to reorder. The fan shows as many as fit, from the top of this list.',
+    reorderHandle: 'Reorder \u201c{{title}}\u201d (Alt+\u2191 / Alt+\u2193)',
+    add: 'Add prompt',
+    empty: 'No prompts yet.',
+    edit: 'Edit \u201c{{title}}\u201d',
+    remove: 'Remove \u201c{{title}}\u201d',
+    removeTitle: 'Remove \u201c{{title}}\u201d?',
+    removeMessage: 'The prompt is deleted.',
+    removeConfirm: 'Remove',
+    removeCancel: 'Cancel',
+    planBadge: 'Plan',
+    editorNew: 'New prompt',
+    editorEdit: 'Edit prompt',
+    forPlan: 'For plan refinement',
+    forPlanHint: 'Also offered in the plan dialog, beside the correction field.',
+    title: 'Title',
+    titleHint: 'Shown on the button in the fan.',
+    text: 'Text',
+    save: 'Save',
+    cancel: 'Cancel'
   },
 
   elicitation: {
