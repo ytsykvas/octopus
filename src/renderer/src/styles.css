@@ -304,6 +304,40 @@
     border-color: color-mix(in srgb, var(--project-color, var(--border)) 30%, var(--border));
   }
 
+  /* A pill of the prompt fan (PromptFan.tsx), in the project's colour the way the
+     sent bubble and the active tab are. Opaque over the canvas, not the
+     translucent wash the bubble takes: the pills hang over the chat, and the
+     text under one must not show through it.
+
+     `--project-color` is copied onto the fan by the component, because the fan is
+     drawn into the body or a dialog and no longer sits inside the pane that sets
+     it. The fallbacks are the accent, so a fan with no project behind it is a
+     plain blue one rather than an invalid colour-mix. */
+  .fan-pill {
+    color: var(--ink);
+    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 18%, var(--canvas));
+    border-color: color-mix(in srgb, var(--project-color, var(--accent)) 45%, var(--border));
+    transition: background-color 0.12s ease;
+  }
+
+  .fan-pill:hover {
+    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 30%, var(--canvas));
+  }
+
+  /* An installation-wide prompt, beside the project's own: a frame twice as
+     heavy in the project's colour itself, unmixed, and a fill a step deeper, so
+     the two kinds tell apart in the fan without a heading. The height stays
+     24: the frame is drawn inside it. */
+  .fan-pill[data-scope='global'] {
+    border-width: 2px;
+    border-color: var(--project-color, var(--accent));
+    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 24%, var(--canvas));
+  }
+
+  .fan-pill[data-scope='global']:hover {
+    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 34%, var(--canvas));
+  }
+
   /* The chosen tab in the right pane, carrying the project's colour the way the
      strip and the sent bubble do — identity reads alike wherever it appears.
 
@@ -909,6 +943,24 @@
 
 .drawer-in {
   animation: drawer-in 160ms ease-out;
+}
+
+/* The prompt fan (PromptFan.tsx): each pill flies out of the button that opened
+   it, a rung after the one above. `both` holds a pill in its first frame for
+   the length of its delay, so none shows in its place before its turn; under
+   "Reduce motion" the rule below removes the animation and every pill is simply
+   there. The offsets are set on the pill, since where the button is from each
+   one's own place is different for each. */
+@keyframes fan-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--fan-from-x), var(--fan-from-y)) scale(0.6);
+  }
+}
+
+.fan-in {
+  animation: fan-in 180ms ease-out both;
+  animation-delay: calc(var(--fan-index) * 24ms);
 }
 
 /* Nothing moves on its own for anybody who has asked the system for less

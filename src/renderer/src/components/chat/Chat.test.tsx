@@ -69,6 +69,7 @@ function Pane({
         defaultModel={null}
         defaultPlanModel={null}
         onOpenSkillSettings={vi.fn()}
+        onOpenPromptSettings={vi.fn()}
         dismissedTips={[]}
         onDismissTip={vi.fn()}
         focusComposer={false}

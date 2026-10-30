@@ -8,6 +8,7 @@ import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
 
 import { stubDialogElement } from '../../test/dialog.js'
+import { octopus } from '../../test/octopus.js'
 import { ownSkill } from '../../test/skills.js'
 import { ComposerAttic } from './ComposerAttic.js'
 
@@ -42,6 +43,8 @@ function renderAttic(
   onToggleSkill: ReturnType<typeof vi.fn>
   onRefreshSkills: ReturnType<typeof vi.fn>
   onOpenSettings: ReturnType<typeof vi.fn>
+  onInsert: ReturnType<typeof vi.fn>
+  onOpenPromptSettings: ReturnType<typeof vi.fn>
   onAttach: ReturnType<typeof vi.fn>
   onAutoCompact: ReturnType<typeof vi.fn>
 } {
@@ -49,6 +52,8 @@ function renderAttic(
   const onToggleSkill = vi.fn()
   const onRefreshSkills = vi.fn()
   const onOpenSettings = vi.fn()
+  const onInsert = vi.fn()
+  const onOpenPromptSettings = vi.fn()
   const onAttach = vi.fn()
   const onAutoCompact = vi.fn()
 
@@ -61,12 +66,24 @@ function renderAttic(
       onToggleSkill={onToggleSkill}
       onRefreshSkills={onRefreshSkills}
       onOpenSettings={onOpenSettings}
+      projectId="planner"
+      onInsert={onInsert}
+      onOpenPromptSettings={onOpenPromptSettings}
       onAttach={onAttach}
       onAutoCompact={onAutoCompact}
     />
   )
 
-  return { onSend, onToggleSkill, onRefreshSkills, onOpenSettings, onAttach, onAutoCompact }
+  return {
+    onSend,
+    onToggleSkill,
+    onRefreshSkills,
+    onOpenSettings,
+    onInsert,
+    onOpenPromptSettings,
+    onAttach,
+    onAutoCompact
+  }
 }
 
 describe('what the next message is up against', () => {
@@ -597,5 +614,54 @@ describe('where the conversation compacts', () => {
     await open()
 
     expect(screen.getByRole('menu')).toHaveStyle({ width: '360px' })
+  })
+})
+
+describe('the saved prompts button', () => {
+  // Beside the paperclip and before it: both put something into the field, and
+  // the paperclip is the least used of the strip.
+  it('sits in the right-hand group, ahead of the paperclip', () => {
+    renderAttic()
+
+    const prompts = screen.getByRole('button', { name: 'Saved prompts' })
+    const attach = screen.getByRole('button', { name: 'Attach files' })
+
+    expect(prompts.compareDocumentPosition(attach) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('hands over the text of the prompt chosen', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().prompts.list).mockImplementation((store) =>
+      Promise.resolve({
+        ok: true,
+        value:
+          store.kind === 'global'
+            ? [
+                {
+                  id: '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
+                  title: 'Review',
+                  text: 'Look it over.',
+                  forPlan: false
+                }
+              ]
+            : []
+      })
+    )
+    const { onInsert } = renderAttic()
+
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Review' }))
+
+    expect(onInsert).toHaveBeenCalledWith('Look it over.')
+  })
+
+  it('goes to the settings that keep them', async () => {
+    const user = userEvent.setup()
+    const { onOpenPromptSettings } = renderAttic()
+
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Manage prompts…' }))
+
+    expect(onOpenPromptSettings).toHaveBeenCalledOnce()
   })
 })

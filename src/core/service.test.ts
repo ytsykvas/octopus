@@ -15993,6 +15993,101 @@ describe('the commands and subagents a store holds', () => {
  * workspace of the project after every turn of every agent, for rows nothing
  * had touched.
  */
+describe('the saved prompts a store holds', () => {
+  let service: OctopusService
+  let projectId: string
+
+  beforeEach(async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    projectId = project.id
+  })
+
+  const global = { kind: 'global' } as const
+  const ofProject = (): { kind: 'project'; projectId: string } => ({ kind: 'project', projectId })
+  const draft = (title: string): { title: string; text: string; forPlan: boolean } => ({
+    title,
+    text: `${title} text`,
+    forPlan: false
+  })
+
+  it('starts with nothing in either store', async () => {
+    await expect(service.listPrompts(global)).resolves.toEqual([])
+    await expect(service.listPrompts(ofProject())).resolves.toEqual([])
+  })
+
+  it("keeps a project's own apart from the installation's", async () => {
+    await service.createPrompt(global, draft('Everywhere'))
+    await service.createPrompt(ofProject(), draft('Here'))
+
+    await expect(service.listPrompts(global)).resolves.toMatchObject([{ title: 'Everywhere' }])
+    await expect(service.listPrompts(ofProject())).resolves.toMatchObject([{ title: 'Here' }])
+  })
+
+  it('writes each beside the data it belongs to, and outside any skills root', async () => {
+    await service.createPrompt(global, draft('A'))
+    await service.createPrompt(ofProject(), draft('B'))
+
+    await expect(readFile(join(dir, 'data', 'prompts.json'), 'utf8')).resolves.toContain('"A"')
+    await expect(
+      readFile(join(dir, 'data', 'projects', projectId, 'prompts.json'), 'utf8')
+    ).resolves.toContain('"B"')
+  })
+
+  it('refuses a project that is not there', async () => {
+    await expect(
+      service.listPrompts({ kind: 'project', projectId: 'nowhere' })
+    ).rejects.toMatchObject({ code: 'worktreeMissing' })
+  })
+
+  // Two saves landing together would both read the file as it was and the
+  // second would write over the first — and `writeJsonFile` renames one fixed
+  // temporary path, so the loser can as easily fail outright.
+  it('keeps both of two prompts created at the same moment', async () => {
+    await Promise.all([
+      service.createPrompt(global, draft('A')),
+      service.createPrompt(global, draft('B')),
+      service.createPrompt(global, draft('C'))
+    ])
+
+    const titles = (await service.listPrompts(global)).map((prompt) => prompt.title)
+    expect(titles.toSorted()).toEqual(['A', 'B', 'C'])
+  })
+
+  it('updates, reorders and removes in the store it is told', async () => {
+    const first = await service.createPrompt(ofProject(), draft('A'))
+    const second = await service.createPrompt(ofProject(), draft('B'))
+    await service.createPrompt(global, draft('G'))
+
+    await service.updatePrompt(ofProject(), first.id, { ...draft('A2'), forPlan: true })
+    await service.reorderPrompts(ofProject(), [second.id, first.id])
+
+    await expect(service.listPrompts(ofProject())).resolves.toMatchObject([
+      { title: 'B' },
+      { title: 'A2', forPlan: true }
+    ])
+
+    await service.removePrompt(ofProject(), second.id)
+
+    await expect(service.listPrompts(ofProject())).resolves.toMatchObject([{ title: 'A2' }])
+    await expect(service.listPrompts(global)).resolves.toMatchObject([{ title: 'G' }])
+  })
+
+  // Pins the reason prompts are files under the project's directory and not a
+  // field of the state: removing the project removes them with no code of ours.
+  it('goes with the project', async () => {
+    await service.createPrompt(ofProject(), draft('A'))
+
+    await service.removeProjectById(projectId)
+
+    await expect(
+      readFile(join(dir, 'data', 'projects', projectId, 'prompts.json'), 'utf8')
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})
+
 describe('reading one workspace', () => {
   interface Call {
     readonly cwd: string

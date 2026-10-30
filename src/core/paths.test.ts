@@ -9,9 +9,11 @@ import {
   chatTranscript,
   configFile,
   dataRootOverride,
+  globalPromptsFile,
   globalSkillsRoot,
   insideWorktree,
   projectDir,
+  projectPromptsFile,
   projectScript,
   projectScriptsDir,
   projectSkillsRoot,
@@ -284,5 +286,27 @@ describe('resolvesInside', () => {
     await expect(resolvesInside(root, 'near.sh')).resolves.toBe(false)
 
     await rm(neighbour, { recursive: true, force: true })
+  })
+})
+
+describe('prompt files', () => {
+  it("keeps the installation's beside the config and a project's in its own directory", () => {
+    expect(globalPromptsFile(ROOT)).toBe(join(ROOT, 'prompts.json'))
+    expect(projectPromptsFile(PROJECT, ROOT)).toBe(join(ROOT, 'projects', PROJECT, 'prompts.json'))
+  })
+
+  // Not under the skills root: that one is handed to every session as a
+  // working directory, and the agent has no business reading these.
+  it('does not put either under a skills root', () => {
+    expect(globalPromptsFile(ROOT).startsWith(globalSkillsRoot(ROOT))).toBe(false)
+    expect(projectPromptsFile(PROJECT, ROOT).startsWith(projectSkillsRoot(PROJECT, ROOT))).toBe(
+      false
+    )
+  })
+
+  it('falls back to rootDir when no root is given', () => {
+    const root = rootDir()
+    expect(globalPromptsFile()).toBe(join(root, 'prompts.json'))
+    expect(projectPromptsFile(PROJECT)).toBe(join(root, 'projects', PROJECT, 'prompts.json'))
   })
 })

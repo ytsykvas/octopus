@@ -131,6 +131,19 @@ way to one; what the agent did next was start editing files.
   two. The note reaches the agent as the refusal's reason, so "add a step for
   the tests" comes back as a better plan rather than a stopped conversation, and
   that plan raises this dialog again.
+- **Saved prompts are offered beside the field, and only the ones marked for the
+  plan.** The same fan as the composer's, from a button at the **start** of the field —
+  apart from the send button at its end, where side by side in the corner one
+  was a near miss of the other — and drawn **into the dialog** because
+  `showModal()` makes everything outside it inert. The field makes room on its
+  left only while that button is there. A prompt is
+  written into the note where the caret is, and travels as the refusal's reason
+  like anything else typed there, so it is visible in the log as the message it
+  is. With nothing marked there is no button — the dialog stays as it was — and
+  there is no way to the settings from here, because a plan is being decided
+  about and the agent is blocked on the answer. Escape closes the fan and
+  **only** the fan: it would otherwise be the dialog's own "keep planning",
+  which answers the agent.
 
 Dismissing sends whatever is in the field, empty or not. The agent is blocked on
 this answer, so a dismissal that resolved nothing would leave the conversation

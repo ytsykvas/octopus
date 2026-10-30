@@ -129,6 +129,8 @@ interface ChatSessionProps {
   readonly defaultPlanModel: string | null
   /** Opens the settings on skills, for a conversation that has none to switch. */
   readonly onOpenSkillSettings: () => void
+  /** Where the prompt fan sends someone who has none yet, or wants to order them. */
+  readonly onOpenPromptSettings: () => void
   /** The workspace was just made, so this conversation's field takes the caret. */
   readonly focusComposer: boolean
   /** The set of variables the project uses, until the list is read. */
@@ -178,6 +180,7 @@ export function ChatSession({
   defaultModel,
   defaultPlanModel,
   onOpenSkillSettings,
+  onOpenPromptSettings,
   focusComposer,
   projectEnvProfile,
   onWorkspacesChanged,
@@ -851,6 +854,7 @@ export function ChatSession({
               // Per request: a plan the agent replaces is a different plan, and the
               // editor's open-or-closed state belongs to the one it was opened on.
               key={pending.requestId}
+              projectId={workspace.projectId}
               plan={plan}
               text={
                 planEdit !== null && planEdit.requestId === pending.requestId ? planEdit.text : plan
@@ -964,6 +968,8 @@ export function ChatSession({
               onToggleSkill={skills.toggle}
               onRefreshSkills={skills.refresh}
               onOpenSettings={onOpenSkillSettings}
+              projectId={workspace.projectId}
+              onOpenPromptSettings={onOpenPromptSettings}
               onSend={send}
               onStop={() => void chat.interrupt()}
               /* The two queues become one list here rather than in the composer:

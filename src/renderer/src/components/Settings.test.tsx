@@ -1056,6 +1056,27 @@ describe('the commands section', () => {
   })
 })
 
+describe('the prompts section', () => {
+  // The installation's own list, and the one place the order that ranks them in
+  // the fan is set.
+  it('opens on the installation-wide store', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'Prompts')
+
+    expect(await screen.findByText(/live in that project/)).toBeInTheDocument()
+    expect(octopus().prompts.list).toHaveBeenCalledWith({ kind: 'global' })
+  })
+
+  // What the fan's "Manage prompts" button asks for.
+  it('can be opened on directly', async () => {
+    await renderSettings({ initialSection: 'prompts' })
+
+    expect(await screen.findByText(/live in that project/)).toBeInTheDocument()
+  })
+})
+
 describe('the pasted images row', () => {
   /*
    * The one place octopus quietly uses disk. Nothing removes a pasted image on

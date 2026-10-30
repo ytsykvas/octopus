@@ -63,6 +63,7 @@ interface PaneProps {
   readonly onError?: (message: string | null) => void
   readonly focusComposer?: boolean
   readonly onWorkspacesChanged?: () => void
+  readonly onOpenPromptSettings?: () => void
 }
 
 /**
@@ -89,7 +90,8 @@ function ChatPane({
   onDismissTip = vi.fn(),
   onError = vi.fn(),
   focusComposer = false,
-  onWorkspacesChanged = vi.fn()
+  onWorkspacesChanged = vi.fn(),
+  onOpenPromptSettings = vi.fn()
 }: PaneProps): React.JSX.Element {
   const tabs = useChatTabs(target.id, vi.fn(), onError)
   const files = useFileTabs(target.id)
@@ -121,6 +123,7 @@ function ChatPane({
       defaultModel={defaultModel}
       defaultPlanModel={defaultPlanModel}
       onOpenSkillSettings={vi.fn()}
+      onOpenPromptSettings={onOpenPromptSettings}
       focusComposer={focusComposer}
       projectEnvProfile="default"
       onWorkspacesChanged={onWorkspacesChanged}
@@ -353,6 +356,33 @@ describe('the project it belongs to', () => {
     })
 
     expect(container.firstElementChild).toHaveStyle({ '--project-color': 'var(--project-teal)' })
+  })
+})
+
+describe('the saved prompts of the project it belongs to', () => {
+  // The workspace knows which project it is in; the fan is told, rather than
+  // asking the window, so a prompt shown here is one this project can use.
+  it('are read for the workspace’s project and the installation, and for no other', async () => {
+    render(<ChatPane workspace={workspaceView('anna', { projectId: 'ledger' })} />)
+    await waitFor(() => {
+      expect(octopus().prompts.list).toHaveBeenCalledTimes(2)
+    })
+
+    expect(octopus().prompts.list).toHaveBeenCalledWith({ kind: 'project', projectId: 'ledger' })
+    expect(octopus().prompts.list).toHaveBeenCalledWith({ kind: 'global' })
+  })
+
+  it('lead to the settings from the fan', async () => {
+    const user = userEvent.setup()
+    const onOpenPromptSettings = vi.fn()
+    render(
+      <ChatPane workspace={workspaceView('anna')} onOpenPromptSettings={onOpenPromptSettings} />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Manage prompts…' }))
+
+    expect(onOpenPromptSettings).toHaveBeenCalledOnce()
   })
 })
 
@@ -1290,6 +1320,40 @@ describe('deciding on a plan', () => {
     toolName: 'ExitPlanMode',
     input: { plan: PLAN }
   }
+
+  // The prompt exists only in the project this workspace belongs to, so seeing
+  // it in the dialog says the dialog was told which project that is.
+  it('offers the project’s prompts marked for the plan, in the field for corrections', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().prompts.list).mockImplementation((store) =>
+      Promise.resolve({
+        ok: true,
+        value:
+          store.kind === 'project' && store.projectId === 'ledger'
+            ? [
+                {
+                  id: '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
+                  title: 'Tighten the plan',
+                  text: 'Make the plan smaller.',
+                  forPlan: true
+                }
+              ]
+            : []
+      })
+    )
+    givenChat()
+    await openChat(workspaceView('anna', { projectId: 'ledger' }))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    emitAgentEvent(planRequest)
+    const dialog = await screen.findByRole('dialog')
+    await user.click(await within(dialog).findByRole('button', { name: 'Saved prompts' }))
+    await user.click(await within(dialog).findByRole('menuitem', { name: 'Tighten the plan' }))
+
+    expect(within(dialog).getByRole('textbox')).toHaveValue('Make the plan smaller. ')
+  })
 
   it('opens the dialog rather than a card in the log', async () => {
     givenChat()

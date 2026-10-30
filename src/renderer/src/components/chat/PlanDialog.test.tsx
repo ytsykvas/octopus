@@ -1,9 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
+import type { Prompt } from '@core/promptSchema.js'
+
 import { stubDialogElement } from '../../test/dialog.js'
+import { octopus } from '../../test/octopus.js'
 import { PlanDialog } from './PlanDialog.js'
 
 beforeAll(stubDialogElement)
@@ -13,15 +16,18 @@ const PLAN = '# Normalising the locales\n\n## Context\n\nUse `en.ts` as the sour
 type Props = Omit<
   React.ComponentProps<typeof PlanDialog>,
   'text' | 'onText' | 'feedback' | 'onFeedback'
->
+> & {
+  /** What the field holds when the dialog opens: a note left there from before. */
+  readonly initialFeedback?: string
+}
 
 /**
  * The pane's half of the contract: it holds the text the dialog shows and takes
  * back what is typed. The dialog is controlled, and tested the way it is used.
  */
-function Held(props: Props): React.JSX.Element {
+function Held({ initialFeedback = '', ...props }: Props): React.JSX.Element {
   const [text, setText] = useState(props.plan)
-  const [feedback, setFeedback] = useState('')
+  const [feedback, setFeedback] = useState(initialFeedback)
 
   return (
     <PlanDialog
@@ -48,6 +54,7 @@ function renderDialog(overrides: Partial<Props> = {}): {
   render(
     <Held
       plan={PLAN}
+      projectId="planner"
       goesOnIn="acceptEdits"
       onExecute={onExecute}
       onFork={onFork}
@@ -386,5 +393,156 @@ describe('the two ways out', () => {
     await user.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(onKeepPlanning).toHaveBeenCalledExactlyOnceWith('')
+  })
+})
+
+describe('the saved prompts beside the field for corrections', () => {
+  const TIGHTEN: Prompt = {
+    id: '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
+    title: 'Tighten the plan',
+    text: 'Make the plan smaller.',
+    forPlan: true
+  }
+  const REVIEW: Prompt = {
+    ...TIGHTEN,
+    id: '8a1d2c3b-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+    title: 'Review',
+    forPlan: false
+  }
+
+  /** Answered by the store asked about, as the bridge does. */
+  const holding = (project: Prompt[], global: Prompt[] = []): void => {
+    vi.mocked(octopus().prompts.list).mockImplementation((store) =>
+      Promise.resolve({ ok: true, value: store.kind === 'global' ? global : project })
+    )
+  }
+
+  const feedbackField = (): HTMLTextAreaElement => screen.getByRole('textbox')
+
+  /** The lists are drawn a moment after they are read. */
+  const read = async (): Promise<void> => {
+    await waitFor(() => {
+      expect(octopus().prompts.list).toHaveBeenCalledTimes(2)
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  it('is not there when no prompt is marked for the plan', async () => {
+    holding([REVIEW])
+    renderDialog()
+    await read()
+
+    expect(screen.queryByRole('button', { name: 'Saved prompts' })).not.toBeInTheDocument()
+  })
+
+  it('offers the ones marked for the plan, and not the rest, and no way to settings', async () => {
+    const user = userEvent.setup()
+    holding([REVIEW, TIGHTEN])
+    renderDialog()
+    await read()
+
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+
+    expect(screen.getByRole('menuitem', { name: 'Tighten the plan' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Review' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Manage prompts…' })).not.toBeInTheDocument()
+  })
+
+  // At the start of the field, apart from the send button at its end: the two
+  // were side by side in the corner, where reaching for one was a near miss of
+  // the other. In reading order too, so a screen reader meets them the same way.
+  it('sits at the start of the field, with the send button at its end', async () => {
+    holding([TIGHTEN])
+    renderDialog()
+    await read()
+
+    const fan = screen.getByRole('button', { name: 'Saved prompts' })
+    const send = screen.getByRole('button', { name: 'Send the note and keep planning' })
+
+    expect(
+      fan.compareDocumentPosition(feedbackField()) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      feedbackField().compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  // `showModal()` makes everything outside the dialog inert: a fan drawn into
+  // the body would be there and could not be reached.
+  it('is drawn inside the dialog, where it can be reached', async () => {
+    const user = userEvent.setup()
+    holding([TIGHTEN])
+    renderDialog()
+    await read()
+
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+
+    expect(screen.getByRole('dialog')).toContainElement(screen.getByRole('menu'))
+  })
+
+  it('writes the prompt into the note where the caret is', async () => {
+    const user = userEvent.setup()
+    holding([TIGHTEN])
+    renderDialog()
+    await read()
+
+    await user.type(feedbackField(), 'ab cd')
+    feedbackField().setSelectionRange(2, 2)
+    fireEvent.select(feedbackField())
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Tighten the plan' }))
+
+    expect(feedbackField()).toHaveValue('ab Make the plan smaller. cd')
+    // The caret after it and the field ready for the next word.
+    expect(feedbackField()).toHaveFocus()
+    expect(feedbackField().selectionStart).toBe(25)
+  })
+
+  it('writes it at the end of a note that was already there when the dialog opened', async () => {
+    const user = userEvent.setup()
+    holding([TIGHTEN])
+    renderDialog({ initialFeedback: 'first this' })
+    await read()
+
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Tighten the plan' }))
+
+    expect(feedbackField()).toHaveValue('first this Make the plan smaller. ')
+  })
+
+  it('goes back to the agent with the rest of the note when it is sent', async () => {
+    const user = userEvent.setup()
+    holding([TIGHTEN])
+    const { onKeepPlanning } = renderDialog()
+    await read()
+
+    await user.type(feedbackField(), 'and')
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Tighten the plan' }))
+    await user.keyboard('{Enter}')
+
+    expect(onKeepPlanning).toHaveBeenCalledWith('and Make the plan smaller.')
+  })
+
+  /* The reason the popup claims its Escape: in this dialog Escape is "keep
+     planning", which answers the agent. The key that closes the fan must not be
+     the one that sends the plan back. */
+  it('closes on Escape without the dialog taking the key as its own', async () => {
+    const user = userEvent.setup()
+    holding([TIGHTEN])
+    const { onKeepPlanning } = renderDialog()
+    await read()
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    act(() => {
+      window.dispatchEvent(escape)
+    })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(escape.defaultPrevented).toBe(true)
+    expect(onKeepPlanning).not.toHaveBeenCalled()
   })
 })

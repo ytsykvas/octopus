@@ -14,6 +14,12 @@ turning. The limits' refresh broke this: its arrows stopped and only dimmed,
 which reads as unavailable, and it shows a loader while it reads now, like the
 new-workspace button.
 
+The prompt fan's pills fly out of the button a rung after one another (`fan-in`,
+180 ms, 24 ms apart). It answers a click and runs once, so it is no spinner, and
+under "Reduce motion" the one rule at the end of `styles.css` takes it away and
+every pill is simply where it goes. `animation-fill-mode: both` is what keeps a
+pill invisible for the length of its delay rather than showing in its place first.
+
 Transitions are left alone — they answer the pointer rather than moving on
 their own — though the plugin tile's turn, the Help button's buoy and a
 folding chevron drop theirs with `motion-reduce:transition-none`.

@@ -204,7 +204,9 @@ import {
 import {
   attachmentsDir,
   configFile,
+  globalPromptsFile,
   globalSkillsRoot,
+  projectPromptsFile,
   projectSkillsRoot,
   rootDir,
   libraryDirOf,
@@ -230,6 +232,14 @@ import {
 } from './library.js'
 import { type ElicitationField, type FormValues, toContent } from './elicitation.js'
 import type { LibraryKind } from './libraryNames.js'
+import type { Prompt, PromptDraft } from './promptSchema.js'
+import {
+  createPrompt as createPromptIn,
+  readPrompts,
+  removePrompt as removePromptIn,
+  reorderPrompts as reorderPromptsIn,
+  updatePrompt as updatePromptIn
+} from './prompts.js'
 import {
   ensureStore,
   importFromPath,
@@ -1218,6 +1228,22 @@ export interface OctopusService {
    * nowhere — so somebody has to choose, and choosing needs the document first.
    */
   inspectLibrary(kind: LibraryKind, request: LibraryImport): Promise<LibraryPreview>
+
+  /**
+   * The saved prompts of one store, in the order the user gave them.
+   *
+   * Text the user inserts into a field, not commands the CLI expands — so
+   * nothing here reaches a session, and a write does not touch a running one.
+   */
+  listPrompts(store: Store): Promise<Prompt[]>
+  createPrompt(store: Store, draft: PromptDraft): Promise<Prompt>
+  updatePrompt(store: Store, id: string, draft: PromptDraft): Promise<Prompt>
+  removePrompt(store: Store, id: string): Promise<void>
+  /**
+   * Puts them in the order given, as `reorderProjects` does for the tab strip:
+   * a drop hands over the whole new order, and a stale one is still safe.
+   */
+  reorderPrompts(store: Store, orderedIds: readonly string[]): Promise<void>
 
   /** The skills one of the two stores holds, for a settings section. */
   listSkills(store: Store): Promise<SkillEntry[]>
@@ -4689,6 +4715,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return listings.flat().map((skill) => skill.name)
   }
 
+  /**
+   * Where a store's prompts sit.
+   *
+   * Beside the store and not inside it: the skills root is handed to every
+   * session as a working directory, and the agent has no business reading these.
+   */
+  function promptsFileOf(store: Store): string {
+    return store.kind === 'global'
+      ? globalPromptsFile(dataRoot)
+      : projectPromptsFile(requireProject(store.projectId).id, dataRoot)
+  }
+
+  /**
+   * One line for every prompt write, both stores together.
+   *
+   * Each write reads the file, changes the list and writes it back, so two in
+   * flight both start from the same list and the later one drops the earlier.
+   * `writeJsonFile` also renames one fixed temporary path, so the loser of that
+   * race can as easily fail outright. Reads do not wait: they see a whole file.
+   */
+  const promptWrites = oneAtATime()
+
   /** Where one kind of library item lives in a store; a path, made on demand. */
   function libraryDir(store: Store, kind: LibraryKind): string {
     return libraryDirOf(storeRoot(store), kind)
@@ -5984,6 +6032,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Nothing about a store: this reads a source and suggests a name, and a
       // preview must create nothing for an item nobody has agreed to yet.
       return inspectLibraryImport(kind, request, download)
+    },
+
+    async listPrompts(store) {
+      return readPrompts(promptsFileOf(store))
+    },
+
+    async createPrompt(store, draft) {
+      return promptWrites(() => createPromptIn(promptsFileOf(store), draft))
+    },
+
+    async updatePrompt(store, id, draft) {
+      return promptWrites(() => updatePromptIn(promptsFileOf(store), id, draft))
+    },
+
+    async removePrompt(store, id) {
+      await promptWrites(() => removePromptIn(promptsFileOf(store), id))
+    },
+
+    async reorderPrompts(store, orderedIds) {
+      await promptWrites(() => reorderPromptsIn(promptsFileOf(store), orderedIds))
     },
 
     async skillsForChat(chatId) {
