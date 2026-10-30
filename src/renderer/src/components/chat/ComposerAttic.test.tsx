@@ -46,7 +46,6 @@ function renderAttic(
   onOpenSettings: ReturnType<typeof vi.fn>
   onAttach: ReturnType<typeof vi.fn>
   onAutoCompact: ReturnType<typeof vi.fn>
-  onCompactWithFocus: ReturnType<typeof vi.fn>
 } {
   const onSend = vi.fn()
   const onToggleSkill = vi.fn()
@@ -54,7 +53,6 @@ function renderAttic(
   const onOpenSettings = vi.fn()
   const onAttach = vi.fn()
   const onAutoCompact = vi.fn()
-  const onCompactWithFocus = vi.fn()
 
   render(
     <ComposerAttic
@@ -67,7 +65,6 @@ function renderAttic(
       onOpenSettings={onOpenSettings}
       onAttach={onAttach}
       onAutoCompact={onAutoCompact}
-      onCompactWithFocus={onCompactWithFocus}
     />
   )
 
@@ -77,8 +74,7 @@ function renderAttic(
     onRefreshSkills,
     onOpenSettings,
     onAttach,
-    onAutoCompact,
-    onCompactWithFocus
+    onAutoCompact
   }
 }
 
@@ -163,23 +159,22 @@ describe('the way out of a full context window', () => {
     renderAttic()
     await open()
 
-    expect(screen.getByRole('menuitem', { name: /^\/compact(?! …)/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /^Compact all/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /^Explain compact/ })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /\/clear/ })).toBeInTheDocument()
   })
 
   /*
-   * The names are the CLI's, not ours, and they say what the command is called
-   * rather than what it does — "compact" and "clear" are near enough synonyms
-   * to anyone who has not met them. The second line is the difference between
-   * the two, so it is the part of the row worth asserting.
+   * The names say what each row is called rather than what it does — "compact"
+   * and "clear" are near enough synonyms to anyone who has not met them. The
+   * second line is the difference, so it is the part of the row worth asserting.
    */
   it('says what each of them does to the conversation', async () => {
     renderAttic()
     await open()
 
-    expect(
-      screen.getByText('The agent keeps a summary of the conversation and carries on.')
-    ).toBeInTheDocument()
+    expect(screen.getByText('Keep a summary and carry on.')).toBeInTheDocument()
+    expect(screen.getByText('Say first what to drop.')).toBeInTheDocument()
     expect(
       screen.getByText('The agent forgets this conversation, and the log goes with it.')
     ).toBeInTheDocument()
@@ -193,7 +188,7 @@ describe('the way out of a full context window', () => {
 
     const rows = screen.getAllByRole('menuitem').map((row) => row.textContent)
 
-    expect(rows.findIndex((text) => text.startsWith('/compact'))).toBeLessThan(
+    expect(rows.findIndex((text) => text.startsWith('Compact all'))).toBeLessThan(
       rows.findIndex((text) => text.startsWith('/clear'))
     )
   })
@@ -209,51 +204,106 @@ describe('the way out of a full context window', () => {
     const { onSend } = renderAttic()
     await open()
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /^\/compact(?! …)/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Compact all/ }))
 
     expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
   })
 
-  // The focus is the one supported way to say what survives a compaction: no
-  // API removes a single message from the middle, and the CLI reads what follows
-  // the command as what to keep. It sits straight after the plain command it
-  // refines, and well before the one that loses something.
-  it('offers /compact with a focus between /compact and /clear', async () => {
-    renderAttic()
-    await open()
+  // The other half of the row. No API removes a single message, and the text
+  // after `/compact` is what the summary keeps and drops — so this one asks for
+  // that text first and sends it exactly as written.
+  describe('saying first what to drop', () => {
+    const explain = async (): Promise<void> => {
+      await open()
+      await userEvent.click(screen.getByRole('menuitem', { name: /^Explain compact/ }))
+    }
+    const field = (): HTMLElement =>
+      screen.getByRole('textbox', { name: 'What should the summary leave out, or keep?' })
+    const compact = (): HTMLElement => screen.getByRole('button', { name: 'Compact' })
 
-    const rows = screen.getAllByRole('menuitem').map((row) => row.textContent)
-    const focused = rows.findIndex((text) => text.startsWith('/compact …'))
-    // The plain command is the one that begins with it and is not the other.
-    const plain = rows.findIndex(
-      (text) => text.startsWith('/compact') && !text.startsWith('/compact …')
-    )
-    const clear = rows.findIndex((text) => text.startsWith('/clear'))
+    it('offers both ways to compact in one row', async () => {
+      renderAttic()
+      await open()
 
-    expect(plain).toBeGreaterThanOrEqual(0)
-    expect(focused).toBe(plain + 1)
-    expect(focused).toBeLessThan(clear)
-  })
+      const all = screen.getByRole('menuitem', { name: /^Compact all/ })
+      const explaining = screen.getByRole('menuitem', { name: /^Explain compact/ })
 
-  // Nothing is sent: the text after the command is the reader's to write, and a
-  // bare `/compact` sent now would compact with nothing said about what to keep.
-  it('hands /compact … to the field instead of sending it', async () => {
-    const { onSend, onCompactWithFocus } = renderAttic()
-    await open()
+      expect(all.parentElement).toBe(explaining.parentElement)
+    })
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /\/compact …/ }))
+    it('opens a dialog and sends nothing yet', async () => {
+      const { onSend } = renderAttic()
+      await explain()
 
-    expect(onCompactWithFocus).toHaveBeenCalledTimes(1)
-    expect(onSend).not.toHaveBeenCalled()
-  })
+      expect(
+        screen.getByRole('dialog', { name: 'What to remove from the context' })
+      ).toBeInTheDocument()
+      expect(onSend).not.toHaveBeenCalled()
+    })
 
-  it('says what the focused row is for', async () => {
-    renderAttic()
-    await open()
+    it('sends what was written, verbatim, after /compact', async () => {
+      const { onSend } = renderAttic()
+      await explain()
 
-    expect(
-      screen.getByText('Puts /compact in the field: write after it what the summary must keep.')
-    ).toBeInTheDocument()
+      await userEvent.type(field(), 'drop the npm test output')
+      await userEvent.click(compact())
+
+      expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact drop the npm test output')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('trims the text it sends', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.type(field(), '  keep math.js  ')
+      await userEvent.click(compact())
+
+      expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact keep math.js')
+    })
+
+    // A bare `/compact` is the other button's; this one is for saying something.
+    it('will not compact with nothing written', async () => {
+      renderAttic()
+      await explain()
+
+      expect(compact()).toBeDisabled()
+      await userEvent.type(field(), '   ')
+      expect(compact()).toBeDisabled()
+    })
+
+    // Enter is the way past a disabled button, so it is held to the same rule.
+    it('sends nothing on Enter with nothing written, and stays open', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.type(field(), '  {Enter}')
+
+      expect(onSend).not.toHaveBeenCalled()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // The composer's keys, so there is one convention and not two.
+    it('sends on Enter and keeps Shift+Enter for a new line', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.type(field(), 'keep a{Shift>}{Enter}{/Shift}keep b')
+      expect(onSend).not.toHaveBeenCalled()
+
+      await userEvent.type(field(), '{Enter}')
+      expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact keep a\nkeep b')
+    })
+
+    it('closes without sending on Cancel', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(onSend).not.toHaveBeenCalled()
+    })
   })
 
   // The one row of the two that loses something: the log is deleted from disk,

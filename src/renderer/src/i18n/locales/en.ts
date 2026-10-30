@@ -1234,14 +1234,25 @@ export const en = {
     context: 'Context',
     contextTitle: 'Context window — {{used}} of {{total}}',
     contextTitleCompactsAt: 'Context window — {{used}} of {{total}}, compacts at {{threshold}}',
-    /* The second lines of the menu the reading opens. The commands themselves
-       are not here: they are the CLI's own names, printed the way the
-       suggestion list prints them, and a translated `/clear` would be a
+    /* The second line of `/clear` in the menu the reading opens. The command
+       itself is not here: it is the CLI's own name, printed the way the
+       suggestion list prints it, and a translated `/clear` would be a
        command that does nothing. */
-    contextCompactNote: 'The agent keeps a summary of the conversation and carries on.',
     contextClearNote: 'The agent forgets this conversation, and the log goes with it.',
-    contextCompactFocusNote:
-      'Puts /compact in the field: write after it what the summary must keep.',
+    /* The first row of that menu is a pair: compacting all of the conversation,
+       or saying first what to drop. Short, because each has half the row. */
+    compactAll: 'Compact all',
+    compactAllNote: 'Keep a summary and carry on.',
+    compactExplain: 'Explain compact',
+    compactExplainNote: 'Say first what to drop.',
+    compactExplainTitle: 'What to remove from the context',
+    compactExplainLabel: 'What should the summary leave out, or keep?',
+    compactExplainPlaceholder:
+      'e.g. drop the npm test output and the README reads; keep the decisions about math.js',
+    compactExplainHint:
+      'Sent as you wrote it, after /compact. The agent writes the summary, so it is a request, not a guarantee.',
+    compactExplainCancel: 'Cancel',
+    compactExplainSend: 'Compact',
     contextBreakdownTitle: 'What fills the context',
     contextBreakdownCategories: 'By kind',
     contextBreakdownMemoryFiles: 'Memory files',

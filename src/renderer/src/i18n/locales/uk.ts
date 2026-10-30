@@ -934,10 +934,19 @@ export const uk: Translation = {
     context: 'Контекст',
     contextTitle: 'Вікно контексту — {{used}} з {{total}}',
     contextTitleCompactsAt: 'Вікно контексту — {{used}} з {{total}}, стискається на {{threshold}}',
-    contextCompactNote: 'Агент лишає собі стислий переказ розмови й працює далі.',
     contextClearNote: 'Агент забуває цю розмову, а її запис видаляється.',
-    contextCompactFocusNote:
-      'Вставляє /compact у поле: допишіть після нього, що має лишитися в переказі.',
+    compactAll: 'Стиснути все',
+    compactAllNote: 'Лишити переказ і працювати далі.',
+    compactExplain: 'З поясненням',
+    compactExplainNote: 'Спершу сказати, що прибрати.',
+    compactExplainTitle: 'Що прибрати з контексту',
+    compactExplainLabel: 'Що переказ має пропустити або лишити?',
+    compactExplainPlaceholder:
+      'напр. прибери вивід npm test і читання README; лиши рішення про math.js',
+    compactExplainHint:
+      'Надсилається як є, після /compact. Переказ пише агент, тож це прохання, а не гарантія.',
+    compactExplainCancel: 'Скасувати',
+    compactExplainSend: 'Стиснути',
     contextBreakdownTitle: 'Що заповнює контекст',
     contextBreakdownCategories: 'За видом',
     contextBreakdownMemoryFiles: "Файли пам'яті",

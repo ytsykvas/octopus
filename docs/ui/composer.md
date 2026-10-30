@@ -170,22 +170,18 @@ threshold, and keeps the agent's own percentage when it does not — switched of
 which also sends no threshold, or a CLI that predates the fields. The tooltip
 names the point beside the counts.
 
-**Clicking the context share opens the two commands that change it.** It is the
-one figure on the strip that can be acted on — the account's windows empty on a
-clock nobody here controls — and what acts on a full context window is
-`/compact`, which keeps a summary and carries on, or `/clear`, which throws the
-conversation away. Neither is dispatched: they go out as the text of an ordinary
-message, which is what a slash command is in this app, so the menu hands them to
-the same `onSend` the field uses.
-
-**A third row, `/compact …`, says what the summary keeps.** The CLI reads the
-text after `/compact` as what to keep, which makes it the one supported way to
-choose what survives a compaction: no API removes a single message from the
-middle, and "summarize from here" exists only in the terminal's own `/rewind`
-menu. The row sends nothing. It asks the field to write `/compact ` before the
-draft (`withCompact`), and a draft already there becomes the focus rather than
-being overwritten, because only the field knows the draft and the caret. A
-`/compact` sent bare would compact with nothing said about what to keep.
+**Clicking the context share opens what changes it.** It is the one figure on
+the strip that can be acted on — the account's windows empty on a clock nobody
+here controls. The first row holds two commands side by side (`beside` on
+`DropdownMenu`): **Compact all** sends `/compact`, which keeps a summary and
+carries on, and **Explain compact** opens a dialog asking what the summary
+should leave out or keep, then sends `/compact <that text>` exactly as written.
+The dialog exists because no API removes a single message from the middle of a
+conversation, and the text after `/compact` is the one supported way to say
+what survives. It is a request — the agent writes the summary — and the dialog
+says so. **`/clear`** comes last, in the danger colour. Nothing is dispatched
+here: each goes out as the text of an ordinary message through the same
+`onSend` the field uses.
 
 **What fills the window sits beside the share.** A button with the layers icon
 opens a panel of the same reply the share is counted from — `getContextUsage`

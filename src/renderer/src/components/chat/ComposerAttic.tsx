@@ -1,4 +1,5 @@
 import { ChevronDown, Eraser, FoldVertical, Paperclip, PencilLine } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ContextUsage } from '@core/agent.js'
@@ -15,6 +16,7 @@ import type { SkillListing } from '@core/skills.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { AgentsChip } from './AgentsChip.js'
+import { CompactDialog } from './CompactDialog.js'
 import { ContextPanel } from './ContextPanel.js'
 import { DropdownMenu, type MenuAction, type MenuSection } from '../DropdownMenu.js'
 import { formatTokens, usageTone } from './format.js'
@@ -51,11 +53,6 @@ interface ComposerAtticProps {
   readonly onAttach: () => void
   /** Where this conversation compacts itself; null hands it back to the agent. */
   readonly onAutoCompact: (window: AutoCompactWindow | null) => void
-  /**
-   * Puts `/compact ` in the field for the reader to say what the summary keeps.
-   * Nothing is sent: the text after the command is theirs to write.
-   */
-  readonly onCompactWithFocus: () => void
 }
 
 /**
@@ -66,7 +63,8 @@ interface ComposerAtticProps {
 const MENU_WIDTH = 360
 
 /**
- * What the two rows send, written as it goes on the wire.
+ * What the rows send, written as it goes on the wire; the labels are words now,
+ * and only what is sent stays the CLI's command.
  *
  * Not taken from `CLEAR_COMMAND` in `core/chats.ts`, which is the same word
  * answering a different question: that one *recognises* what the user typed —
@@ -77,7 +75,6 @@ const MENU_WIDTH = 360
  */
 const CLEAR = '/clear'
 const COMPACT = '/compact'
-const COMPACT_FOCUS = '/compact …'
 
 /**
  * What the next message is up against, above the field it is typed in.
@@ -106,8 +103,7 @@ export function ComposerAttic({
   onRefreshSkills,
   onOpenSettings,
   onAttach,
-  onAutoCompact,
-  onCompactWithFocus
+  onAutoCompact
 }: ComposerAtticProps): React.JSX.Element {
   const { t } = useTranslation()
   // Owned here rather than threaded down from `App`, where the shared one
@@ -116,6 +112,8 @@ export function ComposerAttic({
   // sits on a native `<dialog>` — `showModal()` puts it in the top layer
   // wherever in the tree it is written.
   const { confirm, dialog } = useConfirm()
+  // Whether the dialog asking what to drop before compacting is open.
+  const [explaining, setExplaining] = useState(false)
 
   /**
    * Asks before sending the command that throws the conversation away.
@@ -292,19 +290,24 @@ export function ComposerAttic({
               actions={[
                 {
                   id: COMPACT,
-                  label: COMPACT,
-                  description: t('chat.contextCompactNote'),
+                  label: t('chat.compactAll'),
+                  description: t('chat.compactAllNote'),
                   icon: <FoldVertical aria-hidden size={12} />,
                   onSelect: () => {
                     void onSend(COMPACT)
+                  },
+                  // The same command with something said first: no API removes
+                  // one message, and the text after `/compact` is what the
+                  // summary keeps and drops.
+                  beside: {
+                    id: 'compact-explain',
+                    label: t('chat.compactExplain'),
+                    description: t('chat.compactExplainNote'),
+                    icon: <PencilLine aria-hidden size={12} />,
+                    onSelect: () => {
+                      setExplaining(true)
+                    }
                   }
-                },
-                {
-                  id: 'compact-focus',
-                  label: COMPACT_FOCUS,
-                  description: t('chat.contextCompactFocusNote'),
-                  icon: <PencilLine aria-hidden size={12} />,
-                  onSelect: onCompactWithFocus
                 },
                 ...(autoCompact === null ? [] : windowRows(autoCompact, context)),
                 {
@@ -400,6 +403,17 @@ export function ComposerAttic({
       </div>
 
       {dialog}
+      {explaining && (
+        <CompactDialog
+          onClose={() => {
+            setExplaining(false)
+          }}
+          onCompact={(instructions) => {
+            setExplaining(false)
+            void onSend(`${COMPACT} ${instructions}`)
+          }}
+        />
+      )}
     </>
   )
 }

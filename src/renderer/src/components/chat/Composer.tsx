@@ -23,7 +23,7 @@ import type { ChatMode } from '../../hooks/useChat.js'
 
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { useLatest } from '../../hooks/useLatest.js'
-import { type ChatNote, insertPaths, withCompact, withNotes } from './attachments.js'
+import { type ChatNote, insertPaths, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { EffortPicker } from './EffortPicker.js'
@@ -314,7 +314,7 @@ export function Composer({
 
   // Where a text the app writes into the field lands: the draft, the caret at
   // the given place and the focus in the field, so the next key continues it.
-  // A seed and a `/compact` row both end this way.
+  // A seed is what lands here.
   const place = useCallback((text: string, caretAt: number) => {
     latest.current = text
     caretAfterWrite.current = caretAt
@@ -340,13 +340,6 @@ export function Composer({
         : seed.text
     place(text, text.length)
   }, [seed, place])
-
-  // Written here, not in the attic: only the field knows the draft and the caret,
-  // and the text after `/compact` is what the summary is told to keep.
-  const compactWithFocus = useCallback(() => {
-    const next = withCompact(latest.current)
-    place(next.draft, next.caret)
-  }, [place])
 
   // A file pointed at — dropped, chosen, pasted, or sent over from the Files
   // tab — is written into the text where the caret is, the way a path typed
@@ -616,7 +609,6 @@ export function Composer({
           onOpenSettings={onOpenSettings}
           onAttach={onAttachFiles}
           onAutoCompact={onAutoCompact}
-          onCompactWithFocus={compactWithFocus}
         />
 
         <ComposerAttachments notes={notes} onRemove={onRemoveNote} />

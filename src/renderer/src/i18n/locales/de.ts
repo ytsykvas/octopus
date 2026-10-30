@@ -963,10 +963,19 @@ export const de: Translation = {
     contextTitle: 'Kontextfenster – {{used}} von {{total}}',
     contextTitleCompactsAt:
       'Kontextfenster – {{used}} von {{total}}, komprimiert bei {{threshold}}',
-    contextCompactNote: 'Der Agent behält eine Zusammenfassung des Chats und macht weiter.',
     contextClearNote: 'Der Agent vergisst diesen Chat, und der Verlauf wird gelöscht.',
-    contextCompactFocusNote:
-      'Setzt /compact ins Feld: dahinter steht, was die Zusammenfassung behalten soll.',
+    compactAll: 'Alles komprimieren',
+    compactAllNote: 'Zusammenfassung behalten, weiter.',
+    compactExplain: 'Mit Erklärung',
+    compactExplainNote: 'Erst sagen, was weg soll.',
+    compactExplainTitle: 'Was aus dem Kontext soll',
+    compactExplainLabel: 'Was soll die Zusammenfassung auslassen oder behalten?',
+    compactExplainPlaceholder:
+      'z. B. die npm-test-Ausgabe und das Lesen der README weglassen; die Entscheidungen zu math.js behalten',
+    compactExplainHint:
+      'Wird so gesendet, wie geschrieben, nach /compact. Die Zusammenfassung schreibt der Agent – eine Bitte, keine Garantie.',
+    compactExplainCancel: 'Abbrechen',
+    compactExplainSend: 'Komprimieren',
     contextBreakdownTitle: 'Was den Kontext füllt',
     contextBreakdownCategories: 'Nach Art',
     contextBreakdownMemoryFiles: 'Memory-Dateien',

@@ -276,41 +276,9 @@ describe('sending', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /Context 48%/ }))
-    await user.click(screen.getByRole('menuitem', { name: /^\/compact(?! …)/ }))
+    await user.click(screen.getByRole('menuitem', { name: /^Compact all/ }))
 
     expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
-  })
-
-  // The attic can only ask; the field is what holds the text. So the draft is
-  // written here, where the caret is known, and nothing goes out: a bare
-  // `/compact` sent now would compact with nothing said about what to keep.
-  it('writes /compact before the draft and leaves the caret after it', async () => {
-    const user = userEvent.setup()
-    const { onSend } = renderComposer({
-      usage: {
-        context: {
-          percentage: 48,
-          usedTokens: 48_000,
-          maxTokens: 200_000,
-          compactsAt: null,
-          autoCompactOn: null,
-          model: 'claude-opus-5',
-          modelWindow: null,
-          breakdown: null
-        },
-        autoCompact: null
-      }
-    })
-
-    await user.type(screen.getByRole('textbox'), 'keep the plan')
-    await user.click(screen.getByRole('button', { name: /Context 48%/ }))
-    await user.click(screen.getByRole('menuitem', { name: /^\/compact …/ }))
-
-    const field = screen.getByRole('textbox')
-    expect(field).toHaveValue('/compact keep the plan')
-    expect((field as HTMLTextAreaElement).selectionStart).toBe('/compact '.length)
-    expect(field).toHaveFocus()
-    expect(onSend).not.toHaveBeenCalled()
   })
 })
 
@@ -524,7 +492,7 @@ describe('review notes riding with the message', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /Context 48%/ }))
-    await user.click(screen.getByRole('menuitem', { name: /^\/compact(?! …)/ }))
+    await user.click(screen.getByRole('menuitem', { name: /^Compact all/ }))
 
     expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
   })
@@ -583,7 +551,7 @@ describe('while the agent is working', () => {
 
     await user.click(screen.getByRole('button', { name: /Context 91%/ }))
 
-    expect(screen.getByRole('menuitem', { name: /^\/compact(?! …)/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /^Compact all/ })).toBeInTheDocument()
   })
 })
 
