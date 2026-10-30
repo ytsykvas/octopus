@@ -51,10 +51,10 @@ function place(button: HTMLElement, at: { top: number; left: number }): void {
 }
 
 /**
- * The composer's corner: room above and to the left, none to the right — five
- * rungs, the left quarter, from 9 o'clock to 12.
+ * The composer's corner: room above and to the left, none for the right quarter
+ * — five rungs, from 9 o'clock up to the top of the arc.
  */
-const ROOMY = { top: 600, left: 980 }
+const ROOMY = { top: 600, left: 900 }
 /** Room all round: the right quarter as well, 12 o'clock to 3, nine rungs in all. */
 const OPEN = { top: 600, left: 500 }
 /** Too close to the top for a single rung. */
@@ -160,12 +160,12 @@ describe('opening the fan', () => {
     expect(first).toHaveClass('fan-in')
     expect(first?.style.getPropertyValue('--fan-index')).toBe('0')
     expect(second?.style.getPropertyValue('--fan-index')).toBe('1')
-    // The button's centre is at (992, 612). The sweep starts at 9 o'clock, the
-    // lowest rung, 137 to the left of the button and 28 above it; the next rung
+    // The button's centre is at (912, 612). The sweep starts at 9 o'clock, the
+    // lowest rung, 82 to the left of the button and 28 above it; the next rung
     // up is a little nearer.
-    expect(first?.style.getPropertyValue('--fan-from-x')).toBe('137px')
+    expect(first?.style.getPropertyValue('--fan-from-x')).toBe('82px')
     expect(first?.style.getPropertyValue('--fan-from-y')).toBe('28px')
-    expect(second?.style.getPropertyValue('--fan-from-x')).toBe('128px')
+    expect(second?.style.getPropertyValue('--fan-from-x')).toBe('77px')
   })
 
   it('closes on a second click on the button', async () => {
@@ -640,8 +640,8 @@ describe('as far round as there are prompts', () => {
     }
   })
 
-  // The button's centre is at (512, 612): the first rung of the right quarter is
-  // 84 to the right of it, and its pill grows away from the button.
+  // The button's centre is at (512, 612): the top of the arc is centred over it,
+  // and the first rung of the right quarter is 50 to its right, growing away.
   it('goes on round to the right when the left quarter is full', async () => {
     answering(titles(8), [])
     const user = userEvent.setup()
@@ -650,8 +650,9 @@ describe('as far round as there are prompts', () => {
     await user.click(button())
 
     expect(pills()).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'Manage prompts…'])
-    expect(items()[4]?.style.right).not.toBe('')
-    expect(items()[5]?.style.left).toBe('596px')
+    expect(items()[3]?.style.right).not.toBe('')
+    expect(items()[4]?.style.left).toBe('512px')
+    expect(items()[5]?.style.left).toBe('562px')
     expect(items()[5]?.style.right).toBe('')
   })
 
@@ -662,7 +663,7 @@ describe('as far round as there are prompts', () => {
 
     await user.click(button())
 
-    expect(items()[5]?.style.getPropertyValue('--fan-from-x')).toBe('-84px')
+    expect(items()[5]?.style.getPropertyValue('--fan-from-x')).toBe('-50px')
   })
 
   it('puts the way to settings at the far end', async () => {
@@ -703,6 +704,7 @@ describe('as far round as there are prompts', () => {
 
     await user.click(button())
 
-    for (const item of items()) expect(item.style.left).toBe('')
+    // Five rungs and no more: three of the eight, "more" for the other five, settings.
+    expect(pills()).toEqual(['P1', 'P2', 'P3', 'More… (5)', 'Manage prompts…'])
   })
 })

@@ -85,7 +85,12 @@ above and to the left, where the composer's attic sits and there is room, then o
 past 12 and down the right side. The prompts fill that sweep in their order and
 stop where they do, so a few sit on the left and many go on round to the right.
 An earlier shape ran from 12 down to 9 and then started the right side again from
-the top; on screen that was two piles rather than one fan. Each pill flies out of the button
+the top; on screen that was two piles rather than one fan. So did a round arc read
+in the right order: each side's pills grow outwards from the button, and with the
+top pill hanging off the left the two sides sat far apart with nothing over the
+button to join them. The pill at the top is now **centred** over the button, so it
+spans both sides, and the arc is **narrower than it is tall** (`FAN_SPREAD`, 0.6),
+which keeps the sides near the button and near each other. Each pill flies out of the button
 a rung after the one before it (`fan-in` in `styles.css`). **As many fit as fit
 whole**: a rung is kept only when its pill clears the top of the area by the
 margin and the narrowest pill clears the edge it grows towards — the left on the

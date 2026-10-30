@@ -258,9 +258,12 @@ export function PromptFan({
 
                 // A pill on the left half grows away from the button towards the
                 // left, so it is fixed by its right edge; one on the right half
-                // grows towards the right, and is fixed by its left.
+                // grows towards the right, and is fixed by its left. The top one
+                // is centred over the button, by `translate`, which the flight's
+                // `transform` leaves alone.
                 const edge: React.CSSProperties =
                   slot.side === 'left' ? { right: opened.width - slot.x } : { left: slot.x }
+                const place = slot.side === 'center' ? '-translate-x-1/2' : ''
 
                 // Each pill is fixed to its own place on the arc and flies out of
                 // the button, a rung after the one above.
@@ -284,7 +287,7 @@ export function PromptFan({
                       onClick={() => {
                         choose(entry.prompt.text)
                       }}
-                      className={`${PILL} fixed z-50`}
+                      className={`${PILL} ${place} fixed z-50`}
                     >
                       {entry.prompt.forPlan && <PlanIcon />}
                       <span className="truncate">{entry.prompt.title}</span>
@@ -302,7 +305,7 @@ export function PromptFan({
                       onClick={() => {
                         setListing(true)
                       }}
-                      className={`${PILL} fixed z-50`}
+                      className={`${PILL} ${place} fixed z-50`}
                     >
                       {t('prompts.more', { count: entry.count })}
                     </button>
@@ -318,7 +321,7 @@ export function PromptFan({
                     onClick={manageAndClose}
                     aria-label={t('prompts.manage')}
                     title={t('prompts.manage')}
-                    className={`${CIRCLE} fixed z-50`}
+                    className={`${CIRCLE} ${place} fixed z-50`}
                   >
                     <Settings aria-hidden data-testid="manage-icon" size={16} />
                   </button>

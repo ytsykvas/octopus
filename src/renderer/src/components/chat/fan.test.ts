@@ -4,44 +4,52 @@ import type { Prompt } from '@core/promptSchema.js'
 
 import { fanItems, fanSlots, PILL_MAX } from './fan.js'
 
-// The composer's own corner: nothing to the right of the button, so only the
-// left quarter — 9 o'clock to 12 — is there to use.
-const LEFT_ONLY = { top: 0, left: 0, right: 600 }
+// Room for the left quarter and the top of the arc, none for the right quarter:
+// the top pill is centred and needs 48 on either side of the anchor, and the
+// right quarter's first pill needs 50 + 96 to its right.
+const LEFT_ONLY = { top: 0, left: 0, right: 700 }
 // Room all round, which is what lets the fan open as far as 3 o'clock.
 const WIDE = { top: 0, left: 0, right: 1200 }
 
 describe('fanSlots', () => {
   // The quarter of a circle above and to the left of the button, in the order a
   // clock is read: from 9 o'clock, nearly level with the button, up to 12,
-  // straight above it.
-  it('lays five pills on the left quarter when there is room only on the left', () => {
+  // straight above it. The arc is narrower than it is tall, so the two sides
+  // stay close to the button and to each other.
+  it('lays the left quarter from 9 o\u2019clock up to the top of the arc', () => {
     const slots = fanSlots({ x: 600, y: 600 }, LEFT_ONLY)
 
-    expect(slots.map((slot) => slot.x)).toEqual([463, 472, 488, 516, 600])
+    expect(slots.map((slot) => slot.side)).toEqual(['left', 'left', 'left', 'left', 'center'])
+    expect(slots.map((slot) => slot.x)).toEqual([518, 523, 533, 550, 600])
     expect(slots.map((slot) => slot.top)).toEqual([560, 532, 504, 476, 448])
-    expect(slots.every((slot) => slot.side === 'left')).toBe(true)
   })
 
   // The rest of the half circle, 12 o'clock to 3, for when there are many: the
-  // sweep goes on without a break, down the right side. The top rung is shared,
-  // so the right quarter has one rung fewer.
+  // sweep goes on without a break, down the right side. The top of the arc is
+  // shared, so each side has one rung fewer than the arc is tall.
   it('goes on round to 3 o\u2019clock when there is room on the right, top to bottom', () => {
     const slots = fanSlots({ x: 600, y: 600 }, WIDE)
     const right = slots.filter((slot) => slot.side === 'right')
 
     expect(slots).toHaveLength(9)
-    expect(slots.slice(0, 5).every((slot) => slot.side === 'left')).toBe(true)
-    expect(right.map((slot) => slot.x)).toEqual([684, 712, 728, 737])
+    expect(slots.slice(0, 5).map((slot) => slot.side)).toEqual([
+      'left',
+      'left',
+      'left',
+      'left',
+      'center'
+    ])
+    expect(right.map((slot) => slot.x)).toEqual([650, 667, 677, 682])
     expect(right.map((slot) => slot.top)).toEqual([476, 504, 532, 560])
   })
 
-  // Read clockwise from 9, the pill straight above the button is the last of the
-  // left quarter, and the one the right quarter carries on from.
-  it('ends the left quarter on the pill straight above the button, as wide as a pill may be', () => {
-    const top = fanSlots({ x: 600, y: 600 }, LEFT_ONLY).at(-1)
+  // Centred, so it bridges the two sides: anchored by an edge, it hung off one
+  // of them and left the top of the arc open over the other.
+  it('centres the pill at the top of the arc over the button, as wide as a pill may be', () => {
+    const top = fanSlots({ x: 600, y: 600 }, WIDE)[4]
 
     expect(top).toEqual({
-      side: 'left',
+      side: 'center',
       x: 600,
       top: 448,
       maxWidth: PILL_MAX,
@@ -55,54 +63,72 @@ describe('fanSlots', () => {
   it('measures each pill\u2019s flight from the button\u2019s centre, on either side', () => {
     const slots = fanSlots({ x: 600, y: 600 }, WIDE)
 
-    expect(slots[0]).toMatchObject({ fromX: 600 - 463, fromY: 600 - 560 - 12 })
-    expect(slots[5]).toMatchObject({ side: 'right', fromX: 600 - 684, fromY: 600 - 476 - 12 })
+    expect(slots[0]).toMatchObject({ fromX: 600 - 518, fromY: 600 - 560 - 12 })
+    expect(slots[5]).toMatchObject({ side: 'right', fromX: 600 - 650, fromY: 600 - 476 - 12 })
   })
 
   it('drops the pills that would run off the top, keeping the ones below', () => {
     const slots = fanSlots({ x: 600, y: 60 }, WIDE)
 
-    expect(slots).toHaveLength(2)
     expect(slots.map((slot) => slot.side)).toEqual(['left', 'right'])
     expect(slots.map((slot) => slot.top)).toEqual([20, 20])
   })
 
   it('keeps a pill whose top is exactly at the margin, and drops the rung above it', () => {
     // The top rung of this anchor sits at y - 152; the margin is 8.
-    expect(fanSlots({ x: 600, y: 160 }, LEFT_ONLY).at(-1)).toMatchObject({ top: 8, x: 600 })
-    // The rung at 7 is gone, so the first one left is the next down: 159 - 112 - 12.
-    expect(fanSlots({ x: 600, y: 159 }, LEFT_ONLY).at(-1)).toMatchObject({ top: 35 })
+    expect(fanSlots({ x: 600, y: 160 }, LEFT_ONLY).at(-1)).toMatchObject({
+      side: 'center',
+      top: 8
+    })
+    // The rung at 7 is gone, so the last one left is the next down: 159 - 112 - 12.
+    expect(fanSlots({ x: 600, y: 159 }, LEFT_ONLY).at(-1)).toMatchObject({ side: 'left', top: 35 })
   })
 
-  it('drops the left pills too far left for the narrowest pill to fit', () => {
-    const slots = fanSlots({ x: 150, y: 600 }, { top: 0, left: 0, right: 150 })
+  const onSide = (side: string, slots: readonly { side: string }[]): number =>
+    slots.filter((slot) => slot.side === side).length
 
-    expect(slots).toHaveLength(1)
-    expect(slots[0]).toMatchObject({ x: 150 })
+  it('drops the left pills too far left for the narrowest pill to fit', () => {
+    // Only the first rung of the left quarter, 50 left of the anchor, clears it.
+    expect(onSide('left', fanSlots({ x: 170, y: 600 }, WIDE))).toBe(1)
   })
 
   it('keeps a left pill whose edge is exactly at the margin', () => {
-    // Narrowest pill is 96 wide and the margin 8, so the right edge may be 104.
-    expect(fanSlots({ x: 104, y: 600 }, { top: 0, left: 0, right: 104 })).toHaveLength(1)
-    expect(fanSlots({ x: 103, y: 600 }, { top: 0, left: 0, right: 103 })).toHaveLength(0)
+    // Narrowest pill is 96 wide and the margin 8, so its right edge may be 104.
+    expect(onSide('left', fanSlots({ x: 154, y: 600 }, WIDE))).toBe(1)
+    expect(onSide('left', fanSlots({ x: 153, y: 600 }, WIDE))).toBe(0)
   })
 
   it('drops the right pills too near the right edge, and keeps one exactly at the margin', () => {
     // A right pill starts at x and the narrowest is 96 wide: x + 96 <= right - 8.
-    // The rungs of the right quarter start 84 right of the anchor at the least.
-    const fits = fanSlots({ x: 600, y: 600 }, { top: 0, left: 0, right: 600 + 84 + 96 + 8 })
-    expect(fits.filter((slot) => slot.side === 'right')).toHaveLength(1)
-
-    const short = fanSlots({ x: 600, y: 600 }, { top: 0, left: 0, right: 600 + 84 + 96 + 7 })
-    expect(short.filter((slot) => slot.side === 'right')).toHaveLength(0)
+    const bounds = (right: number): { top: number; left: number; right: number } => ({
+      top: 0,
+      left: 0,
+      right
+    })
+    expect(onSide('right', fanSlots({ x: 600, y: 600 }, bounds(600 + 50 + 96 + 8)))).toBe(1)
+    expect(onSide('right', fanSlots({ x: 600, y: 600 }, bounds(600 + 50 + 96 + 7)))).toBe(0)
   })
 
-  it('narrows a pill to the room it has, on the left and on the right', () => {
-    const [first, ...others] = fanSlots({ x: 350, y: 600 }, { top: 0, left: 200, right: 650 })
+  it('keeps the top pill only where half the narrowest pill fits on either side', () => {
+    expect(onSide('center', fanSlots({ x: 600, y: 600 }, { top: 0, left: 0, right: 656 }))).toBe(1)
+    expect(onSide('center', fanSlots({ x: 600, y: 600 }, { top: 0, left: 0, right: 655 }))).toBe(0)
+    expect(onSide('center', fanSlots({ x: 600, y: 600 }, { top: 0, left: 544, right: 1200 }))).toBe(
+      1
+    )
+    expect(onSide('center', fanSlots({ x: 600, y: 600 }, { top: 0, left: 545, right: 1200 }))).toBe(
+      0
+    )
+  })
 
-    expect(first).toMatchObject({ side: 'left', x: 350, maxWidth: 350 - 200 - 8 })
-    const right = others.find((slot) => slot.side === 'right')
-    expect(right).toMatchObject({ maxWidth: 650 - (right?.x ?? 0) - 8 })
+  it('narrows a pill to the room it has, on either side of the top and on the right', () => {
+    const slots = fanSlots({ x: 350, y: 600 }, { top: 0, left: 250, right: 560 })
+
+    // Centred, so the nearer edge decides: 350 - 250 - 8 on the left, twice over.
+    expect(slots.find((slot) => slot.side === 'center')).toMatchObject({ maxWidth: 184 })
+    expect(slots.find((slot) => slot.side === 'right')).toMatchObject({
+      x: 400,
+      maxWidth: 560 - 400 - 8
+    })
   })
 
   it('measures from the top-left of the area it is given, not of the window', () => {

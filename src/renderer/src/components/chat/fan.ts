@@ -23,6 +23,13 @@ import type { Prompt } from '@core/promptSchema.js'
  * reaches further from the control it belongs to.
  */
 export const FAN_RADIUS = 140
+/**
+ * How far out the arc reaches sideways, against how high it reaches: an arc
+ * narrower than it is tall keeps the two sides near the button and near each
+ * other. A round one put them so far apart either side of the button that, with
+ * the pills growing outwards from it, the fan read as two piles.
+ */
+export const FAN_SPREAD = 0.6
 /** One rung: a 24 px pill and 4 px of air. */
 export const FAN_ROW = 28
 export const PILL_HEIGHT = 24
@@ -39,15 +46,17 @@ export interface FanBounds {
   readonly right: number
 }
 
-export type FanSide = 'left' | 'right'
+/** Which part of the arc: the top of it is centred over the button. */
+export type FanSide = 'left' | 'center' | 'right'
 
 export interface FanSlot {
   /** Which half of the circle: it decides which edge of the pill sits on `x`. */
   readonly side: FanSide
   /**
    * Where the pill is fixed, in window coordinates: its **right** edge on the
-   * left half, so it grows away from the button, and its **left** edge on the
-   * right half, for the same reason.
+   * left half, so it grows away from the button, its **left** edge on the right
+   * half, for the same reason, and its **centre** at the top of the arc, so it
+   * spans both sides and joins them.
    */
   readonly x: number
   readonly top: number
@@ -71,13 +80,34 @@ export interface FanSlot {
 export function fanSlots(anchor: { x: number; y: number }, bounds: FanBounds): FanSlot[] {
   const left: FanSlot[] = []
   const right: FanSlot[] = []
+  let center: FanSlot | null = null
 
   for (let rung = 0; FAN_RADIUS - rung * FAN_ROW > 0; rung += 1) {
     const height = FAN_RADIUS - rung * FAN_ROW
-    const across = Math.round(Math.sqrt(FAN_RADIUS ** 2 - height ** 2))
+    const across = Math.round(Math.sqrt(FAN_RADIUS ** 2 - height ** 2) * FAN_SPREAD)
     const top = anchor.y - height - PILL_HEIGHT / 2
+    const fromY = anchor.y - top - PILL_HEIGHT / 2
 
     if (top < bounds.top + FAN_MARGIN) continue
+
+    if (rung === 0) {
+      // Centred, so half the narrowest pill has to fit on either side of it.
+      const room = Math.min(
+        anchor.x - bounds.left - FAN_MARGIN,
+        bounds.right - FAN_MARGIN - anchor.x
+      )
+      if (room >= PILL_MIN / 2) {
+        center = {
+          side: 'center',
+          x: anchor.x,
+          top,
+          maxWidth: Math.min(PILL_MAX, room * 2),
+          fromX: 0,
+          fromY
+        }
+      }
+      continue
+    }
 
     const leftX = anchor.x - across
     if (leftX - PILL_MIN >= bounds.left + FAN_MARGIN) {
@@ -87,26 +117,25 @@ export function fanSlots(anchor: { x: number; y: number }, bounds: FanBounds): F
         top,
         maxWidth: Math.min(PILL_MAX, leftX - bounds.left - FAN_MARGIN),
         fromX: anchor.x - leftX,
-        fromY: anchor.y - top - PILL_HEIGHT / 2
+        fromY
       })
     }
 
-    // The top rung is shared by the two halves, and is the left one's.
     const rightX = anchor.x + across
-    if (rung > 0 && rightX + PILL_MIN <= bounds.right - FAN_MARGIN) {
+    if (rightX + PILL_MIN <= bounds.right - FAN_MARGIN) {
       right.push({
         side: 'right',
         x: rightX,
         top,
         maxWidth: Math.min(PILL_MAX, bounds.right - rightX - FAN_MARGIN),
         fromX: anchor.x - rightX,
-        fromY: anchor.y - top - PILL_HEIGHT / 2
+        fromY
       })
     }
   }
 
-  // Built from the top rung down; the left quarter is read upwards.
-  return [...left.reverse(), ...right]
+  // Built from the top rung down; the left quarter is read upwards to the top.
+  return [...left.reverse(), ...(center === null ? [] : [center]), ...right]
 }
 
 export type FanEntry =
