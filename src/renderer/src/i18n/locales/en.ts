@@ -1185,6 +1185,7 @@ export const en = {
       'Claude Code stopped with an error (code {{code}}). Send a message to try again; the conversation is kept.',
     compactedBy:
       'The agent summarised everything above to make room \u2014 {{before}} became {{after}}',
+    compactSummaryTitle: 'What the agent kept',
 
     /* The one change of model nobody in the conversation asked for. Two
        sentences because the two scopes are two different facts: a session swap

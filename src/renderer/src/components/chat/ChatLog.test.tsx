@@ -1391,6 +1391,24 @@ describe('what the log shows', () => {
     expect(screen.getByText(/74k/)).toBeVisible()
   })
 
+  // The summary is what the agent now knows of everything above. It runs long
+  // and is read when something seems forgotten, so it waits folded.
+  it('folds what the agent kept, and opens it on a click', async () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'compaction_summary', summary: 'Kept: the decisions about math.js.' })
+      ]
+    })
+
+    const fold = screen.getByRole('button', { name: 'What the agent kept' })
+    expect(fold).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Kept: the decisions about math.js.')).not.toBeInTheDocument()
+
+    await userEvent.click(fold)
+
+    expect(screen.getByText('Kept: the decisions about math.js.')).toBeVisible()
+  })
+
   /*
    * The agent's working directory moved, and the window's did not: Changes,
    * Files and the terminal still show the workspace. Drawn as a tool name with

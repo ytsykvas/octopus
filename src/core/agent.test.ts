@@ -21,6 +21,8 @@ import {
   READ_ONLY_TOOLS,
   GUARD_FAILED,
   CWD_WATCH_SETTINGS,
+  COMPACTION_WATCH_SETTINGS,
+  compactionWatch,
   cwdWatch,
   publishLocked,
   toolGuards,
@@ -1811,7 +1813,16 @@ describe('a session', () => {
       ultracode: false,
       enableWorkflows: false,
       skillOverrides: { 'octopus:review': 'off' },
-      hooks: CWD_WATCH_SETTINGS
+      hooks: { ...CWD_WATCH_SETTINGS, ...COMPACTION_WATCH_SETTINGS }
+    })
+  })
+
+  // The settings above only arm the hooks; these are the callbacks that answer.
+  it('listens for where the shell moved and for what a compaction kept', () => {
+    // An array in `toMatchObject` must match in length: one callback for each.
+    expect(fakeAgent().agent.options().hooks).toMatchObject({
+      CwdChanged: [expect.anything()],
+      PostCompact: [expect.anything()]
     })
   })
 
@@ -2064,7 +2075,7 @@ describe('a session', () => {
       ultracode: true,
       enableWorkflows: true,
       skillOverrides: {},
-      hooks: CWD_WATCH_SETTINGS
+      hooks: { ...CWD_WATCH_SETTINGS, ...COMPACTION_WATCH_SETTINGS }
     })
   })
 
@@ -2078,7 +2089,7 @@ describe('a session', () => {
       ultracode: false,
       enableWorkflows: false,
       skillOverrides: {},
-      hooks: CWD_WATCH_SETTINGS
+      hooks: { ...CWD_WATCH_SETTINGS, ...COMPACTION_WATCH_SETTINGS }
     })
   })
 
@@ -2215,6 +2226,72 @@ describe('cwdWatch', () => {
 
     expect(locked.hooks?.CwdChanged).toHaveLength(1)
     expect(locked.hooks?.PreToolUse?.length).toBeGreaterThan(0)
+  })
+})
+
+describe('compactionWatch', () => {
+  /** Fires the hook the way the SDK does, on what a compaction reports. */
+  function compacted(onEvent: (event: AgentEvent) => void, input: unknown): Promise<unknown> {
+    const [hook] = compactionWatch(onEvent).PostCompact?.[0]?.hooks ?? []
+    if (!hook) throw new Error('no PostCompact hook')
+    return hook(input as never, undefined, { signal: new AbortController().signal })
+  }
+
+  const report = {
+    hook_event_name: 'PostCompact',
+    session_id: 's-1',
+    transcript_path: '/t',
+    cwd: '/w/anna',
+    trigger: 'manual',
+    compact_summary: 'Kept: math.js'
+  }
+
+  it('says what the agent kept, and answers the hook with nothing', async () => {
+    const events: AgentEvent[] = []
+
+    await expect(compacted((event) => events.push(event), report)).resolves.toEqual({})
+
+    expect(events).toEqual([{ type: 'compaction_summary', summary: 'Kept: math.js' }])
+  })
+
+  // A subagent's compaction ends with its task; the conversation's memory is untouched.
+  it('leaves a subagent’s compaction unsaid', async () => {
+    const events: AgentEvent[] = []
+
+    await expect(
+      compacted((event) => events.push(event), { ...report, agent_id: 'a-1' })
+    ).resolves.toEqual({})
+
+    expect(events).toEqual([])
+  })
+
+  // A fold with nothing in it promises something it does not hold.
+  it('says nothing of an empty summary', async () => {
+    const events: AgentEvent[] = []
+
+    await compacted((event) => events.push(event), { ...report, compact_summary: '  ' })
+
+    expect(events).toEqual([])
+  })
+
+  it('says nothing of a report it cannot read', async () => {
+    const events: AgentEvent[] = []
+
+    await expect(compacted((event) => events.push(event), {})).resolves.toEqual({})
+
+    expect(events).toEqual([])
+  })
+
+  it('is carried by the locked session beside the cwd watch', () => {
+    const locked = publishLocked(
+      undefined,
+      [],
+      {},
+      { ...cwdWatch(() => undefined), ...compactionWatch(() => undefined) }
+    )
+
+    expect(locked.hooks?.CwdChanged).toHaveLength(1)
+    expect(locked.hooks?.PostCompact).toHaveLength(1)
   })
 })
 

@@ -824,6 +824,54 @@ export const CWD_WATCH_SETTINGS: NonNullable<Settings['hooks']> = {
   CwdChanged: [{ hooks: [{ type: 'command', command: 'true' }] }]
 }
 
+const PostCompactSchema = z.object({
+  compact_summary: z.string(),
+  // Present only inside a subagent, the SDK says; the main thread has none.
+  agent_id: z.string().optional()
+})
+
+/**
+ * What the agent kept when the conversation was compacted, as an event.
+ *
+ * The CLI hands the summary it wrote to its `PostCompact` hook and nowhere
+ * else the SDK streams, so this is the only way the log can show it. A
+ * subagent's compaction is left out, and so is an empty summary: a fold with
+ * nothing in it is a row that promises something it does not hold.
+ */
+export function compactionWatch(
+  onEvent: (event: AgentEvent) => void
+): NonNullable<Options['hooks']> {
+  return {
+    PostCompact: [
+      {
+        hooks: [
+          (input) => {
+            const compacted = PostCompactSchema.safeParse(input)
+            if (
+              compacted.success &&
+              compacted.data.agent_id === undefined &&
+              compacted.data.compact_summary.trim() !== ''
+            ) {
+              onEvent({ type: 'compaction_summary', summary: compacted.data.compact_summary })
+            }
+            return Promise.resolve({})
+          }
+        ]
+      }
+    ]
+  }
+}
+
+/**
+ * The settings side of `compactionWatch`, on the ground `CWD_WATCH_SETTINGS`
+ * was measured on: there, the callback alone never fired. Whether
+ * `PostCompact` needs it too is unmeasured, and the `true` command costs
+ * nothing.
+ */
+export const COMPACTION_WATCH_SETTINGS: NonNullable<Settings['hooks']> = {
+  PostCompact: [{ hooks: [{ type: 'command', command: 'true' }] }]
+}
+
 /**
  * What every session the app starts carries so its agent cannot publish: the
  * hooks, the CLI's own deny rules, and an environment where a push to any of
@@ -956,7 +1004,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
         enableWorkflows: ultracode,
         skillOverrides: options.skillOverrides,
         // What lets the `CwdChanged` callback below fire at all.
-        hooks: CWD_WATCH_SETTINGS,
+        hooks: { ...CWD_WATCH_SETTINGS, ...COMPACTION_WATCH_SETTINGS },
         // Left out rather than sent as null for "the agent's own": the flag
         // layer outranks the user's files, so a null here would still be a
         // claim, and `/autocompact` saved there is what null should defer to.
@@ -978,7 +1026,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
         hooks.refuseCommand,
         options.pushTargets,
         { ...process.env, ...options.env },
-        cwdWatch(hooks.onEvent)
+        { ...cwdWatch(hooks.onEvent), ...compactionWatch(hooks.onEvent) }
       ),
       // What makes text appear while it is being written rather than in one
       // block at the end of a turn.

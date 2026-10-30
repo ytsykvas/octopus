@@ -572,6 +572,14 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
    */
   z.object({ type: z.literal('cwd_changed'), from: z.string(), to: z.string() }),
 
+  /**
+   * What the agent kept of the conversation when it compacted it: the summary
+   * the CLI wrote, from its `PostCompact` hook. Kept in the transcript, since it
+   * is all the agent now knows of everything above the compaction line. Only the
+   * main thread's: a subagent's compaction ends with its task.
+   */
+  z.object({ type: z.literal('compaction_summary'), summary: z.string() }),
+
   z.object({
     type: z.literal('model_refusal_no_fallback'),
     originalModel: z.string(),
