@@ -268,7 +268,8 @@ describe('sending', () => {
           compactsAt: null,
           autoCompactOn: null,
           model: 'claude-opus-5',
-          modelWindow: null
+          modelWindow: null,
+          breakdown: null
         },
         autoCompact: null
       }
@@ -483,7 +484,8 @@ describe('review notes riding with the message', () => {
           compactsAt: null,
           autoCompactOn: null,
           model: null,
-          modelWindow: null
+          modelWindow: null,
+          breakdown: null
         },
         autoCompact: null
       }
@@ -540,7 +542,8 @@ describe('while the agent is working', () => {
           compactsAt: null,
           autoCompactOn: null,
           model: 'claude-opus-5',
-          modelWindow: null
+          modelWindow: null,
+          breakdown: null
         },
         autoCompact: null
       }

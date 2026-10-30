@@ -3022,7 +3022,15 @@ const CONTEXT_RESPONSE = {
   percentage: 2,
   autoCompactThreshold: 967_000,
   isAutoCompactEnabled: true,
-  categories: [{ name: 'System prompt', tokens: 3313, color: 'promptBorder' }],
+  categories: [
+    {
+      id: 'system_prompt',
+      name: 'System prompt',
+      tokens: 3313,
+      color: 'promptBorder',
+      kind: 'used'
+    }
+  ],
   gridRows: [],
   model: 'claude-opus-5[1m]',
   memoryFiles: [],
@@ -3116,8 +3124,26 @@ describe('reading how full the context window is', () => {
       autoCompactOn: true,
       model: 'claude-opus-5[1m]',
       // Nothing to go on before a turn has said what the model holds.
-      modelWindow: null
+      modelWindow: null,
+      breakdown: {
+        categories: [{ id: 'system_prompt', tokens: 3313 }],
+        memoryFiles: [],
+        mcpServers: [],
+        tools: []
+      }
     })
+  })
+
+  // The breakdown is a second reading of the same reply: when it cannot be made,
+  // the percentage the strip draws must not go with it.
+  it('keeps the reading when the breakdown cannot be read', async () => {
+    const usage = await readContextUsage(
+      queryAnswering({
+        getContextUsage: () => Promise.resolve({ ...CONTEXT_RESPONSE, categories: 'x' } as never)
+      })
+    )
+
+    expect(usage).toMatchObject({ percentage: 2, usedTokens: 23_921, breakdown: null })
   })
 
   /*

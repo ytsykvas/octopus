@@ -6786,7 +6786,10 @@ describe('the agent chat', () => {
           compactsAt: 967_000,
           autoCompactOn: true,
           model: 'claude-opus-5[1m]',
-          modelWindow: null
+          modelWindow: null,
+          // The fake reply's categories carry no ids, which is a reply the
+          // breakdown cannot read and the reading survives.
+          breakdown: null
         },
         autoCompact: {
           chosen: null,

@@ -22,7 +22,8 @@ const FULL: SessionUsage = {
     compactsAt: null,
     autoCompactOn: null,
     model: 'claude-opus-5',
-    modelWindow: null
+    modelWindow: null,
+    breakdown: null
   },
   autoCompact: null
 }
@@ -257,7 +258,8 @@ describe('the way out of a full context window', () => {
         compactsAt: null,
         autoCompactOn: null,
         model: 'claude-opus-5',
-        modelWindow: null
+        modelWindow: null,
+        breakdown: null
       },
       autoCompact: null
     })

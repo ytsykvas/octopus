@@ -38,6 +38,7 @@ import type {
   PermissionMode
 } from './chats.js'
 import { contextShare, sessionEffort } from './chats.js'
+import { type ContextBreakdown, breakdownFrom } from './contextBreakdown.js'
 import { type AnswerValue, type ElicitationField, readForm } from './elicitation.js'
 import { type AgentEvent, ResetTriggerSchema } from './events.js'
 import { describeError } from './persist.js'
@@ -433,6 +434,8 @@ export interface ContextUsage {
    * to it, so the menu needs it to say which choices would do nothing.
    */
   readonly modelWindow: number | null
+  /** What fills the window, or null when the CLI did not say in a shape we read. */
+  readonly breakdown: ContextBreakdown | null
 }
 
 /**
@@ -516,7 +519,8 @@ export async function readContextUsage(
       // Defended rather than taken: this arrived later than the rest of the
       // response, so a CLI a few versions back answers without it.
       model,
-      modelWindow: (model === null ? undefined : windowOf(model)) ?? null
+      modelWindow: (model === null ? undefined : windowOf(model)) ?? null,
+      breakdown: breakdownFrom(usage)
     }
   } catch {
     return null
