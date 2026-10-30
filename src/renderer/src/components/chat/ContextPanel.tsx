@@ -150,9 +150,7 @@ export function ContextPanel({ breakdown, usedTokens }: ContextPanelProps): Reac
               .filter((section) => section.rows.length > 0)
               .map((section) => (
                 <section key={section.id}>
-                  <p className="text-ink-faint px-3 pt-2 text-[10px] tracking-wide uppercase">
-                    {section.heading}
-                  </p>
+                  <p className="section-label px-3 pt-2">{section.heading}</p>
                   <ul>
                     {section.rows.map((row) => (
                       <li key={row.key} className="space-y-1 px-3 py-1">
