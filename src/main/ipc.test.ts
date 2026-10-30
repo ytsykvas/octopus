@@ -22,6 +22,7 @@ import type { Config } from '../core/config.js'
 import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import type { RemoteRepository } from '../core/github.js'
 import type { DraftEvent } from '../core/pullRequestDraft.js'
+import type { RemoteRefWatchDeps } from '../core/remoteRefs.js'
 import {
   createService as makeService,
   type OctopusService,
@@ -32,6 +33,7 @@ import type {
   ChatsChangedEvent,
   ChatStatusEvent,
   TasksEvent,
+  WorkspacePushedEvent,
   WorkspaceStatusEvent
 } from '../core/service.js'
 import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
@@ -70,6 +72,8 @@ interface Harness {
   readonly broadcasts: ThemeName[]
   readonly chatEvents: ChatEvent[]
   readonly statusEvents: WorkspaceStatusEvent[]
+  /** Every workspace branch the remote was heard to move. */
+  readonly pushedEvents: WorkspacePushedEvent[]
   readonly chatStatusEvents: ChatStatusEvent[]
   /** Every announcement that a workspace's set of conversations moved. */
   readonly chatsChangedEvents: ChatsChangedEvent[]
@@ -98,6 +102,7 @@ function harness(): Harness {
   const broadcasts: ThemeName[] = []
   const chatEvents: ChatEvent[] = []
   const statusEvents: WorkspaceStatusEvent[] = []
+  const pushedEvents: WorkspacePushedEvent[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
   const chatsChangedEvents: ChatsChangedEvent[] = []
   const taskEvents: TasksEvent[] = []
@@ -112,6 +117,7 @@ function harness(): Harness {
     broadcasts,
     chatEvents,
     statusEvents,
+    pushedEvents,
     chatStatusEvents,
     chatsChangedEvents,
     taskEvents,
@@ -137,6 +143,7 @@ function harness(): Harness {
       broadcastTheme: (theme) => broadcasts.push(theme),
       broadcastChatEvent: (event) => chatEvents.push(event),
       broadcastWorkspaceStatus: (event) => statusEvents.push(event),
+      broadcastWorkspacePushed: (event) => pushedEvents.push(event),
       broadcastUsageWindows: (windows) => usageBroadcasts.push(windows),
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
       broadcastChatsChanged: (event) => chatsChangedEvents.push(event),
@@ -2168,6 +2175,7 @@ describe('workspaces of a real project', () => {
                 mergeStateStatus: 'DIRTY',
                 reviewDecision: 'CHANGES_REQUESTED',
                 statusCheckRollup: [],
+                headRefOid: 'a'.repeat(40),
                 comments: [],
                 reviews: []
               })
@@ -3682,5 +3690,29 @@ describe('the workspace notes channel', () => {
     await expect(invoke('workspaces:notes', workspace.id, { text: 'no' })).resolves.toMatchObject({
       ok: false
     })
+  })
+})
+
+describe('a workspace branch the remote moved', () => {
+  it('reaches the windows', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    let heard: RemoteRefWatchDeps | null = null
+    const replacement = await useService({
+      refWatch: (deps) => {
+        heard = deps
+        return { sync: () => Promise.resolve(), close: () => undefined }
+      }
+    })
+    const project = await replacement.addProjectFromPath(repo)
+    const workspace = await replacement.createWorkspaceIn(project.id)
+
+    const deps = heard as RemoteRefWatchDeps | null
+    deps?.onRef(project.id, workspace.branch, 'a'.repeat(40))
+
+    expect(bench.pushedEvents).toEqual([
+      { workspaceId: workspace.id, projectId: project.id, head: 'a'.repeat(40) }
+    ])
+    await replacement.closeChats()
   })
 })

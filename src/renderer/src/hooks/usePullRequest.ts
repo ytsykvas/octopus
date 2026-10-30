@@ -4,6 +4,7 @@ import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 
 import { useDraftState } from './pullRequestDrafts.js'
+import { useBranchMoved } from './useBranchMoved.js'
 import { useErrorMessage } from './useErrorMessage.js'
 import { useTurnSettled } from './useTurnSettled.js'
 
@@ -190,6 +191,9 @@ export function usePullRequest(
 
   // Behind a hidden tab nothing fires; the effect above reads when it is shown.
   useTurnSettled(workspaceId, enabled, refresh)
+  // A push from the terminal ends no turn, and is what "nothing left to push"
+  // is about.
+  useBranchMoved(workspaceId, enabled, refresh)
 
   return {
     view,

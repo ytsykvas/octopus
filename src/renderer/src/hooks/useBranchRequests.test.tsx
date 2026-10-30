@@ -6,6 +6,8 @@ import type { BranchRequest } from '@core/pullRequestShapes.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { failOnUpdatesOutsideAct } from '../test/updatesOutsideAct.js'
+import { emitBranchMoved } from '../test/workspaces.js'
+import { PUSH_SETTLE_MS } from './pullRequestPace.js'
 import { RUNNING_INTERVAL_MS, useBranchRequests } from './useBranchRequests.js'
 
 // Every read here answers through a promise, and one answered after a test had
@@ -187,6 +189,84 @@ describe('what each branch of a project has become', () => {
     await act(() => vi.advanceTimersByTimeAsync(RUNNING_INTERVAL_MS + 100))
 
     expect(vi.mocked(octopus().projects.pullRequests).mock.calls.length).toBeGreaterThan(1)
+  })
+
+  /*
+   * A push puts nothing running at first: GitHub takes a few seconds to put a
+   * check on the new commit, so the read made at the push said "passed" about
+   * the commit before, and the row waited a minute to start spinning.
+   */
+  it('reads at a push, and keeps the fast clock for a while after it', async () => {
+    vi.useFakeTimers()
+    answer(request({ checks: 'passed' }))
+    renderHook(() => useBranchRequests(PLANNER))
+    const asked = (): number => vi.mocked(octopus().projects.pullRequests).mock.calls.length
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(asked()).toBe(1)
+
+    emitBranchMoved('planner/anna', 'a'.repeat(40), PLANNER)
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(asked()).toBe(2)
+
+    await act(() => vi.advanceTimersByTimeAsync(RUNNING_INTERVAL_MS + 100))
+    expect(asked()).toBe(3)
+
+    // Fifteen-second steps until the window closes, then the minute again.
+    await act(() => vi.advanceTimersByTimeAsync(PUSH_SETTLE_MS - RUNNING_INTERVAL_MS))
+    expect(asked()).toBe(8)
+    await act(() => vi.advanceTimersByTimeAsync(59_000))
+    expect(asked()).toBe(8)
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    expect(asked()).toBe(9)
+  })
+
+  it('ignores a push in a project it is not showing', async () => {
+    vi.useFakeTimers()
+    answer(request({ checks: 'passed' }))
+    renderHook(() => useBranchRequests(PLANNER))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    emitBranchMoved('ledger/anna', 'a'.repeat(40), 'ledger')
+    await act(() => vi.advanceTimersByTimeAsync(RUNNING_INTERVAL_MS + 100))
+
+    expect(octopus().projects.pullRequests).toHaveBeenCalledOnce()
+  })
+
+  /*
+   * A push starts a read while the last one may still be on its way. That
+   * older one describes the branch before the push, and answering second it
+   * used to overwrite the newer answer — and leave a second clock running.
+   */
+  it('drops the answer of a read a push overtook, and keeps one clock', async () => {
+    vi.useFakeTimers()
+    const before = held<Awaited<ReturnType<typeof window.octopus.projects.pullRequests>>>()
+    const after = held<Awaited<ReturnType<typeof window.octopus.projects.pullRequests>>>()
+    vi.mocked(octopus().projects.pullRequests)
+      .mockReturnValueOnce(before.promise)
+      .mockReturnValueOnce(after.promise)
+    answer(request({ checks: 'passed' }))
+    const { result } = renderHook(() => useBranchRequests(PLANNER))
+
+    emitBranchMoved('planner/anna', 'a'.repeat(40), PLANNER)
+    await act(async () => {
+      after.resolve({
+        ok: true,
+        value: { requests: [request({ checks: 'passed' })], capped: false }
+      })
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await act(async () => {
+      before.resolve({
+        ok: true,
+        value: { requests: [request({ checks: 'running' })], capped: false }
+      })
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(result.current.byBranch.get('ytsykvas/anna')?.checks).toBe('passed')
+    const asked = vi.mocked(octopus().projects.pullRequests).mock.calls.length
+    await act(() => vi.advanceTimersByTimeAsync(RUNNING_INTERVAL_MS + 100))
+    expect(vi.mocked(octopus().projects.pullRequests).mock.calls.length).toBe(asked + 1)
   })
 
   it('keeps the slow clock when nothing is running', async () => {
@@ -413,6 +493,22 @@ describe('the other projects the status bar counts', () => {
     rerender({ also: ['ledger'] })
 
     expect(octopus().projects.pullRequests).toHaveBeenCalledOnce()
+  })
+
+  // The status bar's projects can lag their minute; a push says nothing about them.
+  it('re-reads only the project the push was in', async () => {
+    vi.useFakeTimers()
+    answer(request({ checks: 'passed' }))
+    renderHook(() => useBranchRequests(PLANNER, ['ledger']))
+    const asked = (id: string): number =>
+      vi.mocked(octopus().projects.pullRequests).mock.calls.filter(([of]) => of === id).length
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    emitBranchMoved('planner/anna', 'a'.repeat(40), PLANNER)
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    expect(asked(PLANNER)).toBe(2)
+    expect(asked('ledger')).toBe(1)
   })
 })
 

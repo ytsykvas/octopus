@@ -10,6 +10,7 @@ import {
   pushSettingsOpen,
   pushTheme,
   pushUsageWindows,
+  pushWorkspacePushed,
   pushWorkspaceStatus
 } from './broadcast.js'
 
@@ -91,6 +92,15 @@ describe('what the main process pushes, and on which channel', () => {
     pushWorkspaceStatus([window], event)
 
     expect(window.sent).toEqual([['workspaces:status', event]])
+  })
+
+  it('announces a workspace branch the remote moved', () => {
+    const window = target()
+    const event = { workspaceId: 'planner/anna', projectId: 'planner', head: 'a'.repeat(40) }
+
+    pushWorkspacePushed([window], event)
+
+    expect(window.sent).toEqual([['workspaces:pushed', event]])
   })
 
   it('announces the account windows', () => {

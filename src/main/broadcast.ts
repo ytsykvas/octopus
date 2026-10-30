@@ -59,6 +59,10 @@ export function pushWorkspaceStatus(targets: readonly PushTarget[], event: unkno
   pushAll(targets, 'workspaces:status', event)
 }
 
+export function pushWorkspacePushed(targets: readonly PushTarget[], event: unknown): void {
+  pushAll(targets, 'workspaces:pushed', event)
+}
+
 export function pushUsageWindows(targets: readonly PushTarget[], windows: unknown): void {
   pushAll(targets, 'usage:windows', windows)
 }

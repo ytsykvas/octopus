@@ -392,6 +392,15 @@ export interface PullRequestDetail {
   readonly description: string
   readonly url: string
   readonly draft: boolean
+  /**
+   * The commit GitHub is looking at — the head of the branch as it last saw it.
+   *
+   * What tells an answer about the commit just sent from one about the commit
+   * before it. GitHub takes a push in a few seconds after it lands, and until
+   * then the checks it reports are the previous commit's, finished: read alone,
+   * they say there is nothing left to wait for at exactly the moment there is.
+   */
+  readonly head: string
   readonly checks: readonly PullRequestCheck[]
   /** All three kinds in one reading order, oldest first. */
   readonly comments: readonly PullRequestComment[]
@@ -436,6 +445,7 @@ export const DetailPayloadSchema = z.object({
      never fire there. */
   reviewDecision: z.string(),
   statusCheckRollup: RollupSchema,
+  headRefOid: z.string().min(1),
   comments: z.array(
     z.object({
       id: z.string(),
@@ -580,6 +590,7 @@ export function toPullRequestDetail(
     description: view.body,
     url: view.url,
     draft: view.isDraft,
+    head: view.headRefOid,
     checks: toChecks(view.statusCheckRollup),
     comments: comments(view, threads),
     decision: DECISIONS[view.reviewDecision] ?? null,

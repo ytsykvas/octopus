@@ -189,6 +189,7 @@ import {
 import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, keptIndexCopies } from './git.js'
 import { FETCH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
+import { createRemoteRefWatch, type RemoteRefWatch, type RemoteRefWatchDeps } from './remoteRefs.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
 import { narrowCarried } from './carriedTrust.js'
@@ -545,6 +546,12 @@ export interface ServiceOptions {
    * plugins on the machine running it.
    */
   readonly pluginCli?: PluginCli
+  /**
+   * What hears a project's remote branches move. Injected because the real one
+   * is a file-system watch, and what is under test here is which workspace a
+   * moved branch belongs to, not when FSEvents gets round to saying so.
+   */
+  readonly refWatch?: (deps: RemoteRefWatchDeps) => RemoteRefWatch
   /** How long a running conversation is given to reload its plugins. */
   readonly pluginReloadMs?: number
   /** How long a conversation stays at rest before it is said to be done. */
@@ -644,6 +651,19 @@ export interface ChatEvent {
 export interface WorkspaceStatusEvent {
   readonly workspaceId: string
   readonly status: Workspace['status']
+}
+
+/**
+ * A workspace's branch moved on the remote — almost always because it was just
+ * pushed, from wherever.
+ *
+ * `head` is the commit it moved to, which is what lets the pull request pane
+ * tell GitHub's answer about this commit from its answer about the last one.
+ */
+export interface WorkspacePushedEvent {
+  readonly workspaceId: string
+  readonly projectId: string
+  readonly head: string
 }
 
 /**
@@ -1754,6 +1774,14 @@ export interface OctopusService {
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
   onWorkspaceStatus(handler: (event: WorkspaceStatusEvent) => void): () => void
   /**
+   * A workspace's branch moving on the remote, as soon as git writes it.
+   *
+   * The one signal every push shares — the agent's, the terminal's, the one
+   * `gh pr create` makes — so the pull request pane reads when it happens
+   * rather than on its next tick.
+   */
+  onWorkspacePushed(handler: (event: WorkspacePushedEvent) => void): () => void
+  /**
    * The account's windows, whenever they move.
    *
    * Pushed rather than pulled, and that is the whole of what stops the block
@@ -1781,7 +1809,8 @@ export interface OctopusService {
    *
    * Called when the application quits, and by the tests before the temporary
    * directory they gave it goes: a write still running when `rm` starts is a
-   * failure in whichever test the runner tears down next.
+   * failure in whichever test the runner tears down next. Lets go of the watch
+   * on the projects' refs as well, being the one place the service is shut.
    *
    * Bounded by `SHUTDOWN_GRACE_MS`, so a session that will not close cannot
    * hold the application open. What ends at the ceiling is the **waiting** —
@@ -1845,6 +1874,33 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const now = options.now ?? ((): string => new Date().toISOString())
 
   let state: State = await loadState(statePath)
+
+  const pushedListeners = new Set<(event: WorkspacePushedEvent) => void>()
+  /*
+   * Which workspace a moved branch belongs to is decided here, at the moment
+   * it moves, against the state as it is then: a workspace created or removed
+   * since the watch started is found or not found accordingly.
+   */
+  /** The workspace of a project on a branch, if there is one — looked up as it is now. */
+  const workspaceOnBranch = (projectId: string, branch: string): Workspace | undefined =>
+    workspacesOfProject(state, projectId).find((candidate) => candidate.branch === branch)
+
+  const refWatch = (options.refWatch ?? createRemoteRefWatch)({
+    commonDirOf: async (repoPath) =>
+      resolve(repoPath, (await makeExec(repoPath)(['rev-parse', '--git-common-dir'])).trim()),
+    wants: (projectId, branch) => workspaceOnBranch(projectId, branch) !== undefined,
+    onRef: (projectId, branch, head) => {
+      // Asked again: the workspace may have gone in the moment between the
+      // event and the read.
+      const workspace = workspaceOnBranch(projectId, branch)
+      if (workspace === undefined) return
+
+      for (const listener of pushedListeners) {
+        listener({ workspaceId: workspace.id, projectId, head })
+      }
+    }
+  })
+  void refWatch.sync(state.projects)
 
   /*
    * A project's variables used to be one file. Giving each project its `envs/`
@@ -2181,7 +2237,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const next = change(state)
       if (next === state) return
       await saveState(next, statePath, stateTempPath)
+      const moved = next.projects !== state.projects
       state = next
+      // Added or removed is what matters, and a write that leaves the list
+      // alone keeps the same array: most writes are a turn, not a project.
+      if (moved) void refWatch.sync(next.projects)
     })
   }
 
@@ -7493,12 +7553,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return () => draftListeners.delete(handler)
     },
 
+    onWorkspacePushed(handler) {
+      pushedListeners.add(handler)
+      return () => pushedListeners.delete(handler)
+    },
+
     onChatsChanged(handler) {
       chatsChangedListeners.add(handler)
       return () => chatsChangedListeners.delete(handler)
     },
 
     async closeChats() {
+      refWatch.close()
       const live = [...sessions.values()]
       sessions.clear()
 
