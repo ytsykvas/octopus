@@ -61,6 +61,8 @@ async function renderFan(
     readonly manage?: boolean
     readonly at?: { top: number; left: number }
     readonly inDialog?: boolean
+    /** The colour the pane carries down, as `ChatSession` sets it inline. */
+    readonly projectColor?: string
   } = {}
 ): Promise<Rendered> {
   const onPick = vi.fn()
@@ -74,7 +76,14 @@ async function renderFan(
       {...(options.manage !== false && { onManage })}
     />
   )
-  const { container } = render(options.inDialog === true ? <dialog open>{fan}</dialog> : fan)
+  const inner = options.inDialog === true ? <dialog open>{fan}</dialog> : fan
+  const { container } = render(
+    options.projectColor === undefined ? (
+      inner
+    ) : (
+      <div style={{ '--project-color': options.projectColor } as React.CSSProperties}>{inner}</div>
+    )
+  )
 
   await waitFor(() => {
     expect(octopus().prompts.list).toHaveBeenCalledTimes(2)
@@ -93,7 +102,10 @@ async function renderFan(
   return { onPick, onManage, container, button }
 }
 
-const pills = (): string[] => screen.getAllByRole('menuitem').map((pill) => pill.textContent)
+// What a pill is called, as a reader would hear it: the way to settings is a
+// circle with a gear on it and says its name by its label.
+const pills = (): string[] =>
+  screen.getAllByRole('menuitem').map((pill) => pill.getAttribute('aria-label') ?? pill.textContent)
 
 describe('opening the fan', () => {
   it('lays the project’s prompts out first, then the installation’s, in their order', async () => {
@@ -501,5 +513,101 @@ describe('closing', () => {
     expect(
       within(screen.getByRole('menu')).getByRole('menuitem', { name: /^More/ })
     ).toBeInTheDocument()
+  })
+})
+
+describe('how the pills look', () => {
+  // A circle with a gear and no words: it is not one of the prompts, and it is
+  // the same place however many there are.
+  it('draws the way to settings as a circle with a gear and no words', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    const manage = screen.getByRole('menuitem', { name: 'Manage prompts…' })
+    expect(manage).toHaveTextContent('')
+    expect(manage).toHaveAttribute('title', 'Manage prompts…')
+    expect(within(manage).getByTestId('manage-icon')).toBeInTheDocument()
+  })
+
+  it('keeps the words on it in the list, where there is a row for it', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ at: CRAMPED })
+
+    await user.click(button())
+
+    expect(screen.getByRole('menuitem', { name: 'Manage prompts…' })).toHaveTextContent(
+      'Manage prompts…'
+    )
+  })
+
+  it('puts the plan icon on a prompt for the plan, and on no other', async () => {
+    answering([prompt('Plain'), prompt('Tighten', { forPlan: true })], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    expect(
+      within(screen.getByRole('menuitem', { name: 'Tighten' })).getByTestId('plan-icon')
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('menuitem', { name: 'Plain' })).queryByTestId('plan-icon')
+    ).not.toBeInTheDocument()
+  })
+
+  it('puts the plan icon on a row of the list too', async () => {
+    answering([prompt('Tighten', { forPlan: true })], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ at: CRAMPED })
+
+    await user.click(button())
+
+    expect(
+      within(screen.getByRole('menuitem', { name: 'Tighten' })).getByTestId('plan-icon')
+    ).toBeInTheDocument()
+  })
+
+  // Drawn into the body, the fan is no longer inside the pane that sets the
+  // colour, so it is read where the button is and carried over.
+  it('wears the colour of the project the button sits in', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({ projectColor: 'rgb(10, 20, 30)' })
+
+    await user.click(button())
+
+    expect(screen.getByRole('menu').style.getPropertyValue('--project-color')).toBe(
+      'rgb(10, 20, 30)'
+    )
+  })
+
+  it('wears the colour in a dialog too, and in the list', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan({
+      projectColor: 'rgb(10, 20, 30)',
+      inDialog: true,
+      at: CRAMPED
+    })
+
+    await user.click(button())
+
+    expect(screen.getByRole('menu').style.getPropertyValue('--project-color')).toBe(
+      'rgb(10, 20, 30)'
+    )
+  })
+
+  it('sets no colour of its own where the button sits in no project', async () => {
+    answering([prompt('A')], [])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    expect(screen.getByRole('menu').style.getPropertyValue('--project-color')).toBe('')
   })
 })

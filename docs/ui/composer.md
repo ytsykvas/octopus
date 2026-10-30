@@ -87,7 +87,15 @@ area by the margin and the narrowest pill clears the left, so none is ever cut
 off by an edge. The rest go behind a last-but-one pill, "More… (N)", which opens
 a list of only what did not fit, under the sections "This project" and
 "Everywhere"; the last pill is always the way to the settings that keep and order
-them. The arithmetic is pure (`fanSlots` and `fanItems` in `chat/fan.ts`), so it
+them. That last one is **not a pill**: it is a larger circle with a gear and no
+words, because it is not one of the prompts and should read as the fan's own
+control, the same place however many prompts there are (it keeps its words in the
+list). A prompt marked for the plan carries the plan's icon, the one the mode
+picker uses, so the two kinds tell apart at a glance. The pills wear **the
+project's colour** — the same wash as the sent bubble and the active tab — which
+the component reads off the button when the fan opens and carries onto the fan,
+since drawn into the body it is no longer inside the pane that sets
+`--project-color`. The arithmetic is pure (`fanSlots` and `fanItems` in `chat/fan.ts`), so it
 is tested as numbers and the component only draws.
 
 **The order is the priority.** The project's own prompts come first, then the

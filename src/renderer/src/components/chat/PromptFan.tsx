@@ -1,4 +1,4 @@
-import { MessageSquareText, SlidersHorizontal } from 'lucide-react'
+import { Map, MessageSquareText, Settings } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -35,12 +35,28 @@ interface Opened {
   readonly host: HTMLElement
   /** The window's width, which a pill's `right` is counted from. */
   readonly width: number
+  /**
+   * The colour of the project the button sits in, or nothing.
+   *
+   * Read off the button and carried over, because the fan is drawn into the body
+   * and the pane that sets `--project-color` is no longer above it.
+   */
+  readonly color: string
   /** Where the list goes when the fan has no room, or is asked for more. */
   readonly list: { readonly right: number; readonly top?: number; readonly bottom?: number }
 }
 
 const PILL =
-  'fan-in row focus-ring border-line bg-canvas text-ink h-6 truncate rounded-full border px-3 text-[12px] shadow-[var(--shadow-pop)]'
+  'fan-in fan-pill focus-ring inline-flex h-6 items-center gap-1.5 rounded-full border px-3 text-[12px] shadow-[var(--shadow-pop)]'
+
+/** The way to settings, as a gear in a circle: it is not one of the prompts. */
+const CIRCLE =
+  'fan-in fan-pill focus-ring grid size-8 place-items-center rounded-full border shadow-[var(--shadow-pop)]'
+
+/** The plan's own icon, the one the composer's mode picker uses for it. */
+function PlanIcon(): React.JSX.Element {
+  return <Map aria-hidden data-testid="plan-icon" size={12} className="shrink-0" />
+}
 
 /**
  * Saved prompts, laid out as a fan of pills over the button that opened it.
@@ -116,6 +132,7 @@ export function PromptFan({
       slots: fanSlots({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, bounds),
       host: dialog ?? document.body,
       width: window.innerWidth,
+      color: getComputedStyle(trigger).getPropertyValue('--project-color').trim(),
       list: above
         ? { right, bottom: window.innerHeight - rect.top + GAP }
         : { right, top: rect.bottom + GAP }
@@ -156,9 +173,10 @@ export function PromptFan({
       onClick={() => {
         choose(prompt.text)
       }}
-      className="row focus-ring block w-full truncate px-2.5 py-1.5 text-left"
+      className="row focus-ring flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
     >
-      {prompt.title}
+      {prompt.forPlan && <PlanIcon />}
+      <span className="truncate">{prompt.title}</span>
     </button>
   )
 
@@ -187,6 +205,13 @@ export function PromptFan({
             role="menu"
             aria-label={t('prompts.pick')}
             onKeyDown={onKeyDown}
+            // Only where there is one to carry: an empty value is not a colour,
+            // and would paint over the fallback the stylesheet has.
+            style={
+              opened.color === ''
+                ? undefined
+                : ({ '--project-color': opened.color } as React.CSSProperties)
+            }
             className="contents"
           >
             {showList ? (
@@ -217,7 +242,7 @@ export function PromptFan({
                     onClick={manageAndClose}
                     className="row focus-ring text-ink-soft flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
                   >
-                    <SlidersHorizontal aria-hidden size={12} />
+                    <Settings aria-hidden size={12} />
                     {t('prompts.manage')}
                   </button>
                 )}
@@ -253,7 +278,8 @@ export function PromptFan({
                       }}
                       className={`${PILL} fixed z-50`}
                     >
-                      {entry.prompt.title}
+                      {entry.prompt.forPlan && <PlanIcon />}
+                      <span className="truncate">{entry.prompt.title}</span>
                     </button>
                   )
                 }
@@ -268,7 +294,7 @@ export function PromptFan({
                       onClick={() => {
                         setListing(true)
                       }}
-                      className={`${PILL} text-ink-soft fixed z-50`}
+                      className={`${PILL} fixed z-50`}
                     >
                       {t('prompts.more', { count: entry.count })}
                     </button>
@@ -282,10 +308,11 @@ export function PromptFan({
                     role="menuitem"
                     style={style}
                     onClick={manageAndClose}
-                    className={`${PILL} text-ink-soft fixed z-50 inline-flex items-center gap-1.5`}
+                    aria-label={t('prompts.manage')}
+                    title={t('prompts.manage')}
+                    className={`${CIRCLE} fixed z-50`}
                   >
-                    <SlidersHorizontal aria-hidden size={12} />
-                    {t('prompts.manage')}
+                    <Settings aria-hidden data-testid="manage-icon" size={16} />
                   </button>
                 )
               })

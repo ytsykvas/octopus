@@ -304,6 +304,26 @@
     border-color: color-mix(in srgb, var(--project-color, var(--border)) 30%, var(--border));
   }
 
+  /* A pill of the prompt fan (PromptFan.tsx), in the project's colour the way the
+     sent bubble and the active tab are. Opaque over the canvas, not the
+     translucent wash the bubble takes: the pills hang over the chat, and the
+     text under one must not show through it.
+
+     `--project-color` is copied onto the fan by the component, because the fan is
+     drawn into the body or a dialog and no longer sits inside the pane that sets
+     it. The fallbacks are the accent, so a fan with no project behind it is a
+     plain blue one rather than an invalid colour-mix. */
+  .fan-pill {
+    color: var(--ink);
+    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 18%, var(--canvas));
+    border-color: color-mix(in srgb, var(--project-color, var(--accent)) 45%, var(--border));
+    transition: background-color 0.12s ease;
+  }
+
+  .fan-pill:hover {
+    background-color: color-mix(in srgb, var(--project-color, var(--accent)) 30%, var(--canvas));
+  }
+
   /* The chosen tab in the right pane, carrying the project's colour the way the
      strip and the sent bubble do — identity reads alike wherever it appears.
 
