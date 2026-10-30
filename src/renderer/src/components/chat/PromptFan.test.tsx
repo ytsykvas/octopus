@@ -191,6 +191,38 @@ describe('opening the fan', () => {
   })
 })
 
+describe('the order of the pills', () => {
+  // From 9 o'clock: the prompts for the plan first, as a group, and the rest after
+  // them — each group still the project's own before the installation's, each in
+  // the order the settings give.
+  it('puts the prompts for the plan first, then the rest, each project before everywhere', async () => {
+    answering(
+      [prompt('Review'), prompt('Tighten', { forPlan: true })],
+      [prompt('Summarise'), prompt('Check edges', { forPlan: true })]
+    )
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['Tighten', 'Check edges', 'Review', 'Summarise', 'Manage prompts…'])
+  })
+
+  it('keeps the same order in the list of what did not fit', async () => {
+    answering(
+      Array.from({ length: 6 }, (_, index) => prompt(`P${String(index + 1)}`)),
+      [prompt('Late plan', { forPlan: true })]
+    )
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    // Five rungs: three prompts, "more", settings — the plan one leads.
+    expect(pills()).toEqual(['Late plan', 'P1', 'P2', 'More… (4)', 'Manage prompts…'])
+  })
+})
+
 describe('choosing a prompt', () => {
   it('hands over its text and closes', async () => {
     answering([prompt('Review', { text: 'Look it over.' })], [])

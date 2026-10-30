@@ -2048,7 +2048,8 @@ export const en = {
       'Text you insert into a message or a plan correction with one click. Unlike a command, it lands in the field as text you can change before sending.',
     globalNote:
       'Prompts for a single project live in that project\u2019s settings, and come first in the fan.',
-    orderHint: 'Drag to reorder. The fan shows as many as fit, from the top of this list.',
+    orderHint:
+      'Drag to reorder. The fan shows as many as fit: the prompts for the plan first, then the rest, each from the top of this list.',
     reorderHandle: 'Reorder \u201c{{title}}\u201d (Alt+\u2191 / Alt+\u2193)',
     add: 'Add prompt',
     empty: 'No prompts yet.',

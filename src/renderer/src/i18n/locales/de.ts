@@ -1633,7 +1633,7 @@ export const de: Translation = {
     globalNote:
       'Prompts für ein einzelnes Projekt stehen in dessen Einstellungen und kommen im Fächer zuerst.',
     orderHint:
-      'Zum Umsortieren ziehen. Der Fächer zeigt so viele, wie hineinpassen, von oben in dieser Liste.',
+      'Zum Umsortieren ziehen. Der Fächer zeigt so viele, wie hineinpassen: zuerst die Prompts für den Plan, dann die übrigen, jeweils von oben in dieser Liste.',
     reorderHandle: '\u201e{{title}}\u201c verschieben (Alt+\u2191 / Alt+\u2193)',
     add: 'Prompt hinzufügen',
     empty: 'Noch keine Prompts.',

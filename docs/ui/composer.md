@@ -111,8 +111,10 @@ since drawn into the body it is no longer inside the pane that sets
 `--project-color`. The arithmetic is pure (`fanSlots` and `fanItems` in `chat/fan.ts`), so it
 is tested as numbers and the component only draws.
 
-**The order is the priority.** The project's own prompts come first, then the
-installation's, each as the Prompts section lists them — so dragging one up in
+**The order is the priority.** The prompts marked for the plan come first, as a
+group, so the fan opens on them at 9 o'clock; the rest follow. Within each group
+the project's own prompts come first, then the installation's, each as the
+Prompts section lists them — so dragging one up in
 Settings is how it is made easier to reach, and there is no second field for it.
 The lists are read again each time the fan opens, which is why a prompt saved a
 moment ago is there without anything telling the composer: a subscription would

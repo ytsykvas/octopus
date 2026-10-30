@@ -102,7 +102,12 @@ export function PromptFan({
     panel.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
   }, [opened, listing])
 
-  const prompts = [...project, ...global].filter((prompt) => !planOnly || prompt.forPlan)
+  // The prompts for the plan lead, as a group, so the fan opens on them at 9
+  // o'clock; the rest follow. Each group keeps the project's own before the
+  // installation's, in the order the settings give.
+  const all = [...project, ...global]
+  const forPlan = all.filter((prompt) => prompt.forPlan)
+  const prompts = planOnly ? forPlan : [...forPlan, ...all.filter((prompt) => !prompt.forPlan)]
   if (planOnly && prompts.length === 0) return null
 
   const manage = planOnly ? undefined : onManage
