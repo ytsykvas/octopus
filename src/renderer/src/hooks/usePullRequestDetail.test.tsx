@@ -6,6 +6,7 @@ import type { PullRequestCheck, PullRequestDetail } from '@core/pullRequestShape
 import { emitAgentEvent } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
+import { emitBranchMoved } from '../test/workspaces.js'
 import { usePullRequestDetail } from './usePullRequestDetail.js'
 
 const ANNA = 'planner/anna'
@@ -17,6 +18,7 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
     description: '',
     url: 'https://github.com/o/p/pull/7',
     draft: false,
+    head: 'a'.repeat(40),
     checks: [],
     comments: [],
     decision: null,
@@ -140,6 +142,42 @@ describe('the checks and the review of one request', () => {
 })
 
 describe('waiting for something to settle', () => {
+  // The request on screen is the one somebody is watching: five seconds, not
+  // the workspace list's fifteen, which every open project pays for.
+  // The fast clock follows the tab: the workspace switched away from goes back
+  // to the list's pace, and only the one now on screen is read every 5 s.
+  it('moves the fast clock to the workspace switched to, and off the one left', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('pending')] }))
+    const { rerender } = renderHook(
+      ({ workspace }: { workspace: string }) => usePullRequestDetail(workspace, 7, true),
+      { initialProps: { workspace: ANNA } }
+    )
+    await vi.advanceTimersByTimeAsync(0)
+
+    rerender({ workspace: 'planner/bob' })
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    const of = (workspace: string): number =>
+      vi
+        .mocked(octopus().workspaces.pullRequestDetail)
+        .mock.calls.filter(([id]) => id === workspace).length
+    expect(of(ANNA)).toBe(1)
+    expect(of('planner/bob')).toBe(2)
+  })
+
+  it('reads the request on screen every five seconds while a check runs', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('pending')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await vi.advanceTimersByTimeAsync(0)
+
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+  })
+
   it('looks again while a check is still running', async () => {
     vi.useFakeTimers()
     answer(detail({ checks: [check('pending')] }))
@@ -355,5 +393,107 @@ describe('waiting for something to settle', () => {
 
     await vi.advanceTimersByTimeAsync(60_000)
     expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(asked)
+  })
+})
+
+describe('right after the branch moved on the remote', () => {
+  const OLD = 'a'.repeat(40)
+  const NEW = 'b'.repeat(40)
+
+  /** How many times the tab has asked so far. */
+  const asked = (): number => vi.mocked(octopus().workspaces.pullRequestDetail).mock.calls.length
+
+  /** Advances inside `act`, so a refresh's re-render is flushed before counting. */
+  async function wait(ms: number): Promise<void> {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms)
+    })
+  }
+
+  it('reads at once, from the terminal as much as from the agent', async () => {
+    vi.useFakeTimers()
+    answer(detail({ head: OLD, checks: [check('passed')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await wait(0)
+    expect(asked()).toBe(1)
+
+    emitBranchMoved(ANNA, NEW)
+    await wait(0)
+
+    expect(asked()).toBe(2)
+  })
+
+  /*
+   * The bug: GitHub had not taken the push in, so it answered with the commit
+   * before and its checks, finished. Read alone that says nothing is left to
+   * wait for, and the tab stopped looking at exactly the moment it mattered.
+   */
+  it('keeps looking, quickly, while GitHub is still on the commit before', async () => {
+    vi.useFakeTimers()
+    answer(detail({ head: OLD, checks: [check('passed')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await wait(0)
+
+    emitBranchMoved(ANNA, NEW)
+    await wait(0)
+    expect(asked()).toBe(2)
+
+    await wait(2_000)
+    expect(asked()).toBe(3)
+    // Backing off: the next step is three seconds, not two.
+    await wait(2_000)
+    expect(asked()).toBe(3)
+    await wait(1_000)
+    expect(asked()).toBe(4)
+  })
+
+  it('goes back to the ordinary clock once GitHub has caught up', async () => {
+    vi.useFakeTimers()
+    answer(detail({ head: OLD, checks: [check('passed')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await wait(0)
+
+    emitBranchMoved(ANNA, NEW)
+    answer(detail({ head: NEW, checks: [check('pending')] }))
+    await wait(0)
+    expect(asked()).toBe(2)
+
+    await wait(4_999)
+    expect(asked()).toBe(2)
+    await wait(1)
+    expect(asked()).toBe(3)
+  })
+
+  it('ignores another workspace’s branch', async () => {
+    vi.useFakeTimers()
+    answer(detail({ head: OLD, checks: [check('passed')] }))
+    renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    await wait(0)
+
+    emitBranchMoved('planner/bob', NEW)
+    await wait(10_000)
+
+    expect(asked()).toBe(1)
+  })
+
+  // The push belonged to the request on screen when it came; another one asked
+  // about afterwards reads on the ordinary clock.
+  it('forgets the push when another request is asked about', async () => {
+    vi.useFakeTimers()
+    answer(detail({ head: OLD, checks: [check('passed')] }))
+    const { rerender } = renderHook(
+      ({ number }: { number: number }) => usePullRequestDetail(ANNA, number, true),
+      { initialProps: { number: 7 } }
+    )
+    await wait(0)
+    emitBranchMoved(ANNA, NEW)
+    await wait(0)
+
+    rerender({ number: 8 })
+    await wait(0)
+    const after = asked()
+    await wait(10_000)
+
+    expect(asked()).toBe(after)
   })
 })

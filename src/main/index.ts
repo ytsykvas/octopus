@@ -17,6 +17,7 @@ import {
   pushSettingsOpen,
   pushTheme,
   pushUsageWindows,
+  pushWorkspacePushed,
   pushWorkspaceStatus
 } from './broadcast.js'
 import { registerIpc } from './ipc.js'
@@ -217,6 +218,9 @@ async function start(): Promise<void> {
     },
     broadcastWorkspaceStatus: (event) => {
       pushWorkspaceStatus(BrowserWindow.getAllWindows(), event)
+    },
+    broadcastWorkspacePushed: (event) => {
+      pushWorkspacePushed(BrowserWindow.getAllWindows(), event)
     },
     broadcastUsageWindows: (windows) => {
       pushUsageWindows(BrowserWindow.getAllWindows(), windows)

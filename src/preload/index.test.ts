@@ -680,6 +680,7 @@ describe('channel names', () => {
     'chats.onChanged',
     'chats.onUsageWindows',
     'workspaces.onStatus',
+    'workspaces.onPushed',
     'workspaces.onDraft',
     'terminal.onData',
     'terminal.onExit',
@@ -1038,6 +1039,23 @@ describe('the rest of the surface', () => {
 
     stop()
     expect(off).toHaveBeenCalledWith('workspaces:status', expect.any(Function))
+  })
+
+  it('workspaces.onPushed delivers the moved branch and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('workspaces', 'onPushed')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'workspaces:pushed')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    const moved = { workspaceId: 'planner/kyiv', projectId: 'planner', head: 'a'.repeat(40) }
+    listener({}, moved)
+    expect(handler).toHaveBeenCalledWith(moved)
+
+    stop()
+    expect(off).toHaveBeenCalledWith('workspaces:pushed', expect.any(Function))
   })
 })
 

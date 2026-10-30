@@ -120,6 +120,7 @@ export function installOctopusStub(): Api {
     },
     workspaces: {
       onStatus: vi.fn(subscription),
+      onPushed: vi.fn(subscription),
       list: vi.fn(() => ok([])),
       read: vi.fn(() => ok(null)),
       create: vi.fn(() => ok(workspaceFixture())),
@@ -494,6 +495,7 @@ function detailFixture(): PullRequestDetail {
     description: '',
     url: 'https://github.com/ytsykvas/octopus/pull/1',
     draft: false,
+    head: 'a'.repeat(40),
     checks: [],
     comments: [],
     decision: null,

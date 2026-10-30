@@ -152,7 +152,12 @@ While a check runs, the open project is read every 15 s instead, so its row
 stops spinning when the pull request tab says the checks are done; a watched
 project stays on the minute, since nothing of it is on screen but the bar's
 count, and a few repositories with long CI runs on the fast clock were a
-GraphQL query every 15 s each, all day. A
+GraphQL query every 15 s each, all day. A push to one of the open
+project's branches (`workspaces:pushed`, see
+[pull-request-tab.md](pull-request-tab.md)) is read at once and keeps the
+15 s clock for 90 s after it, running check or not: GitHub takes a few seconds
+to put a check on the new commit, so the read made at the push still said the
+previous one passed, and the row waited a minute to start spinning. A
 look that falls due while the window is hidden waits for it, and is taken once
 when it is shown. A failure is silent: there is no room on a
 row to explain one, the tab says it properly when opened, and a repository with

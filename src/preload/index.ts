@@ -27,6 +27,7 @@ import type {
   SessionUsage,
   TasksEvent,
   UsageOutcome,
+  WorkspacePushedEvent,
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
@@ -538,6 +539,20 @@ const api = {
       ipcRenderer.on('workspaces:status', listener)
       return () => {
         ipcRenderer.off('workspaces:status', listener)
+      }
+    },
+
+    /**
+     * A workspace's branch moving on the remote, whoever pushed it — the
+     * terminal included, which no other event reports.
+     */
+    onPushed: (handler: (event: WorkspacePushedEvent) => void): (() => void) => {
+      const listener = (_event: unknown, moved: WorkspacePushedEvent): void => {
+        handler(moved)
+      }
+      ipcRenderer.on('workspaces:pushed', listener)
+      return () => {
+        ipcRenderer.off('workspaces:pushed', listener)
       }
     },
 

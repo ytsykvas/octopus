@@ -7,6 +7,7 @@ import type { PullRequestView } from '@core/pullRequests.js'
 import { refuseSilence, TURN_DONE } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { announceDraft, answerDraft, octopus } from '../test/octopus.js'
+import { emitBranchMoved } from '../test/workspaces.js'
 import { usePullRequest } from './usePullRequest.js'
 
 const VIEW: PullRequestView = {
@@ -64,6 +65,26 @@ describe('a pull request pane kept in step with the agent', () => {
 
     expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
     expect(result.current.view?.ahead).toBe(1)
+  })
+
+  // A push from the terminal ends no turn: without this the pane went on
+  // offering to push what had just gone.
+  it('reads again when the branch moves on the remote', async () => {
+    vi.useFakeTimers()
+    answering({ ...VIEW, unpushedCommits: 1 })
+    const { result } = renderHook(() => usePullRequest(WORKSPACE, true))
+    await vi.waitFor(() => {
+      expect(result.current.view?.unpushedCommits).toBe(1)
+    })
+
+    answering({ ...VIEW, unpushedCommits: 0 })
+    emitBranchMoved(WORKSPACE, 'a'.repeat(40))
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
+    expect(result.current.view?.unpushedCommits).toBe(0)
   })
 
   // A turn that failed may well have committed before it did.

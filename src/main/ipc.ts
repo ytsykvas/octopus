@@ -73,6 +73,7 @@ import type {
   TasksEvent,
   ChatStatusEvent,
   OctopusService,
+  WorkspacePushedEvent,
   WorkspaceStatusEvent
 } from '../core/service.js'
 import { SideExchangeSchema, SideHistorySchema, SideQuestionSchema } from '../core/sideQuestions.js'
@@ -141,6 +142,8 @@ export interface IpcHost {
    * about a conversation, and the list that draws it is not looking at a chat.
    */
   readonly broadcastWorkspaceStatus: (event: WorkspaceStatusEvent) => void
+  /** A workspace's branch moved on the remote: what the pull request pane reads on. */
+  readonly broadcastWorkspacePushed: (event: WorkspacePushedEvent) => void
   /** The account's windows, whenever the service learns they moved. */
   readonly broadcastUsageWindows: (windows: UsageWindows) => void
   /**
@@ -1009,6 +1012,7 @@ export function registerIpc(
     if (!isTaskFrame(event.event)) host.broadcastChatEvent(event)
   })
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
+  service.onWorkspacePushed(host.broadcastWorkspacePushed)
   service.onUsageWindows(host.broadcastUsageWindows)
   service.onChatStatus(host.broadcastChatStatus)
   service.onChatsChanged(host.broadcastChatsChanged)

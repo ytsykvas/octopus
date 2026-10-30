@@ -154,14 +154,33 @@ of it. When the first fails the pane blanks, because nothing on it is true any
 more; when the second fails the number, the title and the link stay and the
 error sits under them. One `Result` could not say both.
 
-**The detail re-reads itself every 15 s** while a check is running _or_ while
+**The detail re-reads itself every 5 s** while a check is running _or_ while
 GitHub has not decided whether the branch is mergeable — a self-rescheduling
 `setTimeout` rather than an interval, so a slow reply never has a second read
 stacked on it — and held while the window is hidden, so a check finishing
 behind it is read once, when the window is shown. The second half of that condition is load-bearing: mergeability
 is computed asynchronously, so the first read after every push says it is
 unknown, and a request whose repository runs no CI has no pending check to wait
-on at all.
+on at all. Five seconds is affordable because only the request on screen is
+read on it: the tab reads nothing while hidden, so switching to another
+workspace's tab moves the clock there and leaves the one switched away from to
+the workspace list's own, slower clock. Not shorter, because each read is two
+calls to GitHub.
+
+**A push is read the moment it lands, and the tab hurries until GitHub has
+caught up.** Every push this checkout makes — the agent's, the built-in
+terminal's, the one opening a request makes — ends with git rewriting
+`refs/remotes/<remote>/<branch>`, and `remoteRefs.ts` watches `refs/` in the
+project's common git dir for exactly that. A workspace's branch moving arrives
+as `workspaces:pushed` with the commit it moved to, and the tab reads at once.
+What GitHub says straight after is worse than nothing: for a few seconds it has
+not taken the commit in, and reports the one before with its checks finished —
+which on its own reads as nothing left to wait for. So the detail carries
+`head` (`headRefOid`), and for `PUSH_SETTLE_MS` (90 s) after a push the tab
+reads after 2 s and 3 s, then every 5 s, while GitHub names a different
+commit, has put no check on it yet, or has not worked out mergeability; then it
+is back on the rule above (`nextDelay` in `pullRequestPace.ts`). The window is
+what stops a repository with no CI being read every 5 s for ever.
 
 **And it reads again when a turn ends in the workspace.** A check that has
 _failed_ is not pending, so the poll above stops at exactly the moment a fix is
@@ -170,9 +189,9 @@ the pane listened to. It subscribes the way the diff pane does: filtered on the
 workspace rather than the chat, on `error` as well as `result`, skipped while
 the tab is hidden and held while the window is, settled for the same 300 ms. Not a slow poll while a check is failed,
 which would ask GitHub about an abandoned request for ever. The time of the last
-read sits beside the refresh control, because a push from the built-in terminal
-raises no event either, and a pane that says nothing about when it looked reads
-as current however old it is.
+read sits beside the refresh control: GitHub can be slow to answer and a read
+can fail, and a pane that says nothing about when it looked reads as current
+however old it is.
 
 **A check's state is a word as well as a mark**, and so is the review's verdict.
 A colour reaches nobody using a screen reader, and it is also the only handle a
