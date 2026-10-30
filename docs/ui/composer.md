@@ -103,7 +103,7 @@ opens a list of only what did not fit, under the sections "This project" and
 them. That last one is **not a pill**: it is a larger circle with a gear and no
 words, because it is not one of the prompts and should read as the fan's own
 control — always the end of the fan, wherever that is (it keeps its words in the
-list). The installation's prompts wear a **heavier frame** than the project's own — 2 px in the project's colour at full strength, against a soft 1 px line — so the two kinds tell apart in the fan without a heading. A prompt marked for the plan carries the plan's icon, the one the mode
+list). The installation's prompts wear a **heavier frame** than the project's own — 2 px in the project's colour itself, over a fill a step deeper, against a soft 1 px line — so the two kinds tell apart in the fan without a heading. A prompt marked for the plan carries the plan's icon, the one the mode
 picker uses, so the two kinds tell apart at a glance. The pills wear **the
 project's colour** — the same wash as the sent bubble and the active tab — which
 the component reads off the button when the fan opens and carries onto the fan,
