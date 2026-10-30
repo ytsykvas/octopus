@@ -965,6 +965,8 @@ export const de: Translation = {
       'Kontextfenster – {{used}} von {{total}}, komprimiert bei {{threshold}}',
     contextCompactNote: 'Der Agent behält eine Zusammenfassung des Chats und macht weiter.',
     contextClearNote: 'Der Agent vergisst diesen Chat, und der Verlauf wird gelöscht.',
+    contextCompactFocusNote:
+      'Setzt /compact ins Feld: dahinter steht, was die Zusammenfassung behalten soll.',
     autoCompactTitle: 'Auto-Komprimierung',
     autoCompactNote:
       'Wann dieser Chat von selbst komprimiert wird. Eine Änderung startet die Sitzung neu; der Chat bleibt erhalten.',

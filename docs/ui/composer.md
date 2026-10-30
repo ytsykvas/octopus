@@ -178,6 +178,15 @@ conversation away. Neither is dispatched: they go out as the text of an ordinary
 message, which is what a slash command is in this app, so the menu hands them to
 the same `onSend` the field uses.
 
+**A third row, `/compact …`, says what the summary keeps.** The CLI reads the
+text after `/compact` as what to keep, which makes it the one supported way to
+choose what survives a compaction: no API removes a single message from the
+middle, and "summarize from here" exists only in the terminal's own `/rewind`
+menu. The row sends nothing. It asks the field to write `/compact ` before the
+draft (`withCompact`), and a draft already there becomes the focus rather than
+being overwritten, because only the field knows the draft and the caret. A
+`/compact` sent bare would compact with nothing said about what to keep.
+
 **The same menu chooses where the conversation compacts itself**: _Auto_ and
 300k, 400k, 500k, 600k, 800k, as radio rows in a group of their own between the
 two commands. Left alone, a 1M model compacts near 967k, by which point every

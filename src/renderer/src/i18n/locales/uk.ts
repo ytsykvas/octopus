@@ -936,6 +936,8 @@ export const uk: Translation = {
     contextTitleCompactsAt: 'Вікно контексту — {{used}} з {{total}}, стискається на {{threshold}}',
     contextCompactNote: 'Агент лишає собі стислий переказ розмови й працює далі.',
     contextClearNote: 'Агент забуває цю розмову, а її запис видаляється.',
+    contextCompactFocusNote:
+      'Вставляє /compact у поле: допишіть після нього, що має лишитися в переказі.',
     autoCompactTitle: 'Автокомпакт',
     autoCompactNote:
       'Коли розмова стискається сама. Зміна перезапускає сесію; розмова зберігається.',

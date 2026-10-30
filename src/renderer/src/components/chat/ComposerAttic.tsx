@@ -1,4 +1,4 @@
-import { ChevronDown, Eraser, FoldVertical, Paperclip } from 'lucide-react'
+import { ChevronDown, Eraser, FoldVertical, Paperclip, PencilLine } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { ContextUsage } from '@core/agent.js'
@@ -50,6 +50,11 @@ interface ComposerAtticProps {
   readonly onAttach: () => void
   /** Where this conversation compacts itself; null hands it back to the agent. */
   readonly onAutoCompact: (window: AutoCompactWindow | null) => void
+  /**
+   * Puts `/compact ` in the field for the reader to say what the summary keeps.
+   * Nothing is sent: the text after the command is theirs to write.
+   */
+  readonly onCompactWithFocus: () => void
 }
 
 /**
@@ -71,6 +76,7 @@ const MENU_WIDTH = 360
  */
 const CLEAR = '/clear'
 const COMPACT = '/compact'
+const COMPACT_FOCUS = '/compact …'
 
 /**
  * What the next message is up against, above the field it is typed in.
@@ -99,7 +105,8 @@ export function ComposerAttic({
   onRefreshSkills,
   onOpenSettings,
   onAttach,
-  onAutoCompact
+  onAutoCompact,
+  onCompactWithFocus
 }: ComposerAtticProps): React.JSX.Element {
   const { t } = useTranslation()
   // Owned here rather than threaded down from `App`, where the shared one
@@ -285,6 +292,13 @@ export function ComposerAttic({
                 onSelect: () => {
                   void onSend(COMPACT)
                 }
+              },
+              {
+                id: 'compact-focus',
+                label: COMPACT_FOCUS,
+                description: t('chat.contextCompactFocusNote'),
+                icon: <PencilLine aria-hidden size={12} />,
+                onSelect: onCompactWithFocus
               },
               ...(autoCompact === null ? [] : windowRows(autoCompact, context)),
               {

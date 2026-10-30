@@ -45,6 +45,7 @@ function renderAttic(
   onOpenSettings: ReturnType<typeof vi.fn>
   onAttach: ReturnType<typeof vi.fn>
   onAutoCompact: ReturnType<typeof vi.fn>
+  onCompactWithFocus: ReturnType<typeof vi.fn>
 } {
   const onSend = vi.fn()
   const onToggleSkill = vi.fn()
@@ -52,6 +53,7 @@ function renderAttic(
   const onOpenSettings = vi.fn()
   const onAttach = vi.fn()
   const onAutoCompact = vi.fn()
+  const onCompactWithFocus = vi.fn()
 
   render(
     <ComposerAttic
@@ -64,10 +66,19 @@ function renderAttic(
       onOpenSettings={onOpenSettings}
       onAttach={onAttach}
       onAutoCompact={onAutoCompact}
+      onCompactWithFocus={onCompactWithFocus}
     />
   )
 
-  return { onSend, onToggleSkill, onRefreshSkills, onOpenSettings, onAttach, onAutoCompact }
+  return {
+    onSend,
+    onToggleSkill,
+    onRefreshSkills,
+    onOpenSettings,
+    onAttach,
+    onAutoCompact,
+    onCompactWithFocus
+  }
 }
 
 describe('what the next message is up against', () => {
@@ -151,7 +162,7 @@ describe('the way out of a full context window', () => {
     renderAttic()
     await open()
 
-    expect(screen.getByRole('menuitem', { name: /\/compact/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /^\/compact(?! …)/ })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /\/clear/ })).toBeInTheDocument()
   })
 
@@ -197,9 +208,51 @@ describe('the way out of a full context window', () => {
     const { onSend } = renderAttic()
     await open()
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /\/compact/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^\/compact(?! …)/ }))
 
     expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
+  })
+
+  // The focus is the one supported way to say what survives a compaction: no
+  // API removes a single message from the middle, and the CLI reads what follows
+  // the command as what to keep. It sits straight after the plain command it
+  // refines, and well before the one that loses something.
+  it('offers /compact with a focus between /compact and /clear', async () => {
+    renderAttic()
+    await open()
+
+    const rows = screen.getAllByRole('menuitem').map((row) => row.textContent)
+    const focused = rows.findIndex((text) => text.startsWith('/compact …'))
+    // The plain command is the one that begins with it and is not the other.
+    const plain = rows.findIndex(
+      (text) => text.startsWith('/compact') && !text.startsWith('/compact …')
+    )
+    const clear = rows.findIndex((text) => text.startsWith('/clear'))
+
+    expect(plain).toBeGreaterThanOrEqual(0)
+    expect(focused).toBe(plain + 1)
+    expect(focused).toBeLessThan(clear)
+  })
+
+  // Nothing is sent: the text after the command is the reader's to write, and a
+  // bare `/compact` sent now would compact with nothing said about what to keep.
+  it('hands /compact … to the field instead of sending it', async () => {
+    const { onSend, onCompactWithFocus } = renderAttic()
+    await open()
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /\/compact …/ }))
+
+    expect(onCompactWithFocus).toHaveBeenCalledTimes(1)
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('says what the focused row is for', async () => {
+    renderAttic()
+    await open()
+
+    expect(
+      screen.getByText('Puts /compact in the field: write after it what the summary must keep.')
+    ).toBeInTheDocument()
   })
 
   // The one row of the two that loses something: the log is deleted from disk,

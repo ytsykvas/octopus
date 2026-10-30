@@ -114,6 +114,33 @@ export function insertPaths(
   return { draft: `${before}${written}${after}`, caret: at + written.length }
 }
 
+/** What `/compact` is written as, with the space the text to keep goes after. */
+export const COMPACT_PREFIX = '/compact '
+
+/**
+ * Writes `/compact ` before a draft, so the draft says what the summary keeps.
+ *
+ * Whatever follows the command is what the CLI is told to keep when it
+ * summarises, and it is the one supported way to choose what survives: no API
+ * removes a single message from the middle. So a half-written message becomes
+ * that text rather than being overwritten, and the command is not written twice
+ * over a draft that already starts with it.
+ *
+ * The caret lands after the command in every case, where the focus is typed.
+ */
+export function withCompact(draft: string): { readonly draft: string; readonly caret: number } {
+  const rest = draft.trimStart()
+  // `/compactor` only begins with the command; the word must end there.
+  const written = /^\/compact(\s|$)/.test(rest)
+
+  return {
+    draft: written
+      ? `${COMPACT_PREFIX}${rest.slice('/compact'.length).trimStart()}`
+      : `${COMPACT_PREFIX}${rest}`,
+    caret: COMPACT_PREFIX.length
+  }
+}
+
 export function withNotes(text: string, notes: readonly ChatNote[], intros: NoteIntros): string {
   if (notes.length === 0) return text
 

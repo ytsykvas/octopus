@@ -1240,6 +1240,8 @@ export const en = {
        command that does nothing. */
     contextCompactNote: 'The agent keeps a summary of the conversation and carries on.',
     contextClearNote: 'The agent forgets this conversation, and the log goes with it.',
+    contextCompactFocusNote:
+      'Puts /compact in the field: write after it what the summary must keep.',
     /* The window group in the same menu. The values print through
        `formatTokens`, so only the words around them are here. */
     autoCompactTitle: 'Auto-compact',

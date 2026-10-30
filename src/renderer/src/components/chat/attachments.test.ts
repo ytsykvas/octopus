@@ -4,7 +4,15 @@ import type { CodeNote } from '../../hooks/useCodeNotes.js'
 import type { DiffComment } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuote } from '../../hooks/usePullRequestQuotes.js'
 
-import { type ChatNote, insertPaths, mergeNotes, noteKey, withNotes } from './attachments.js'
+import {
+  type ChatNote,
+  COMPACT_PREFIX,
+  insertPaths,
+  mergeNotes,
+  noteKey,
+  withCompact,
+  withNotes
+} from './attachments.js'
 
 const INTROS = {
   diff: 'Review notes:',
@@ -279,5 +287,37 @@ describe('writing a file pointed at into the draft', () => {
   // A caret left past the text — the draft shortened under it — writes at the end.
   it('writes at the end when the caret is past it', () => {
     expect(insertPaths('hi', 9, ['/a.png'])).toEqual({ draft: 'hi /a.png ', caret: 10 })
+  })
+})
+
+describe('writing /compact before a draft', () => {
+  // What follows `/compact` is what the CLI is told the summary must keep, so a
+  // draft already written becomes that text instead of being thrown away.
+  it('starts a command with the caret after it when there is nothing written', () => {
+    expect(withCompact('')).toEqual({ draft: '/compact ', caret: COMPACT_PREFIX.length })
+  })
+
+  it('puts the draft after the command as what to keep', () => {
+    expect(withCompact('keep the API notes')).toEqual({
+      draft: '/compact keep the API notes',
+      caret: 9
+    })
+  })
+
+  it('drops the whitespace before the draft', () => {
+    expect(withCompact('  padded')).toEqual({ draft: '/compact padded', caret: 9 })
+  })
+
+  it('does not write the command twice', () => {
+    expect(withCompact('/compact the plan')).toEqual({ draft: '/compact the plan', caret: 9 })
+  })
+
+  it('completes a bare command with the space the focus goes after', () => {
+    expect(withCompact('/compact')).toEqual({ draft: '/compact ', caret: 9 })
+  })
+
+  // A word that only begins with the command is not the command.
+  it('treats /compactor as text to keep, not as the command', () => {
+    expect(withCompact('/compactor')).toEqual({ draft: '/compact /compactor', caret: 9 })
   })
 })
