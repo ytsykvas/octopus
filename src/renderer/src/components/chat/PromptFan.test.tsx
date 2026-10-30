@@ -580,6 +580,22 @@ describe('how the pills look', () => {
     )
   })
 
+  // The installation's prompts are drawn with a stronger frame than the
+  // project's own, so the two tell apart in the fan without a heading.
+  it('marks which prompts are the installation\u2019s and which the project\u2019s', async () => {
+    answering([prompt('Here')], [prompt('Everywhere')])
+    const user = userEvent.setup()
+    const { button } = await renderFan()
+
+    await user.click(button())
+
+    expect(screen.getByRole('menuitem', { name: 'Everywhere' })).toHaveAttribute(
+      'data-scope',
+      'global'
+    )
+    expect(screen.getByRole('menuitem', { name: 'Here' })).toHaveAttribute('data-scope', 'project')
+  })
+
   it('puts the plan icon on a prompt for the plan, and on no other', async () => {
     answering([prompt('Plain'), prompt('Tighten', { forPlan: true })], [])
     const user = userEvent.setup()

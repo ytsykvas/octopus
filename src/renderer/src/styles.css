@@ -324,6 +324,15 @@
     background-color: color-mix(in srgb, var(--project-color, var(--accent)) 30%, var(--canvas));
   }
 
+  /* An installation-wide prompt, beside the project's own: the same fill, and a
+     frame twice as heavy in the project's colour at full strength rather than
+     mixed into the border, so the two kinds tell apart in the fan without a
+     heading. The height stays 24: the frame is drawn inside it. */
+  .fan-pill[data-scope='global'] {
+    border-width: 2px;
+    border-color: color-mix(in srgb, var(--project-color, var(--accent)) 85%, var(--ink));
+  }
+
   /* The chosen tab in the right pane, carrying the project's colour the way the
      strip and the sent bubble do — identity reads alike wherever it appears.
 

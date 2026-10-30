@@ -282,6 +282,9 @@ export function PromptFan({
                       key={entry.prompt.id}
                       type="button"
                       role="menuitem"
+                      // The installation's prompts wear a stronger frame than the
+                      // project's own (`.fan-pill[data-scope='global']`).
+                      data-scope={project.includes(entry.prompt) ? 'project' : 'global'}
                       title={entry.prompt.title}
                       style={style}
                       onClick={() => {
