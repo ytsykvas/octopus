@@ -79,12 +79,14 @@ is written where the caret is, with the same spacing as a path
 (`insertAtCaret` in `attachments.ts`, which `insertPaths` is now made of), so a
 prompt dropped into the middle of a sentence reads as part of it.
 
-The pills lie on a circle round the button, close to it: **from 9 o'clock to 12
-first**, which is the quarter above and to the left, where the composer's attic
-sits and there is room. A few prompts stay there. **When there are more, the fan
-goes on from 12 to 3**, as far round as there are prompts and room, so it fills
-by what there is rather than by a fixed shape. Each pill flies out of the button
-a rung after the one above (`fan-in` in `styles.css`). **As many fit as fit
+The pills lie on a circle round the button, close to it, and are **read the way
+a clock is: from 9 o'clock round to 3, in one unbroken sweep** — up the quarter
+above and to the left, where the composer's attic sits and there is room, then on
+past 12 and down the right side. The prompts fill that sweep in their order and
+stop where they do, so a few sit on the left and many go on round to the right.
+An earlier shape ran from 12 down to 9 and then started the right side again from
+the top; on screen that was two piles rather than one fan. Each pill flies out of the button
+a rung after the one before it (`fan-in` in `styles.css`). **As many fit as fit
 whole**: a rung is kept only when its pill clears the top of the area by the
 margin and the narrowest pill clears the edge it grows towards — the left on the
 left half, the right on the right — so none is ever cut off. The radius is 140:

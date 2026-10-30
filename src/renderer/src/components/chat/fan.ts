@@ -7,11 +7,12 @@ import type { Prompt } from '@core/promptSchema.js'
  * The fan opens on a circle round the button that opened it — which sits in the
  * composer's top-right corner — with one pill on each rung of a ladder.
  *
- * **From 9 o'clock to 12 first**: the top rung is straight above the button and
- * the lowest nearly level with it on the left, each a little further left, so
- * the pills lie along the arc. A few prompts stay there. **From 12 to 3 when
- * there are more**: the right quarter takes what the left could not, top rung to
- * bottom, so the fan fills as far round as there are prompts and room.
+ * **Read the way a clock is, from 9 o'clock round to 3**, one unbroken sweep: up
+ * the left quarter from the rung nearly level with the button to the one
+ * straight above it, then down the right quarter. The fan fills that sweep in
+ * the order of the prompts and stops where they do, so a few prompts sit on the
+ * left and many go on round to the right. Turning back at 12 and starting the
+ * right side again from the top was tried, and read as two piles, not one fan.
  */
 
 /**
@@ -58,15 +59,14 @@ export interface FanSlot {
 }
 
 /**
- * Every slot of the fan that fits whole inside `bounds`: the left quarter from
- * the top rung down, then the right quarter from its top rung down.
+ * Every slot of the fan that fits whole inside `bounds`, clockwise from 9
+ * o'clock: up the left quarter, then down the right.
  *
  * A rung is kept only if the pill clears the top by the margin and the
  * narrowest pill clears the edge it grows towards — the left on the left half,
  * the right on the right. There is no check against the bottom: every rung is
- * above the button, which is itself inside the area. When the top of the fan is
- * cut off it is the **highest** rungs that go, so the first prompt takes the
- * highest rung that is left.
+ * above the button, which is itself inside the area. A rung that does not fit
+ * is left out of the sweep, and the sweep carries on past it.
  */
 export function fanSlots(anchor: { x: number; y: number }, bounds: FanBounds): FanSlot[] {
   const left: FanSlot[] = []
@@ -105,7 +105,8 @@ export function fanSlots(anchor: { x: number; y: number }, bounds: FanBounds): F
     }
   }
 
-  return [...left, ...right]
+  // Built from the top rung down; the left quarter is read upwards.
+  return [...left.reverse(), ...right]
 }
 
 export type FanEntry =

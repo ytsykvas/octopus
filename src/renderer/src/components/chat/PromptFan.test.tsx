@@ -160,10 +160,12 @@ describe('opening the fan', () => {
     expect(first).toHaveClass('fan-in')
     expect(first?.style.getPropertyValue('--fan-index')).toBe('0')
     expect(second?.style.getPropertyValue('--fan-index')).toBe('1')
-    // The button's centre is at (992, 612); the top pill's right edge is at 992.
-    expect(first?.style.getPropertyValue('--fan-from-x')).toBe('0px')
-    expect(first?.style.getPropertyValue('--fan-from-y')).toBe('140px')
-    expect(second?.style.getPropertyValue('--fan-from-x')).toBe('84px')
+    // The button's centre is at (992, 612). The sweep starts at 9 o'clock, the
+    // lowest rung, 137 to the left of the button and 28 above it; the next rung
+    // up is a little nearer.
+    expect(first?.style.getPropertyValue('--fan-from-x')).toBe('137px')
+    expect(first?.style.getPropertyValue('--fan-from-y')).toBe('28px')
+    expect(second?.style.getPropertyValue('--fan-from-x')).toBe('128px')
   })
 
   it('closes on a second click on the button', async () => {
