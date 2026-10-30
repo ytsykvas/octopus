@@ -11,6 +11,9 @@ import type { TreeStatus } from '@core/fileTree.js'
  * `З`, which before a path reads as the digit 3. The word is what is
  * translated, and what a reader hears.
  *
+ * An edited file is amber, the colour the Changes tab gives work not yet
+ * committed, so the two tabs share one meaning for it.
+ *
  * The key is written out rather than built from the status: `t` is typed
  * against the locale, and a key assembled at runtime is a string it cannot
  * check — which is the whole point of typing the locales against each other.
@@ -31,10 +34,10 @@ export interface StatusMark {
 
 export const FILE_STATUS_MARKS: Record<FileStatus, StatusMark> = {
   added: { letter: 'A', label: 'diff.statusAddedLabel', tone: 'text-success' },
-  modified: { letter: 'M', label: 'diff.statusModifiedLabel', tone: 'text-info' },
+  modified: { letter: 'M', label: 'diff.statusModifiedLabel', tone: 'text-warning' },
   deleted: { letter: 'D', label: 'diff.statusDeletedLabel', tone: 'text-danger' },
-  renamed: { letter: 'R', label: 'diff.statusRenamedLabel', tone: 'text-info' },
-  copied: { letter: 'C', label: 'diff.statusCopiedLabel', tone: 'text-info' },
+  renamed: { letter: 'R', label: 'diff.statusRenamedLabel', tone: 'text-warning' },
+  copied: { letter: 'C', label: 'diff.statusCopiedLabel', tone: 'text-warning' },
   typeChanged: { letter: 'T', label: 'diff.statusTypeChangedLabel', tone: 'text-warning' },
   untracked: { letter: 'U', label: 'diff.statusUntrackedLabel', tone: 'text-success' }
 }

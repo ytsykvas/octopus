@@ -1,5 +1,6 @@
 import type { FileStatus } from './diff.js'
 import type { GitExec } from './git.js'
+import { DIFF_FLAGS, type NameStatusEntry, parseNameStatus, RAW_PATHS } from './nameStatus.js'
 
 /**
  * The file tree of a workspace, as the right pane's Files tab draws it.
@@ -12,15 +13,16 @@ import type { GitExec } from './git.js'
  */
 
 /**
- * What git says about a path, measured against HEAD.
+ * What git says about a path, measured against where the branch began.
  *
- * HEAD rather than the base branch the Changes tab compares with: the tree
- * answers "what have I not committed yet", which is what an editor's explorer
- * means by a mark, while the Changes tab answers "what will this branch
- * deliver". After a commit the two disagree, and both are right.
+ * The same starting point the Changes tab and the viewer's line marks use, so a
+ * commit does not empty the tree while Changes still lists the file. It
+ * measured against HEAD at first, as an editor's explorer does, and a branch of
+ * committed work then showed nothing at all.
  *
  * `conflicted` is the one state the diff has no word for, because a diff
- * against a merge base never sees an unmerged index.
+ * against the branch's starting point never sees an unmerged index, so it
+ * comes from the status.
  */
 export type TreeStatus = FileStatus | 'conflicted'
 
@@ -200,6 +202,33 @@ export function parseStatus(output: string): {
   }
 
   return { statuses, movedAway, untracked }
+}
+
+/**
+ * The marks against where the branch began: what the diff names, with the two
+ * states only the status can see laid over it — an untracked file, which no
+ * diff lists, and a conflict, which a diff calls `U`. A file edited and put
+ * back the way the base had it is no change at all.
+ */
+export function branchStatuses(
+  changes: readonly NameStatusEntry[],
+  worktree: {
+    readonly statuses: Readonly<Record<string, TreeStatus>>
+    readonly movedAway: readonly string[]
+  }
+): { statuses: Record<string, TreeStatus>; movedAway: string[] } {
+  const statuses: Record<string, TreeStatus> = {}
+  const movedAway = [...worktree.movedAway]
+
+  for (const change of changes) {
+    statuses[change.path] = change.status
+    if (change.status === 'renamed' && change.oldPath !== null) movedAway.push(change.oldPath)
+  }
+  for (const [path, status] of Object.entries(worktree.statuses)) {
+    if (status === 'untracked' || status === 'conflicted') statuses[path] = status
+  }
+
+  return { statuses, movedAway }
 }
 
 /** The mode of a submodule's entry in the index: a commit, where a file's is a blob. */
@@ -591,6 +620,10 @@ export function folderStatuses(
 /**
  * Reads the tree of a worktree in one go.
  *
+ * With `baseCommit` the marks come from the same `--name-status` the Changes
+ * tab reads, against where the branch began; without one — no base could be
+ * found — they are the status's own, against HEAD as before.
+ *
  * `--no-optional-locks` on the status: without it `git status` refreshes the
  * index and takes `index.lock` to write it back, and the agent runs its own git
  * in this same worktree — the two would trip over each other's lock. The
@@ -614,15 +647,24 @@ export function folderStatuses(
  * this module is one the window imports values from. Which of the git reads
  * failed first is not something anybody acts on here.
  */
-export async function readFileTree(exec: GitExec): Promise<FileTreeSnapshot> {
-  const [status, staged, ignored, folders] = await Promise.all([
+export async function readFileTree(
+  exec: GitExec,
+  baseCommit: string | null = null
+): Promise<FileTreeSnapshot> {
+  const [status, staged, ignored, folders, changes] = await Promise.all([
     exec(['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-uall']),
     exec(['ls-files', '-z', '--stage']),
     exec(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory']),
-    exec(['ls-files', '-z', '--others', '--exclude-standard', '--directory'])
+    exec(['ls-files', '-z', '--others', '--exclude-standard', '--directory']),
+    baseCommit === null
+      ? Promise.resolve(null)
+      : exec([...RAW_PATHS, 'diff', '--name-status', '-z', ...DIFF_FLAGS, baseCommit])
   ])
 
-  const { statuses, movedAway, untracked } = parseStatus(status)
+  const worktree = parseStatus(status)
+  const { untracked } = worktree
+  const { statuses, movedAway } =
+    changes === null ? worktree : branchStatuses(parseNameStatus(changes), worktree)
   const ignoredEntries = parseIgnored(ignored)
   const { empty, holding } = parseUntrackedFolders(folders, untracked, ignoredEntries)
   const { entries, truncated } = collectTreeEntries(

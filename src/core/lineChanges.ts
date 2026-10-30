@@ -9,7 +9,8 @@
 
 import { readFile } from 'node:fs/promises'
 
-import { DIFF_FLAGS, mergeBase, RAW_PATHS } from './diff.js'
+import { mergeBase } from './diff.js'
+import { DIFF_FLAGS, RAW_PATHS } from './nameStatus.js'
 import type { GitExec } from './git.js'
 import { allOf } from './parallel.js'
 

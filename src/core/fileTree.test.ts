@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  branchStatuses,
   buildTree,
   collectTreeEntries,
   compareNodes,
@@ -27,6 +28,7 @@ import {
   type TreeEntryKind
 } from './fileTree.js'
 import { gitIn } from './git.js'
+import { parseNameStatus } from './nameStatus.js'
 
 const run = promisify(execFile)
 
@@ -617,6 +619,49 @@ describe('folderStatuses', () => {
   })
 })
 
+describe('branchStatuses', () => {
+  const none = { statuses: {}, movedAway: [] }
+
+  it('marks what the diff against the base names', () => {
+    expect(branchStatuses(parseNameStatus('A\0new.ts\0M\0edited.ts\0D\0gone.ts\0'), none)).toEqual({
+      statuses: { 'new.ts': 'added', 'edited.ts': 'modified', 'gone.ts': 'deleted' },
+      movedAway: []
+    })
+  })
+
+  it('names the old side of a rename as moved away', () => {
+    expect(branchStatuses(parseNameStatus('R100\0old.ts\0new.ts\0'), none)).toEqual({
+      statuses: { 'new.ts': 'renamed' },
+      movedAway: ['old.ts']
+    })
+  })
+
+  it('lets the status say untracked and conflicted, which the diff never sees', () => {
+    const worktree = {
+      statuses: {
+        'both.ts': 'conflicted',
+        'fresh.ts': 'untracked',
+        'edited.ts': 'added'
+      } as const,
+      movedAway: []
+    }
+
+    expect(
+      branchStatuses(parseNameStatus('U\0both.ts\0M\0edited.ts\0'), worktree).statuses
+    ).toEqual({ 'both.ts': 'conflicted', 'edited.ts': 'modified', 'fresh.ts': 'untracked' })
+  })
+
+  it('leaves unmarked a file the status calls edited but the base already had', () => {
+    const worktree = { statuses: { 'back.ts': 'modified' } as const, movedAway: [] }
+
+    expect(branchStatuses([], worktree).statuses).toEqual({})
+  })
+
+  it('keeps the moved-away paths the status found', () => {
+    expect(branchStatuses([], { statuses: {}, movedAway: ['a.txt'] }).movedAway).toEqual(['a.txt'])
+  })
+})
+
 describe('readFileTree', () => {
   it('asks git for the status without its optional lock, and for three listings', async () => {
     const calls: string[][] = []
@@ -631,6 +676,36 @@ describe('readFileTree', () => {
       ['ls-files', '-z', '--stage'],
       ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'],
       ['ls-files', '-z', '--others', '--exclude-standard', '--directory']
+    ])
+  })
+
+  it('asks for the diff against the base when given one', async () => {
+    const calls: string[][] = []
+
+    await readFileTree((args) => {
+      calls.push([...args])
+      return Promise.resolve('')
+    }, 'abc123')
+
+    expect(calls).toEqual([
+      ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '-uall'],
+      ['ls-files', '-z', '--stage'],
+      ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'],
+      ['ls-files', '-z', '--others', '--exclude-standard', '--directory'],
+      [
+        '-c',
+        'core.quotePath=false',
+        'diff',
+        '--name-status',
+        '-z',
+        '--no-ext-diff',
+        '--no-textconv',
+        '--no-color',
+        '--find-renames',
+        '--src-prefix=a/',
+        '--dst-prefix=b/',
+        'abc123'
+      ]
     ])
   })
 
@@ -656,6 +731,52 @@ describe('readFileTree', () => {
 
     afterEach(async () => {
       await rm(dir, { recursive: true, force: true })
+    })
+
+    const headOf = async (): Promise<string> =>
+      (await run('git', ['rev-parse', 'HEAD'], { cwd: dir })).stdout.trim()
+
+    it('marks what the branch changed since its base, committed or not', async () => {
+      const base = await headOf()
+      await git('checkout', '-q', '-b', 'feature')
+      await writeFile(join(dir, 'added.txt'), 'added\n', 'utf8')
+      await writeFile(join(dir, 'edited.txt'), 'changed\n', 'utf8')
+      await git('rm', '-q', 'staged-gone.txt')
+      await git('mv', 'a.txt', 'renamed.txt')
+      await git('add', '-A')
+      await git('commit', '-q', '-m', 'branch')
+      await writeFile(join(dir, 'disk-gone.txt'), 'changed\n', 'utf8')
+      await writeFile(join(dir, 'fresh.ts'), 'new\n', 'utf8')
+
+      const tree = await readFileTree(gitIn(dir), base)
+
+      expect(tree.statuses).toEqual({
+        'added.txt': 'added',
+        'edited.txt': 'modified',
+        'staged-gone.txt': 'deleted',
+        'renamed.txt': 'renamed',
+        'disk-gone.txt': 'modified',
+        'fresh.ts': 'untracked'
+      })
+      // A deletion made in a commit is no longer in the index, and is kept.
+      expect(tree.entries).toContainEqual(file('staged-gone.txt'))
+      expect(tree.entries.map((entry) => entry.path)).not.toContain('a.txt')
+
+      // Without a base it is HEAD that is measured against, as it was.
+      expect((await readFileTree(gitIn(dir))).statuses).toEqual({
+        'disk-gone.txt': 'modified',
+        'fresh.ts': 'untracked'
+      })
+    })
+
+    it('leaves no mark on an edit put back to what the base had', async () => {
+      const base = await headOf()
+      await git('checkout', '-q', '-b', 'feature')
+      await writeFile(join(dir, 'edited.txt'), 'changed\n', 'utf8')
+      await git('commit', '-q', '-am', 'edit')
+      await writeFile(join(dir, 'edited.txt'), 'edited.txt\n', 'utf8')
+
+      expect((await readFileTree(gitIn(dir), base)).statuses).toEqual({})
     })
 
     it('marks what has not been committed and keeps both kinds of deletion', async () => {
