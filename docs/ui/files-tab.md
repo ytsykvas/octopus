@@ -15,8 +15,8 @@ file edited and put back the way the base had it carries no mark. With no base
 to be found the tree marks against HEAD, as it used to. A file deleted in a
 commit stays in the tree, struck through, and opens on the last version the
 branch had. The colours and letters come from
-`statusMarks.ts`: green for new, blue for edited, red for deleted and
-conflicted, the conflict marked `!` because a diff against a merge base never
+`statusMarks.ts`: green for new, amber for edited — the colour Changes gives what is not
+yet committed — red for deleted and conflicted, the conflict marked `!` because a diff against a merge base never
 sees one. The letters are the ones editors draw — git's `M A D R C T`, `U` for
 untracked, `!` for a conflict — in every language; only the word said after the
 name is translated. The Ukrainian initial for "changed" was `З`, which before a

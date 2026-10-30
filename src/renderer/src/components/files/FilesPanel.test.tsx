@@ -156,7 +156,7 @@ describe('FilesPanel', () => {
     expect(row('src')).toHaveAttribute('aria-expanded', 'true')
     expect(names()).toEqual(['node_modules', 'src', 'core', 'b.ts', 'gone.ts', '.env', 'README.md'])
     expect(row('b.ts')).toHaveAttribute('aria-level', '2')
-    expect(within(row('b.ts')).getByText('M')).toHaveClass('text-info')
+    expect(within(row('b.ts')).getByText('M')).toHaveClass('text-warning')
     expect(within(row('gone.ts')).getByText('gone.ts')).toHaveClass('line-through')
 
     await userEvent.click(row('src'))
@@ -185,7 +185,7 @@ describe('FilesPanel', () => {
       })
 
       await userEvent.click(row('src'))
-      expect(within(row('b.ts')).getByText('M')).toHaveClass('text-info')
+      expect(within(row('b.ts')).getByText('M')).toHaveClass('text-warning')
       expect(row('b.ts')).toHaveAccessibleName(/Змінено/)
     })
   })

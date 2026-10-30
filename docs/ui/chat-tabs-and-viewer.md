@@ -139,7 +139,7 @@ against the same merge base as the Changes pane (`lineChanges.ts`), as the
 tree's marks are: against `HEAD` a commit would empty the viewer while the pane
 still listed the file, and the button below would lead to lines the viewer had
 stopped showing. A tint behind the code and the same ranges
-in the number column, where a strip says which kind — blue for edited, green for
+in the number column, where a strip says which kind — amber for edited, green for
 new — and a red line between two lines marks a deletion, which has no line to
 tint. Drawn as one element per range behind the text (`ChangeMarks`), never per
 line, and memoised for the reason `ColouredLines` is: the viewer redraws on every

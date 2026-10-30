@@ -457,6 +457,18 @@ describe('a file with lines the branch changed', () => {
     })
   })
 
+  it('strips an edited range amber in the number column', async () => {
+    marking({ added: [], modified: [{ start: 1, end: 1 }], removedAfter: [] })
+
+    renderViewer()
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-marks="gutter"] [data-change="modified"]')).toHaveClass(
+        'border-warning'
+      )
+    })
+  })
+
   it('carries the same ranges into the number column, and marks a deletion there', async () => {
     marking({ added: [{ start: 3, end: 4 }], modified: [], removedAfter: [5, 0] })
 
