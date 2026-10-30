@@ -450,6 +450,25 @@ describe('the saved prompts beside the field for corrections', () => {
     expect(screen.queryByRole('menuitem', { name: 'Manage prompts…' })).not.toBeInTheDocument()
   })
 
+  // At the start of the field, apart from the send button at its end: the two
+  // were side by side in the corner, where reaching for one was a near miss of
+  // the other. In reading order too, so a screen reader meets them the same way.
+  it('sits at the start of the field, with the send button at its end', async () => {
+    holding([TIGHTEN])
+    renderDialog()
+    await read()
+
+    const fan = screen.getByRole('button', { name: 'Saved prompts' })
+    const send = screen.getByRole('button', { name: 'Send the note and keep planning' })
+
+    expect(
+      fan.compareDocumentPosition(feedbackField()) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      feedbackField().compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
   // `showModal()` makes everything outside the dialog inert: a fan drawn into
   // the body would be there and could not be reached.
   it('is drawn inside the dialog, where it can be reached', async () => {

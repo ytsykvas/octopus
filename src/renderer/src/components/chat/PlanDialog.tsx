@@ -223,7 +223,16 @@ export function PlanDialog({
         <label className="text-ink-soft block text-[11px]" htmlFor="plan-feedback">
           {t('chat.planFeedback')}
         </label>
-        <div className="relative mt-1">
+        {/* The field makes room on its left only while the fan's button is there:
+            with nothing marked for the plan there is no button, and a gap kept
+            for one would be a hole in the field. */}
+        <div className="relative mt-1 [&:has([data-prompt-fan])_textarea]:pl-9">
+          {/* At the start of the field, apart from the send button at its end:
+              side by side in the corner, reaching for one was a near miss of the
+              other. Before the field in the markup too, so it is read that way. */}
+          <span className="absolute bottom-2 left-2">
+            <PromptFan projectId={projectId} planOnly onPick={insertPrompt} />
+          </span>
           <textarea
             id="plan-feedback"
             ref={feedbackField}
@@ -250,13 +259,12 @@ export function PlanDialog({
             // `block`: an inline textarea leaves a descender gap under it, which
             // makes the wrapper taller than the field and drops the button,
             // positioned from the wrapper's bottom, below the text's line.
-            className="focus-ring border-line bg-surface field-sizing-content block max-h-40 min-h-[2.5rem] w-full resize-none rounded-[var(--radius-control)] border py-1.5 pr-16 pl-2.5 outline-none"
+            className="focus-ring border-line bg-surface field-sizing-content block max-h-40 min-h-[2.5rem] w-full resize-none rounded-[var(--radius-control)] border py-1.5 pr-10 pl-2.5 outline-none"
           />
           {/* Beside the field it answers, as in the composer: the key is not
               the only way to send the note. Never disabled — a plan sent back
               with nothing written is a valid answer. */}
-          <span className="absolute right-2 bottom-2 flex items-center gap-1">
-            <PromptFan projectId={projectId} planOnly onPick={insertPrompt} />
+          <span className="absolute right-2 bottom-2">
             <SendButton label={t('chat.planSendFeedback')} onClick={keepPlanning} />
           </span>
         </div>

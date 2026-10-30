@@ -132,8 +132,11 @@ way to one; what the agent did next was start editing files.
   the tests" comes back as a better plan rather than a stopped conversation, and
   that plan raises this dialog again.
 - **Saved prompts are offered beside the field, and only the ones marked for the
-  plan.** The same fan as the composer's, over the same button, drawn **into the
-  dialog** because `showModal()` makes everything outside it inert. A prompt is
+  plan.** The same fan as the composer's, from a button at the **start** of the field —
+  apart from the send button at its end, where side by side in the corner one
+  was a near miss of the other — and drawn **into the dialog** because
+  `showModal()` makes everything outside it inert. The field makes room on its
+  left only while that button is there. A prompt is
   written into the note where the caret is, and travels as the refusal's reason
   like anything else typed there, so it is visible in the log as the message it
   is. With nothing marked there is no button — the dialog stays as it was — and

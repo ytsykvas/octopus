@@ -195,6 +195,9 @@ export function PromptFan({
         aria-label={t('prompts.pick')}
         title={t('prompts.pick')}
         aria-expanded={opened !== null}
+        // What a field beside the button reads, through `:has`, to make room
+        // for it only while it is there.
+        data-prompt-fan
         className="focus-ring text-ink-faint hover:text-ink -my-0.5 inline-flex items-center rounded-[var(--radius-control)] px-1 py-0.5"
       >
         <MessageSquareText aria-hidden size={12} />
