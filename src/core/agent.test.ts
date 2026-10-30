@@ -2254,6 +2254,38 @@ describe('compactionWatch', () => {
     expect(events).toEqual([{ type: 'compaction_summary', summary: 'Kept: math.js' }])
   })
 
+  /*
+   * As CLI 2.1.311 handed it to the hook in a live session (`npm run
+   * probe:compaction`): the model's working first, then the summary, each in
+   * its tag. The agent keeps the summary; the analysis is scratch work, and the
+   * tags are markup nobody should have to read.
+   */
+  it('keeps the summary and leaves the analysis before it out', async () => {
+    const events: AgentEvent[] = []
+
+    await compacted((event) => events.push(event), {
+      ...report,
+      compact_summary:
+        '<analysis>\nThe user asked for one word.\n</analysis>\n\n<summary>\n1. Primary Request: reply with banana.\n</summary>'
+    })
+
+    expect(events).toEqual([
+      { type: 'compaction_summary', summary: '1. Primary Request: reply with banana.' }
+    ])
+  })
+
+  // An analysis with no summary after it is not a summary of anything.
+  it('says nothing when there is analysis and no summary', async () => {
+    const events: AgentEvent[] = []
+
+    await compacted((event) => events.push(event), {
+      ...report,
+      compact_summary: '<analysis>\nthinking\n</analysis>'
+    })
+
+    expect(events).toEqual([])
+  })
+
   // A subagent's compaction ends with its task; the conversation's memory is untouched.
   it('leaves a subagent’s compaction unsaid', async () => {
     const events: AgentEvent[] = []

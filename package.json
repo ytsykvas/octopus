@@ -23,6 +23,7 @@
     "format:check": "prettier --check .",
     "vendor:icons": "node --experimental-strip-types scripts/vendor-icons.ts",
     "probe:cwd": "npx --yes tsx scripts/probe-cwd-changed.ts",
+    "probe:compaction": "npx --yes tsx scripts/probe-compaction.ts",
     "test": "vitest run && vitest run --config vitest.renderer.config.ts",
     "test:watch": "vitest",
     "test:race": "OCTOPUS_SCHEDULER_LOSES=1 vitest run --config vitest.renderer.config.ts",

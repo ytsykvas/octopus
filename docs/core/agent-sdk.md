@@ -48,10 +48,18 @@ after an SDK upgrade.
 **What a compaction kept is announced the same way.** `compaction_summary` is
 the CLI's `PostCompact` hook as an event — `compactionWatch`, merged beside
 `cwdWatch` under the publish guards — carrying the summary the agent will work
-from, for the main thread only and never empty. The session's settings carry a
-`true` command hook for `PostCompact` (`COMPACTION_WATCH_SETTINGS`) on the
-ground `CwdChanged` was measured on; whether this event needs it is not yet
-measured.
+from, for the main thread only and never empty. Measured on CLI 2.1.311: the
+hook fires on a `/compact` through the SDK, and what it carries is the model's
+working in `<analysis>` followed by the summary in `<summary>` — the event keeps
+the summary alone, since that is what the conversation goes on from. The
+session's settings carry a `true` command hook for `PostCompact`
+(`COMPACTION_WATCH_SETTINGS`) on the ground `CwdChanged` was measured on;
+whether this event fires without it has not been tried. The same live reply
+showed `getContextUsage` naming an MCP server two ways — normalised in
+`mcpTools`, as `mcp_status` has it in `mcpInstructions` — which
+`contextBreakdown.ts` folds into one row. `npm run probe:compaction` checks both
+against a live session, in a throwaway repository; run it after an SDK upgrade,
+beside `probe:cwd`.
 
 **A model that refuses is announced, and the announcement is drawn.**
 `model_refusal_fallback` is the one change of model that is neither the user's

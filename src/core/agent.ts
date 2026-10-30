@@ -831,6 +831,24 @@ const PostCompactSchema = z.object({
 })
 
 /**
+ * The part of what the compaction wrote that the agent keeps.
+ *
+ * Measured on CLI 2.1.311 (`npm run probe:compaction`): the hook gets the
+ * model's working in `<analysis>`, then the summary in `<summary>`. The summary
+ * is what the conversation goes on from; the analysis is scratch work. Text
+ * with neither tag is taken whole, less any analysis, so a CLI that stops
+ * tagging still shows its summary.
+ */
+function keptSummary(written: string): string {
+  // The whole match rather than its group: it is always there when the match
+  // is, so there is no absent case to invent a fallback for.
+  const tagged = /<summary>[\s\S]*?<\/summary>/.exec(written)
+  if (tagged !== null) return tagged[0].slice('<summary>'.length, -'</summary>'.length).trim()
+
+  return written.replace(/<analysis>[\s\S]*?<\/analysis>/g, '').trim()
+}
+
+/**
  * What the agent kept when the conversation was compacted, as an event.
  *
  * The CLI hands the summary it wrote to its `PostCompact` hook and nowhere
@@ -847,12 +865,9 @@ export function compactionWatch(
         hooks: [
           (input) => {
             const compacted = PostCompactSchema.safeParse(input)
-            if (
-              compacted.success &&
-              compacted.data.agent_id === undefined &&
-              compacted.data.compact_summary.trim() !== ''
-            ) {
-              onEvent({ type: 'compaction_summary', summary: compacted.data.compact_summary })
+            if (compacted.success && compacted.data.agent_id === undefined) {
+              const summary = keptSummary(compacted.data.compact_summary)
+              if (summary !== '') onEvent({ type: 'compaction_summary', summary })
             }
             return Promise.resolve({})
           }
