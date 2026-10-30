@@ -1,4 +1,10 @@
+import { act } from '@testing-library/react'
+import { vi } from 'vitest'
+
 import type { WorkspaceView } from '@core/workspaces.js'
+
+import { refuseSilence } from './chat.js'
+import { octopus } from './octopus.js'
 
 /**
  * A workspace as the panels receive it.
@@ -29,4 +35,17 @@ export function workspaceView(name: string, overrides: Partial<WorkspaceView> = 
     headOnBranch: true,
     ...overrides
   }
+}
+
+/**
+ * Says a workspace's branch moved on the remote, as main would after a git
+ * write to `refs/remotes/`, to whatever subscribed.
+ */
+export function emitBranchMoved(workspaceId: string, head: string, projectId = 'planner'): void {
+  const handlers = vi.mocked(octopus().workspaces.onPushed).mock.calls.map(([handler]) => handler)
+  refuseSilence(handlers.length, 'workspaces.onPushed')
+
+  act(() => {
+    for (const handler of handlers) handler({ workspaceId, projectId, head })
+  })
 }

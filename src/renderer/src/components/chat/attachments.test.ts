@@ -4,7 +4,14 @@ import type { CodeNote } from '../../hooks/useCodeNotes.js'
 import type { DiffComment } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuote } from '../../hooks/usePullRequestQuotes.js'
 
-import { type ChatNote, insertPaths, mergeNotes, noteKey, withNotes } from './attachments.js'
+import {
+  type ChatNote,
+  insertAtCaret,
+  insertPaths,
+  mergeNotes,
+  noteKey,
+  withNotes
+} from './attachments.js'
 
 const INTROS = {
   diff: 'Review notes:',
@@ -232,6 +239,41 @@ describe('writing a remark from the review into the message', () => {
   })
   it('leaves a message with no notes exactly as it was typed', () => {
     expect(withNotes('rerun the tests', [], INTROS)).toBe('rerun the tests')
+  })
+})
+
+/*
+ * What `insertPaths` is made of, and what a saved prompt is inserted with: words
+ * written where the reader is typing, set apart from the ones on either side.
+ */
+describe('writing words into the draft at the caret', () => {
+  it('stands alone in an empty field, with the caret ready for the next word', () => {
+    expect(insertAtCaret('', 0, 'hi')).toEqual({ draft: 'hi ', caret: 3 })
+  })
+
+  it('sets them apart from the words on either side', () => {
+    expect(insertAtCaret('ab', 1, 'X')).toEqual({ draft: 'a X b', caret: 4 })
+  })
+
+  it('adds no space where there is one already', () => {
+    expect(insertAtCaret('look at ', 8, 'this')).toEqual({ draft: 'look at this ', caret: 13 })
+    expect(insertAtCaret('see  please', 4, 'this')).toEqual({
+      draft: 'see this please',
+      caret: 8
+    })
+  })
+
+  // A caret left past the text — the draft shortened under it — writes at the end.
+  it('writes at the end when the caret is past it', () => {
+    expect(insertAtCaret('hi', 9, 'there')).toEqual({ draft: 'hi there ', caret: 9 })
+  })
+
+  // A prompt is several lines as often as one, and a newline is whitespace too.
+  it('does not put a space beside a line break', () => {
+    expect(insertAtCaret('first line\n', 11, 'second')).toEqual({
+      draft: 'first line\nsecond ',
+      caret: 18
+    })
   })
 })
 

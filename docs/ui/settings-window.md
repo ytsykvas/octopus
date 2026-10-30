@@ -209,6 +209,33 @@ link route, it is how the name gets on screen before it is decided. What the
 source suggests is prefilled: a subagent's own `name`, a file's own name tidied
 (`Run Checks.md` becomes `run-checks`), and nothing at all for pasted text.
 
+**Prompts get a section of their own, in both dialogs, and are not commands.** A
+command is expanded by the CLI where the reader cannot see it; a prompt is
+inserted into a field as text they can still change before it is sent. So it
+has no session in the way, is not kept in the stores a session is handed, and
+lives in a file of its own: `~/.octopus/prompts.json`, and one in each project's
+directory that goes when the project does. The intro of the section says as much
+in one sentence, because the two sit side by side in the rail and are easy to
+confuse.
+
+**The order of the list is the priority.** The composer's fan shows as many
+prompts as fit, from the top of the project's list and then the installation's,
+so dragging one up is how it is made easier to reach. A row drags the way a
+project tab does, with the same line on the edge it would land against, and the
+same move is on the keyboard — Alt and an arrow on the handle — because an
+order only a pointer can change is one that only some people get to have. A
+drop hands over the whole new order rather than a move, so a list drawn before
+another change is still safe to apply.
+
+**The editor opens on the one choice that changes where a prompt shows up.**
+The switch "For plan refinement" comes above the words: a prompt with it on is
+offered in the plan dialog too, beside the field for corrections. The title's
+limit is the pill's, not the disk's — a longer one would be cut off in the fan,
+and a field that took it would be promising something the fan cannot keep. A
+refusal is drawn **inside** the dialog while it is open, and under the
+introduction otherwise: a modal covers the list, and a message behind one is a
+message nobody reads.
+
 **About lists the terminals still running, with a way to end one.** A
 pseudo-terminal outlives the pane that started it more easily than it looks — a
 window closed, a document reloaded, a half unmounted without its cleanup — and

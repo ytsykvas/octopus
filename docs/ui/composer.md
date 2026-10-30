@@ -68,6 +68,66 @@ account has one. The reading is one step fainter than the pickers underneath,
 which are clicked where it is mostly read — mostly, because it is also the way
 out of what it reports.
 
+**A saved prompt is chosen from a fan of pills round a button in the attic,
+and is written into the field as text.** The button sits in the right-hand group,
+ahead of the paperclip: both put something into the field, and the paperclip is
+the least used of the strip. A prompt is **not** a command, and that is the
+difference the whole feature rests on: `/ship` goes out as the characters
+typed and is expanded by the CLI where the sender never sees what it said, while
+a prompt lands in the field as text they can read and change before it goes. It
+is written where the caret is, with the same spacing as a path
+(`insertAtCaret` in `attachments.ts`, which `insertPaths` is now made of), so a
+prompt dropped into the middle of a sentence reads as part of it.
+
+The pills lie on a circle round the button, close to it, and are **read the way
+a clock is: from 9 o'clock round, in one unbroken sweep** — up the left to 12,
+down the right past 3 to 6, straight below the button, and up the left again to
+just under 9. The prompts fill that sweep in their order and stop where they do,
+so a few sit on the upper left and many go on round. The lower half lies over
+the field for as long as the fan is open; a pill that would run past the
+window's edge is left out, and what does not fit goes behind "More…". Two
+earlier shapes read as two piles rather than one fan: running from 12 down to 9
+and starting the right side again from the top, and a round arc whose sides —
+each growing outwards from the button — sat far apart with nothing over it.
+Hence the pills at 12 and 6 are **centred** on the button and join the sides,
+and the circle is **narrower than it is tall** (`FAN_SPREAD`, 0.6). Each pill
+flies out of the button a rung after the one before it (`fan-in` in
+`styles.css`). **As many fit as fit whole**: a rung is kept only when its pill
+clears the top of the area by the margin, does not run past the bottom, and the
+narrowest pill clears the edge it grows towards — the left on the left side, the
+right on the right, and half of it either way for the centred pills at 12 and 6
+— so none is ever cut off. The radius is 140: a pill and its air are 28 px, so
+the circle has eleven rows and twenty slots at most; nearer the button holds
+fewer, and further holds more but reaches away from the control it belongs to.
+The rest go behind a last-but-one pill, "More… (N)", which opens a list of only
+what did not fit, under the sections "This project" and "Everywhere"; the last
+pill is always the way to the settings that keep and order them. That last one
+is **not a pill**: it is a larger circle with a gear and no words, because it is
+not one of the prompts and should read as the fan's own control — always the end
+of the fan, wherever that is (it keeps its words in the list). The
+installation's prompts wear a **heavier frame** than the project's own — 2 px in
+the project's colour itself, over a fill a step deeper, against a soft 1 px line
+— so the two stores tell apart in the fan without a heading. A prompt marked for
+the plan carries the plan's icon, the one the mode picker uses, so it is found
+at a glance. The pills wear **the project's colour** — the same wash as the sent
+bubble and the active tab — which the component reads off the button when the
+fan opens and carries onto the fan, since drawn into the body or a dialog it is
+no longer inside the pane that sets `--project-color`. The arithmetic is pure
+(`fanSlots` and `fanItems` in `chat/fan.ts`), so it is tested as numbers and the
+component only draws.
+
+**The order is the priority.** The project's own prompts come first, then the
+installation's, each as the Prompts section lists them — so dragging one up in
+Settings is how it is made easier to reach, and there is no second field for it.
+The lists are read again each time the fan opens, which is why a prompt saved a
+moment ago is there without anything telling the composer: a subscription would
+be a second way for the same list to go stale, for a list looked at a few times
+an hour.
+
+With no room round the button at all — no slot of the circle fits in the window,
+or in a dialog too small for it — the fan opens as the list, and nothing about it
+differs but the shape.
+
 **A file is attached by pointing at it, not by copying it.** The paperclip is
 one of four ways in: a file can be dragged onto the composer, added from the
 Files tab's right-click menu or, for a screenshot, pasted straight into the

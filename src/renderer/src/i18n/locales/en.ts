@@ -190,6 +190,7 @@ export const en = {
     /* Commands and subagents together. Named for the half the reader types,
        because that is the one they go looking for. */
     sectionLibrary: 'Commands',
+    sectionPrompts: 'Prompts',
     sectionInstructions: 'Instructions',
     sectionRepository: 'Repository',
     sectionDanger: 'Danger zone',
@@ -1701,6 +1702,7 @@ export const en = {
     /* Commands and subagents together. Named for the half the reader types,
        because that is the one they go looking for. */
     sectionLibrary: 'Commands',
+    sectionPrompts: 'Prompts',
     sectionInstructions: 'Instructions',
     /* The global one. What a project's own instruction overrides, and what
        applies wherever a project has not written one. */
@@ -2070,6 +2072,40 @@ export const en = {
     noDescription: 'It describes itself as nothing.'
   },
 
+  /* Saved prompts: text inserted into a field, apart from the library's
+     commands because nothing here is expanded by the agent. */
+  prompts: {
+    intro:
+      'Text you insert into a message or a plan correction with one click. Unlike a command, it lands in the field as text you can change before sending.',
+    globalNote:
+      'Prompts for a single project live in that project\u2019s settings, and come first in the fan.',
+    orderHint: 'Drag to reorder. The fan shows as many as fit, from the top of this list.',
+    reorderHandle: 'Reorder \u201c{{title}}\u201d (Alt+\u2191 / Alt+\u2193)',
+    add: 'Add prompt',
+    empty: 'No prompts yet.',
+    edit: 'Edit \u201c{{title}}\u201d',
+    remove: 'Remove \u201c{{title}}\u201d',
+    removeTitle: 'Remove \u201c{{title}}\u201d?',
+    removeMessage: 'The prompt is deleted.',
+    removeConfirm: 'Remove',
+    removeCancel: 'Cancel',
+    planBadge: 'Plan',
+    editorNew: 'New prompt',
+    editorEdit: 'Edit prompt',
+    forPlan: 'For plan refinement',
+    forPlanHint: 'Also offered in the plan dialog, beside the correction field.',
+    title: 'Title',
+    titleHint: 'Shown on the button in the fan.',
+    text: 'Text',
+    save: 'Save',
+    cancel: 'Cancel',
+    pick: 'Saved prompts',
+    sectionProject: 'This project',
+    sectionGlobal: 'Everywhere',
+    more: 'More\u2026 ({{count}})',
+    manage: 'Manage prompts\u2026'
+  },
+
   elicitation: {
     /* A question from an MCP server. The one card in the log that comes from
        software nobody here wrote — a `.mcp.json` in a checkout starts these —
@@ -2315,6 +2351,7 @@ export const en = {
       '\u201c{{url}}\u201d could not be read. Only https addresses answering with one markdown file are fetched.',
     librarySubagentNeedsDescription:
       'A subagent needs frontmatter with a description saying when to use it, or the agent will never reach for it.',
+    promptMissing: 'That prompt is not there any more.',
     branchMissing:
       'That repository has no branch called \u201c{{branch}}\u201d. Choose a base branch it does have before pointing the project at it.',
     draftFailed: 'The description could not be drafted: {{reason}}',

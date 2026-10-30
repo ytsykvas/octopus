@@ -899,6 +899,7 @@ const DETAIL_FIELDS = [
   'mergeStateStatus',
   'reviewDecision',
   'statusCheckRollup',
+  'headRefOid',
   'comments',
   'reviews'
 ].join(',')

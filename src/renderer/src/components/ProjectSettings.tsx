@@ -5,6 +5,7 @@ import {
   GitBranch,
   Info,
   KeyRound,
+  MessageSquareText,
   SquareSlash,
   Terminal,
   TriangleAlert,
@@ -44,6 +45,7 @@ import { useProjectSources } from '../hooks/useProjectSources.js'
 import { RepoConfig } from './RepoConfig.js'
 import { RepoTrust } from './RepoTrust.js'
 import { LibrarySection } from './settings/LibrarySection.js'
+import { PromptsSection } from './settings/PromptsSection.js'
 import { SkillsSection } from './settings/SkillsSection.js'
 
 interface ProjectSettingsProps {
@@ -179,6 +181,7 @@ export type SectionId =
   | 'env'
   | 'skills'
   | 'library'
+  | 'prompts'
   | 'instructions'
   | 'repository'
   | 'danger'
@@ -193,6 +196,7 @@ const SECTIONS: readonly {
     | 'project.sectionEnv'
     | 'project.sectionSkills'
     | 'project.sectionLibrary'
+    | 'project.sectionPrompts'
     | 'project.sectionInstructions'
     | 'project.sectionRepository'
     | 'project.sectionDanger'
@@ -212,6 +216,7 @@ const SECTIONS: readonly {
   // agent reads, and this is the one that comes with a switch.
   { id: 'skills', labelKey: 'project.sectionSkills', Icon: Blocks },
   { id: 'library', labelKey: 'project.sectionLibrary', Icon: SquareSlash },
+  { id: 'prompts', labelKey: 'project.sectionPrompts', Icon: MessageSquareText },
   { id: 'instructions', labelKey: 'project.sectionInstructions', Icon: BookText },
   // Last before the danger zone, and after everything it moves: the section is
   // about the six above rather than a setting of its own.
@@ -856,6 +861,13 @@ export function ProjectSettings({
               <LibrarySection store={{ kind: 'project', projectId: project.id }} kind="command" />
               <LibrarySection store={{ kind: 'project', projectId: project.id }} kind="subagent" />
             </>
+          )}
+
+          {/* This project's own prompts, which come first in the fan. Not in
+              `SOURCED_SECTIONS`: a repository carries no prompts of its own, so
+              there is no layer to name. */}
+          {section === 'prompts' && (
+            <PromptsSection store={{ kind: 'project', projectId: project.id }} />
           )}
 
           {section === 'instructions' && (

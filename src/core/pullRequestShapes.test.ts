@@ -78,6 +78,7 @@ function view(overrides: Record<string, unknown> = {}): DetailPayload {
     // most of them.
     reviewDecision: '',
     statusCheckRollup: [],
+    headRefOid: 'c0ffee'.padEnd(40, '0'),
     comments: [],
     reviews: [],
     ...overrides
@@ -656,6 +657,14 @@ describe('where a pull request stands', () => {
       url: 'https://github.com/o/p/pull/12',
       draft: true
     })
+  })
+
+  // Compared with the commit just sent: until GitHub has taken it in, the
+  // checks it reports belong to the commit before.
+  it('carries the commit GitHub is looking at', () => {
+    expect(toPullRequestDetail(view({ headRefOid: 'f'.repeat(40) }), NO_THREADS).head).toBe(
+      'f'.repeat(40)
+    )
   })
 
   it("carries the author's description as written", () => {

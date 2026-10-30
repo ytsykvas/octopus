@@ -120,6 +120,7 @@ export function installOctopusStub(): Api {
     },
     workspaces: {
       onStatus: vi.fn(subscription),
+      onPushed: vi.fn(subscription),
       list: vi.fn(() => ok([])),
       read: vi.fn(() => ok(null)),
       create: vi.fn(() => ok(workspaceFixture())),
@@ -267,6 +268,28 @@ export function installOctopusStub(): Api {
         })
       ),
       inspect: vi.fn(() => ok({ name: 'ship', description: '', text: '' }))
+    },
+
+    prompts: {
+      list: vi.fn(() => ok([])),
+      create: vi.fn(() =>
+        ok({
+          id: '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
+          title: 'Review',
+          text: 'Look it over.',
+          forPlan: false
+        })
+      ),
+      update: vi.fn(() =>
+        ok({
+          id: '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
+          title: 'Review',
+          text: 'Look it over.',
+          forPlan: false
+        })
+      ),
+      remove: vi.fn(() => ok(undefined)),
+      reorder: vi.fn(() => ok(undefined))
     },
 
     skills: {
@@ -494,6 +517,7 @@ function detailFixture(): PullRequestDetail {
     description: '',
     url: 'https://github.com/ytsykvas/octopus/pull/1',
     draft: false,
+    head: 'a'.repeat(40),
     checks: [],
     comments: [],
     decision: null,

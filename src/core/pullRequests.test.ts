@@ -1757,6 +1757,7 @@ describe('reading one request in full', () => {
     mergeStateStatus: 'CLEAN',
     reviewDecision: '',
     statusCheckRollup: [],
+    headRefOid: 'c0ffee'.padEnd(40, '0'),
     comments: [],
     reviews: []
   })
@@ -1776,6 +1777,10 @@ describe('reading one request in full', () => {
 
     expect(calls[0]?.slice(0, 3)).toEqual(['pr', 'view', '7'])
     expect(calls[0]?.[4]).toContain('statusCheckRollup')
+    // The commit GitHub is looking at, which is how the pane tells an answer
+    // about the commit just sent from one about the commit before it.
+    expect(calls[0]?.[4]).toContain('headRefOid')
+    expect(detail.head).toBe('c0ffee'.padEnd(40, '0'))
     // The id from the first answer, so nothing has to work out the owner and
     // the repository to ask GraphQL a question.
     expect(calls[1]).toContain('-F')

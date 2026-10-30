@@ -6,6 +6,7 @@ import {
   GitBranch,
   Info,
   type LucideIcon,
+  MessageSquareText,
   Monitor,
   Play,
   Sparkles,
@@ -57,6 +58,7 @@ import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
 import { ClaudeSection } from './settings/ClaudeSection.js'
 import { LibrarySection } from './settings/LibrarySection.js'
+import { PromptsSection } from './settings/PromptsSection.js'
 import { SkillsSection } from './settings/SkillsSection.js'
 import { type AccountsController, useAccounts } from './settings/useAccounts.js'
 import { fileSize } from './fileSize.js'
@@ -79,7 +81,15 @@ interface SettingsProps {
 }
 
 export type SectionId =
-  'general' | 'git' | 'agent' | 'skills' | 'library' | 'instructions' | 'accounts' | 'about'
+  | 'general'
+  | 'git'
+  | 'agent'
+  | 'skills'
+  | 'library'
+  | 'prompts'
+  | 'instructions'
+  | 'accounts'
+  | 'about'
 
 const SECTIONS: readonly {
   readonly id: SectionId
@@ -89,6 +99,7 @@ const SECTIONS: readonly {
     | 'settings.sectionAgent'
     | 'settings.sectionSkills'
     | 'settings.sectionLibrary'
+    | 'settings.sectionPrompts'
     | 'settings.sectionInstructions'
     | 'settings.sectionAccounts'
     | 'settings.sectionAbout'
@@ -99,6 +110,7 @@ const SECTIONS: readonly {
   { id: 'agent', labelKey: 'settings.sectionAgent', Icon: Sparkles },
   { id: 'skills', labelKey: 'settings.sectionSkills', Icon: Blocks },
   { id: 'library', labelKey: 'settings.sectionLibrary', Icon: SquareSlash },
+  { id: 'prompts', labelKey: 'settings.sectionPrompts', Icon: MessageSquareText },
   { id: 'instructions', labelKey: 'settings.sectionInstructions', Icon: BookText },
   { id: 'accounts', labelKey: 'settings.sectionAccounts', Icon: Bot },
   { id: 'about', labelKey: 'settings.sectionAbout', Icon: Info }
@@ -163,6 +175,10 @@ export function Settings({
               <LibrarySection store={{ kind: 'global' }} kind="subagent" />
             </>
           )}
+          {/* Text inserted into a field, not commands the agent expands — a section
+              of its own for that reason, and the place the order is set that
+              ranks the prompts in the composer's fan. */}
+          {section === 'prompts' && <PromptsSection store={{ kind: 'global' }} />}
           {section === 'instructions' && <InstructionsSection />}
           {section === 'accounts' && (
             <ClaudeSection accounts={accounts}>

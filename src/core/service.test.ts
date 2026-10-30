@@ -66,6 +66,7 @@ import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
 import { listWorktrees } from './worktree.js'
+import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
 import { WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
@@ -16003,6 +16004,101 @@ describe('the commands and subagents a store holds', () => {
  * workspace of the project after every turn of every agent, for rows nothing
  * had touched.
  */
+describe('the saved prompts a store holds', () => {
+  let service: OctopusService
+  let projectId: string
+
+  beforeEach(async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    service = await createService(paths(dir))
+    const project = await service.addProjectFromPath(repo)
+    projectId = project.id
+  })
+
+  const global = { kind: 'global' } as const
+  const ofProject = (): { kind: 'project'; projectId: string } => ({ kind: 'project', projectId })
+  const draft = (title: string): { title: string; text: string; forPlan: boolean } => ({
+    title,
+    text: `${title} text`,
+    forPlan: false
+  })
+
+  it('starts with nothing in either store', async () => {
+    await expect(service.listPrompts(global)).resolves.toEqual([])
+    await expect(service.listPrompts(ofProject())).resolves.toEqual([])
+  })
+
+  it("keeps a project's own apart from the installation's", async () => {
+    await service.createPrompt(global, draft('Everywhere'))
+    await service.createPrompt(ofProject(), draft('Here'))
+
+    await expect(service.listPrompts(global)).resolves.toMatchObject([{ title: 'Everywhere' }])
+    await expect(service.listPrompts(ofProject())).resolves.toMatchObject([{ title: 'Here' }])
+  })
+
+  it('writes each beside the data it belongs to, and outside any skills root', async () => {
+    await service.createPrompt(global, draft('A'))
+    await service.createPrompt(ofProject(), draft('B'))
+
+    await expect(readFile(join(dir, 'data', 'prompts.json'), 'utf8')).resolves.toContain('"A"')
+    await expect(
+      readFile(join(dir, 'data', 'projects', projectId, 'prompts.json'), 'utf8')
+    ).resolves.toContain('"B"')
+  })
+
+  it('refuses a project that is not there', async () => {
+    await expect(
+      service.listPrompts({ kind: 'project', projectId: 'nowhere' })
+    ).rejects.toMatchObject({ code: 'worktreeMissing' })
+  })
+
+  // Two saves landing together would both read the file as it was and the
+  // second would write over the first — and `writeJsonFile` renames one fixed
+  // temporary path, so the loser can as easily fail outright.
+  it('keeps both of two prompts created at the same moment', async () => {
+    await Promise.all([
+      service.createPrompt(global, draft('A')),
+      service.createPrompt(global, draft('B')),
+      service.createPrompt(global, draft('C'))
+    ])
+
+    const titles = (await service.listPrompts(global)).map((prompt) => prompt.title)
+    expect(titles.toSorted()).toEqual(['A', 'B', 'C'])
+  })
+
+  it('updates, reorders and removes in the store it is told', async () => {
+    const first = await service.createPrompt(ofProject(), draft('A'))
+    const second = await service.createPrompt(ofProject(), draft('B'))
+    await service.createPrompt(global, draft('G'))
+
+    await service.updatePrompt(ofProject(), first.id, { ...draft('A2'), forPlan: true })
+    await service.reorderPrompts(ofProject(), [second.id, first.id])
+
+    await expect(service.listPrompts(ofProject())).resolves.toMatchObject([
+      { title: 'B' },
+      { title: 'A2', forPlan: true }
+    ])
+
+    await service.removePrompt(ofProject(), second.id)
+
+    await expect(service.listPrompts(ofProject())).resolves.toMatchObject([{ title: 'A2' }])
+    await expect(service.listPrompts(global)).resolves.toMatchObject([{ title: 'G' }])
+  })
+
+  // Pins the reason prompts are files under the project's directory and not a
+  // field of the state: removing the project removes them with no code of ours.
+  it('goes with the project', async () => {
+    await service.createPrompt(ofProject(), draft('A'))
+
+    await service.removeProjectById(projectId)
+
+    await expect(
+      readFile(join(dir, 'data', 'projects', projectId, 'prompts.json'), 'utf8')
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})
+
 describe('reading one workspace', () => {
   interface Call {
     readonly cwd: string
@@ -16139,5 +16235,141 @@ describe('reading one workspace', () => {
     const asked = calls.map((call) => call.args)
     expect(asked).toContainEqual(['check-ignore', '-q', '--', '.env.local'])
     expect(asked).not.toContainEqual(['rev-parse', '--verify', 'refs/heads/develop'])
+  })
+})
+
+describe('a branch the remote moved', () => {
+  /** A watch that remembers what it was given and what it was asked to watch. */
+  function fakeRefWatch(): {
+    readonly make: (deps: RemoteRefWatchDeps) => RemoteRefWatch
+    readonly deps: () => RemoteRefWatchDeps
+    readonly synced: string[][]
+    readonly closed: () => number
+  } {
+    let given: RemoteRefWatchDeps | null = null
+    const synced: string[][] = []
+    let closes = 0
+
+    return {
+      make: (deps) => {
+        given = deps
+        return {
+          sync: (projects) => {
+            synced.push(projects.map((project) => project.id))
+            return Promise.resolve()
+          },
+          close: () => {
+            closes += 1
+          }
+        }
+      },
+      deps: () => {
+        if (given === null) throw new Error('never made')
+        return given
+      },
+      synced,
+      closed: () => closes
+    }
+  }
+
+  it('watches the projects there are, and follows them being added and removed', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+
+    expect(watch.synced).toEqual([[]])
+
+    const project = await watching.addProjectFromPath(repo)
+    expect(watch.synced.at(-1)).toEqual([project.id])
+
+    await watching.removeProjectById(project.id)
+    expect(watch.synced.at(-1)).toEqual([])
+  })
+
+  // A write that leaves the projects as they were is most writes: a turn, a
+  // rename, a port. Each would otherwise be a sync.
+  it('does not sync again for a write that left the projects alone', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+    const before = watch.synced.length
+
+    await watching.createWorkspaceIn(project.id)
+
+    expect(watch.synced).toHaveLength(before)
+  })
+
+  it('names the workspace whose branch moved, and nothing for a branch no workspace has', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+    const workspace = await watching.createWorkspaceIn(project.id)
+    const heard = vi.fn()
+    watching.onWorkspacePushed(heard)
+
+    const head = 'a'.repeat(40)
+    watch.deps().onRef(project.id, workspace.branch, head)
+    watch.deps().onRef(project.id, 'main', head)
+    watch.deps().onRef('elsewhere', workspace.branch, head)
+
+    expect(heard).toHaveBeenCalledTimes(1)
+    expect(heard).toHaveBeenCalledWith({ workspaceId: workspace.id, projectId: project.id, head })
+  })
+
+  it('asks to read only the branches its workspaces are on', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+    const workspace = await watching.createWorkspaceIn(project.id)
+
+    expect(watch.deps().wants(project.id, workspace.branch)).toBe(true)
+    expect(watch.deps().wants(project.id, 'main')).toBe(false)
+    expect(watch.deps().wants('elsewhere', workspace.branch)).toBe(false)
+  })
+
+  it('stops telling a listener that unsubscribed', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+    const workspace = await watching.createWorkspaceIn(project.id)
+    const heard = vi.fn()
+
+    watching.onWorkspacePushed(heard)()
+    watch.deps().onRef(project.id, workspace.branch, 'a'.repeat(40))
+
+    expect(heard).not.toHaveBeenCalled()
+  })
+
+  // A workspace is a worktree, and its remote-tracking refs live with the main
+  // checkout: the path git answers relative to it has to come back absolute.
+  it('finds the git dir every worktree of the project shares', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+    const workspace = await watching.createWorkspaceIn(project.id)
+    const real = await realpath(join(repo, '.git'))
+
+    expect(await realpath(await watch.deps().commonDirOf(repo))).toBe(real)
+    expect(await realpath(await watch.deps().commonDirOf(workspace.path))).toBe(real)
+  })
+
+  it('lets go of the watch on the way out', async () => {
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+
+    await watching.closeChats()
+
+    expect(watch.closed()).toBe(1)
   })
 })

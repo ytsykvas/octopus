@@ -153,6 +153,11 @@ a delete.
 | `library:remove`  | `store`, `kind`, `name`         | one file                                                                                                                                                                                                                                                          |
 | `library:rename`  | `store`, `kind`, `name`, `to`   | an ordinary rename, unlike a skill's migration: nothing is keyed on either, because the SDK offers no per-conversation switch for them                                                                                                                            |
 | `library:inspect` | `kind`, `request`               | what an import would write **and the name it suggests**, which is why this step exists where a skill's preview is a courtesy: a skill's document names itself and a command names itself nowhere. The answer carries the document back so the source is read once |
+| `prompts:list`    | `store`                         | the saved prompts of one store, in the order the user gave them                                                                                                                                                                                                   |
+| `prompts:create`  | `store`, `draft`                | adds one at the end. The draft is parsed whole — title 1–40 and text 1–20 000 characters once trimmed — and the id is made in core                                                                                                                                |
+| `prompts:update`  | `store`, `id`, `draft`          | changes what one says, not where it stands. An id that is not a uuid is refused before it is a lookup; one that is not in the file answers `promptMissing`                                                                                                        |
+| `prompts:remove`  | `store`, `id`                   | one prompt                                                                                                                                                                                                                                                        |
+| `prompts:reorder` | `store`, `orderedIds`           | the whole new order, as a drop gives it — at most 1 000 ids, of which the unknown are ignored and the ones left out keep their order at the end                                                                                                                   |
 
 `dialog:pickMarkdown` belongs with them: one file, never a folder — a skill may
 be a directory and neither of these ever is.
@@ -326,6 +331,14 @@ re-reading asks git about every workspace of every project, several times a
 turn, to learn what the main process had already decided. It says nothing about
 a conversation, which is why it is not folded into the one above — the list that
 draws it is not looking at a chat.
+
+**`workspaces:pushed`** carries `{ workspaceId, projectId, head }` when a
+workspace's branch moves on the remote — git rewriting
+`refs/remotes/<remote>/<branch>` in the project's common git dir, which every
+push does wherever it came from, the built-in terminal included. `head` is the
+commit it moved to, so the pull request tab can tell GitHub's answer about this
+commit from its answer about the one before. A fetch that moves the branch
+announces it too, which costs one read and is true.
 
 **`chats:status`** carries `{ chatId, workspaceId, status, interrupted, turnStartedAt }` — `interrupted` false on every one, since any move ends it, and said rather than assumed so the rule lives in core alone; the last when the turn under way began, kept by the service by the same rule the working line reads a log with (`turns.ts`), so the status bar can count a turn whose log no window has loaded. The twin of the
 one above, a level in: the tab strip draws a conversation while

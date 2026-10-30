@@ -22,6 +22,7 @@ import type { Config } from '../core/config.js'
 import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import type { RemoteRepository } from '../core/github.js'
 import type { DraftEvent } from '../core/pullRequestDraft.js'
+import type { RemoteRefWatchDeps } from '../core/remoteRefs.js'
 import {
   createService as makeService,
   type OctopusService,
@@ -32,6 +33,7 @@ import type {
   ChatsChangedEvent,
   ChatStatusEvent,
   TasksEvent,
+  WorkspacePushedEvent,
   WorkspaceStatusEvent
 } from '../core/service.js'
 import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
@@ -70,6 +72,8 @@ interface Harness {
   readonly broadcasts: ThemeName[]
   readonly chatEvents: ChatEvent[]
   readonly statusEvents: WorkspaceStatusEvent[]
+  /** Every workspace branch the remote was heard to move. */
+  readonly pushedEvents: WorkspacePushedEvent[]
   readonly chatStatusEvents: ChatStatusEvent[]
   /** Every announcement that a workspace's set of conversations moved. */
   readonly chatsChangedEvents: ChatsChangedEvent[]
@@ -98,6 +102,7 @@ function harness(): Harness {
   const broadcasts: ThemeName[] = []
   const chatEvents: ChatEvent[] = []
   const statusEvents: WorkspaceStatusEvent[] = []
+  const pushedEvents: WorkspacePushedEvent[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
   const chatsChangedEvents: ChatsChangedEvent[] = []
   const taskEvents: TasksEvent[] = []
@@ -112,6 +117,7 @@ function harness(): Harness {
     broadcasts,
     chatEvents,
     statusEvents,
+    pushedEvents,
     chatStatusEvents,
     chatsChangedEvents,
     taskEvents,
@@ -137,6 +143,7 @@ function harness(): Harness {
       broadcastTheme: (theme) => broadcasts.push(theme),
       broadcastChatEvent: (event) => chatEvents.push(event),
       broadcastWorkspaceStatus: (event) => statusEvents.push(event),
+      broadcastWorkspacePushed: (event) => pushedEvents.push(event),
       broadcastUsageWindows: (windows) => usageBroadcasts.push(windows),
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
       broadcastChatsChanged: (event) => chatsChangedEvents.push(event),
@@ -432,6 +439,11 @@ describe('channel table', () => {
     'library:remove',
     'library:rename',
     'library:inspect',
+    'prompts:list',
+    'prompts:create',
+    'prompts:update',
+    'prompts:remove',
+    'prompts:reorder',
     'dialog:pickSkill',
     'dialog:pickMarkdown',
     'dialog:pickFiles',
@@ -2163,6 +2175,7 @@ describe('workspaces of a real project', () => {
                 mergeStateStatus: 'DIRTY',
                 reviewDecision: 'CHANGES_REQUESTED',
                 statusCheckRollup: [],
+                headRefOid: 'a'.repeat(40),
                 comments: [],
                 reviews: []
               })
@@ -3480,6 +3493,82 @@ describe('the commands and subagents channels', () => {
   })
 })
 
+describe('the saved prompts channels', () => {
+  const GLOBAL = { kind: 'global' }
+  const DRAFT = { title: 'Review', text: 'Look it over.', forPlan: false }
+  const UUID = '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b'
+
+  it('writes one, lists it, changes it, orders them and takes one away', async () => {
+    const first = await invoke('prompts:create', GLOBAL, DRAFT)
+    const second = await invoke('prompts:create', GLOBAL, { ...DRAFT, title: 'Tests' })
+    expect(first).toMatchObject({ ok: true, value: { title: 'Review' } })
+
+    const ids = [first, second].map((answer) => (answer as { value: { id: string } }).value.id)
+    const [firstId = '', secondId = ''] = ids
+
+    await expect(
+      invoke('prompts:update', GLOBAL, firstId, { ...DRAFT, forPlan: true })
+    ).resolves.toMatchObject({ ok: true, value: { forPlan: true } })
+
+    await expect(invoke('prompts:reorder', GLOBAL, [secondId, firstId])).resolves.toMatchObject({
+      ok: true
+    })
+    await expect(invoke('prompts:list', GLOBAL)).resolves.toMatchObject({
+      ok: true,
+      value: [{ title: 'Tests' }, { title: 'Review' }]
+    })
+
+    await expect(invoke('prompts:remove', GLOBAL, secondId)).resolves.toMatchObject({ ok: true })
+    await expect(invoke('prompts:list', GLOBAL)).resolves.toMatchObject({
+      ok: true,
+      value: [{ title: 'Review' }]
+    })
+  })
+
+  // Types are gone by this point: a renderer sending any of these is the case
+  // the parse exists for.
+  it('refuses a draft that is empty or too long', async () => {
+    await expect(invoke('prompts:create', GLOBAL, { ...DRAFT, title: '' })).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(
+      invoke('prompts:create', GLOBAL, { ...DRAFT, text: 'x'.repeat(20_001) })
+    ).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:list', GLOBAL)).resolves.toMatchObject({ ok: true, value: [] })
+  })
+
+  it('refuses a store that is neither of the two', async () => {
+    await expect(invoke('prompts:list', { kind: 'somewhere' })).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('refuses an id that is not a uuid, in each channel that takes one', async () => {
+    await expect(invoke('prompts:update', GLOBAL, 'x', DRAFT)).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:remove', GLOBAL, '../x')).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:reorder', GLOBAL, ['x'])).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:reorder', GLOBAL, 'x')).resolves.toMatchObject({ ok: false })
+  })
+
+  // The order arrives from a window that draws agent output, so its length is
+  // bounded at the bridge rather than trusted.
+  it('refuses an order longer than any list could be', async () => {
+    const many = Array.from({ length: 1001 }, () => UUID)
+
+    await expect(invoke('prompts:reorder', GLOBAL, many)).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:reorder', GLOBAL, many.slice(1))).resolves.toMatchObject({
+      ok: true
+    })
+  })
+
+  it('reports a prompt that is not there with its code', async () => {
+    await expect(invoke('prompts:remove', GLOBAL, UUID)).resolves.toMatchObject({
+      ok: false,
+      code: 'promptMissing'
+    })
+  })
+})
+
 describe('the pasted images channels', () => {
   it('measures what is there and empties it', async () => {
     await expect(invoke('attachments:measure')).resolves.toEqual({
@@ -3601,5 +3690,29 @@ describe('the workspace notes channel', () => {
     await expect(invoke('workspaces:notes', workspace.id, { text: 'no' })).resolves.toMatchObject({
       ok: false
     })
+  })
+})
+
+describe('a workspace branch the remote moved', () => {
+  it('reaches the windows', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    let heard: RemoteRefWatchDeps | null = null
+    const replacement = await useService({
+      refWatch: (deps) => {
+        heard = deps
+        return { sync: () => Promise.resolve(), close: () => undefined }
+      }
+    })
+    const project = await replacement.addProjectFromPath(repo)
+    const workspace = await replacement.createWorkspaceIn(project.id)
+
+    const deps = heard as RemoteRefWatchDeps | null
+    deps?.onRef(project.id, workspace.branch, 'a'.repeat(40))
+
+    expect(bench.pushedEvents).toEqual([
+      { workspaceId: workspace.id, projectId: project.id, head: 'a'.repeat(40) }
+    ])
+    await replacement.closeChats()
   })
 })

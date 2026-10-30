@@ -77,6 +77,8 @@ interface ChatProps {
   readonly defaultPlanModel: string | null
   /** Opens the settings on skills — the way out of an empty skills panel. */
   readonly onOpenSkillSettings: () => void
+  /** Opens the settings on prompts — what the prompt fan's last pill is for. */
+  readonly onOpenPromptSettings: () => void
   /** The workspace was just made here, so its composer takes the caret. */
   readonly focusComposer: boolean
   /** The set of variables the workspace's project uses, until the list is read. */
@@ -124,6 +126,7 @@ export function Chat({
   defaultModel,
   defaultPlanModel,
   onOpenSkillSettings,
+  onOpenPromptSettings,
   focusComposer,
   projectEnvProfile,
   onWorkspacesChanged,
@@ -268,6 +271,7 @@ export function Chat({
           defaultModel={defaultModel}
           defaultPlanModel={defaultPlanModel}
           onOpenSkillSettings={onOpenSkillSettings}
+          onOpenPromptSettings={onOpenPromptSettings}
           focusComposer={focusComposer && tab.key === tabs.activeKey}
           projectEnvProfile={projectEnvProfile}
           onWorkspacesChanged={onWorkspacesChanged}

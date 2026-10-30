@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 
+import { onBranchMoved } from './branchMoves.js'
+import { PUSH_SETTLE_MS } from './pullRequestPace.js'
 import { setVisibleTimeout } from './visibleTimeout.js'
 
 export interface BranchRequestController {
@@ -31,7 +33,7 @@ export interface BranchRequestController {
 /**
  * How often to look again while a project is open.
  *
- * Slower than the pull request tab's own timer by four times, and deliberately:
+ * Slower than the pull request tab's own timer by twelve times, and deliberately:
  * this one runs whenever a project is open rather than when somebody is looking
  * at a request, and what it feeds is a mark on a row rather than a number
  * anybody is waiting on.
@@ -41,14 +43,21 @@ const INTERVAL_MS = 60_000
 /**
  * How often to look again while some request still has a check running.
  *
- * The pull request tab reads on this clock, and the mark on a row is the same
- * fact: left at a minute, the row kept spinning for up to a minute after the tab
- * had already said the checks were done. Only while something is running, so a
+ * The mark on a row is the fact the pull request tab draws: left at a minute,
+ * the row kept spinning for up to a minute after the tab had already said the
+ * checks were done. The tab itself reads faster (`INTERVAL_MS` in
+ * `pullRequestPace.ts`), but only for the one request on screen; this clock is
+ * paid for every row of the project, so it stays at fifteen seconds. Only while something is running, so a
  * project with nothing in flight costs what it did — and only for the open
  * project, which is the one with rows on screen. A watched project has no
  * row; its one reader is the status bar's count, which can lag a minute
  * without harm, and a few repositories with long CI runs on this clock were a
  * GraphQL query every 15 s each, all day.
+ *
+ * And for `PUSH_SETTLE_MS` after a workspace's branch moves on the remote:
+ * GitHub takes a few seconds to put a check on the new commit, so the read made
+ * at the push still says the previous one passed, and nothing is running yet
+ * for this clock to notice.
  */
 export const RUNNING_INTERVAL_MS = 15_000
 
@@ -110,6 +119,9 @@ export function useBranchRequests(
     setNonce((count) => count + 1)
   }, [])
 
+  /** When a branch of each project last moved on the remote; read in the effect only. */
+  const movedAt = useRef(new Map<string, number>())
+
   /*
    * The watched set as one string, so a caller handing a fresh array each
    * render with the same projects in it does not restart every read.
@@ -123,10 +135,18 @@ export function useBranchRequests(
 
     let stopped = false
     const timers = new Map<string, () => void>()
+    /**
+     * The newest read asked of each project. A push starts one while the last
+     * may still be on its way, and that older answer describes the branch
+     * before the push: it goes neither into the state nor onto a timer.
+     */
+    const asked = new Map<string, number>()
 
     const read = async (id: string): Promise<void> => {
+      const attempt = (asked.get(id) ?? 0) + 1
+      asked.set(id, attempt)
       const result = await window.octopus.projects.pullRequests(id)
-      if (stopped) return
+      if (stopped || asked.get(id) !== attempt) return
 
       // A refusal is an answer too: a repository with no GitHub remote never
       // gives another, and waiting on it would take the header's shortcut away
@@ -146,6 +166,7 @@ export function useBranchRequests(
       )
 
       const running = [...answer.byBranch.values()].some((request) => request.checks === 'running')
+      const settling = Date.now() - (movedAt.current.get(id) ?? -Infinity) < PUSH_SETTLE_MS
 
       // Rescheduled from the answer rather than run on an interval, so a slow
       // reply never has a second read stacked on top of it — and a refusal is
@@ -156,14 +177,27 @@ export function useBranchRequests(
         id,
         setVisibleTimeout(
           () => void read(id),
-          running && id === projectId ? RUNNING_INTERVAL_MS : INTERVAL_MS
+          (running || settling) && id === projectId ? RUNNING_INTERVAL_MS : INTERVAL_MS
         )
       )
     }
 
     for (const id of watched.split('\n')) void read(id)
 
+    // Read the open project at a push, and only it: the status bar's projects
+    // can lag their minute, and a push is no news about them.
+    const unsubscribe =
+      projectId === null
+        ? null
+        : onBranchMoved((event) => {
+            if (event.projectId !== projectId) return
+            movedAt.current.set(projectId, Date.now())
+            timers.get(projectId)?.()
+            void read(projectId)
+          })
+
     return () => {
+      unsubscribe?.()
       stopped = true
       for (const cancel of timers.values()) cancel()
     }

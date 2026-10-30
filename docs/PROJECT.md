@@ -658,10 +658,12 @@ the app never sees a token (§10.9).
   the push would publish them.
 - **The checks.** Read from `statusCheckRollup`, which is a union of GitHub
   Actions runs and the older Commit Status API — external services still report
-  through the second, so a repository commonly has both. Re-read every 15 s
-  (held while the window is hidden) while a check is running **or** while GitHub has not worked out whether the
+  through the second, so a repository commonly has both. Re-read every 5 s
+  for the request on screen, 15 s after ten minutes on it (held while the window is hidden) while a check is running **or** while GitHub has not worked out whether the
   branch is mergeable, since it computes that asynchronously and a repository
-  with no CI has no pending check to wait on. While one is red, two buttons
+  with no CI has no pending check to wait on — and read at once, then every
+  few seconds, after a push to the branch until GitHub has caught up with it.
+  While one is red, two buttons
   under the list restart its Actions runs — only the failed jobs, or all of
   them — through `gh run rerun`.
 - **The review.** Issue comments, review submissions and inline notes in one
@@ -719,8 +721,10 @@ Everything under one directory:
 ~/.octopus/
   config.json                global settings
   state.json                 workspaces, session ids, statuses
+  prompts.json               saved prompts for every project
   projects/<slug>/
     carry                    which of the checkout's files travel into a workspace
+    prompts.json             this project's saved prompts; goes with the project
     envs/                    named sets of variables, one appended to every workspace's .env
       default
     scripts/setup.sh

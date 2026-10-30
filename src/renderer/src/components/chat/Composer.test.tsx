@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentCommand, AgentModel } from '@core/chats.js'
+import type { Prompt } from '@core/promptSchema.js'
 
+import { octopus } from '../../test/octopus.js'
 import { Composer } from './Composer.js'
 
 type ComposerProps = React.ComponentProps<typeof Composer>
@@ -21,6 +23,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   onFilesTaken: ReturnType<typeof vi.fn>
   onDropFiles: ReturnType<typeof vi.fn>
   onPasteImage: ReturnType<typeof vi.fn>
+  onOpenPromptSettings: ReturnType<typeof vi.fn>
   rerender: (next: Partial<ComposerProps>) => void
 } {
   // Answers that the message went, which is what the composer clears on. A
@@ -34,6 +37,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
   const onFilesTaken = vi.fn()
   const onDropFiles = vi.fn()
   const onPasteImage = vi.fn()
+  const onOpenPromptSettings = vi.fn()
 
   const composer = (props: Partial<ComposerProps>): React.JSX.Element => (
     <Composer
@@ -65,6 +69,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       onToggleSkill={vi.fn()}
       onRefreshSkills={vi.fn()}
       onOpenSettings={vi.fn()}
+      projectId="planner"
+      onOpenPromptSettings={onOpenPromptSettings}
       notes={[]}
       onRemoveNote={vi.fn()}
       onNotesSent={vi.fn()}
@@ -86,6 +92,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
     onFilesTaken,
     onDropFiles,
     onPasteImage,
+    onOpenPromptSettings,
     // For the settings that have to be watched *changing* — the chip follows
     // the mode, and a second `render` would mount a second composer instead.
     rerender: (next) => {
@@ -1667,5 +1674,77 @@ describe('a message handed back', () => {
     renderComposer({ initialDraft: 'my own words', seed: { text: 'rename it', id: 3 } })
 
     expect(screen.getByRole('textbox')).toHaveValue('my own words')
+  })
+})
+
+describe('a saved prompt', () => {
+  const REVIEW: Prompt = {
+    id: '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
+    title: 'Review',
+    text: 'Look it over.',
+    forPlan: false
+  }
+
+  // jsdom measures nothing, so the button has no room above it and the fan opens
+  // as its list — which is the same prompts, chosen the same way.
+  const chosen = async (user: ReturnType<typeof userEvent.setup>): Promise<void> => {
+    // Answered by the store asked about, as the bridge does: one prompt, the
+    // installation's, and not a second copy of it from the project.
+    vi.mocked(octopus().prompts.list).mockImplementation((store) =>
+      Promise.resolve({ ok: true, value: store.kind === 'global' ? [REVIEW] : [] })
+    )
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Review' }))
+  }
+
+  /* Written where the caret is, as a path is: text the reader can still change
+     before it goes, not a command the agent expands where nobody sees it. */
+  it('is written into the text where the caret is, not at the end', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer()
+
+    await user.type(field(), 'please now')
+    const textarea = field() as HTMLTextAreaElement
+    textarea.setSelectionRange(6, 6)
+    fireEvent.select(textarea)
+
+    await chosen(user)
+
+    expect(textarea).toHaveValue('please Look it over. now')
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSend).toHaveBeenCalledWith('please Look it over. now')
+  })
+
+  it('leaves the caret after it and the field ready for the next word', async () => {
+    const user = userEvent.setup()
+    renderComposer()
+
+    await user.type(field(), 'please')
+    await chosen(user)
+
+    const textarea = field() as HTMLTextAreaElement
+    expect(textarea).toHaveValue('please Look it over. ')
+    expect(textarea).toHaveFocus()
+    expect(textarea.selectionStart).toBe(21)
+  })
+
+  it('stands alone in an empty field', async () => {
+    const user = userEvent.setup()
+    renderComposer()
+
+    await chosen(user)
+
+    expect(field()).toHaveValue('Look it over. ')
+  })
+
+  it('goes to the settings that keep them', async () => {
+    const user = userEvent.setup()
+    const { onOpenPromptSettings } = renderComposer()
+
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Manage prompts…' }))
+
+    expect(onOpenPromptSettings).toHaveBeenCalledOnce()
   })
 })

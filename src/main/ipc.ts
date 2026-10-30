@@ -65,6 +65,7 @@ import { FormValuesSchema } from '../core/elicitation.js'
 import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
 import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { NotesBodySchema } from '../core/notes.js'
+import { PromptDraftSchema, PromptIdSchema } from '../core/promptSchema.js'
 import { StoreSchema } from '../core/stores.js'
 import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core/plugins.js'
 import type {
@@ -73,6 +74,7 @@ import type {
   TasksEvent,
   ChatStatusEvent,
   OctopusService,
+  WorkspacePushedEvent,
   WorkspaceStatusEvent
 } from '../core/service.js'
 import { SideExchangeSchema, SideHistorySchema, SideQuestionSchema } from '../core/sideQuestions.js'
@@ -141,6 +143,8 @@ export interface IpcHost {
    * about a conversation, and the list that draws it is not looking at a chat.
    */
   readonly broadcastWorkspaceStatus: (event: WorkspaceStatusEvent) => void
+  /** A workspace's branch moved on the remote: what the pull request pane reads on. */
+  readonly broadcastWorkspacePushed: (event: WorkspacePushedEvent) => void
   /** The account's windows, whenever the service learns they moved. */
   readonly broadcastUsageWindows: (windows: UsageWindows) => void
   /**
@@ -725,6 +729,41 @@ export function registerIpc(
     )
   )
 
+  /* Saved prompts. The draft is parsed whole — its limits are the ones the
+     editor shows — and every id is a uuid before it is a lookup. `reorder` takes
+     the whole new order, as `projects:reorder` does, and is bounded because it
+     arrives from a window that draws agent output. */
+  host.handle('prompts:list', (_event, store: unknown) =>
+    attempt(() => service.listPrompts(StoreSchema.parse(store)))
+  )
+
+  host.handle('prompts:create', (_event, store: unknown, draft: unknown) =>
+    attempt(() => service.createPrompt(StoreSchema.parse(store), PromptDraftSchema.parse(draft)))
+  )
+
+  host.handle('prompts:update', (_event, store: unknown, id: unknown, draft: unknown) =>
+    attempt(() =>
+      service.updatePrompt(
+        StoreSchema.parse(store),
+        PromptIdSchema.parse(id),
+        PromptDraftSchema.parse(draft)
+      )
+    )
+  )
+
+  host.handle('prompts:remove', (_event, store: unknown, id: unknown) =>
+    attempt(() => service.removePrompt(StoreSchema.parse(store), PromptIdSchema.parse(id)))
+  )
+
+  host.handle('prompts:reorder', (_event, store: unknown, orderedIds: unknown) =>
+    attempt(() =>
+      service.reorderPrompts(
+        StoreSchema.parse(store),
+        z.array(PromptIdSchema).max(1000).parse(orderedIds)
+      )
+    )
+  )
+
   host.handle('skills:inRepository', (_event, workspaceId: string) =>
     attempt(() => service.listRepositorySkills(workspaceId))
   )
@@ -1009,6 +1048,7 @@ export function registerIpc(
     if (!isTaskFrame(event.event)) host.broadcastChatEvent(event)
   })
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
+  service.onWorkspacePushed(host.broadcastWorkspacePushed)
   service.onUsageWindows(host.broadcastUsageWindows)
   service.onChatStatus(host.broadcastChatStatus)
   service.onChatsChanged(host.broadcastChatsChanged)
