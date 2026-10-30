@@ -183,11 +183,14 @@ says so. **`/clear`** comes last, in the danger colour. Nothing is dispatched
 here: each goes out as the text of an ordinary message through the same
 `onSend` the field uses.
 
-**What fills the window sits beside the share.** A button with the layers icon
+**What fills the window sits just before the share.** A button with the layers
+icon, on the share's left — the icon leads and the figure it explains follows —
 opens a panel of the same reply the share is counted from — `getContextUsage`
 already carries a breakdown, and a second call for it would cost another
 650ms — read by `contextBreakdown.ts` into four sections: the kinds of row, the
-memory files, the MCP servers, and the five heaviest tools. A section with no
+memory files, the MCP servers — one row each, though the reply spells a server
+normalised under its tools and as `mcp_status` does under its instructions —
+and the five heaviest tools. A section with no
 rows is not drawn, and the button is absent when the CLI sent no breakdown the
 core could read, since a panel with nothing in it has nothing to open on. Every
 row is a share of what the window holds, in one neutral colour:
@@ -199,7 +202,7 @@ message out of the middle.
 
 **The same menu chooses where the conversation compacts itself**: _Auto_ and
 300k, 400k, 500k, 600k, 800k, as radio rows in a group of their own between the
-two commands. Left alone, a 1M model compacts near 967k, by which point every
+compacting row and `/clear`. Left alone, a 1M model compacts near 967k, by which point every
 turn pays for a context it mostly no longer reads. The menu is wider than the
 app's others (`width` on `DropdownMenu`) so the group's notes fit, and the group
 says, most pressing first:
