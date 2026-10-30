@@ -96,6 +96,23 @@ export function projectScriptsDir(projectId: ProjectId, root: string = rootDir()
 }
 
 /**
+ * The installation's saved prompts: `~/.octopus/prompts.json`.
+ *
+ * A file of its own and not a field of `config.json`: a list the user orders by
+ * hand and edits one entry at a time is a document, and the config's edits are
+ * one-operation lists. Beside the skills store rather than inside it, because
+ * that one is handed to every session as a working directory.
+ */
+export function globalPromptsFile(root: string = rootDir()): string {
+  return join(root, 'prompts.json')
+}
+
+/** One project's saved prompts, in the directory that goes when the project does. */
+export function projectPromptsFile(projectId: ProjectId, root: string = rootDir()): string {
+  return join(projectDir(projectId, root), 'prompts.json')
+}
+
+/**
  * The list of files a project carries into every new workspace.
  *
  * Beside the env it replaces: a worktree holds what git tracks and nothing

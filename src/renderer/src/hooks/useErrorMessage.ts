@@ -226,6 +226,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.libraryUrlRefused', { url: failure.params?.url ?? '' })
         case 'librarySubagentNeedsDescription':
           return t('errors.librarySubagentNeedsDescription')
+        case 'promptMissing':
+          return t('errors.promptMissing')
         case 'pluginCliUnavailable':
           return t('errors.pluginCliUnavailable', { message: failure.params?.message ?? '' })
         case 'pluginTimedOut':

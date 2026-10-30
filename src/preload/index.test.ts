@@ -77,6 +77,7 @@ describe('the exposed bridge', () => {
       'library',
       'plugins',
       'projects',
+      'prompts',
       'resources',
       'settings',
       'skills',
@@ -471,6 +472,27 @@ describe('channel names', () => {
     ],
     ['attachments.measure', () => method('attachments', 'measure')(), 'attachments:measure'],
     ['attachments.clear', () => method('attachments', 'clear')(), 'attachments:clear'],
+    ['prompts.list', () => method('prompts', 'list')({ kind: 'global' } as never), 'prompts:list'],
+    [
+      'prompts.create',
+      () => method('prompts', 'create')({ kind: 'global' } as never, {} as never),
+      'prompts:create'
+    ],
+    [
+      'prompts.update',
+      () => method('prompts', 'update')({ kind: 'global' } as never, 'id' as never, {} as never),
+      'prompts:update'
+    ],
+    [
+      'prompts.remove',
+      () => method('prompts', 'remove')({ kind: 'global' } as never, 'id' as never),
+      'prompts:remove'
+    ],
+    [
+      'prompts.reorder',
+      () => method('prompts', 'reorder')({ kind: 'global' } as never, [] as never),
+      'prompts:reorder'
+    ],
     [
       'library.list',
       () => method('library', 'list')({ kind: 'global' } as never, 'command' as never),

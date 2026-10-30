@@ -2284,6 +2284,7 @@ export const en = {
       '\u201c{{url}}\u201d could not be read. Only https addresses answering with one markdown file are fetched.',
     librarySubagentNeedsDescription:
       'A subagent needs frontmatter with a description saying when to use it, or the agent will never reach for it.',
+    promptMissing: 'That prompt is not there any more.',
     branchMissing:
       'That repository has no branch called \u201c{{branch}}\u201d. Choose a base branch it does have before pointing the project at it.',
     draftFailed: 'The description could not be drafted: {{reason}}',

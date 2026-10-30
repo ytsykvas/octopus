@@ -1850,6 +1850,7 @@ export const de: Translation = {
       '„{{url}}“ ließ sich nicht lesen. Abgerufen werden nur https-Adressen, die mit genau einer Markdown-Datei antworten.',
     librarySubagentNeedsDescription:
       'Ein Subagent braucht Frontmatter mit einer Beschreibung, wann er genutzt wird, sonst greift der Agent nie auf ihn zurück.',
+    promptMissing: 'Diesen Prompt gibt es nicht mehr.',
     branchMissing:
       'Dieses Repository hat keinen Branch namens „{{branch}}“. Wähle einen Basis-Branch, den es hat, bevor du das Projekt darauf richtest.',
     draftFailed: 'Die Beschreibung ließ sich nicht entwerfen: {{reason}}',

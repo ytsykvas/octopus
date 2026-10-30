@@ -432,6 +432,11 @@ describe('channel table', () => {
     'library:remove',
     'library:rename',
     'library:inspect',
+    'prompts:list',
+    'prompts:create',
+    'prompts:update',
+    'prompts:remove',
+    'prompts:reorder',
     'dialog:pickSkill',
     'dialog:pickMarkdown',
     'dialog:pickFiles',
@@ -3477,6 +3482,71 @@ describe('the commands and subagents channels', () => {
     bench.picked = { canceled: false, filePaths: [] }
 
     await expect(invoke('dialog:pickMarkdown', 'Pick')).resolves.toEqual({ ok: true, value: null })
+  })
+})
+
+describe('the saved prompts channels', () => {
+  const GLOBAL = { kind: 'global' }
+  const DRAFT = { title: 'Review', text: 'Look it over.', forPlan: false }
+  const UUID = '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b'
+
+  it('writes one, lists it, changes it, orders them and takes one away', async () => {
+    const first = await invoke('prompts:create', GLOBAL, DRAFT)
+    const second = await invoke('prompts:create', GLOBAL, { ...DRAFT, title: 'Tests' })
+    expect(first).toMatchObject({ ok: true, value: { title: 'Review' } })
+
+    const ids = [first, second].map((answer) => (answer as { value: { id: string } }).value.id)
+    const [firstId = '', secondId = ''] = ids
+
+    await expect(
+      invoke('prompts:update', GLOBAL, firstId, { ...DRAFT, forPlan: true })
+    ).resolves.toMatchObject({ ok: true, value: { forPlan: true } })
+
+    await expect(invoke('prompts:reorder', GLOBAL, [secondId, firstId])).resolves.toMatchObject({
+      ok: true
+    })
+    await expect(invoke('prompts:list', GLOBAL)).resolves.toMatchObject({
+      ok: true,
+      value: [{ title: 'Tests' }, { title: 'Review' }]
+    })
+
+    await expect(invoke('prompts:remove', GLOBAL, secondId)).resolves.toMatchObject({ ok: true })
+    await expect(invoke('prompts:list', GLOBAL)).resolves.toMatchObject({
+      ok: true,
+      value: [{ title: 'Review' }]
+    })
+  })
+
+  // Types are gone by this point: a renderer sending any of these is the case
+  // the parse exists for.
+  it('refuses a draft that is empty or too long', async () => {
+    await expect(invoke('prompts:create', GLOBAL, { ...DRAFT, title: '' })).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(
+      invoke('prompts:create', GLOBAL, { ...DRAFT, text: 'x'.repeat(20_001) })
+    ).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:list', GLOBAL)).resolves.toMatchObject({ ok: true, value: [] })
+  })
+
+  it('refuses a store that is neither of the two', async () => {
+    await expect(invoke('prompts:list', { kind: 'somewhere' })).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('refuses an id that is not a uuid, in each channel that takes one', async () => {
+    await expect(invoke('prompts:update', GLOBAL, 'x', DRAFT)).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:remove', GLOBAL, '../x')).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:reorder', GLOBAL, ['x'])).resolves.toMatchObject({ ok: false })
+    await expect(invoke('prompts:reorder', GLOBAL, 'x')).resolves.toMatchObject({ ok: false })
+  })
+
+  it('reports a prompt that is not there with its code', async () => {
+    await expect(invoke('prompts:remove', GLOBAL, UUID)).resolves.toMatchObject({
+      ok: false,
+      code: 'promptMissing'
+    })
   })
 })
 

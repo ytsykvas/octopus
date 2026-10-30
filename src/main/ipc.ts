@@ -65,6 +65,7 @@ import { FormValuesSchema } from '../core/elicitation.js'
 import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
 import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { NotesBodySchema } from '../core/notes.js'
+import { PromptDraftSchema, PromptIdSchema } from '../core/promptSchema.js'
 import { StoreSchema } from '../core/stores.js'
 import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core/plugins.js'
 import type {
@@ -722,6 +723,41 @@ export function registerIpc(
   host.handle('library:inspect', (_event, kind: unknown, request: unknown) =>
     attempt(() =>
       service.inspectLibrary(LibraryKindSchema.parse(kind), LibraryImportSchema.parse(request))
+    )
+  )
+
+  /* Saved prompts. The draft is parsed whole — its limits are the ones the
+     editor shows — and every id is a uuid before it is a lookup. `reorder` takes
+     the whole new order, as `projects:reorder` does, and is bounded because it
+     arrives from a window that draws agent output. */
+  host.handle('prompts:list', (_event, store: unknown) =>
+    attempt(() => service.listPrompts(StoreSchema.parse(store)))
+  )
+
+  host.handle('prompts:create', (_event, store: unknown, draft: unknown) =>
+    attempt(() => service.createPrompt(StoreSchema.parse(store), PromptDraftSchema.parse(draft)))
+  )
+
+  host.handle('prompts:update', (_event, store: unknown, id: unknown, draft: unknown) =>
+    attempt(() =>
+      service.updatePrompt(
+        StoreSchema.parse(store),
+        PromptIdSchema.parse(id),
+        PromptDraftSchema.parse(draft)
+      )
+    )
+  )
+
+  host.handle('prompts:remove', (_event, store: unknown, id: unknown) =>
+    attempt(() => service.removePrompt(StoreSchema.parse(store), PromptIdSchema.parse(id)))
+  )
+
+  host.handle('prompts:reorder', (_event, store: unknown, orderedIds: unknown) =>
+    attempt(() =>
+      service.reorderPrompts(
+        StoreSchema.parse(store),
+        z.array(PromptIdSchema).max(1000).parse(orderedIds)
+      )
     )
   )
 
