@@ -8,7 +8,7 @@
  * workspace, and everything under a single root (§12.5).
  */
 
-import { access, realpath } from 'node:fs/promises'
+import { access, readdir, realpath, rm } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
@@ -477,7 +477,7 @@ export async function ensureRemovable(
 ): Promise<void> {
   const force = options.force ?? false
 
-  if (!force && (await holdsUncommittedWork(exec.workspace))) {
+  if (!force && (await holdsUncommittedWork(exec, workspace.path))) {
     throw new WorkspaceError(
       'uncommittedChanges',
       { name: workspace.name },
@@ -566,16 +566,69 @@ export async function removeWorkspace(
  * Pruning afterwards clears the entry git keeps inside the repository, which
  * `git worktree remove` would have cleared and did not.
  *
- * A failure with the directory still on disk is a real one — a tree holding
+ * A directory that is still there but that git no longer lists is the same
+ * state half done: a removal that stopped while something kept writing into
+ * the tree has already dropped git's part and left the files. Nothing is left
+ * for git to refuse, so the directory goes by hand — but only when it is empty
+ * or the caller has agreed to lose what it holds, because those files were
+ * never under git's care and `ensureRemovable` is what told the user so.
+ *
+ * Any other failure with the directory on disk is a real one — a tree holding
  * changes and refusing to go without `force`, a locked worktree — and is left
- * to the caller. Only absence is forgiven.
+ * to the caller.
  */
 async function discardWorktree(exec: GitExec, path: string, force: boolean): Promise<void> {
   try {
     await removeWorktree(exec, path, force)
   } catch (error) {
-    if (await pathExists(path)) throw error
+    if (!(await pathExists(path))) {
+      await pruneWorktrees(exec)
+      return
+    }
+
+    if (!(await isOrphaned(exec, path))) throw error
+    if (!force && (await holdsLeftovers(path))) throw error
+
+    await rm(path, { recursive: true, force: true })
     await pruneWorktrees(exec)
+  }
+}
+
+/**
+ * Whether a directory is standing where git no longer knows of a worktree.
+ *
+ * Both sides go through `realpath`: git reports the resolved path, and the one
+ * stored for a workspace is not always resolved (`/var` against `/private/var`
+ * on macOS). A repository git cannot be asked about answers no — it says
+ * nothing about the directory, and the caller treats a no as "leave it alone".
+ */
+export async function isOrphaned(repository: GitExec, path: string): Promise<boolean> {
+  if (!(await pathExists(path))) return false
+
+  try {
+    const known = await Promise.all(
+      (await listWorktrees(repository)).map((worktree) => resolveOrSelf(worktree.path))
+    )
+    return !known.includes(await resolveOrSelf(path))
+  } catch {
+    return false
+  }
+}
+
+/** Whether a directory holds anything at all. */
+export async function holdsLeftovers(path: string): Promise<boolean> {
+  try {
+    return (await readdir(path)).length > 0
+  } catch {
+    return false
+  }
+}
+
+async function resolveOrSelf(path: string): Promise<string> {
+  try {
+    return await realpath(path)
+  } catch {
+    return path
   }
 }
 
@@ -585,10 +638,17 @@ async function discardWorktree(exec: GitExec, path: string, force: boolean): Pro
  * A directory that is already gone counts as clean: there is nothing left to
  * lose, and refusing to tidy up the record would leave the user stuck with an
  * entry they cannot remove.
+ *
+ * A directory git has let go of is asked differently. `git status` there would
+ * answer for whatever repository lies above it, or fail and read as clean, and
+ * either way say nothing of the files that are about to be deleted — so any
+ * file in it counts.
  */
-async function holdsUncommittedWork(exec: GitExec): Promise<boolean> {
+async function holdsUncommittedWork(exec: WorkspaceExec, path: string): Promise<boolean> {
+  if (await isOrphaned(exec.repository, path)) return holdsLeftovers(path)
+
   try {
-    return await hasUncommittedChanges(exec)
+    return await hasUncommittedChanges(exec.workspace)
   } catch {
     return false
   }

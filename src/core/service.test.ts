@@ -580,6 +580,22 @@ describe('workspaces', () => {
     expect(listed[0]?.changedFiles).toBe(1)
   })
 
+  // Not changes, because git no longer has a tree to compare — but the files a
+  // half-deleted folder holds are exactly what removing it would lose, and the
+  // pane decides whether to warn from this answer.
+  it('counts what a half-deleted worktree holds as work that would be lost', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await gitIn(join(dir, 'planner'))(['worktree', 'remove', '--force', workspace.path])
+    await mkdir(workspace.path)
+
+    await expect(service.workspaceHasChanges(workspace.id)).resolves.toBe(false)
+
+    await writeFile(join(workspace.path, 'plan.md'), 'left\n', 'utf8')
+
+    await expect(service.workspaceHasChanges(workspace.id)).resolves.toBe(true)
+  })
+
   it('puts one file back to the state the workspace branched from', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)

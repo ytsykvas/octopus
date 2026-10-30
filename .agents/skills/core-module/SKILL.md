@@ -101,15 +101,15 @@ Getting this wrong keeps producing bugs here, and they run both ways: a name
 meaningful inside one project checked against the whole app, and a name the
 agent treats as global checked inside one directory.
 
-| Value              | Unique within                                                                       |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| workspace `name`   | its project                                                                         |
-| workspace `slug`   | its project — it names a database, and is **not** injective                         |
-| workspace `branch` | its project — branches live in a repository                                         |
-| workspace `id`     | the whole app — it is the IPC key                                                   |
+| Value              | Unique within                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| workspace `name`   | its project                                                                        |
+| workspace `slug`   | its project — it names a database, and is **not** injective                        |
+| workspace `branch` | its project — branches live in a repository                                        |
+| workspace `id`     | the whole app — it is the IPC key                                                  |
 | skill `name`       | everything the agent can see — both stores, and the checkout's own `.Codex/skills` |
-| skill folder       | its store — it is a directory, and the app addresses a skill by it                  |
-| directory path     | the filesystem                                                                      |
+| skill folder       | its store — it is a directory, and the app addresses a skill by it                 |
+| directory path     | the filesystem                                                                     |
 
 The skill rows are the pair worth reading together. `skillKey` is the bare name
 because the CLI dedupes on it — two skills sharing one are one skill to the

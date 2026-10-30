@@ -94,6 +94,18 @@ work of its own to do in between cannot accidentally ask twice; asking twice is
 worse than it sounds, because the cleanup script runs in the worktree and a
 script that writes there would make the second answer differ from the first.
 
+A removal can also stop partway. When a dev server or a test run keeps writing
+into the tree, `git worktree remove` has already dropped its own part — the
+`.git` file and the entry in the repository — and then fails on the files, and
+every retry fails on "is not a working tree". The folder is on disk and git does
+not list it (`isOrphaned`). Nothing in it is under git's care, so `git status`
+there cannot say what is at stake: it answers for whatever repository lies above
+the folder, or fails and reads as clean. Any file in it counts as work that
+would be lost (`holdsLeftovers`), the same refusal and the same forced
+confirmation a dirty tree gets, and once the user has agreed — or the folder is
+empty — it is deleted by hand and the entry pruned. A repository git cannot be
+asked about never counts as an orphan, so silence is not what deletes a folder.
+
 A squash or rebase merge rewrites the commits, so git alone calls such a branch
 unmerged; the last thing asked is whether GitHub merged the branch's request.
 **That word covers the commits the request carried and nothing after them.** A
