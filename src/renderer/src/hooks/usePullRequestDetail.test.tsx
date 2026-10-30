@@ -7,6 +7,7 @@ import { emitAgentEvent } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { emitBranchMoved } from '../test/workspaces.js'
+import { FAST_FOR_MS } from './pullRequestPace.js'
 import { usePullRequestDetail } from './usePullRequestDetail.js'
 
 const ANNA = 'planner/anna'
@@ -176,6 +177,30 @@ describe('waiting for something to settle', () => {
     expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1)
     expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
+  })
+
+  it('falls back to fifteen seconds after ten minutes on one request, and a refresh starts the fast clock again', async () => {
+    vi.useFakeTimers()
+    answer(detail({ checks: [check('pending')] }))
+    const { result } = renderHook(() => usePullRequestDetail(ANNA, 7, true))
+    const asked = (): number => vi.mocked(octopus().workspaces.pullRequestDetail).mock.calls.length
+
+    await vi.advanceTimersByTimeAsync(FAST_FOR_MS)
+    const atTen = asked()
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(asked()).toBe(atTen)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(asked()).toBe(atTen + 1)
+
+    await act(async () => {
+      result.current.refresh()
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const refreshed = asked()
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(asked()).toBe(refreshed)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(asked()).toBe(refreshed + 1)
   })
 
   it('looks again while a check is still running', async () => {

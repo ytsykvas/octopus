@@ -16216,6 +16216,19 @@ describe('a branch the remote moved', () => {
     expect(heard).toHaveBeenCalledWith({ workspaceId: workspace.id, projectId: project.id, head })
   })
 
+  it('asks to read only the branches its workspaces are on', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+    const workspace = await watching.createWorkspaceIn(project.id)
+
+    expect(watch.deps().wants(project.id, workspace.branch)).toBe(true)
+    expect(watch.deps().wants(project.id, 'main')).toBe(false)
+    expect(watch.deps().wants('elsewhere', workspace.branch)).toBe(false)
+  })
+
   it('stops telling a listener that unsubscribed', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)

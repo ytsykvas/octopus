@@ -114,7 +114,10 @@ describe('createRemoteRefWatch', () => {
     readonly refs: ReturnType<typeof createRemoteRefWatch>
   }
 
-  function setUp(files: Record<string, string> = {}): Bench {
+  function setUp(
+    files: Record<string, string> = {},
+    wants: RemoteRefWatchDeps['wants'] = () => true
+  ): Bench {
     const fake = fakeWatch()
     const onRef = vi.fn<RemoteRefWatchDeps['onRef']>()
     const contents = new Map(Object.entries(files))
@@ -125,7 +128,7 @@ describe('createRemoteRefWatch', () => {
         : Promise.resolve(found)
     })
     const commonDirOf = vi.fn<(repoPath: string) => Promise<string>>(() => Promise.resolve(COMMON))
-    const refs = createRemoteRefWatch({ commonDirOf, onRef, watch: fake.watch, readFile })
+    const refs = createRemoteRefWatch({ commonDirOf, onRef, wants, watch: fake.watch, readFile })
 
     return { fake, onRef, contents, readFile, commonDirOf, refs }
   }
@@ -151,6 +154,26 @@ describe('createRemoteRefWatch', () => {
     await vi.advanceTimersByTimeAsync(REF_DEBOUNCE_MS)
 
     expect(onRef).toHaveBeenCalledWith('planner', 'octopus/ava', SHA)
+  })
+
+  // The first fetch of a large repository moves thousands of remote branches;
+  // the service cares about the few its workspaces are on.
+  it('reads only the branches it is asked about', async () => {
+    const BOB = join(COMMON, 'refs', 'remotes/origin/octopus/bob')
+    const { fake, onRef, readFile, refs } = setUp(
+      { [REF]: SHA, [BOB]: NEXT },
+      (_project, branch) => branch === 'octopus/bob'
+    )
+    await refs.sync([PROJECT])
+
+    fake.fire('remotes/origin/octopus/ava')
+    fake.fire('remotes/origin/octopus/bob')
+    await vi.advanceTimersByTimeAsync(REF_DEBOUNCE_MS)
+
+    expect(readFile).toHaveBeenCalledTimes(1)
+    expect(readFile).toHaveBeenCalledWith(BOB)
+    expect(onRef).toHaveBeenCalledTimes(1)
+    expect(onRef).toHaveBeenCalledWith('planner', 'octopus/bob', NEXT)
   })
 
   // The lock, the rename and the reflog arrive as several events for the one
@@ -336,6 +359,7 @@ describe('createRemoteRefWatch', () => {
     const failing = createRemoteRefWatch({
       commonDirOf,
       onRef: vi.fn(),
+      wants: () => true,
       watch: throwing,
       readFile: vi.fn()
     })
@@ -384,7 +408,8 @@ describe('a real push', () => {
     const onRef = vi.fn<RemoteRefWatchDeps['onRef']>()
     const refs = createRemoteRefWatch({
       commonDirOf: () => Promise.resolve(join(dir, '.git')),
-      onRef
+      onRef,
+      wants: () => true
     })
 
     try {

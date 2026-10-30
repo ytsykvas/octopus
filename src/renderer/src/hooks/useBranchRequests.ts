@@ -122,17 +122,6 @@ export function useBranchRequests(
   /** When a branch of each project last moved on the remote; read in the effect only. */
   const movedAt = useRef(new Map<string, number>())
 
-  // Read at the push rather than at the next tick, and hurry for a while after.
-  useEffect(() => {
-    if (projectId === null) return
-
-    return onBranchMoved((event) => {
-      if (event.projectId !== projectId) return
-      movedAt.current.set(projectId, Date.now())
-      refresh()
-    })
-  }, [projectId, refresh])
-
   /*
    * The watched set as one string, so a caller handing a fresh array each
    * render with the same projects in it does not restart every read.
@@ -146,10 +135,18 @@ export function useBranchRequests(
 
     let stopped = false
     const timers = new Map<string, () => void>()
+    /**
+     * The newest read asked of each project. A push starts one while the last
+     * may still be on its way, and that older answer describes the branch
+     * before the push: it goes neither into the state nor onto a timer.
+     */
+    const asked = new Map<string, number>()
 
     const read = async (id: string): Promise<void> => {
+      const attempt = (asked.get(id) ?? 0) + 1
+      asked.set(id, attempt)
       const result = await window.octopus.projects.pullRequests(id)
-      if (stopped) return
+      if (stopped || asked.get(id) !== attempt) return
 
       // A refusal is an answer too: a repository with no GitHub remote never
       // gives another, and waiting on it would take the header's shortcut away
@@ -187,7 +184,20 @@ export function useBranchRequests(
 
     for (const id of watched.split('\n')) void read(id)
 
+    // Read the open project at a push, and only it: the status bar's projects
+    // can lag their minute, and a push is no news about them.
+    const unsubscribe =
+      projectId === null
+        ? null
+        : onBranchMoved((event) => {
+            if (event.projectId !== projectId) return
+            movedAt.current.set(projectId, Date.now())
+            timers.get(projectId)?.()
+            void read(projectId)
+          })
+
     return () => {
+      unsubscribe?.()
       stopped = true
       for (const cancel of timers.values()) cancel()
     }

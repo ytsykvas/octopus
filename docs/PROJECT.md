@@ -659,7 +659,7 @@ the app never sees a token (§10.9).
 - **The checks.** Read from `statusCheckRollup`, which is a union of GitHub
   Actions runs and the older Commit Status API — external services still report
   through the second, so a repository commonly has both. Re-read every 5 s
-  for the request on screen (held while the window is hidden) while a check is running **or** while GitHub has not worked out whether the
+  for the request on screen, 15 s after ten minutes on it (held while the window is hidden) while a check is running **or** while GitHub has not worked out whether the
   branch is mergeable, since it computes that asynchronously and a repository
   with no CI has no pending check to wait on — and read at once, then every
   few seconds, after a push to the branch until GitHub has caught up with it.

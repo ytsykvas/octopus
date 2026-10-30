@@ -154,8 +154,8 @@ project stays on the minute, since nothing of it is on screen but the bar's
 count, and a few repositories with long CI runs on the fast clock were a
 GraphQL query every 15 s each, all day. A push to one of the open
 project's branches (`workspaces:pushed`, see
-[pull-request-tab.md](pull-request-tab.md)) is read at once and keeps the
-15 s clock for 90 s after it, running check or not: GitHub takes a few seconds
+[pull-request-tab.md](pull-request-tab.md)) is read at once — that project
+only, the status bar's keep their minute — and keeps the 15 s clock for 90 s after it, running check or not: GitHub takes a few seconds
 to put a check on the new commit, so the read made at the push still said the
 previous one passed, and the row waited a minute to start spinning. A
 look that falls due while the window is hidden waits for it, and is taken once

@@ -21,6 +21,20 @@ import type { PullRequestDetail } from '@core/pullRequestShapes.js'
 export const INTERVAL_MS = 5_000
 
 /**
+ * How long the tab keeps that clock on one request before it falls back.
+ *
+ * A required check that never reports is pending for ever, and the tab left
+ * open on it read every 5 s for ever — some 1440 GraphQL points an hour of the
+ * 5000 the account has. Ten minutes covers an ordinary CI run. Counted from the
+ * last fresh read: a push, a turn ending, Refresh or another request starts it
+ * again.
+ */
+export const FAST_FOR_MS = 10 * 60_000
+
+/** The clock after that: the pace the workspace list keeps while a check runs. */
+export const PATIENT_INTERVAL_MS = 15_000
+
+/**
  * How long after a push the tab hurries.
  *
  * Long enough for GitHub to take the commit in, Actions to put a check on it
@@ -59,12 +73,14 @@ export function settling(detail: PullRequestDetail): boolean {
  * than nothing: the previous commit's checks, finished, which `settling` reads
  * as nothing to wait for. So until it names the commit sent, puts a check on it
  * and has worked out mergeability, the tab reads on `CATCH_UP_MS` — and after
- * that, or once `PUSH_SETTLE_MS` has passed, on the ordinary clock.
+ * that, or once `PUSH_SETTLE_MS` has passed, on the ordinary clock, which slows
+ * once the tab has watched the request for `FAST_FOR_MS` since `since`.
  */
 export function nextDelay(
   detail: PullRequestDetail,
   pushed: Pushed | null,
-  now: number
+  now: number,
+  since: number
 ): number | null {
   const behind =
     pushed !== null &&
@@ -72,6 +88,7 @@ export function nextDelay(
     (detail.head !== pushed.head || detail.checks.length === 0 || detail.mergeable === 'unknown')
 
   if (behind) return CATCH_UP_MS[pushed.reads] ?? INTERVAL_MS
+  if (!settling(detail)) return null
 
-  return settling(detail) ? INTERVAL_MS : null
+  return now - since < FAST_FOR_MS ? INTERVAL_MS : PATIENT_INTERVAL_MS
 }

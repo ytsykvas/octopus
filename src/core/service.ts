@@ -1855,13 +1855,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * it moves, against the state as it is then: a workspace created or removed
    * since the watch started is found or not found accordingly.
    */
+  /** The workspace of a project on a branch, if there is one — looked up as it is now. */
+  const workspaceOnBranch = (projectId: string, branch: string): Workspace | undefined =>
+    workspacesOfProject(state, projectId).find((candidate) => candidate.branch === branch)
+
   const refWatch = (options.refWatch ?? createRemoteRefWatch)({
     commonDirOf: async (repoPath) =>
       resolve(repoPath, (await makeExec(repoPath)(['rev-parse', '--git-common-dir'])).trim()),
+    wants: (projectId, branch) => workspaceOnBranch(projectId, branch) !== undefined,
     onRef: (projectId, branch, head) => {
-      const workspace = workspacesOfProject(state, projectId).find(
-        (candidate) => candidate.branch === branch
-      )
+      // Asked again: the workspace may have gone in the moment between the
+      // event and the read.
+      const workspace = workspaceOnBranch(projectId, branch)
       if (workspace === undefined) return
 
       for (const listener of pushedListeners) {

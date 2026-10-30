@@ -92,6 +92,9 @@ export function usePullRequestDetail(
     let stopped = false
     let cancel: (() => void) | undefined
     const attempt = ++generation.current
+    // When this run of reads began: a push, a turn ending, Refresh or another
+    // request re-runs the effect, and with it the ten minutes of the fast clock.
+    const since = Date.now()
 
     const read = async (): Promise<void> => {
       const result = await window.octopus.workspaces.pullRequestDetail(workspaceId, number)
@@ -112,7 +115,7 @@ export function usePullRequestDetail(
       // settled. Held while the window is hidden: a check finishing behind it
       // is read once, when somebody can see the answer.
       const current = pushed.current?.key === key ? pushed.current : null
-      const delay = nextDelay(result.value, current, Date.now())
+      const delay = nextDelay(result.value, current, Date.now(), since)
       if (delay === null) return
 
       // A hurried read is a step along the back-off; the ordinary clock is not.

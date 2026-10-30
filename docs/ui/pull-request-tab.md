@@ -165,7 +165,11 @@ on at all. Five seconds is affordable because only the request on screen is
 read on it: the tab reads nothing while hidden, so switching to another
 workspace's tab moves the clock there and leaves the one switched away from to
 the workspace list's own, slower clock. Not shorter, because each read is two
-calls to GitHub.
+calls to GitHub. After ten minutes on one request the step becomes 15 s
+(`FAST_FOR_MS`): a required check that never reports would otherwise keep a tab
+left open on it at some 1440 GraphQL points an hour of the 5000 the account
+has. A push, a turn ending, Refresh or another request start the ten minutes
+again.
 
 **A push is read the moment it lands, and the tab hurries until GitHub has
 caught up.** Every push this checkout makes — the agent's, the built-in

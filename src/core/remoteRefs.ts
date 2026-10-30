@@ -60,6 +60,12 @@ export interface RemoteRefWatchDeps {
   /** The common git dir of a checkout, absolute. */
   readonly commonDirOf: (repoPath: string) => Promise<string>
   readonly onRef: (projectId: string, branch: string, head: string) => void
+  /**
+   * Whether a moved branch is worth reading. The service's workspaces and
+   * nothing else: the first fetch of a large repository moves thousands, and
+   * each would be read from disk and remembered in `seen` for the session.
+   */
+  readonly wants: (projectId: string, branch: string) => boolean
   readonly watch?: (
     path: string,
     options: { readonly recursive: boolean; readonly persistent: boolean },
@@ -167,6 +173,7 @@ export function createRemoteRefWatch(deps: RemoteRefWatchDeps): RemoteRefWatch {
         if (filename === null) return
         const branch = parseRemoteRef(filename)
         if (branch === null) return
+        if (!deps.wants(id, branch)) return
 
         // Keyed by the ref rather than the name the event carried, so the lock
         // and the rename of one write are one read.
