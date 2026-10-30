@@ -30,7 +30,14 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
-import { ABANDONED, CWD_WATCH_SETTINGS, DENIED, type QueryFn, READ_ONLY_TOOLS } from './agent.js'
+import {
+  ABANDONED,
+  COMPACTION_WATCH_SETTINGS,
+  CWD_WATCH_SETTINGS,
+  DENIED,
+  type QueryFn,
+  READ_ONLY_TOOLS
+} from './agent.js'
 import { type Chat, MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
@@ -6787,7 +6794,10 @@ describe('the agent chat', () => {
           compactsAt: 967_000,
           autoCompactOn: true,
           model: 'claude-opus-5[1m]',
-          modelWindow: null
+          modelWindow: null,
+          // The fake reply's categories carry no ids, which is a reply the
+          // breakdown cannot read and the reading survives.
+          breakdown: null
         },
         autoCompact: {
           chosen: null,
@@ -11289,7 +11299,7 @@ describe('the agent chat', () => {
         ultracode: true,
         enableWorkflows: true,
         skillOverrides: {},
-        hooks: CWD_WATCH_SETTINGS
+        hooks: { ...CWD_WATCH_SETTINGS, ...COMPACTION_WATCH_SETTINGS }
       })
     })
 

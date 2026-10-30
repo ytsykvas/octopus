@@ -42,6 +42,13 @@ export interface MenuAction {
    * It leaves the menu open, so several can be tried in a row.
    */
   readonly aside?: MenuAside
+  /**
+   * A second item sharing the row, half the width each: two commands that
+   * belong together, like compacting all of a conversation or saying first what
+   * to drop. Not combined with `aside` or `selected` — a pair of commands, not a
+   * choice.
+   */
+  readonly beside?: MenuAction
   readonly onSelect: () => void
 }
 
@@ -255,7 +262,14 @@ export function DropdownMenu({
             {actions.map((action) => (
               <Fragment key={action.id}>
                 {action.section !== undefined && <SectionHead section={action.section} />}
-                {action.aside === undefined ? (
+                {action.beside !== undefined ? (
+                  // Two items, each its own button: the row is a pair of
+                  // commands, and either is chosen without the other.
+                  <div className="grid grid-cols-2 gap-1">
+                    <MenuItem action={action} onChosen={close} />
+                    <MenuItem action={action.beside} onChosen={close} />
+                  </div>
+                ) : action.aside === undefined ? (
                   <MenuItem action={action} onChosen={close} />
                 ) : (
                   // Two buttons side by side rather than one inside the other:

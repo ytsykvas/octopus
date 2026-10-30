@@ -6,6 +6,7 @@ import {
   Eraser,
   FileCode2,
   FolderGit2,
+  FoldVertical,
   Map,
   Play,
   Repeat,
@@ -23,7 +24,7 @@ import {
   useExternalStoreRuntime
 } from '@assistant-ui/react'
 import type { TFunction } from 'i18next'
-import { createContext, memo, useContext, useMemo, useSyncExternalStore } from 'react'
+import { createContext, memo, useContext, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { FormValues } from '@core/elicitation.js'
@@ -41,12 +42,12 @@ import { shown } from '../diff/shown.js'
 import { NOTHING_STREAMING, type StreamStore, streamOf } from '../../hooks/useStreaming.js'
 import { sameMap, sameSet, useSameValue } from '../../hooks/useSameValue.js'
 import { DaySeparator } from './DayChip.js'
-import { exitCodeOf, formatClock, formatFullTime, formatTokens } from './format.js'
+import { exitCodeOf, formatClock, formatFullTime, formatTokens, savedShare } from './format.js'
 import { Markdown } from './Markdown.js'
 import { BLOCK_PART, DAY_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
 import { QuestionCard } from './QuestionCard.js'
-import { type MessageBlock, messageBlocks } from './userMessage.js'
+import { compactRequest, type MessageBlock, messageBlocks } from './userMessage.js'
 import { splitStreamed } from './streamedText.js'
 import { type Expansion, ExpandContext, FileLinkContext, useExpanded } from './expansion.js'
 import {
@@ -634,6 +635,9 @@ function AgentRow({
     case 'conversation_compacted':
       return <CompactedRow preTokens={event.preTokens} postTokens={event.postTokens} />
 
+    case 'compaction_summary':
+      return <CompactSummaryRow summary={event.summary} />
+
     // What the agent was actually told to do. Drawn as the plan it is, with the
     // way back to carrying it out, and named so it is not mistaken for the one
     // the agent wrote above it.
@@ -746,6 +750,27 @@ function UserMessage({
 }
 
 function UserBubble({ text }: { text: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  const compact = compactRequest(text)
+
+  // A `/compact` is drawn as what was asked: the instructions are the part worth
+  // reading. The exact text the agent got stays in the title, so nothing sent
+  // is hidden (§4).
+  if (compact !== null) {
+    return (
+      <div
+        title={text}
+        className="bubble-sent flex max-w-full min-w-0 flex-col gap-1 self-end rounded-[var(--radius-panel)] border px-3 py-2 whitespace-pre-wrap wrap-anywhere"
+      >
+        <span className="text-ink-soft flex items-center gap-1.5 text-[11px] font-medium">
+          <FoldVertical aria-hidden size={12} />
+          {t('chat.compactRequestTitle')}
+        </span>
+        <p>{compact.instructions ?? t('chat.compactRequestAll')}</p>
+      </div>
+    )
+  }
+
   const blocks = messageBlocks(text)
   // Nothing recognised: the characters exactly as they were typed.
   const plain = blocks.every(
@@ -1228,9 +1253,36 @@ function CompactedRow({
         ? t('chat.compacted')
         : t('chat.compactedBy', {
             before: formatTokens(preTokens),
-            after: formatTokens(postTokens)
+            after: formatTokens(postTokens),
+            saved: savedShare(preTokens, postTokens)
           })}
     </p>
+  )
+}
+
+/**
+ * What the agent kept when it compacted: the summary it will work from, folded
+ * because it runs long and is read when something seems forgotten, not every time.
+ */
+function CompactSummaryRow({ summary }: { summary: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="text-ink-faint text-[11px]">
+      <DisclosureButton
+        open={open}
+        onOpenChange={setOpen}
+        className="focus-ring hover:text-ink-soft flex items-center gap-1.5 rounded-[var(--radius-control)]"
+      >
+        {t('chat.compactSummaryTitle')}
+      </DisclosureButton>
+      {open && (
+        <div className="border-line text-ink-soft mt-1 ml-1.5 border-l pl-3 text-[12px]">
+          <Markdown text={summary} />
+        </div>
+      )}
+    </div>
   )
 }
 

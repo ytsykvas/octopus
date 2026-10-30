@@ -1,4 +1,5 @@
-import { ChevronDown, Eraser, FoldVertical, Paperclip } from 'lucide-react'
+import { ChevronDown, Eraser, FoldVertical, Paperclip, PencilLine } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ContextUsage } from '@core/agent.js'
@@ -15,6 +16,8 @@ import type { SkillListing } from '@core/skills.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { AgentsChip } from './AgentsChip.js'
+import { CompactDialog } from './CompactDialog.js'
+import { ContextPanel } from './ContextPanel.js'
 import { DropdownMenu, type MenuAction, type MenuSection } from '../DropdownMenu.js'
 import { formatTokens, usageTone } from './format.js'
 import { PromptFan } from './PromptFan.js'
@@ -67,7 +70,8 @@ interface ComposerAtticProps {
 const MENU_WIDTH = 360
 
 /**
- * What the two rows send, written as it goes on the wire.
+ * What the rows send, written as it goes on the wire; the labels are words now,
+ * and only what is sent stays the CLI's command.
  *
  * Not taken from `CLEAR_COMMAND` in `core/chats.ts`, which is the same word
  * answering a different question: that one *recognises* what the user typed —
@@ -118,6 +122,8 @@ export function ComposerAttic({
   // sits on a native `<dialog>` — `showModal()` puts it in the top layer
   // wherever in the tree it is written.
   const { confirm, dialog } = useConfirm()
+  // Whether the dialog asking what to drop before compacting is open.
+  const [explaining, setExplaining] = useState(false)
 
   /**
    * Asks before sending the command that throws the conversation away.
@@ -283,76 +289,94 @@ export function ComposerAttic({
           // commands the CLI already has, and neither is dispatched here —
           // they go out as the text of an ordinary message, which is what a
           // slash command is in this app.
-          <DropdownMenu
-            align="left"
-            width={MENU_WIDTH}
-            actions={[
-              {
-                id: COMPACT,
-                label: COMPACT,
-                description: t('chat.contextCompactNote'),
-                icon: <FoldVertical aria-hidden size={12} />,
-                onSelect: () => {
-                  void onSend(COMPACT)
-                }
-              },
-              ...(autoCompact === null ? [] : windowRows(autoCompact, context)),
-              {
-                // Last, and in the danger colour: of the two it is the one
-                // that loses something, and the reader should land first on
-                // the option that keeps the conversation.
-                id: CLEAR,
-                label: CLEAR,
-                description: t('chat.contextClearNote'),
-                icon: <Eraser aria-hidden size={12} />,
-                destructive: true,
-                // A line of its own, so it does not read as a seventh window.
-                ...(autoCompact !== null && { section: {} }),
-                onSelect: () => {
-                  void requestClear()
-                }
-              }
-            ]}
-            trigger={({ onClick, open }) => (
-              <button
-                type="button"
-                onClick={onClick}
-                aria-haspopup="menu"
-                aria-expanded={open}
-                // No `aria-label`: the visible text is the better name, and one
-                // here would replace "Context 48%" with a generic phrase —
-                // taking the figure away from the reader who is told it rather
-                // than shown it. The title stays what it was, and with text
-                // content present it is read as the description.
-                title={
-                  context.compactsAt === null
-                    ? t('chat.contextTitle', {
-                        used: formatTokens(context.usedTokens),
-                        total: formatTokens(context.maxTokens)
-                      })
-                    : t('chat.contextTitleCompactsAt', {
-                        used: formatTokens(context.usedTokens),
-                        total: formatTokens(context.maxTokens),
-                        threshold: formatTokens(context.compactsAt)
-                      })
-                }
-                // `px-1 py-0.5` gives the hover surface something to hold and
-                // the negative margins cancel it exactly, so the reading stays
-                // on the strip's own inset and the strip does not grow taller.
-                //
-                // No `hover:text-ink`, which is the one line the pickers below
-                // have that must not be copied up here: `usageTone` paints this
-                // `warning` at 60% and `danger` at 80%, and a hover that
-                // repainted it would put the control's state over the
-                // measurement. The open state is a background alone for the
-                // same reason.
-                className={`focus-ring hover:bg-muted -mx-1 -my-0.5 inline-flex items-center gap-1 rounded-[var(--radius-control)] px-1 py-0.5 transition-colors ${usageTone(context.percentage)} ${open ? 'bg-muted' : ''}`}
-              >
-                {t('chat.context')} {context.percentage}%
-                <ChevronDown aria-hidden size={10} className="shrink-0 opacity-50" />
-              </button>
+          <>
+            {/* Before the share it explains, and only with something to open. */}
+            {context.breakdown !== null && (
+              <ContextPanel breakdown={context.breakdown} usedTokens={context.usedTokens} />
             )}
-          />
+            <DropdownMenu
+              align="left"
+              width={MENU_WIDTH}
+              actions={[
+                {
+                  id: COMPACT,
+                  label: t('chat.compactAll'),
+                  description: t('chat.compactAllNote'),
+                  icon: <FoldVertical aria-hidden size={12} />,
+                  onSelect: () => {
+                    void onSend(COMPACT)
+                  },
+                  // The same command with something said first: no API removes
+                  // one message, and the text after `/compact` is what the
+                  // summary keeps and drops.
+                  beside: {
+                    id: 'compact-explain',
+                    label: t('chat.compactExplain'),
+                    description: t('chat.compactExplainNote'),
+                    icon: <PencilLine aria-hidden size={12} />,
+                    onSelect: () => {
+                      setExplaining(true)
+                    }
+                  }
+                },
+                ...(autoCompact === null ? [] : windowRows(autoCompact, context)),
+                {
+                  // Last, and in the danger colour: of the two it is the one
+                  // that loses something, and the reader should land first on
+                  // the option that keeps the conversation.
+                  id: CLEAR,
+                  label: CLEAR,
+                  description: t('chat.contextClearNote'),
+                  icon: <Eraser aria-hidden size={12} />,
+                  destructive: true,
+                  // A line of its own, so it does not read as a seventh window.
+                  ...(autoCompact !== null && { section: {} }),
+                  onSelect: () => {
+                    void requestClear()
+                  }
+                }
+              ]}
+              trigger={({ onClick, open }) => (
+                <button
+                  type="button"
+                  onClick={onClick}
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  // No `aria-label`: the visible text is the better name, and one
+                  // here would replace "Context 48%" with a generic phrase —
+                  // taking the figure away from the reader who is told it rather
+                  // than shown it. The title stays what it was, and with text
+                  // content present it is read as the description.
+                  title={
+                    context.compactsAt === null
+                      ? t('chat.contextTitle', {
+                          used: formatTokens(context.usedTokens),
+                          total: formatTokens(context.maxTokens)
+                        })
+                      : t('chat.contextTitleCompactsAt', {
+                          used: formatTokens(context.usedTokens),
+                          total: formatTokens(context.maxTokens),
+                          threshold: formatTokens(context.compactsAt)
+                        })
+                  }
+                  // `px-1 py-0.5` gives the hover surface something to hold and
+                  // the negative margins cancel it exactly, so the reading stays
+                  // on the strip's own inset and the strip does not grow taller.
+                  //
+                  // No `hover:text-ink`, which is the one line the pickers below
+                  // have that must not be copied up here: `usageTone` paints this
+                  // `warning` at 60% and `danger` at 80%, and a hover that
+                  // repainted it would put the control's state over the
+                  // measurement. The open state is a background alone for the
+                  // same reason.
+                  className={`focus-ring hover:bg-muted -mx-1 -my-0.5 inline-flex items-center gap-1 rounded-[var(--radius-control)] px-1 py-0.5 transition-colors ${usageTone(context.percentage)} ${open ? 'bg-muted' : ''}`}
+                >
+                  {t('chat.context')} {context.percentage}%
+                  <ChevronDown aria-hidden size={10} className="shrink-0 opacity-50" />
+                </button>
+              )}
+            />
+          </>
         )}
 
         {/* Beside the context reading: both say what the conversation is
@@ -391,6 +415,17 @@ export function ComposerAttic({
       </div>
 
       {dialog}
+      {explaining && (
+        <CompactDialog
+          onClose={() => {
+            setExplaining(false)
+          }}
+          onCompact={(instructions) => {
+            setExplaining(false)
+            void onSend(`${COMPACT} ${instructions}`)
+          }}
+        />
+      )}
     </>
   )
 }

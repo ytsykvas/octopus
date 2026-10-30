@@ -141,6 +141,8 @@ describe('what gets stored', () => {
       // A shell's `cd` splits the agent from the panes for the rest of the
       // conversation, so the line saying so has to be there after a restart.
       { type: 'cwd_changed', from: '/w/anna', to: '/w/anna/.claude/worktrees/spike' },
+      // What the agent knows of everything above a compaction: worth reading after a restart.
+      { type: 'compaction_summary', summary: 'Kept: the decisions about math.js.' },
       { type: 'usage', report: null },
       {
         type: 'result',

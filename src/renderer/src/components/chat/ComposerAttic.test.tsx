@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { ContextUsage } from '@core/agent.js'
+import type { ContextBreakdown } from '@core/contextBreakdown.js'
 import type { AutoCompactView } from '@core/autoCompact.js'
 import type { RateLimit, SessionUsage } from '@core/service.js'
 import type { SkillListing } from '@core/skills.js'
@@ -23,7 +24,8 @@ const FULL: SessionUsage = {
     compactsAt: null,
     autoCompactOn: null,
     model: 'claude-opus-5',
-    modelWindow: null
+    modelWindow: null,
+    breakdown: null
   },
   autoCompact: null
 }
@@ -167,23 +169,22 @@ describe('the way out of a full context window', () => {
     renderAttic()
     await open()
 
-    expect(screen.getByRole('menuitem', { name: /\/compact/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /^Compact all/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /^Explain compact/ })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /\/clear/ })).toBeInTheDocument()
   })
 
   /*
-   * The names are the CLI's, not ours, and they say what the command is called
-   * rather than what it does — "compact" and "clear" are near enough synonyms
-   * to anyone who has not met them. The second line is the difference between
-   * the two, so it is the part of the row worth asserting.
+   * The names say what each row is called rather than what it does — "compact"
+   * and "clear" are near enough synonyms to anyone who has not met them. The
+   * second line is the difference, so it is the part of the row worth asserting.
    */
   it('says what each of them does to the conversation', async () => {
     renderAttic()
     await open()
 
-    expect(
-      screen.getByText('The agent keeps a summary of the conversation and carries on.')
-    ).toBeInTheDocument()
+    expect(screen.getByText('Keep a summary and carry on.')).toBeInTheDocument()
+    expect(screen.getByText('Say first what to drop.')).toBeInTheDocument()
     expect(
       screen.getByText('The agent forgets this conversation, and the log goes with it.')
     ).toBeInTheDocument()
@@ -197,7 +198,7 @@ describe('the way out of a full context window', () => {
 
     const rows = screen.getAllByRole('menuitem').map((row) => row.textContent)
 
-    expect(rows.findIndex((text) => text.startsWith('/compact'))).toBeLessThan(
+    expect(rows.findIndex((text) => text.startsWith('Compact all'))).toBeLessThan(
       rows.findIndex((text) => text.startsWith('/clear'))
     )
   })
@@ -213,9 +214,106 @@ describe('the way out of a full context window', () => {
     const { onSend } = renderAttic()
     await open()
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /\/compact/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Compact all/ }))
 
     expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
+  })
+
+  // The other half of the row. No API removes a single message, and the text
+  // after `/compact` is what the summary keeps and drops — so this one asks for
+  // that text first and sends it exactly as written.
+  describe('saying first what to drop', () => {
+    const explain = async (): Promise<void> => {
+      await open()
+      await userEvent.click(screen.getByRole('menuitem', { name: /^Explain compact/ }))
+    }
+    const field = (): HTMLElement =>
+      screen.getByRole('textbox', { name: 'What should the summary leave out, or keep?' })
+    const compact = (): HTMLElement => screen.getByRole('button', { name: 'Compact' })
+
+    it('offers both ways to compact in one row', async () => {
+      renderAttic()
+      await open()
+
+      const all = screen.getByRole('menuitem', { name: /^Compact all/ })
+      const explaining = screen.getByRole('menuitem', { name: /^Explain compact/ })
+
+      expect(all.parentElement).toBe(explaining.parentElement)
+    })
+
+    it('opens a dialog and sends nothing yet', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      expect(
+        screen.getByRole('dialog', { name: 'What to remove from the context' })
+      ).toBeInTheDocument()
+      expect(onSend).not.toHaveBeenCalled()
+    })
+
+    it('sends what was written, verbatim, after /compact', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.type(field(), 'drop the npm test output')
+      await userEvent.click(compact())
+
+      expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact drop the npm test output')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('trims the text it sends', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.type(field(), '  keep math.js  ')
+      await userEvent.click(compact())
+
+      expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact keep math.js')
+    })
+
+    // A bare `/compact` is the other button's; this one is for saying something.
+    it('will not compact with nothing written', async () => {
+      renderAttic()
+      await explain()
+
+      expect(compact()).toBeDisabled()
+      await userEvent.type(field(), '   ')
+      expect(compact()).toBeDisabled()
+    })
+
+    // Enter is the way past a disabled button, so it is held to the same rule.
+    it('sends nothing on Enter with nothing written, and stays open', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.type(field(), '  {Enter}')
+
+      expect(onSend).not.toHaveBeenCalled()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // The composer's keys, so there is one convention and not two.
+    it('sends on Enter and keeps Shift+Enter for a new line', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.type(field(), 'keep a{Shift>}{Enter}{/Shift}keep b')
+      expect(onSend).not.toHaveBeenCalled()
+
+      await userEvent.type(field(), '{Enter}')
+      expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact keep a\nkeep b')
+    })
+
+    it('closes without sending on Cancel', async () => {
+      const { onSend } = renderAttic()
+      await explain()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(onSend).not.toHaveBeenCalled()
+    })
   })
 
   // The one row of the two that loses something: the log is deleted from disk,
@@ -274,7 +372,8 @@ describe('the way out of a full context window', () => {
         compactsAt: null,
         autoCompactOn: null,
         model: 'claude-opus-5',
-        modelWindow: null
+        modelWindow: null,
+        breakdown: null
       },
       autoCompact: null
     })
@@ -614,6 +713,61 @@ describe('where the conversation compacts', () => {
     await open()
 
     expect(screen.getByRole('menu')).toHaveStyle({ width: '360px' })
+  })
+})
+
+describe('what fills the window', () => {
+  const BREAKDOWN: ContextBreakdown = {
+    categories: [{ id: 'messages', tokens: 40_000 }],
+    memoryFiles: [],
+    mcpServers: [],
+    tools: []
+  }
+  const withBreakdown = (breakdown: ContextBreakdown | null): SessionUsage => ({
+    ...FULL,
+    context: {
+      percentage: 48,
+      usedTokens: 48_000,
+      maxTokens: 200_000,
+      compactsAt: null,
+      autoCompactOn: null,
+      model: 'claude-opus-5',
+      modelWindow: null,
+      breakdown
+    }
+  })
+  const button = (): HTMLElement | null =>
+    screen.queryByRole('button', { name: 'What fills the context' })
+
+  // It sits beside the share it explains, so it appears with it.
+  it('sits beside the share when the reading has a breakdown', () => {
+    renderAttic(withBreakdown(BREAKDOWN))
+
+    expect(button()).toBeInTheDocument()
+  })
+
+  // The maintainer's call: the icon leads, and the share it explains follows.
+  it('comes before the share on the strip', () => {
+    renderAttic(withBreakdown(BREAKDOWN))
+
+    const reading = screen.getByRole('button', { name: /Context 48%/ })
+    const panel = screen.getByRole('button', { name: 'What fills the context' })
+
+    expect(panel.compareDocumentPosition(reading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // A CLI that sends no readable breakdown still has a share to show; the
+  // button for a panel with nothing in it is the thing to leave out.
+  it('is left out when the reading has none', () => {
+    renderAttic(withBreakdown(null))
+
+    expect(button()).not.toBeInTheDocument()
+  })
+
+  it('is left out with the share when nothing has been read', () => {
+    renderAttic(NOTHING)
+
+    expect(button()).not.toBeInTheDocument()
   })
 })
 

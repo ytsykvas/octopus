@@ -1004,7 +1004,8 @@ describe('following the conversation', () => {
           compactsAt: null,
           autoCompactOn: null,
           model: 'claude-opus-5',
-          modelWindow: null
+          modelWindow: null,
+          breakdown: null
         },
         autoCompact: null
       }
@@ -1772,7 +1773,8 @@ describe('the permission mode', () => {
           compactsAt: null,
           autoCompactOn: null,
           model,
-          modelWindow: null
+          modelWindow: null,
+          breakdown: null
         },
         autoCompact: null
       }
@@ -1819,7 +1821,8 @@ describe('the permission mode', () => {
             compactsAt: null,
             autoCompactOn: null,
             model: 'claude-sonnet-5',
-            modelWindow: null
+            modelWindow: null,
+            breakdown: null
           },
           autoCompact: null,
           modelHeld
@@ -3071,7 +3074,8 @@ describe('choosing where the conversation compacts', () => {
           compactsAt: null,
           autoCompactOn: null,
           model: 'claude-opus-5',
-          modelWindow: 1_000_000
+          modelWindow: 1_000_000,
+          breakdown: null
         },
         autoCompact: {
           chosen: null,

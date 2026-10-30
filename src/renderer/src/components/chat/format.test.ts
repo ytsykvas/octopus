@@ -11,6 +11,8 @@ import {
   formatResetAt,
   formatTokens,
   localDayKey,
+  savedShare,
+  tailPath,
   usageFill,
   usageLevel,
   usageTone
@@ -309,5 +311,45 @@ describe('the whole moment, for a tooltip', () => {
 
     expect(full).toContain('16 October 2026')
     expect(full).toContain('14:32')
+  })
+})
+
+describe('a long path, shortened', () => {
+  // A memory file is named by where it is, and only the end of that tells two
+  // `CLAUDE.md`s apart on a narrow panel; the row's title keeps the whole path.
+  it('keeps the last two segments by default', () => {
+    expect(tailPath('/Users/x/.claude/CLAUDE.md')).toBe('.claude/CLAUDE.md')
+  })
+
+  it('leaves a path with fewer segments than that as it is', () => {
+    expect(tailPath('CLAUDE.md')).toBe('CLAUDE.md')
+  })
+
+  it('keeps as many segments as it is asked for', () => {
+    expect(tailPath('/a/b/c', 3)).toBe('a/b/c')
+  })
+
+  it('does not count a trailing slash as a segment', () => {
+    expect(tailPath('/w/')).toBe('w')
+  })
+})
+
+describe('how much a compaction saved', () => {
+  it('says how much smaller the context became, in whole percent', () => {
+    expect(savedShare(84_000, 9000)).toBe(89)
+  })
+
+  it('says nothing was saved when the size did not change', () => {
+    expect(savedShare(1000, 1000)).toBe(0)
+  })
+
+  // A summary longer than what it summarised saved nothing; a negative saving
+  // would print as "−−20%".
+  it('says nothing was saved when the context grew', () => {
+    expect(savedShare(1000, 1200)).toBe(0)
+  })
+
+  it('says nothing was saved from nothing', () => {
+    expect(savedShare(0, 0)).toBe(0)
   })
 })

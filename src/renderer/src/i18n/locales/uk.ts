@@ -917,7 +917,11 @@ export const uk: Translation = {
       'Claude Code зупинили ззовні — система чи інша програма. Надішліть повідомлення, щоб продовжити; розмова збережена.',
     processFailed:
       'Claude Code завершився з помилкою (код {{code}}). Надішліть повідомлення, щоб спробувати ще раз; розмова збережена.',
-    compactedBy: 'Агент підсумував усе вище, щоб звільнити місце — {{before}} стало {{after}}',
+    compactedBy:
+      'Агент підсумував усе вище, щоб звільнити місце — {{before}} стало {{after}} (−{{saved}}%)',
+    compactSummaryTitle: 'Що агент лишив собі',
+    compactRequestTitle: 'Стиснути розмову',
+    compactRequestAll: 'Усе, своїми словами агента',
     refusalSwapped:
       '{{from}} відмовилася від цього ходу, тож його взяла {{to}} — і решту цієї розмови теж',
     refusalSwappedLocally:
@@ -935,8 +939,34 @@ export const uk: Translation = {
     context: 'Контекст',
     contextTitle: 'Вікно контексту — {{used}} з {{total}}',
     contextTitleCompactsAt: 'Вікно контексту — {{used}} з {{total}}, стискається на {{threshold}}',
-    contextCompactNote: 'Агент лишає собі стислий переказ розмови й працює далі.',
     contextClearNote: 'Агент забуває цю розмову, а її запис видаляється.',
+    compactAll: 'Стиснути все',
+    compactAllNote: 'Лишити переказ і працювати далі.',
+    compactExplain: 'З поясненням',
+    compactExplainNote: 'Спершу сказати, що прибрати.',
+    compactExplainTitle: 'Що прибрати з контексту',
+    compactExplainLabel: 'Що переказ має пропустити або лишити?',
+    compactExplainPlaceholder:
+      'напр. прибери вивід npm test і читання README; лиши рішення про math.js',
+    compactExplainHint:
+      'Надсилається як є, після /compact. Переказ пише агент, тож це прохання, а не гарантія.',
+    compactExplainCancel: 'Скасувати',
+    compactExplainSend: 'Стиснути',
+    contextBreakdownTitle: 'Що заповнює контекст',
+    contextBreakdownCategories: 'За видом',
+    contextBreakdownMemoryFiles: "Файли пам'яті",
+    contextBreakdownMcpServers: 'MCP-сервери',
+    contextBreakdownTools: 'Найважчі інструменти',
+    contextBreakdownRewindNote:
+      'Щоб забути все після певного повідомлення, перемотайте розмову з нього.',
+    contextCategorySystemPrompt: 'Системний промпт',
+    contextCategorySystemTools: 'Системні інструменти',
+    contextCategoryMcpTools: 'Інструменти MCP',
+    contextCategoryMcpInstructions: 'Інструкції MCP',
+    contextCategoryCustomAgents: 'Власні агенти',
+    contextCategoryMemoryFiles: "Файли пам'яті",
+    contextCategorySkills: 'Скіли',
+    contextCategoryMessages: 'Повідомлення',
     autoCompactTitle: 'Автокомпакт',
     autoCompactNote:
       'Коли розмова стискається сама. Зміна перезапускає сесію; розмова зберігається.',

@@ -126,3 +126,16 @@ export function messageBlocks(message: string): MessageBlock[] {
   flush()
   return blocks
 }
+
+/**
+ * A sent `/compact` and the instructions after it, or null for any other
+ * message. Read for drawing only: the message itself is what the agent got.
+ */
+export function compactRequest(message: string): { readonly instructions: string | null } | null {
+  // `/compactor` only begins with the command; the word has to end there.
+  const found = /^\/compact(?:\s+([\s\S]*))?$/.exec(message)
+  if (found === null) return null
+
+  const instructions = (found[1] ?? '').trim()
+  return { instructions: instructions === '' ? null : instructions }
+}

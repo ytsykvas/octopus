@@ -20,7 +20,8 @@ const READING: SessionUsage = {
     compactsAt: null,
     autoCompactOn: null,
     model: 'claude-opus-5',
-    modelWindow: null
+    modelWindow: null,
+    breakdown: null
   },
   autoCompact: null
 }

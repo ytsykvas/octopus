@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { mergeNotes, withNotes } from './attachments.js'
-import { inlineParts, messageBlocks } from './userMessage.js'
+import { compactRequest, inlineParts, messageBlocks } from './userMessage.js'
 
 const INTROS = {
   diff: 'Review notes on the changes:',
@@ -105,5 +105,35 @@ describe('inlineParts', () => {
 
   it('answers nothing for nothing', () => {
     expect(inlineParts('')).toEqual([])
+  })
+})
+
+describe('a sent /compact', () => {
+  // Read for drawing only: the message itself is what the agent got.
+  it('reads a bare command as asking for all of it', () => {
+    expect(compactRequest('/compact')).toEqual({ instructions: null })
+  })
+
+  it('takes what follows the command as its instructions', () => {
+    expect(compactRequest('/compact drop tests')).toEqual({ instructions: 'drop tests' })
+  })
+
+  it('keeps the lines of the instructions and trims around them', () => {
+    expect(compactRequest('/compact  \n keep a\nkeep b ')).toEqual({
+      instructions: 'keep a\nkeep b'
+    })
+  })
+
+  it('reads only spaces after the command as no instructions', () => {
+    expect(compactRequest('/compact   ')).toEqual({ instructions: null })
+  })
+
+  // A word that only begins with the command is not the command.
+  it('leaves a word that begins with it alone', () => {
+    expect(compactRequest('/compactor')).toBeNull()
+  })
+
+  it('leaves a message that mentions it alone', () => {
+    expect(compactRequest('please /compact')).toBeNull()
   })
 })

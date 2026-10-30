@@ -230,17 +230,39 @@ threshold, and keeps the agent's own percentage when it does not — switched of
 which also sends no threshold, or a CLI that predates the fields. The tooltip
 names the point beside the counts.
 
-**Clicking the context share opens the two commands that change it.** It is the
-one figure on the strip that can be acted on — the account's windows empty on a
-clock nobody here controls — and what acts on a full context window is
-`/compact`, which keeps a summary and carries on, or `/clear`, which throws the
-conversation away. Neither is dispatched: they go out as the text of an ordinary
-message, which is what a slash command is in this app, so the menu hands them to
-the same `onSend` the field uses.
+**Clicking the context share opens what changes it.** It is the one figure on
+the strip that can be acted on — the account's windows empty on a clock nobody
+here controls. The first row holds two commands side by side (`beside` on
+`DropdownMenu`): **Compact all** sends `/compact`, which keeps a summary and
+carries on, and **Explain compact** opens a dialog asking what the summary
+should leave out or keep, then sends `/compact <that text>` exactly as written.
+The dialog exists because no API removes a single message from the middle of a
+conversation, and the text after `/compact` is the one supported way to say
+what survives. It is a request — the agent writes the summary — and the dialog
+says so. **`/clear`** comes last, in the danger colour. Nothing is dispatched
+here: each goes out as the text of an ordinary message through the same
+`onSend` the field uses.
+
+**What fills the window sits just before the share.** A button with the layers
+icon, on the share's left — the icon leads and the figure it explains follows —
+opens a panel of the same reply the share is counted from — `getContextUsage`
+already carries a breakdown, and a second call for it would cost another
+650ms — read by `contextBreakdown.ts` into four sections: the kinds of row, the
+memory files, the MCP servers — one row each, though the reply spells a server
+normalised under its tools and as `mcp_status` does under its instructions —
+and the five heaviest tools. A section with no
+rows is not drawn, and the button is absent when the CLI sent no breakdown the
+core could read, since a panel with nothing in it has nothing to open on. Every
+row is a share of what the window holds, in one neutral colour:
+`warning` and `danger` already say how full the window is, and painting a kind
+of row with them would claim something about it that is not so. The footer names
+the way to forget what follows a message — rewinding from that message in the
+log — rather than offering a control of its own, because no API takes a single
+message out of the middle.
 
 **The same menu chooses where the conversation compacts itself**: _Auto_ and
 300k, 400k, 500k, 600k, 800k, as radio rows in a group of their own between the
-two commands. Left alone, a 1M model compacts near 967k, by which point every
+compacting row and `/clear`. Left alone, a 1M model compacts near 967k, by which point every
 turn pays for a context it mostly no longer reads. The menu is wider than the
 app's others (`width` on `DropdownMenu`) so the group's notes fit, and the group
 says, most pressing first:

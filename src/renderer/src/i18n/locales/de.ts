@@ -934,7 +934,10 @@ export const de: Translation = {
     processFailed:
       'Claude Code wurde mit einem Fehler beendet (Code {{code}}). Schick eine Nachricht, um es erneut zu versuchen; der Chat bleibt erhalten.',
     compactedBy:
-      'Der Agent hat alles oben zusammengefasst, um Platz zu schaffen – aus {{before}} wurden {{after}}',
+      'Der Agent hat alles oben zusammengefasst, um Platz zu schaffen – aus {{before}} wurden {{after}} (−{{saved}}%)',
+    compactSummaryTitle: 'Was der Agent behalten hat',
+    compactRequestTitle: 'Chat komprimieren',
+    compactRequestAll: 'Alles, in den Worten des Agenten',
 
     refusalSwapped:
       '{{from}} hat diese Runde abgelehnt, also hat {{to}} sie übernommen – und den Rest dieses Chats',
@@ -964,8 +967,34 @@ export const de: Translation = {
     contextTitle: 'Kontextfenster – {{used}} von {{total}}',
     contextTitleCompactsAt:
       'Kontextfenster – {{used}} von {{total}}, komprimiert bei {{threshold}}',
-    contextCompactNote: 'Der Agent behält eine Zusammenfassung des Chats und macht weiter.',
     contextClearNote: 'Der Agent vergisst diesen Chat, und der Verlauf wird gelöscht.',
+    compactAll: 'Alles komprimieren',
+    compactAllNote: 'Zusammenfassung behalten, weiter.',
+    compactExplain: 'Mit Erklärung',
+    compactExplainNote: 'Erst sagen, was weg soll.',
+    compactExplainTitle: 'Was aus dem Kontext soll',
+    compactExplainLabel: 'Was soll die Zusammenfassung auslassen oder behalten?',
+    compactExplainPlaceholder:
+      'z. B. die npm-test-Ausgabe und das Lesen der README weglassen; die Entscheidungen zu math.js behalten',
+    compactExplainHint:
+      'Wird so gesendet, wie geschrieben, nach /compact. Die Zusammenfassung schreibt der Agent – eine Bitte, keine Garantie.',
+    compactExplainCancel: 'Abbrechen',
+    compactExplainSend: 'Komprimieren',
+    contextBreakdownTitle: 'Was den Kontext füllt',
+    contextBreakdownCategories: 'Nach Art',
+    contextBreakdownMemoryFiles: 'Memory-Dateien',
+    contextBreakdownMcpServers: 'MCP-Server',
+    contextBreakdownTools: 'Schwerste Tools',
+    contextBreakdownRewindNote:
+      'Um alles nach einer Nachricht zu vergessen, spulen Sie im Chat zu dieser Nachricht zurück.',
+    contextCategorySystemPrompt: 'Systemprompt',
+    contextCategorySystemTools: 'System-Tools',
+    contextCategoryMcpTools: 'MCP-Tools',
+    contextCategoryMcpInstructions: 'MCP-Anweisungen',
+    contextCategoryCustomAgents: 'Eigene Agenten',
+    contextCategoryMemoryFiles: 'Memory-Dateien',
+    contextCategorySkills: 'Skills',
+    contextCategoryMessages: 'Nachrichten',
     autoCompactTitle: 'Auto-Komprimierung',
     autoCompactNote:
       'Wann dieser Chat von selbst komprimiert wird. Eine Änderung startet die Sitzung neu; der Chat bleibt erhalten.',

@@ -38,6 +38,29 @@ export function formatTokens(count: number): string {
   return Number(withDecimal) < 10 ? `${withDecimal}k` : `${String(Math.round(thousands))}k`
 }
 
+/**
+ * The end of a path, for a row too narrow to hold the whole of it.
+ *
+ * Two segments by default, which is what tells `.claude/CLAUDE.md` from
+ * `a/CLAUDE.md`. A trailing slash is not a segment. Lexical only, since the
+ * window has no `node:path`, and the row keeps the full path in its title.
+ */
+export function tailPath(path: string, segments = 2): string {
+  return path
+    .split('/')
+    .filter((part) => part !== '')
+    .slice(-segments)
+    .join('/')
+}
+
+/**
+ * How much smaller `after` is than `before`, in whole percent; 0 when it is not
+ * smaller, or `before` is nothing.
+ */
+export function savedShare(before: number, after: number): number {
+  return before <= 0 || after >= before ? 0 : Math.round((1 - after / before) * 100)
+}
+
 /** Below this a share is unremarkable; at it, worth noticing. */
 const NOTICEABLE = 60
 /** At this, worth acting on before it decides for you. */

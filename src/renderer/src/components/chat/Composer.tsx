@@ -1,5 +1,5 @@
 import { CheckCheck, Map, Shield, Zap } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -318,6 +318,17 @@ export function Composer({
     caretAfterWrite.current = null
   }, [draft])
 
+  // Where a text the app writes into the field lands: the draft, the caret at
+  // the given place and the focus in the field, so the next key continues it.
+  // A seed is what lands here.
+  const place = useCallback((text: string, caretAt: number) => {
+    latest.current = text
+    caretAfterWrite.current = caretAt
+    setDraft(text)
+    setCaret(caretAt)
+    textarea.current?.focus()
+  }, [])
+
   // A saved prompt chosen from the fan is written where the caret is, as a path
   // is — text the reader can still change before it goes, not a command the
   // agent expands out of sight. The body of the `files` effect below, in a
@@ -346,12 +357,8 @@ export function Composer({
       seed.append === true && latest.current.trim() !== ''
         ? `${latest.current.trimEnd()}\n\n${seed.text}`
         : seed.text
-    latest.current = text
-    caretAfterWrite.current = text.length
-    setDraft(text)
-    setCaret(text.length)
-    textarea.current?.focus()
-  }, [seed])
+    place(text, text.length)
+  }, [seed, place])
 
   // A file pointed at — dropped, chosen, pasted, or sent over from the Files
   // tab — is written into the text where the caret is, the way a path typed

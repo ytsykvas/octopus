@@ -275,14 +275,15 @@ describe('sending', () => {
           compactsAt: null,
           autoCompactOn: null,
           model: 'claude-opus-5',
-          modelWindow: null
+          modelWindow: null,
+          breakdown: null
         },
         autoCompact: null
       }
     })
 
     await user.click(screen.getByRole('button', { name: /Context 48%/ }))
-    await user.click(screen.getByRole('menuitem', { name: /\/compact/ }))
+    await user.click(screen.getByRole('menuitem', { name: /^Compact all/ }))
 
     expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
   })
@@ -490,14 +491,15 @@ describe('review notes riding with the message', () => {
           compactsAt: null,
           autoCompactOn: null,
           model: null,
-          modelWindow: null
+          modelWindow: null,
+          breakdown: null
         },
         autoCompact: null
       }
     })
 
     await user.click(screen.getByRole('button', { name: /Context 48%/ }))
-    await user.click(screen.getByRole('menuitem', { name: /\/compact/ }))
+    await user.click(screen.getByRole('menuitem', { name: /^Compact all/ }))
 
     expect(onSend).toHaveBeenCalledExactlyOnceWith('/compact')
   })
@@ -547,7 +549,8 @@ describe('while the agent is working', () => {
           compactsAt: null,
           autoCompactOn: null,
           model: 'claude-opus-5',
-          modelWindow: null
+          modelWindow: null,
+          breakdown: null
         },
         autoCompact: null
       }
@@ -555,7 +558,7 @@ describe('while the agent is working', () => {
 
     await user.click(screen.getByRole('button', { name: /Context 91%/ }))
 
-    expect(screen.getByRole('menuitem', { name: /\/compact/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /^Compact all/ })).toBeInTheDocument()
   })
 })
 
