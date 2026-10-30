@@ -1,5 +1,6 @@
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { type RefObject, useCallback, useRef, useState } from 'react'
 
+import { useCloseOnMove } from './useCloseOnMove.js'
 import { useDismiss } from './useDismiss.js'
 
 /** Gap between trigger and panel, and the smallest margin to a window edge. */
@@ -64,29 +65,7 @@ export function useAnchoredPanel(): AnchoredPanel {
 
   useDismiss(open, container, close)
 
-  // Fixed coordinates are a snapshot: anything that moves the trigger leaves
-  // the panel floating where the trigger used to be, so it closes instead. Only
-  // a scroll inside something the trigger sits in can move it — the chat log
-  // scrolls itself on every streamed fragment, and closing on that shut the
-  // panel a few times a second for as long as the agent was answering.
-  useEffect(() => {
-    if (!open) return
-
-    const closeOnScroll = (event: Event): void => {
-      const scrolled = event.target
-      if (scrolled instanceof Node && !scrolled.contains(container.current)) return
-
-      close()
-    }
-
-    window.addEventListener('scroll', closeOnScroll, true)
-    window.addEventListener('resize', close)
-
-    return () => {
-      window.removeEventListener('scroll', closeOnScroll, true)
-      window.removeEventListener('resize', close)
-    }
-  }, [open, close])
+  useCloseOnMove(open, container, close)
 
   const toggle = useCallback(
     (trigger: HTMLElement, size: PanelSize): void => {
