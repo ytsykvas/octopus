@@ -97,12 +97,42 @@ function heaviestFirst<T extends { readonly tokens: number }>(rows: readonly T[]
   return [...rows].sort((a, b) => b.tokens - a.tokens)
 }
 
-/** Tokens added up under a name, in the order the names first appear. */
-function summedByName(rows: readonly { name: string; tokens: number }[]): ContextRow[] {
-  const sums = new Map<string, number>()
-  for (const row of rows) sums.set(row.name, (sums.get(row.name) ?? 0) + row.tokens)
+/**
+ * A server's name as its tools spell it.
+ *
+ * Measured on CLI 2.1.311, and said in `sdk.d.ts`: `mcpTools[].serverName` is
+ * normalised — `claude_ai_Claude_Docs` — while `mcpInstructions[].serverName`
+ * is the name `mcp_status` reports, `claude.ai Claude Docs`. Anything but a
+ * letter, a digit, `_` or `-` becomes `_`, which turns the second into the first.
+ */
+function normalisedServer(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_')
+}
 
-  return [...sums].map(([name, tokens]) => ({ name, tokens }))
+/**
+ * Each MCP server once, its tools and instructions added up, in the order the
+ * servers first appear — named as the instructions name it where they do,
+ * since that is the name a person recognises, and by its tools' name otherwise.
+ */
+function serversOf(
+  tools: readonly { serverName: string; tokens: number }[],
+  instructions: readonly { serverName: string; tokens: number }[]
+): ContextRow[] {
+  const servers = new Map<string, { name: string; tokens: number }>()
+  const add = (key: string, name: string | null, tokens: number): void => {
+    const known = servers.get(key)
+    servers.set(key, {
+      name: name ?? known?.name ?? key,
+      tokens: (known?.tokens ?? 0) + tokens
+    })
+  }
+
+  for (const tool of tools) add(tool.serverName, null, tool.tokens)
+  for (const server of instructions) {
+    add(normalisedServer(server.serverName), server.serverName, server.tokens)
+  }
+
+  return [...servers.values()]
 }
 
 /**
@@ -129,10 +159,10 @@ export function breakdownFrom(reply: unknown): ContextBreakdown | null {
       .map(({ path, tokens }) => ({ path, tokens }))
   )
 
-  const servers = [
-    ...entriesOf(McpToolSchema, parsed.data.mcpTools).filter((tool) => tool.isLoaded !== false),
-    ...entriesOf(McpInstructionSchema, parsed.data.mcpInstructions)
-  ].map(({ serverName, tokens }) => ({ name: serverName, tokens }))
+  const servers = serversOf(
+    entriesOf(McpToolSchema, parsed.data.mcpTools).filter((tool) => tool.isLoaded !== false),
+    entriesOf(McpInstructionSchema, parsed.data.mcpInstructions)
+  )
 
   const breakdown = z
     .looseObject({ toolCallsByType: z.unknown().optional() })
@@ -147,7 +177,7 @@ export function breakdownFrom(reply: unknown): ContextBreakdown | null {
   return {
     categories,
     memoryFiles,
-    mcpServers: heaviestFirst(summedByName(servers)),
+    mcpServers: heaviestFirst(servers),
     tools: heaviestFirst(tools).slice(0, TOP_TOOLS)
   }
 }

@@ -79,6 +79,44 @@ describe('what fills the context window', () => {
     expect(breakdownFrom(LIVE)?.mcpServers).toEqual([{ name: 'github', tokens: 1800 }])
   })
 
+  /*
+   * As CLI 2.1.311 sent it from a live session: the tools name their server
+   * normalised, `claude_ai_Claude_Docs`, and the instructions name it as
+   * `mcp_status` does, `claude.ai Claude Docs` — `sdk.d.ts` says as much. One
+   * server, so one row, under the name a person recognises.
+   */
+  it('counts one server once when its tools and instructions spell it differently', () => {
+    const read = breakdownFrom({
+      ...LIVE,
+      mcpTools: [
+        {
+          name: 'mcp__claude_ai_Claude_Docs__batch',
+          serverName: 'claude_ai_Claude_Docs',
+          tokens: 162
+        },
+        {
+          name: 'mcp__claude_ai_Claude_Docs__read',
+          serverName: 'claude_ai_Claude_Docs',
+          tokens: 100
+        }
+      ],
+      mcpInstructions: [{ serverName: 'claude.ai Claude Docs', tokens: 717 }]
+    })
+
+    expect(read?.mcpServers).toEqual([{ name: 'claude.ai Claude Docs', tokens: 979 }])
+  })
+
+  // A server with tools and no instructions has only the normalised name to go by.
+  it('names a server by its tools when it gives no instructions', () => {
+    const read = breakdownFrom({
+      ...LIVE,
+      mcpTools: [{ name: 'mcp__linear__list', serverName: 'linear', tokens: 40 }],
+      mcpInstructions: []
+    })
+
+    expect(read?.mcpServers).toEqual([{ name: 'linear', tokens: 40 }])
+  })
+
   it('names the heaviest tools by call and result together, and stops at the top few', () => {
     const tools = breakdownFrom(LIVE)?.tools
 
