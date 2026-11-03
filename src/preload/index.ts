@@ -49,7 +49,7 @@ import type { PullRequestDetail, RerunScope } from '@core/pullRequestShapes.js'
 import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
-import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
+import type { RemovalRequest, WorkspaceView } from '@core/workspaces.js'
 import type { InstructionKind, SendOptions } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type {
@@ -572,7 +572,7 @@ const api = {
     rename: (workspaceId: string, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:rename', workspaceId, name) as Promise<Result<void>>,
 
-    remove: (workspaceId: string, options: RemoveOptions = {}): Promise<Result<CleanupOutcome>> =>
+    remove: (workspaceId: string, options: RemovalRequest = {}): Promise<Result<CleanupOutcome>> =>
       ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<
         Result<CleanupOutcome>
       >,

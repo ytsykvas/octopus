@@ -82,7 +82,7 @@ import { ProjectEditSchema, ProjectPatchSchema } from '../core/store.js'
 import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
-import type { RemoveOptions } from '../core/workspaces.js'
+import { RemovalRequestSchema, WorkspaceNameSchema } from '../core/workspaces.js'
 import type { TerminalManager } from './terminals.js'
 import { attempt } from './result.js'
 import { resolveTheme } from './theme.js'
@@ -868,15 +868,17 @@ export function registerIpc(
     attempt(() => service.setWorkspaceNotes(workspaceId, NotesBodySchema.parse(notes)))
   )
 
-  host.handle('workspaces:rename', (_event, workspaceId: string, name: string) =>
-    attempt(() => service.renameWorkspaceById(workspaceId, name))
+  // Parsed: the name becomes a branch name.
+  host.handle('workspaces:rename', (_event, workspaceId: string, name: unknown) =>
+    attempt(() => service.renameWorkspaceById(workspaceId, WorkspaceNameSchema.parse(name)))
   )
 
   // A removed workspace's last runs go with it, and only once it has gone: a
   // removal that failed leaves the workspace, and its runs are still worth asking about.
-  host.handle('workspaces:remove', (_event, workspaceId: string, options: RemoveOptions) =>
+  host.handle('workspaces:remove', (_event, workspaceId: string, options: unknown) =>
     attempt(async () => {
-      const cleanup = await service.removeWorkspaceById(workspaceId, options)
+      const request = RemovalRequestSchema.parse(options)
+      const cleanup = await service.removeWorkspaceById(workspaceId, request)
       terminals.forgetRuns(workspaceId)
       return cleanup
     })

@@ -11,6 +11,8 @@
 import { access, readdir, realpath, rm } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
+import { z } from 'zod'
+
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
 import { remoteBranchName, shortBranchName } from './branches.js'
 import { CodedError } from './codedError.js'
@@ -443,6 +445,23 @@ export interface RemoveOptions {
    */
   readonly mergedRemotely?: () => Promise<boolean>
 }
+
+/**
+ * What the window may ask of a removal: the two choices its dialog offers.
+ *
+ * Strict, and narrower than `RemoveOptions`. `force` decides whether
+ * uncommitted work is thrown away, so only a boolean will do; the base branch
+ * and the GitHub check are the service's to supply, never the window's.
+ */
+export const RemovalRequestSchema = z.strictObject({
+  force: z.boolean().default(false),
+  deleteBranch: z.boolean().default(false)
+})
+/** As the window sends it: either choice may be left out, and reads as no. */
+export type RemovalRequest = z.input<typeof RemovalRequestSchema>
+
+/** A new name as it arrives; trimming and the clash checks are `renameWorkspace`'s. */
+export const WorkspaceNameSchema = z.string()
 
 /**
  * The two git contexts an operation on a workspace needs.
