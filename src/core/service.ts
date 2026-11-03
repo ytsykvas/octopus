@@ -139,7 +139,7 @@ import {
   renameProfile,
   writeProfile
 } from './envProfiles.js'
-import { type CleanupOutcome, runArchiveScript } from './archive.js'
+import { type CleanupOutcome, type LeftBehind, leavesBehind, runArchiveScript } from './archive.js'
 import {
   type CliSessions,
   cliSessionsOf,
@@ -509,6 +509,14 @@ export type SessionMessagesFn = (
 interface InForce {
   readonly model: string | null
   readonly effort: EffortChoice
+}
+
+/** What removing a project answers. */
+export interface ProjectRemoval {
+  /** Every workspace that went — what `main` drops their last runs by. */
+  readonly workspaceIds: string[]
+  /** The workspaces whose cleanup failed or never ran, for the window to name. */
+  readonly leftBehind: LeftBehind[]
 }
 
 export interface ServiceOptions {
@@ -949,9 +957,10 @@ export interface OctopusService {
   editProjectById(projectId: string, edit: ProjectEdit): Promise<void>
   /**
    * Removes a project and every workspace of it, answering with those
-   * workspaces' ids — what `main` drops their last runs by.
+   * workspaces' ids — what `main` drops their last runs by — and the ones
+   * whose cleanup left something behind, for the window to name.
    */
-  removeProjectById(projectId: string): Promise<string[]>
+  removeProjectById(projectId: string): Promise<ProjectRemoval>
   /** Saves the order the tab strip shows the projects in. */
   reorderProjects(orderedIds: readonly string[]): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
@@ -6234,6 +6243,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const project = findProject(state, projectId)
       const closing: Chat[] = []
       const cliSessions: CliSessions[] = []
+      const leftBehind: LeftBehind[] = []
       // Read now: the commit below drops them all, whether or not the project's own record is there.
       const removed = workspacesOfProject(state, projectId).map((workspace) => workspace.id)
 
@@ -6263,7 +6273,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
            * its workspaces had been given — the accumulation the script exists
            * to prevent, at the one moment there is most of it to clean up.
            */
-          await runCleanup(project, workspace)
+          const cleanup = await runCleanup(project, workspace)
+          if (leavesBehind(cleanup)) leftBehind.push({ workspace: workspace.name, cleanup })
           cliSessions.push(await sessionsOf(workspace.path))
 
           // Best-effort, one by one: a worktree already deleted from outside
@@ -6290,7 +6301,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * survives is exactly the case worth cleaning.
        */
       await removeProjectData(projectId, dataRoot).catch(() => undefined)
-      return removed
+      return { workspaceIds: removed, leftBehind }
     },
 
     async listWorkspaces(projectId) {

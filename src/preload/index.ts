@@ -31,7 +31,7 @@ import type {
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
-import type { CleanupOutcome } from '@core/archive.js'
+import type { CleanupOutcome, LeftBehind } from '@core/archive.js'
 import type { SideAnswer, SideExchange } from '@core/sideQuestions.js'
 import type { StrayServer } from '@core/strayServers.js'
 import type { QuestionAnswer } from '@core/questions.js'
@@ -1227,8 +1227,8 @@ const api = {
     reorder: (orderedIds: readonly string[]): Promise<Result<void>> =>
       ipcRenderer.invoke('projects:reorder', orderedIds) as Promise<Result<void>>,
 
-    remove: (projectId: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<void>>,
+    remove: (projectId: string): Promise<Result<readonly LeftBehind[]>> =>
+      ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<readonly LeftBehind[]>>,
 
     /** Repositories of the signed-in GitHub account. */
     listRemote: (): Promise<Result<RepositoryList>> =>

@@ -38,6 +38,8 @@ export const de: Translation = {
       'Seine {{count}} Workspaces werden samt Branches gelöscht, vorher läuft für jeden das Aufräumskript. Skripte, Mitnahmeliste und Variablen werden aus ~/.octopus gelöscht, Zugangsdaten inklusive. Das Repository selbst bleibt auf der Festplatte.',
     removeConfirm: 'Entfernen',
     removeCancel: 'Abbrechen',
+    cleanupLeftBehind:
+      'Das Projekt ist entfernt, aber die Aufräumskripte von {{names}} sind fehlgeschlagen oder liefen nicht – was sie zurücknehmen sollten, etwa Datenbanken, ist womöglich noch da.',
     collapse: 'Workspaces ausblenden',
     expand: 'Workspaces einblenden',
     settings: 'Einstellungen',

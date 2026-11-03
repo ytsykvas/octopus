@@ -1794,9 +1794,10 @@ describe('workspaces of a real project', () => {
     const workspace = await createWorkspace(projectId)
     sessions.forgetRuns.mockClear()
 
+    // What the window is told: whose cleanup left something behind. Here, nobody's.
     await expect(invoke('projects:remove', projectId)).resolves.toEqual({
       ok: true,
-      value: undefined
+      value: []
     })
     expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
   })

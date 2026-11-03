@@ -157,6 +157,11 @@ export function useProjects(
       }
 
       await refresh()
+
+      // Gone either way; a database one of its workspaces left behind is
+      // still worth a line, or it is found months later.
+      const names = result.value.map((item) => item.workspace)
+      if (names.length > 0) onError(t('sidebar.cleanupLeftBehind', { names: names.join(', ') }))
       return true
     },
     [all, confirm, refresh, describeFailure, onError, t]

@@ -472,5 +472,45 @@ describe('useProjects', () => {
       expect(onError).toHaveBeenCalledWith('Planner has uncommitted changes.')
       expect(result.current.all).toEqual([planner])
     })
+
+    // Removing a project runs every workspace's cleanup, and a database left
+    // behind by one of them is as easy to lose track of as a single one.
+    it('names the workspaces whose cleanup left something behind', async () => {
+      listReturns(planner)
+      vi.mocked(window.octopus.projects.remove).mockResolvedValue({
+        ok: true,
+        value: [
+          { workspace: 'anna', cleanup: { status: 'failed', detail: 'exit 3' } },
+          { workspace: 'bob', cleanup: { status: 'unapproved' } }
+        ]
+      })
+      const onError = vi.fn<OnError>()
+
+      const { result } = renderHook(() => useProjects(accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.all).toEqual([planner])
+      })
+
+      const removed = await act(() => result.current.remove('planner', 2))
+
+      expect(removed).toBe(true)
+      expect(onError).toHaveBeenLastCalledWith(
+        'The project is removed, but the cleanup scripts of anna, bob failed or did not run, so whatever they were meant to take back — databases, say — may still be there.'
+      )
+    })
+
+    it('says nothing more when every cleanup did its job', async () => {
+      listReturns(planner)
+      const onError = vi.fn<OnError>()
+
+      const { result } = renderHook(() => useProjects(accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.all).toEqual([planner])
+      })
+
+      await act(() => result.current.remove('planner', 1))
+
+      expect(onError).not.toHaveBeenCalledWith(expect.any(String))
+    })
   })
 })

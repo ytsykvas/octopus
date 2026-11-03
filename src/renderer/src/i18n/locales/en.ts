@@ -37,6 +37,8 @@ export const en = {
       'Its {{count}} workspaces are deleted along with their branches, and the cleanup script runs for each first. Its scripts, carried-file list and variables are deleted from ~/.octopus, credentials included. The repository itself stays on disk.',
     removeConfirm: 'Remove',
     removeCancel: 'Cancel',
+    cleanupLeftBehind:
+      'The project is removed, but the cleanup scripts of {{names}} failed or did not run, so whatever they were meant to take back — databases, say — may still be there.',
     collapse: 'Hide workspaces',
     expand: 'Show workspaces',
     settings: 'Settings',

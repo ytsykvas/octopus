@@ -62,6 +62,17 @@ export type CleanupOutcome =
   | { readonly status: 'unreadable'; readonly detail: string }
   | { readonly status: 'failed'; readonly detail: string }
 
+/** A workspace whose cleanup did not take back what it gave, by name. */
+export interface LeftBehind {
+  readonly workspace: string
+  readonly cleanup: CleanupOutcome
+}
+
+/** Whether a cleanup leaves something to report: it failed, or never ran. */
+export function leavesBehind(cleanup: CleanupOutcome): boolean {
+  return cleanup.status !== 'done' && cleanup.status !== 'none'
+}
+
 /**
  * Runs a workspace's cleanup script, if it has one.
  *

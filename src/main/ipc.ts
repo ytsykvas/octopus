@@ -831,9 +831,9 @@ export function registerIpc(
   // Its workspaces' last runs go with it, once it has gone.
   host.handle('projects:remove', (_event, projectId: string) =>
     attempt(async () => {
-      for (const workspaceId of await service.removeProjectById(projectId)) {
-        terminals.forgetRuns(workspaceId)
-      }
+      const removal = await service.removeProjectById(projectId)
+      for (const workspaceId of removal.workspaceIds) terminals.forgetRuns(workspaceId)
+      return removal.leftBehind
     })
   )
 
