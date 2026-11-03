@@ -141,6 +141,7 @@ import {
 } from './envProfiles.js'
 import { type CleanupOutcome, runArchiveScript } from './archive.js'
 import {
+  type CliSessions,
   cliSessionsOf,
   type DeleteSessionFn,
   discardCliSessions,
@@ -4418,9 +4419,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * the reason `closing` is read early: the ids while the worktree still
    * exists, the files only once its record has gone.
    */
-  const sessionsOf = (path: string): Promise<string[]> => cliSessionsOf(path, runListSessions)
-  const discardSessionsOf = (path: string, ids: readonly string[]): Promise<void> =>
-    discardCliSessions(path, ids, runDeleteSession)
+  const sessionsOf = (path: string): Promise<CliSessions> => cliSessionsOf(path, runListSessions)
+  const discardSessionsOf = (found: CliSessions): Promise<void> =>
+    discardCliSessions(found, runDeleteSession)
 
   /**
    * Gives a worktree the files and the variables it needs to run.
@@ -6225,7 +6226,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async removeProjectById(projectId) {
       const project = findProject(state, projectId)
       const closing: Chat[] = []
-      const cliSessions: { path: string; ids: string[] }[] = []
+      const cliSessions: CliSessions[] = []
       // Read now: the commit below drops them all, whether or not the project's own record is there.
       const removed = workspacesOfProject(state, projectId).map((workspace) => workspace.id)
 
@@ -6256,7 +6257,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
            * to prevent, at the one moment there is most of it to clean up.
            */
           await runCleanup(project, workspace)
-          cliSessions.push({ path: workspace.path, ids: await sessionsOf(workspace.path) })
+          cliSessions.push(await sessionsOf(workspace.path))
 
           // Best-effort, one by one: a worktree already deleted from outside
           // must not stop the rest — or the project — from being removed. The
@@ -6271,7 +6272,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       await commit((current) => removeProject(current, projectId))
       await discardHistories(closing)
-      for (const { path, ids } of cliSessions) await discardSessionsOf(path, ids)
+      for (const found of cliSessions) await discardSessionsOf(found)
 
       /*
        * After the commit, and swallowing its own failure.
@@ -6483,7 +6484,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       await commit((current) => removeWorkspaceRecord(current, workspaceId))
       await discardHistories(closing)
-      await discardSessionsOf(workspace.path, cliSessions)
+      await discardSessionsOf(cliSessions)
       return cleanup
     },
 

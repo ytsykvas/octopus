@@ -50,7 +50,7 @@ describe("the CLI's own sessions of a worktree", () => {
       { sessionId: 'c' }
     ])
 
-    await expect(cliSessionsOf(dir, list)).resolves.toEqual(['a'])
+    await expect(cliSessionsOf(dir, list)).resolves.toMatchObject({ ids: ['a'] })
   })
 
   // The CLI records the directory it resolved; the worktree may be reached
@@ -62,9 +62,31 @@ describe("the CLI's own sessions of a worktree", () => {
     await symlink(target, linked)
     const real = await realpath(target)
 
-    await expect(cliSessionsOf(linked, listing([{ sessionId: 'a', cwd: real }]))).resolves.toEqual([
-      'a'
-    ])
+    await expect(cliSessionsOf(linked, listing([{ sessionId: 'a', cwd: real }]))).resolves.toEqual({
+      dir: real,
+      ids: ['a']
+    })
+  })
+
+  /*
+   * The SDK resolves the directory it is given and names the folder after the
+   * result. Deleted after the worktree has gone, a linked path no longer
+   * resolves, so the SDK would look in a folder named after the link and find
+   * nothing. The path the sessions were found under is the one to delete under.
+   */
+  it('deletes under the path the sessions were found under', async () => {
+    const target = join(dir, 'target')
+    await mkdir(target)
+    const linked = join(dir, 'linked')
+    await symlink(target, linked)
+    const real = await realpath(target)
+    const remove = vi.fn<DeleteSessionFn>(() => Promise.resolve())
+
+    const found = await cliSessionsOf(linked, listing([{ sessionId: 'a', cwd: real }]))
+    await rm(linked)
+    await discardCliSessions(found, remove)
+
+    expect(remove).toHaveBeenCalledExactlyOnceWith('a', { dir: real })
   })
 
   it('falls back to the path as given when it cannot be resolved', async () => {
@@ -72,20 +94,28 @@ describe("the CLI's own sessions of a worktree", () => {
 
     await expect(
       cliSessionsOf('/nowhere', listing([{ sessionId: 'a', cwd: '/nowhere' }]), resolve)
-    ).resolves.toEqual(['a'])
+    ).resolves.toEqual({ dir: '/nowhere', ids: ['a'] })
   })
 
   // History is not a reason to keep a workspace somebody asked to remove.
   it('answers none when the listing fails', async () => {
     const list: ListSessionsFn = () => Promise.reject(new Error('unreadable'))
 
-    await expect(cliSessionsOf(dir, list)).resolves.toEqual([])
+    await expect(cliSessionsOf(dir, list)).resolves.toMatchObject({ ids: [] })
+  })
+
+  // The SDK's answer crosses a boundary like any other: an id that is not a
+  // string never reaches a deletion.
+  it('answers none for a listing it cannot read', async () => {
+    const list = (() => Promise.resolve([{ sessionId: 7, cwd: dir }])) as unknown as ListSessionsFn
+
+    await expect(cliSessionsOf(dir, list)).resolves.toMatchObject({ ids: [] })
   })
 
   it("deletes every id in the worktree's folder", async () => {
     const remove = vi.fn<DeleteSessionFn>(() => Promise.resolve())
 
-    await discardCliSessions(dir, ['a', 'b'], remove)
+    await discardCliSessions({ dir, ids: ['a', 'b'] }, remove)
 
     expect(remove.mock.calls).toEqual([
       ['a', { dir }],
@@ -99,7 +129,7 @@ describe("the CLI's own sessions of a worktree", () => {
       .mockRejectedValueOnce(new Error('not found'))
       .mockResolvedValueOnce(undefined)
 
-    await expect(discardCliSessions(dir, ['a', 'b'], remove)).resolves.toBeUndefined()
+    await expect(discardCliSessions({ dir, ids: ['a', 'b'] }, remove)).resolves.toBeUndefined()
     expect(remove).toHaveBeenCalledTimes(2)
   })
 })

@@ -2981,9 +2981,11 @@ describe("the CLI's own sessions", () => {
     async (_, listSessions, deleteSession) => {
       const made = await withSessions(listSessions, deleteSession)
 
+      // The removal's own answer, not merely the absence of a throw: a failure
+      // here must not reach the cleanup outcome either.
       await expect(
         made.service.removeWorkspaceById(made.id, { deleteBranch: false })
-      ).resolves.not.toThrow()
+      ).resolves.toEqual({ status: 'none' })
       await expect(made.service.listWorkspaces(made.projectId)).resolves.toHaveLength(0)
     }
   )
@@ -3001,6 +3003,25 @@ describe("the CLI's own sessions", () => {
     await expect(
       made.service.removeWorkspaceById(made.id, { deleteBranch: true })
     ).rejects.toMatchObject({ code: 'branchUnmerged' })
+    expect(deleteSession).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The window the refusal above cannot reach: everything has been asked, the
+   * cleanup has run, and git then will not let the worktree go. The workspace
+   * lives on, so its history must too — which is why the sessions are deleted
+   * after the record, not after they are found.
+   */
+  it('keeps them when git refuses the worktree after the cleanup has run', async () => {
+    const deleteSession = vi.fn<DeleteSessionFn>(() => Promise.resolve())
+    const made = await withSessions(own, deleteSession)
+    const run = promisify(execFile)
+    await run('git', ['worktree', 'lock', made.path], { cwd: made.path })
+
+    await expect(
+      made.service.removeWorkspaceById(made.id, { deleteBranch: false })
+    ).rejects.toThrow()
+    await expect(made.service.listWorkspaces(made.projectId)).resolves.toHaveLength(1)
     expect(deleteSession).not.toHaveBeenCalled()
   })
 

@@ -1065,6 +1065,9 @@ describe('useWorkspaces', () => {
       const request = confirm.mock.calls[0]?.[0]
       expect(request?.message).toContain('anna')
       expect(request?.detail).toContain('Committed work stays on the branch')
+      // The CLI's own copy of its conversations goes too — terminal sessions
+      // included — and a person who meant to resume one has to be told first.
+      expect(request?.detail).toContain('Claude conversations')
       expect(request?.checkbox?.label).toContain('ytsykvas/anna')
       expect(window.octopus.workspaces.remove).toHaveBeenCalledWith('planner/anna', {
         force: false,
@@ -1090,6 +1093,7 @@ describe('useWorkspaces', () => {
 
       const request = confirm.mock.calls[0]?.[0]
       expect(request?.detail).toContain('uncommitted changes')
+      expect(request?.detail).toContain('Claude conversations')
       expect(window.octopus.workspaces.remove).toHaveBeenCalledWith('planner/anna', {
         force: true,
         deleteBranch: false

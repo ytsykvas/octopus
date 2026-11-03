@@ -41,11 +41,21 @@ They are found through the SDK's `listSessions` with `includeWorktrees: false`.
 Its default answers every worktree of the repository, which is every other
 workspace of the project. Only sessions whose `cwd` is the worktree are taken:
 with `CLAUDE_CODE_PROJECT_DIR_NAME` set the CLI files every directory in one
-folder, and the listing answers all of them.
+folder, and the listing answers all of them. That includes what a person ran
+with `claude` in the workspace's own terminal: the directory is about to stop
+existing, and a session left behind is reachable only by a later workspace on
+the same path — which is the bug. The removal dialog says the conversations go.
 
 The ids are read while the worktree exists and the files deleted after its
 record has gone, best-effort — the order the transcripts above are discarded in.
-A removal that fails leaves the workspace with its history.
+A removal that fails leaves the workspace with its history; a locked worktree
+is the case the test uses.
+
+They are deleted under the directory they were **found** under, resolved. The
+SDK resolves the path it is given and names the folder after the result; once
+the worktree has gone a linked path no longer resolves, and the SDK would look
+in a folder named after the link and find nothing. The listing is parsed with
+zod like anything else from the SDK.
 
 The folder itself stays, empty. Its name is the CLI's rule — hashed when long,
 overridable from the environment — and deleting a folder by a guessed name could

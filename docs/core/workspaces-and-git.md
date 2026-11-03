@@ -93,6 +93,9 @@ between `ensureRemovable` and `discardWorkspace` exists so that a caller with
 work of its own to do in between cannot accidentally ask twice; asking twice is
 worse than it sounds, because the cleanup script runs in the worktree and a
 script that writes there would make the second answer differ from the first.
+The agent CLI's own sessions follow the same order: listed while the worktree
+still exists, deleted only once its record has gone, so a removal that fails
+keeps its history ([transcripts-and-ports.md](../data/transcripts-and-ports.md)).
 
 A removal can also stop partway. When a dev server or a test run keeps writing
 into the tree, `git worktree remove` has already dropped its own part — the

@@ -104,9 +104,10 @@ export const de: Translation = {
 
     removeTitle: 'Workspace entfernen?',
     removeMessage: '„{{name}}“ entfernen?',
-    removeDetail: 'Das Worktree-Verzeichnis wird gelöscht. Committete Arbeit bleibt im Branch.',
+    removeDetail:
+      'Das Worktree-Verzeichnis wird gelöscht, und seine Claude-Unterhaltungen mit ihm. Committete Arbeit bleibt im Branch.',
     removeDirty:
-      'Dieser Workspace hat nicht committete Änderungen. Sie gehen verloren – es gibt keine weitere Kopie.',
+      'Dieser Workspace hat nicht committete Änderungen. Sie gehen verloren – es gibt keine weitere Kopie –, und seine Claude-Unterhaltungen mit ihnen.',
     removeBranch: 'Auch den Branch {{branch}} löschen',
     removeConfirm: 'Entfernen',
     removeCancel: 'Abbrechen',

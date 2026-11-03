@@ -126,9 +126,10 @@ export const en = {
 
     removeTitle: 'Remove workspace?',
     removeMessage: 'Remove “{{name}}”?',
-    removeDetail: 'The worktree directory is deleted. Committed work stays on the branch.',
+    removeDetail:
+      'The worktree directory is deleted, and its Claude conversations with it. Committed work stays on the branch.',
     removeDirty:
-      'This workspace has uncommitted changes. They will be lost — nothing else keeps a copy.',
+      'This workspace has uncommitted changes. They will be lost — nothing else keeps a copy — and its Claude conversations with them.',
     removeBranch: 'Delete the branch {{branch}} as well',
     removeConfirm: 'Remove',
     removeCancel: 'Cancel',
