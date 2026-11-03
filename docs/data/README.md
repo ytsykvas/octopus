@@ -10,6 +10,7 @@ else joins a home directory by hand.
   state.json                         projects, workspaces and chats
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/*.md                  the prompts every project falls back to
+  prompts.json                       saved prompts, offered to every project
   skills/                            an extra working-directory root: what every project gets, made at the first message
     .claude/skills/<folder>/SKILL.md one skill, in Claude Code's own format
     .claude/commands/<name>.md       one command, typed as /<name>; the file is the whole prompt
@@ -24,6 +25,7 @@ else joins a home directory by hand.
     scripts/run.sh                   starts the dev server
     scripts/archive.sh               takes back what setup gave out, on removal
     instructions/*.md                this project's own, which win
+    prompts.json                     saved prompts only this project offers
     skills/                          the same shape again, for what only this project gets
   workspaces/<projectId>/<name>/     the git worktrees
 ```
