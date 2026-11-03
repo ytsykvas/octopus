@@ -75,14 +75,38 @@ local-only, and is built to one person's taste.
   before it runs.
 - **The whole pull request, from here.** The right pane shows the diff against
   the base branch, takes comments on it and opens a PR through `gh`, with a
-  description the agent writes to your project's instructions. It then follows
-  the PR: checks, review verdict, threads, and merge, squash or rebase when it is
-  ready.
+  description written to your project's instructions by the model of the chat
+  that last worked. It then follows the PR: checks, review verdict, threads, and
+  merge, squash or rebase when it is ready.
+- **The worktree, readable.** A Files tab shows the tree with tabs of open
+  files, and marks every file and line the branch has changed since it began,
+  not only since the last commit.
+- **A chat that shows the work.** Each conversation keeps its own model and
+  effort. A plan is read in a dialog and can be handed to a fresh chat to carry
+  out, and the `opusplan` preset plans on Opus and builds on Sonnet. Background
+  subagents get a map of their own, where each one can be stopped alone, and
+  `/btw` questions are answered in a drawer beside the chat. A panel shows what
+  fills the context window, and `/compact` can be told what to keep, then shows
+  what it saved and what the agent kept.
+- **Saved prompts, a click away.** Prompts are kept for every project or for
+  one, ordered in Settings, and fan out round the composer's send button and in
+  the plan dialog.
+- **Help that writes the ask.** The Help menu opens a conversation that sets a
+  project up to run, or works out why Run fails, and sends it what the agent
+  cannot find for itself: the workspace's port, whether anything answers there,
+  the scripts and env in effect, and the last run's output.
+- **Agents out of sight still reach you.** When an agent finishes, fails or
+  asks something in a workspace you are not looking at, a quiet toast and a
+  chime say so. A status bar counts the agents at work, the open pull requests
+  and what each workspace's processes hold in memory, and the sidebar shows the
+  account's usage limits.
 - **The agent is the one you already have.** octopus loads the same settings
   Claude Code loads in a terminal — the project's `CLAUDE.md`, its `.claude/`
-  commands, skills and subagents — and adds nothing to the context. A repository
-  that ships settings which pre-approve tools or run hooks is shown to you once,
-  before any of it is believed.
+  commands, skills and subagents — and adds nothing to the context. Skills,
+  commands and subagents of your own are made and imported in Settings, and a
+  plugins window lists what is installed beside a store. A repository that ships
+  settings which pre-approve tools or run hooks is shown to you once, before any
+  of it is believed.
 
 The details behind each of these — the port pool, the env block, what a diff
 counts — are in [docs/](docs/README.md).
@@ -174,9 +198,9 @@ The reasons, and the other traps of a development copy, are in
 
 ## Where things are kept
 
-Everything lives under `~/.octopus`: `config.json`, `state.json`, one JSONL
-transcript per conversation, the per-project scripts and env, and the worktrees
-themselves. Nothing is written inside your repository except the worktree and its
+Everything lives under `~/.octopus`: `config.json`, `state.json`, the saved
+prompts in `prompts.json`, one JSONL transcript per conversation, the
+per-project scripts, env and prompts, and the worktrees themselves. Nothing is written inside your repository except the worktree and its
 branch — see [docs/data/](docs/data/README.md). Removing a workspace offers to delete
 that branch with it, ticked by default.
 
@@ -213,7 +237,7 @@ TypeScript requires every locale to carry every key.
 
 ## Roadmap
 
-Not there yet: notifications, a Monaco-based diff, and Linux and Windows builds.
+Not there yet: a Monaco-based diff, and Linux and Windows builds.
 Ideas and bugs are tracked as [issues](https://github.com/ytsykvas/octopus/issues).
 
 ## Contributing
