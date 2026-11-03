@@ -234,7 +234,7 @@ The env set is in the environment of \`run.sh\`, and so of the server it starts:
 
 The slug is the workspace name lowercased, every other character an underscore, cut to 30 characters, so a prefix still fits inside Postgres' 63. It is the **only** source of a per-workspace name; the name itself may hold spaces. The slug may begin with a digit or an underscore, so always put a prefix in front (\`app_$OCTOPUS_WORKSPACE_SLUG\`) and spell that name one way in the env set, \`setup.sh\` and \`archive.sh\`.
 
-\`setup.sh\` and \`run.sh\` are started by path through the user's login shell, in the worktree, as a fresh process: PATH shims (rbenv, pyenv, asdf, mise) work, shell functions do not — for nvm, \`. "$NVM_DIR/nvm.sh" && nvm use\` reads \`.nvmrc\`. Nothing can answer a prompt. \`archive.sh\` is started with no shell at all and the login PATH only, is given 30 seconds, and its output is not shown: plain tools, quick and quiet.
+\`setup.sh\` and \`run.sh\` are started by path through the user's login shell, in the worktree, as a fresh process: PATH shims (rbenv, pyenv, asdf, mise) work, shell functions do not — for nvm, \`. "$NVM_DIR/nvm.sh" && nvm use\` reads \`.nvmrc\`. Nothing can answer a prompt. \`archive.sh\` is started with no shell at all and the login PATH only, is given 30 seconds, and its output is shown only when it fails: then what it wrote to stderr is shown to the person in the window, so a step that could not clean up says on stderr what it left behind. Plain tools, quick and quiet.
 
 ## Rules
 

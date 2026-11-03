@@ -2837,6 +2837,19 @@ describe('the cleanup script', () => {
     await expect(readFile(marker, 'utf8')).resolves.toBe('default dev.example')
   })
 
+  // The project's removal drops what became of each cleanup — that is its own
+  // task — but a failed one must still not keep a workspace, or the project.
+  it('removes the whole project even when a workspace’s script fails', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
+
+    await expect(service.removeProjectById(project.id)).resolves.toEqual([workspace.id])
+    await expect(stat(workspace.path)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   /*
    * A workspace that cannot be deleted because a cleanup script is broken is a
    * worse problem than the one being cleaned up.
@@ -2847,12 +2860,20 @@ describe('the cleanup script', () => {
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
 
-    await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
+    await service.saveProjectScript(
+      project.id,
+      'archive',
+      "#!/bin/sh\necho 'database busy' >&2\nexit 3\n"
+    )
 
-    // Said, now: nothing stops the removal, which made every failure silent.
+    // Said, now: nothing stops the removal, which made every failure silent —
+    // and the script's own words are what tell the user what is left behind.
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: false })
-    ).resolves.toEqual({ status: 'failed', detail: expect.stringContaining('archive.sh') })
+    ).resolves.toEqual({
+      status: 'failed',
+      detail: expect.stringMatching(/archive\.sh[\s\S]*database busy/)
+    })
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 
@@ -2895,9 +2916,11 @@ describe('the cleanup script', () => {
     await mkdir(join(dir, 'elsewhere'), { recursive: true })
     await symlink(join(dir, 'elsewhere'), join(workspace.path, '.octopus'))
 
+    // Whatever the repository's `archive.sh` would have taken back stays, so
+    // this is said as well — with the reason, since the fix is in the layout.
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
-    ).resolves.toEqual({ status: 'none' })
+    ).resolves.toEqual({ status: 'unreadable', detail: expect.stringMatching(/\S/) })
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 

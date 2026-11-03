@@ -239,6 +239,15 @@ describe('the two Help asks for', () => {
     expect(prompt).toContain(`given ${String(ARCHIVE_TIMEOUT_MS / 1000)} seconds`)
   })
 
+  // A failed cleanup is reported in the window with what it wrote to stderr,
+  // so the agent is told to put the one useful line there — and not that
+  // nothing it prints is ever seen, which stopped being true.
+  it('tell the agent what of the cleanup the person sees', () => {
+    const prompt = instructionTemplate('setupScripts')
+    expect(prompt).not.toContain('its output is not shown')
+    expect(prompt).toContain('stderr')
+  })
+
   // The cleanup runs without a shell, so a file whose guard displaced its
   // shebang fails to start at all.
   it('put the guard after the shebang', () => {

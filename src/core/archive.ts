@@ -59,6 +59,7 @@ export type CleanupOutcome =
   | { readonly status: 'done' }
   | { readonly status: 'none' }
   | { readonly status: 'unapproved' }
+  | { readonly status: 'unreadable'; readonly detail: string }
   | { readonly status: 'failed'; readonly detail: string }
 
 /**

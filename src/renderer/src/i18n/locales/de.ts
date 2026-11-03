@@ -114,7 +114,9 @@ export const de: Translation = {
     cleanupFailed:
       'Der Workspace ist entfernt, aber sein Aufräumskript ist fehlgeschlagen – was es zurücknehmen sollte, etwa eine Datenbank, ist womöglich noch da. Ausgabe: {{detail}}',
     cleanupUnapproved:
-      'Der Workspace ist entfernt, aber sein Aufräumskript lief nicht: Die Skripte dieses Repositorys sind nicht freigegeben. Was es zurücknehmen sollte, etwa eine Datenbank, ist noch da.'
+      'Der Workspace ist entfernt, aber sein Aufräumskript lief nicht: Die Skripte dieses Repositorys sind nicht freigegeben. Was es zurücknehmen sollte, etwa eine Datenbank, ist noch da.',
+    cleanupUnreadable:
+      'Der Workspace ist entfernt, aber sein Aufräumskript ließ sich nicht lesen und lief daher nicht. Was es zurücknehmen sollte, etwa eine Datenbank, ist noch da. Grund: {{detail}}'
   },
 
   limits: {

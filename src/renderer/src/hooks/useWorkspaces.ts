@@ -426,6 +426,9 @@ export function useWorkspaces(
         onError(t('workspaces.cleanupFailed', { detail: cleanup.detail }))
       }
       if (cleanup.status === 'unapproved') onError(t('workspaces.cleanupUnapproved'))
+      if (cleanup.status === 'unreadable') {
+        onError(t('workspaces.cleanupUnreadable', { detail: cleanup.detail }))
+      }
     },
     [byProject, confirm, refresh, describeFailure, onError, t]
   )

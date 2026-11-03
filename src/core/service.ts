@@ -4653,11 +4653,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * The cleanup script to run for a workspace, or null for none.
+   * The cleanup script to run for a workspace, or why none runs.
    *
-   * Null covers three different things on purpose, because a removal treats
-   * them alike: the project has no cleanup script, the repository supplies one
-   * nobody has read, and the repository's scripts could not be read at all.
+   * Three reasons, kept apart because the window says the last two: the
+   * project has no cleanup script, the repository supplies one nobody has
+   * read, and the scripts could not be read at all.
    *
    * That last one is why this exists. Resolving throws on a symlinked
    * `.octopus/` — and a worktree is where an agent works, so an odd layout is
@@ -4667,17 +4667,23 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * at the call site says.
    *
    * Losing the cleanup leaves a database behind. Losing the removal leaves a
-   * project that cannot be deleted from the interface at all.
+   * project that cannot be deleted from the interface at all. So the throw
+   * becomes an answer, and the reason travels with it.
    */
   async function cleanupFor(
     project: Project,
     workspace: Workspace
-  ): Promise<{ kind: 'none' } | { kind: 'unapproved' } | { kind: 'run'; script: ResolvedScript }> {
+  ): Promise<
+    | { kind: 'none' }
+    | { kind: 'unapproved' }
+    | { kind: 'unreadable'; detail: string }
+    | { kind: 'run'; script: ResolvedScript }
+  > {
     let scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
     try {
       scripts = await resolveScripts(workspace.path, project.id, dataRoot, project.preferLocal)
-    } catch {
-      return { kind: 'none' }
+    } catch (error) {
+      return { kind: 'unreadable', detail: describeError(error) }
     }
 
     const cleanup = scripts.archive
@@ -4693,6 +4699,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /** Runs the workspace's cleanup and says what became of it. */
   async function runCleanup(project: Project, workspace: Workspace): Promise<CleanupOutcome> {
     const cleanup = await cleanupFor(project, workspace)
+    if (cleanup.kind === 'unreadable') return { status: 'unreadable', detail: cleanup.detail }
     if (cleanup.kind !== 'run') return { status: cleanup.kind }
 
     const { values, variables } = await scriptSetFor(project, workspace)

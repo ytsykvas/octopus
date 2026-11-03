@@ -6,6 +6,7 @@ import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Result } from '../../../preload/index.js'
+import i18n, { DEFAULT_LANGUAGE } from '../i18n/index.js'
 import { refuseSilence } from '../test/chat.js'
 import { workspaceView } from '../test/workspaces.js'
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
@@ -1225,6 +1226,11 @@ describe('useWorkspaces', () => {
         'The workspace is removed, but its cleanup script failed, so whatever it was meant to take back — a database, say — may still be there. It said: exit 3'
       ],
       [
+        'could not be read',
+        { status: 'unreadable', detail: 'not a directory' },
+        'The workspace is removed, but its cleanup script could not be read, so it did not run. Whatever it was meant to take back — a database, say — is still there. The reason: not a directory'
+      ],
+      [
         'was not approved',
         { status: 'unapproved' },
         'The workspace is removed, but its cleanup script did not run: this repository’s scripts have not been approved. Whatever it was meant to take back — a database, say — is still there.'
@@ -1244,6 +1250,42 @@ describe('useWorkspaces', () => {
 
       expect(onError).toHaveBeenLastCalledWith(message)
     })
+
+    // Nothing checks one translation's placeholders against another's, and a
+    // `{{detail}}` lost in one would drop the script's own words without a sound.
+    it.each([
+      ['uk', 'failed'],
+      ['uk', 'unreadable'],
+      ['de', 'failed'],
+      ['de', 'unreadable']
+    ] as const)(
+      "carries the script's words into %s when the cleanup was %s",
+      async (language, status) => {
+        workspacesPerProject({ planner: [anna] })
+        vi.mocked(window.octopus.workspaces.remove).mockResolvedValue({
+          ok: true,
+          value: { status, detail: 'exit 3' }
+        })
+        const onError = vi.fn<OnError>()
+        const projects = [planner]
+        await i18n.changeLanguage(language)
+        try {
+          const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+          await waitFor(() => {
+            expect(result.current.flat).toEqual([anna])
+          })
+
+          await act(() => result.current.remove('planner/anna'))
+
+          const said = onError.mock.lastCall?.[0]
+          expect(said).toContain('exit 3')
+          expect(said).not.toContain('{{')
+          expect(said).not.toContain('workspaces.')
+        } finally {
+          await i18n.changeLanguage(DEFAULT_LANGUAGE)
+        }
+      }
+    )
 
     it.each([['done'], ['none']] as const)(
       'says nothing more when the cleanup was %s',

@@ -158,7 +158,8 @@ Removing a workspace, end to end:
 
 ```
 WorkspaceRow (click)
-  → useWorkspaces.remove          asks for confirmation, handles the failure
+  → useWorkspaces.remove          asks for confirmation, handles the failure,
+                                  says when the cleanup script failed or did not run
   → window.octopus.workspaces.remove   preload: names the channel
   → ipcMain 'workspaces:remove'   main/ipc.ts: validates, calls attempt()
   → service.removeWorkspaceById   core/service.ts: the façade

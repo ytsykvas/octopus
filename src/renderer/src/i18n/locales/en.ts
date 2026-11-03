@@ -136,7 +136,9 @@ export const en = {
     cleanupFailed:
       'The workspace is removed, but its cleanup script failed, so whatever it was meant to take back — a database, say — may still be there. It said: {{detail}}',
     cleanupUnapproved:
-      'The workspace is removed, but its cleanup script did not run: this repository’s scripts have not been approved. Whatever it was meant to take back — a database, say — is still there.'
+      'The workspace is removed, but its cleanup script did not run: this repository’s scripts have not been approved. Whatever it was meant to take back — a database, say — is still there.',
+    cleanupUnreadable:
+      'The workspace is removed, but its cleanup script could not be read, so it did not run. Whatever it was meant to take back — a database, say — is still there. The reason: {{detail}}'
   },
 
   limits: {
