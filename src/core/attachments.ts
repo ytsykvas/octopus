@@ -12,7 +12,7 @@
  * it becomes one.
  */
 
-import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { CodedError } from './codedError.js'
@@ -163,4 +163,51 @@ export async function clearAttachments(root?: string): Promise<AttachmentStore> 
   }
 
   return measureAttachments(root)
+}
+
+/**
+ * The name `writePastedImage` gives a file, and nothing else.
+ *
+ * What a transcript says decides what is deleted, so only this shape counts: a
+ * name with a slash, `..` or anything octopus did not write cannot match, and
+ * the file is always looked for in the attachments folder itself.
+ */
+const PASTE_NAME = /paste-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9-]+Z-[0-9a-f]{4}\.(?:png|jpg|gif|webp)/gu
+
+/**
+ * The pasted images some transcripts name, by file name.
+ *
+ * The path rides in the message text, so the transcript holds it as written.
+ * A transcript that is not there names nothing: a conversation removed before
+ * it ever wrote a line is ordinary.
+ */
+export async function pastesIn(files: readonly string[]): Promise<Set<string>> {
+  const names = new Set<string>()
+  for (const file of files) {
+    const text = await readFile(file, 'utf8').catch(() => '')
+    for (const match of text.matchAll(PASTE_NAME)) names.add(match[0])
+  }
+  return names
+}
+
+/**
+ * Deletes the pastes no kept conversation names any more.
+ *
+ * Called with the pastes the discarded conversations named, after their
+ * transcripts are gone. A paste another conversation still names stays — a
+ * fork carries the same message, and so does a second workspace the same
+ * screenshot was sent to. Best-effort, like the transcripts it follows.
+ */
+export async function discardUnnamedPastes(
+  candidates: ReadonlySet<string>,
+  kept: readonly string[],
+  root?: string
+): Promise<void> {
+  if (candidates.size === 0) return
+  const named = await pastesIn(kept)
+  const dir = attachmentsDir(root)
+  for (const name of candidates) {
+    // A name standing for a directory is not a file octopus wrote; passed over.
+    if (!named.has(name)) await rm(join(dir, name), { force: true }).catch(() => undefined)
+  }
 }

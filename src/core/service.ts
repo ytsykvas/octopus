@@ -111,7 +111,9 @@ import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 import {
   type AttachmentStore,
   clearAttachments,
+  discardUnnamedPastes,
   measureAttachments,
+  pastesIn,
   writePastedImage
 } from './attachments.js'
 import { type CliPermission, readCliPermissions } from './cliPermissions.js'
@@ -213,6 +215,7 @@ import {
 } from './instructions.js'
 import {
   attachmentsDir,
+  chatTranscript,
   configFile,
   globalPromptsFile,
   globalSkillsRoot,
@@ -4416,11 +4419,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * same reason as `removeProjectData`. A record that outlives its history is
    * a conversation the pane draws empty above an agent that remembers all of
    * it; a file nothing points at is only litter. Of the two, litter.
+   *
+   * The images pasted into them go too, once no conversation still on record
+   * names them: read from the transcripts before they are deleted, checked
+   * against every one that stays.
    */
   async function discardHistories(chats: readonly Chat[]): Promise<void> {
+    const pastes = await pastesIn(chats.map((chat) => chatTranscript(chat.id, dataRoot)))
     for (const chat of chats) {
       await removeTranscript(chat.id, dataRoot).catch(() => undefined)
     }
+    const kept = state.chats.map((chat) => chatTranscript(chat.id, dataRoot))
+    await discardUnnamedPastes(pastes, kept, dataRoot)
   }
 
   /**

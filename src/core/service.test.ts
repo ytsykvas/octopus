@@ -5338,6 +5338,43 @@ describe('the agent chat', () => {
     }) as unknown as SDKMessage
 
   /*
+   * A pasted image becomes a file in the data root, and its path rides in the
+   * message. Nothing took the file back: it outlived the conversation, the
+   * workspace and the project, and only a button in Settings emptied the lot.
+   */
+  describe('pasted images', () => {
+    it('go with the last conversation that sent them', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const other = await service.createWorkspaceIn(projectId)
+      const mine = await service.writePastedAttachment('image/png', Uint8Array.from([1]))
+      const shared = await service.writePastedAttachment('image/png', Uint8Array.from([2]))
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, `look at ${mine} and ${shared}`)
+      const elsewhere = await service.openChat(other.id)
+      await service.sendToChat(elsewhere.id, `and at ${shared}`)
+
+      await service.removeWorkspaceById(workspaceId, { deleteBranch: false })
+
+      await expect(stat(mine)).rejects.toMatchObject({ code: 'ENOENT' })
+      // Still named by a conversation that lives on — a fork carries the
+      // same paths, so this is ordinary rather than a coincidence.
+      await expect(stat(shared)).resolves.toBeDefined()
+    })
+
+    it('go with a project too', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const pasted = await service.writePastedAttachment('image/png', Uint8Array.from([1]))
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, `look at ${pasted}`)
+
+      await service.removeProjectById(projectId)
+
+      await expect(stat(pasted)).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+  })
+
+  /*
    * The description is written by the model that wrote the change, which is
    * not the settings' default once a conversation was switched off it. Read
    * from the session the draft starts, since that is where the model is set.

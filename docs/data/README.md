@@ -15,7 +15,7 @@ else joins a home directory by hand.
     .claude/commands/<name>.md       one command, typed as /<name>; the file is the whole prompt
     .claude/agents/<name>.md         one subagent, named and described in its frontmatter
   attachments/                       pasted images, and another root — nothing else attached is ever copied here.
-                                     Nothing removes one on its own; About says how much is here and can empty it
+                                     One goes with the last conversation that names it; About can empty the rest
   projects/<projectId>/
     carry                            paths carried from the checkout into a workspace
     envs/                            named sets of variables, one written last into every workspace's .env
