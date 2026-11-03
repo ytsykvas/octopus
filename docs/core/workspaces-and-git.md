@@ -15,6 +15,15 @@ exactly this, and reads the remote-tracking branches as well as the local ones:
 the copy on `origin` outlives even a deleted local branch. A rename is refused
 onto either, unless the copy on `origin` is the workspace's own upstream.
 
+That copy outlived the branch itself, too: GitHub deletes a merged branch, the
+fetch keeps the copy, and the name stayed taken for good — one checkout had
+lost 25 names to branches that existed nowhere. So a creation, once its fetch
+has answered, drops the copies under the project's prefix that `origin` no
+longer has (`pruneGoneBranches` in `remotes.ts`), for the next creation to
+draw from. Never one whose branch still exists here: that is a live workspace
+whose request was merged, and its copy is what tells the pull request pane the
+work went out. A failure there costs a name, never the workspace.
+
 **Removal never deletes the branch on `origin`, and must not.** That would be a
 push the user did not make, to a repository other people share: it closes an
 open request, takes a branch somebody else may be on, and cannot be taken back

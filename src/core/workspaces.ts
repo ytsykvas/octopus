@@ -14,7 +14,7 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import { z } from 'zod'
 
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
-import { remoteBranchName, shortBranchName } from './branches.js'
+import { DEFAULT_REMOTE, remoteBranchName, shortBranchName } from './branches.js'
 import { CodedError } from './codedError.js'
 import {
   anyBranchExists,
@@ -27,7 +27,7 @@ import {
   toSlug,
   upstreamOf
 } from './git.js'
-import { fetchRemote, resolveBase } from './remotes.js'
+import { fetchRemote, pruneGoneBranches, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
 import { workspaceSlug } from './scriptEnv.js'
@@ -284,7 +284,15 @@ export async function createWorkspace(
   // Last of the local checks rather than first: the refusals above are instant,
   // and putting a network call in front of them would make a cheap "that name
   // is taken" cost half a minute.
-  await addWorktree(exec, path, branch, await freshBase(project.baseBranch, exec, fetchExec))
+  const base = await freshBase(project.baseBranch, exec, fetchExec)
+
+  // Frees the names GitHub's deleted branches held, for the next creation:
+  // this one's was drawn already. Only `origin`'s copies hold names
+  // (`takenByBranches`). Housekeeping, so a failure costs a name, never the
+  // workspace — and the network has just answered the fetch, so it is rare.
+  await pruneGoneBranches(exec, fetchExec, DEFAULT_REMOTE, project.branchPrefix).catch(() => [])
+
+  await addWorktree(exec, path, branch, base)
 
   return {
     id,
@@ -324,7 +332,8 @@ export async function createWorkspace(
  * repository is the user's own and none of our business.
  *
  * `origin`'s count too: removal deletes the local branch but not the copy
- * there, and a name drawn onto it inherits that branch's history.
+ * there, and a name drawn onto it inherits that branch's history. The copy
+ * holds the name until `origin` loses the branch and a creation prunes it.
  */
 async function takenByBranches(project: Project, exec: GitExec): Promise<string[]> {
   const prefix = `${project.branchPrefix}/`

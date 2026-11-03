@@ -23,7 +23,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { GitError, type GitExec, gitIn } from './git.js'
 import { PUSH_NOWHERE } from './publishGuard.js'
-import { fetchRemote, listRemotes, parseRemotes, pushTargets, resolveBase } from './remotes.js'
+import {
+  fetchRemote,
+  listRemotes,
+  parseRemoteHeads,
+  parseRemotes,
+  pruneGoneBranches,
+  pushTargets,
+  resolveBase
+} from './remotes.js'
 
 const run = promisify(execFile)
 
@@ -263,5 +271,155 @@ describe('fetchRemote', () => {
 
     await fetchRemote(recording, 'origin')
     expect(asked).toEqual([['fetch', 'origin']])
+  })
+})
+
+describe('parseRemoteHeads', () => {
+  it('reads the branch out of each line', () => {
+    expect(parseRemoteHeads('abc\trefs/heads/main\n\ndef\trefs/heads/octopus/a/b\n')).toEqual(
+      new Set(['main', 'octopus/a/b'])
+    )
+  })
+
+  it('ignores a line that names no branch', () => {
+    expect(parseRemoteHeads('abc\trefs/tags/v1\nnonsense\n')).toEqual(new Set())
+  })
+})
+
+describe('pruneGoneBranches', () => {
+  /** Puts a branch on the remote and fetches its copy here. */
+  async function branchOnRemote(branch: string): Promise<void> {
+    await run('git', ['push', '-q', 'origin', `main:${branch}`], { cwd: dir })
+    await run('git', ['fetch', '-q', 'origin'], { cwd: dir })
+  }
+
+  /** Deletes a branch on the remote, as GitHub does after a merge. */
+  async function deleteOnRemote(remote: string, branch: string): Promise<void> {
+    await run('git', ['branch', '-D', branch], { cwd: remote })
+  }
+
+  async function copies(): Promise<string[]> {
+    const { stdout } = await run('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes/'], {
+      cwd: dir
+    })
+    return stdout.split('\n').filter((line) => line !== '')
+  }
+
+  /*
+   * The whole reason this exists: GitHub deleted the branch after its merge,
+   * the copy here stayed, and the workspace name it holds was never drawn
+   * again.
+   */
+  it('drops the copy of a branch the remote no longer has', async () => {
+    const remote = await addRemote()
+    await branchOnRemote('octopus/gone')
+    await deleteOnRemote(remote, 'octopus/gone')
+
+    const exec = gitIn(dir)
+    await expect(pruneGoneBranches(exec, exec, 'origin', 'octopus')).resolves.toEqual([
+      'octopus/gone'
+    ])
+    expect(await copies()).not.toContain('refs/remotes/origin/octopus/gone')
+  })
+
+  it('keeps the copy of a branch the remote still has', async () => {
+    await addRemote()
+    await branchOnRemote('octopus/here')
+
+    const exec = gitIn(dir)
+    await expect(pruneGoneBranches(exec, exec, 'origin', 'octopus')).resolves.toEqual([])
+    expect(await copies()).toContain('refs/remotes/origin/octopus/here')
+  })
+
+  /*
+   * A live workspace whose request was merged and whose branch GitHub deleted.
+   * Its copy is what tells the pull request pane the work went out; without it
+   * every file reads as never pushed, and Push revives a merged branch.
+   */
+  it('keeps the copy of a branch that still exists here', async () => {
+    const remote = await addRemote()
+    await branchOnRemote('octopus/live')
+    await run('git', ['branch', 'octopus/live'], { cwd: dir })
+    await deleteOnRemote(remote, 'octopus/live')
+
+    const exec = gitIn(dir)
+    await expect(pruneGoneBranches(exec, exec, 'origin', 'octopus')).resolves.toEqual([])
+    expect(await copies()).toContain('refs/remotes/origin/octopus/live')
+  })
+
+  // Everything outside the prefix is the user's, pruned or not as they like.
+  it('touches nothing outside the prefix', async () => {
+    const remote = await addRemote()
+    await branchOnRemote('mine/gone')
+    await branchOnRemote('octopusx/gone')
+    await deleteOnRemote(remote, 'mine/gone')
+    await deleteOnRemote(remote, 'octopusx/gone')
+
+    const exec = gitIn(dir)
+    await expect(pruneGoneBranches(exec, exec, 'origin', 'octopus')).resolves.toEqual([])
+    expect(await copies()).toEqual(
+      expect.arrayContaining(['refs/remotes/origin/mine/gone', 'refs/remotes/origin/octopusx/gone'])
+    )
+  })
+
+  it('reaches a branch nested under the prefix', async () => {
+    const remote = await addRemote()
+    await branchOnRemote('team/octopus/gone')
+    await deleteOnRemote(remote, 'team/octopus/gone')
+
+    const exec = gitIn(dir)
+    await expect(pruneGoneBranches(exec, exec, 'origin', 'team/octopus')).resolves.toEqual([
+      'team/octopus/gone'
+    ])
+  })
+
+  it('asks the remote nothing when there is no copy under the prefix', async () => {
+    await addRemote()
+    const asked: string[][] = []
+    const recording: GitExec = (args) => {
+      asked.push([...args])
+      return Promise.resolve('')
+    }
+
+    await expect(pruneGoneBranches(gitIn(dir), recording, 'origin', 'octopus')).resolves.toEqual([])
+    expect(asked).toEqual([])
+  })
+
+  // Asking the remote leaves the machine, so it wants the fetch's deadline.
+  it('asks the remote through the executor given for it', async () => {
+    const remote = await addRemote()
+    await branchOnRemote('octopus/gone')
+    await deleteOnRemote(remote, 'octopus/gone')
+    const exec = gitIn(dir)
+    const asked: string[][] = []
+    const recording: GitExec = (args) => {
+      asked.push([...args])
+      return exec(args)
+    }
+
+    await pruneGoneBranches(exec, recording, 'origin', 'octopus')
+    expect(asked).toEqual([['ls-remote', '--heads', 'origin', 'refs/heads/octopus/*']])
+  })
+
+  /*
+   * A fetch elsewhere can bring the branch back between the read and the
+   * delete. Deleting only the commit that was read leaves the new one alone.
+   */
+  it('leaves a copy that moved after it was read', async () => {
+    const remote = await addRemote()
+    await branchOnRemote('octopus/back')
+    await deleteOnRemote(remote, 'octopus/back')
+    const exec = gitIn(dir)
+    await run('git', ['commit', '-q', '--allow-empty', '-m', 'later'], { cwd: dir })
+    const moving: GitExec = async (args) => {
+      const answer = await exec(args)
+      await run('git', ['update-ref', 'refs/remotes/origin/octopus/back', 'HEAD'], { cwd: dir })
+      return answer
+    }
+
+    await expect(pruneGoneBranches(exec, moving, 'origin', 'octopus')).rejects.toBeInstanceOf(
+      GitError
+    )
+    expect(await copies()).toContain('refs/remotes/origin/octopus/back')
   })
 })

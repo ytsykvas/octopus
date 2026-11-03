@@ -16,6 +16,7 @@
  */
 
 import { type GitExec, type GitOptions, refExists } from './git.js'
+import { allOf } from './parallel.js'
 import { PUSH_NOWHERE } from './publishGuard.js'
 
 /** What a base branch names, and where its current state comes from. */
@@ -190,8 +191,77 @@ export async function resolveBase(exec: GitExec, base: string): Promise<BaseRef>
  * definition of "up to date" that cannot be wrong.
  *
  * No `--prune` either: pruning deletes refs, and a destructive side effect does
- * not belong behind a button that says "new workspace".
+ * not belong behind a button that says "new workspace". The one pruning a
+ * workspace name needs is `pruneGoneBranches`, narrowed to what holds a name.
  */
 export async function fetchRemote(exec: GitExec, remote: string): Promise<void> {
   await exec(['fetch', remote])
+}
+
+const HEADS = 'refs/heads/'
+
+/** The branches `git ls-remote --heads` printed, one `<commit>\t<ref>` a line. */
+export function parseRemoteHeads(output: string): Set<string> {
+  const branches = output
+    .split('\n')
+    .map((line) => line.split('\t')[1] ?? '')
+    .filter((ref) => ref.startsWith(HEADS))
+    .map((ref) => ref.slice(HEADS.length))
+
+  return new Set(branches)
+}
+
+/**
+ * Drops this checkout's copies of a remote's branches under a prefix once the
+ * remote no longer has them, and answers with the branches whose copies went.
+ *
+ * GitHub deletes a merged branch, the fetch keeps its copy here, and a
+ * workspace name a copy holds is never drawn again: one checkout had lost 25
+ * that way. The branch on the remote is never touched — deleting it is a
+ * person's call.
+ *
+ * Narrower than `git fetch --prune` in two ways. Only the prefix: everything
+ * else is the user's. And never a branch that still exists here: that is a
+ * live workspace whose request was merged, and its copy is what tells the pull
+ * request pane the work went out. Without it every file reads as never pushed,
+ * and Push revives a merged branch.
+ *
+ * Each copy is deleted only at the commit that was read, so one a fetch brought
+ * back meanwhile stays. Asking the remote leaves the machine, so it goes
+ * through `fetchExec`, and only when there is a copy to ask about.
+ */
+export async function pruneGoneBranches(
+  exec: GitExec,
+  fetchExec: GitExec,
+  remote: string,
+  prefix: string
+): Promise<string[]> {
+  const tracking = `refs/remotes/${remote}/`
+  const copies = (
+    await exec(['for-each-ref', '--format=%(refname) %(objectname)', `${tracking}${prefix}/`])
+  )
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => {
+      const [ref = '', commit = ''] = line.split(' ')
+      return { ref, commit, branch: ref.slice(tracking.length) }
+    })
+  if (copies.length === 0) return []
+
+  const [onRemote, here] = await allOf([
+    fetchExec(['ls-remote', '--heads', remote, `${HEADS}${prefix}/*`]),
+    exec(['for-each-ref', '--format=%(refname)', `${HEADS}${prefix}/`])
+  ])
+  const kept = new Set([
+    ...parseRemoteHeads(onRemote),
+    ...here
+      .split('\n')
+      .filter((ref) => ref !== '')
+      .map((ref) => ref.slice(HEADS.length))
+  ])
+
+  const gone = copies.filter((copy) => !kept.has(copy.branch))
+  for (const copy of gone) await exec(['update-ref', '-d', copy.ref, copy.commit])
+
+  return gone.map((copy) => copy.branch)
 }

@@ -289,6 +289,47 @@ describe('createWorkspace', () => {
     expect((await create()).name).toBe(SECOND_NAME)
   })
 
+  /*
+   * GitHub deletes a merged branch; the copy here stayed and held its name
+   * for good. The name is drawn before the fetch, so the creation that
+   * prunes still skips it — the next one gets it back.
+   */
+  it('frees a name whose branch the remote has since deleted', async () => {
+    await addRemote()
+    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/${FIRST_NAME}`, 'HEAD'], {
+      cwd: repo
+    })
+
+    expect((await create()).name).toBe(SECOND_NAME)
+    expect((await create()).name).toBe(FIRST_NAME)
+  })
+
+  // Housekeeping: when it fails, only a name stays held, never the workspace.
+  it('still creates the workspace when the remote cannot be asked about its branches', async () => {
+    await addRemote()
+    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/${FIRST_NAME}`, 'HEAD'], {
+      cwd: repo
+    })
+    const fetchExec: GitExec = (args) =>
+      args[0] === 'ls-remote' ? Promise.reject(new GitError(args, 'refused')) : exec(args)
+
+    const workspace = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens,
+      random: first,
+      fetchExec
+    })
+
+    expect(workspace.name).toBe(SECOND_NAME)
+    expect(
+      (
+        await run('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes/origin/'], {
+          cwd: repo
+        })
+      ).stdout
+    ).toContain(`ytsykvas/${FIRST_NAME}`)
+  })
+
   it('ignores branches outside the project prefix', async () => {
     // Same name, no prefix: the user's own branch, which we must not claim.
     await run('git', ['branch', FIRST_NAME], { cwd: repo })
