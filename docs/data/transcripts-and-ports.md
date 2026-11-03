@@ -28,6 +28,29 @@ The filename is the chat id, a uuid, and the directory is flat. A chat outlives
 the name its workspace had when it started, so filing it under that name would
 either strand the file on a rename or require moving it.
 
+## The CLI's own sessions
+
+The agent CLI keeps its own copy of every conversation under `~/.claude/projects`
+(or `$CLAUDE_CONFIG_DIR/projects`), filed by the directory it ran in. That copy
+outlived the workspace: one machine had 1.2 GB from eighty removed workspaces,
+and a new workspace given an old name — the same path — inherited the old
+sessions in `/resume`. Removing a workspace now deletes them too
+(`cliSessions.ts`).
+
+They are found through the SDK's `listSessions` with `includeWorktrees: false`.
+Its default answers every worktree of the repository, which is every other
+workspace of the project. Only sessions whose `cwd` is the worktree are taken:
+with `CLAUDE_CODE_PROJECT_DIR_NAME` set the CLI files every directory in one
+folder, and the listing answers all of them.
+
+The ids are read while the worktree exists and the files deleted after its
+record has gone, best-effort — the order the transcripts above are discarded in.
+A removal that fails leaves the workspace with its history.
+
+The folder itself stays, empty. Its name is the CLI's rule — hashed when long,
+overridable from the environment — and deleting a folder by a guessed name could
+delete somebody else's.
+
 ## What is deliberately not stored
 
 The subscription's rate limit lives in the service's memory and never reaches

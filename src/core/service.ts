@@ -13,8 +13,10 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
 
 import {
+  deleteSession as defaultDeleteSession,
   forkSession as defaultForkSession,
   getSessionMessages as defaultSessionMessages,
+  listSessions as defaultListSessions,
   query as defaultQuery
 } from '@anthropic-ai/claude-agent-sdk'
 
@@ -138,6 +140,12 @@ import {
   writeProfile
 } from './envProfiles.js'
 import { runArchiveScript } from './archive.js'
+import {
+  cliSessionsOf,
+  type DeleteSessionFn,
+  discardCliSessions,
+  type ListSessionsFn
+} from './cliSessions.js'
 import { type ScriptValues, workspaceEnv, workspaceSlug } from './scriptEnv.js'
 import { type UsageReport, type UsageWindows, windowsFrom } from './usage.js'
 import {
@@ -577,6 +585,9 @@ export interface ServiceOptions {
   readonly forkSession?: ForkSessionFn
   /** The SDK's session reader, injected for the reason `forkSession` is. */
   readonly sessionMessages?: SessionMessagesFn
+  /** The SDK's session listing and deletion, injected for the reason `forkSession` is. */
+  readonly listSessions?: ListSessionsFn
+  readonly deleteSession?: DeleteSessionFn
   /** How long a side question may run; a parameter so the deadline can be tested. */
   readonly sideQuestionTimeoutMs?: number
   readonly uuid?: () => string
@@ -691,6 +702,7 @@ export interface ChatStatusEvent {
 }
 
 export type { TasksEvent } from './taskRegistry.js'
+export type { DeleteSessionFn, ListSessionsFn } from './cliSessions.js'
 
 /**
  * The conversations of a workspace are not the set they were.
@@ -1870,6 +1882,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const runForkSession = options.forkSession ?? defaultForkSession
   const sideTimeoutMs = options.sideQuestionTimeoutMs ?? SIDE_TIMEOUT_MS
   const runSessionMessages = options.sessionMessages ?? defaultSessionMessages
+  const runListSessions = options.listSessions ?? defaultListSessions
+  const runDeleteSession = options.deleteSession ?? defaultDeleteSession
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
 
@@ -4399,6 +4413,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
+   * The agent CLI's own copy of a worktree's conversations, in two halves for
+   * the reason `closing` is read early: the ids while the worktree still
+   * exists, the files only once its record has gone.
+   */
+  const sessionsOf = (path: string): Promise<string[]> => cliSessionsOf(path, runListSessions)
+  const discardSessionsOf = (path: string, ids: readonly string[]): Promise<void> =>
+    discardCliSessions(path, ids, runDeleteSession)
+
+  /**
    * Gives a worktree the files and the variables it needs to run.
    *
    * One helper because there were two copies of this, identical down to the
@@ -6187,6 +6210,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async removeProjectById(projectId) {
       const project = findProject(state, projectId)
       const closing: Chat[] = []
+      const cliSessions: { path: string; ids: string[] }[] = []
       // Read now: the commit below drops them all, whether or not the project's own record is there.
       const removed = workspacesOfProject(state, projectId).map((workspace) => workspace.id)
 
@@ -6222,6 +6246,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             path: workspace.path,
             variables
           })
+          cliSessions.push({ path: workspace.path, ids: await sessionsOf(workspace.path) })
 
           // Best-effort, one by one: a worktree already deleted from outside
           // must not stop the rest — or the project — from being removed. The
@@ -6236,6 +6261,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       await commit((current) => removeProject(current, projectId))
       await discardHistories(closing)
+      for (const { path, ids } of cliSessions) await discardSessionsOf(path, ids)
 
       /*
        * After the commit, and swallowing its own failure.
@@ -6431,6 +6457,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         variables
       })
 
+      // Read while the worktree is still there; deleted only once it has gone.
+      const cliSessions = await sessionsOf(workspace.path)
+
       /*
        * The one window this ordering cannot close, recorded rather than left
        * to be rediscovered: the script has run, and `discardWorkspace` below
@@ -6448,6 +6477,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       await commit((current) => removeWorkspaceRecord(current, workspaceId))
       await discardHistories(closing)
+      await discardSessionsOf(workspace.path, cliSessions)
     },
 
     async workspaceHasChanges(workspaceId) {
