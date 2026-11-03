@@ -15,6 +15,12 @@ exactly this, and reads the remote-tracking branches as well as the local ones:
 the copy on `origin` outlives even a deleted local branch. A rename is refused
 onto either, unless the copy on `origin` is the workspace's own upstream.
 
+**Removal never deletes the branch on `origin`, and must not.** That would be a
+push the user did not make, to a repository other people share: it closes an
+open request, takes a branch somebody else may be on, and cannot be taken back
+from here. Whether a merged branch goes is GitHub's own setting, _Automatically
+delete head branches_; an unmerged one stays until a person deletes it.
+
 GitHub remembers a request after its branch is gone, so no choice of name can
 settle that alone. A request opened before the workspace came onto its branch —
 created, or renamed onto it (`branchSince`) — is never its own (`openedFor` in
