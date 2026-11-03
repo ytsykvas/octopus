@@ -1211,6 +1211,57 @@ describe('useWorkspaces', () => {
       expect(onError).toHaveBeenCalledWith('That workspace is no longer there.')
       expect(result.current.flat).toEqual([anna])
     })
+
+    // The workspace has gone either way; a cleanup that did not happen leaves
+    // a database behind, and nothing else would say so.
+    it.each([
+      [
+        'failed',
+        { status: 'failed', detail: 'exit 3' },
+        'The workspace is removed, but its cleanup script failed, so whatever it was meant to take back — a database, say — may still be there. It said: exit 3'
+      ],
+      [
+        'was not approved',
+        { status: 'unapproved' },
+        'The workspace is removed, but its cleanup script did not run: this repository’s scripts have not been approved. Whatever it was meant to take back — a database, say — is still there.'
+      ]
+    ] as const)('says so when the cleanup %s', async (_, value, message) => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.remove).mockResolvedValue({ ok: true, value })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.remove('planner/anna'))
+
+      expect(onError).toHaveBeenLastCalledWith(message)
+    })
+
+    it.each([['done'], ['none']] as const)(
+      'says nothing more when the cleanup was %s',
+      async (status) => {
+        workspacesPerProject({ planner: [anna] })
+        vi.mocked(window.octopus.workspaces.remove).mockResolvedValue({
+          ok: true,
+          value: { status }
+        })
+        const onError = vi.fn<OnError>()
+        const projects = [planner]
+
+        const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+        await waitFor(() => {
+          expect(result.current.flat).toEqual([anna])
+        })
+
+        await act(() => result.current.remove('planner/anna'))
+
+        expect(onError).not.toHaveBeenCalledWith(expect.any(String))
+      }
+    )
   })
 })
 

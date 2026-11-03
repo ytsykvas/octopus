@@ -2777,10 +2777,23 @@ describe('the cleanup script', () => {
       `#!/bin/sh\nprintf '%s' "$OCTOPUS_WORKSPACE_NAME" > '${marker}'\n`
     )
 
-    await service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    ).resolves.toEqual({ status: 'done' })
 
     await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
+  })
+
+  it('answers none when there is no cleanup script', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    ).resolves.toEqual({ status: 'none' })
   })
 
   // It takes back what the build made, and the build was told the set.
@@ -2836,9 +2849,10 @@ describe('the cleanup script', () => {
 
     await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
 
+    // Said, now: nothing stops the removal, which made every failure silent.
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: false })
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ status: 'failed', detail: expect.stringContaining('archive.sh') })
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 
@@ -2859,7 +2873,9 @@ describe('the cleanup script', () => {
 
     // `force`, because writing the script into the worktree is itself an
     // uncommitted change.
-    await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
+    ).resolves.toEqual({ status: 'unapproved' })
 
     await expect(readFile(marker, 'utf8')).rejects.toThrow()
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
@@ -2881,7 +2897,7 @@ describe('the cleanup script', () => {
 
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ status: 'none' })
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 
@@ -12175,9 +12191,9 @@ describe('the agent chat', () => {
       await rm(join(dir, 'data', 'chats'), { recursive: true, force: true })
       await writeFile(join(dir, 'data', 'chats'), 'not a directory', 'utf8')
 
-      await expect(
-        service.removeWorkspaceById(workspace.id, { force: true })
-      ).resolves.toBeUndefined()
+      await expect(service.removeWorkspaceById(workspace.id, { force: true })).resolves.toEqual({
+        status: 'none'
+      })
       expect(service.listChats(workspace.id)).toEqual([])
     })
 

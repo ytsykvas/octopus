@@ -139,7 +139,7 @@ import {
   renameProfile,
   writeProfile
 } from './envProfiles.js'
-import { runArchiveScript } from './archive.js'
+import { type CleanupOutcome, runArchiveScript } from './archive.js'
 import {
   cliSessionsOf,
   type DeleteSessionFn,
@@ -1366,7 +1366,8 @@ export interface OctopusService {
   hasWorkspace(workspaceId: string): boolean
   createWorkspaceIn(projectId: string): Promise<Workspace>
   renameWorkspaceById(workspaceId: string, name: string): Promise<void>
-  removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<void>
+  /** Answers what became of the cleanup script, which nothing lets stop the removal. */
+  removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<CleanupOutcome>
   /** Whether a workspace holds work that removal would discard. */
   workspaceHasChanges(workspaceId: string): Promise<boolean>
   /**
@@ -4670,22 +4671,36 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function cleanupFor(
     project: Project,
     workspace: Workspace
-  ): Promise<ResolvedScript | null> {
+  ): Promise<{ kind: 'none' } | { kind: 'unapproved' } | { kind: 'run'; script: ResolvedScript }> {
     let scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
     try {
       scripts = await resolveScripts(workspace.path, project.id, dataRoot, project.preferLocal)
     } catch {
-      return null
+      return { kind: 'none' }
     }
 
     const cleanup = scripts.archive
-    if (cleanup === undefined) return null
+    if (cleanup === undefined) return { kind: 'none' }
 
     // The user's own script is never gated; a repository's runs only once
     // somebody has read it.
     const allowed = cleanup.source === 'project' || allowedToRun(project, scriptsDigest(scripts))
 
-    return allowed ? cleanup : null
+    return allowed ? { kind: 'run', script: cleanup } : { kind: 'unapproved' }
+  }
+
+  /** Runs the workspace's cleanup and says what became of it. */
+  async function runCleanup(project: Project, workspace: Workspace): Promise<CleanupOutcome> {
+    const cleanup = await cleanupFor(project, workspace)
+    if (cleanup.kind !== 'run') return { status: cleanup.kind }
+
+    const { values, variables } = await scriptSetFor(project, workspace)
+    const failure = await runArchiveScript(cleanup.script, {
+      ...values,
+      path: workspace.path,
+      variables
+    })
+    return failure === null ? { status: 'done' } : { status: 'failed', detail: failure }
   }
 
   async function closeChatsOf(workspaceId: string): Promise<void> {
@@ -6240,12 +6255,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
            * its workspaces had been given — the accumulation the script exists
            * to prevent, at the one moment there is most of it to clean up.
            */
-          const { values, variables } = await scriptSetFor(project, workspace)
-          await runArchiveScript(await cleanupFor(project, workspace), {
-            ...values,
-            path: workspace.path,
-            variables
-          })
+          await runCleanup(project, workspace)
           cliSessions.push({ path: workspace.path, ids: await sessionsOf(workspace.path) })
 
           // Best-effort, one by one: a worktree already deleted from outside
@@ -6446,16 +6456,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * Everywhere else an unapproved script refuses the run and says so. Here
        * it cannot: nothing may stop a workspace being removed, and a dialog in
        * the middle of a deletion is a dialog nobody can answer usefully. So the
-       * cleanup is simply not performed — which leaves a database behind, and
-       * is the lesser of the two: the alternative is executing shell that
-       * arrived with a `git pull` at the one moment the user is not looking.
+       * cleanup is not performed, and the window is told so once the workspace
+       * has gone — a database left behind is then known about, which is still
+       * the lesser of the two: the alternative is executing shell that arrived
+       * with a `git pull` at the one moment the user is not looking.
        */
-      const { values, variables } = await scriptSetFor(project, workspace)
-      await runArchiveScript(await cleanupFor(project, workspace), {
-        ...values,
-        path: workspace.path,
-        variables
-      })
+      const cleanup = await runCleanup(project, workspace)
 
       // Read while the worktree is still there; deleted only once it has gone.
       const cliSessions = await sessionsOf(workspace.path)
@@ -6478,6 +6484,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       await commit((current) => removeWorkspaceRecord(current, workspaceId))
       await discardHistories(closing)
       await discardSessionsOf(workspace.path, cliSessions)
+      return cleanup
     },
 
     async workspaceHasChanges(workspaceId) {

@@ -131,7 +131,11 @@ export const en = {
       'This workspace has uncommitted changes. They will be lost — nothing else keeps a copy.',
     removeBranch: 'Delete the branch {{branch}} as well',
     removeConfirm: 'Remove',
-    removeCancel: 'Cancel'
+    removeCancel: 'Cancel',
+    cleanupFailed:
+      'The workspace is removed, but its cleanup script failed, so whatever it was meant to take back — a database, say — may still be there. It said: {{detail}}',
+    cleanupUnapproved:
+      'The workspace is removed, but its cleanup script did not run: this repository’s scripts have not been approved. Whatever it was meant to take back — a database, say — is still there.'
   },
 
   limits: {

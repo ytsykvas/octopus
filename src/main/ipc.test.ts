@@ -1833,8 +1833,9 @@ describe('workspaces of a real project', () => {
     })
     expect(sessions.forgetRuns).not.toHaveBeenCalled()
 
-    expect(await invoke('workspaces:remove', workspace.id, { force: true })).toMatchObject({
-      ok: true
+    expect(await invoke('workspaces:remove', workspace.id, { force: true })).toEqual({
+      ok: true,
+      value: { status: 'none' }
     })
     expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
     await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })

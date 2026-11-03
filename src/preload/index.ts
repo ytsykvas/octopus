@@ -31,6 +31,7 @@ import type {
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type { CleanupOutcome } from '@core/archive.js'
 import type { SideAnswer, SideExchange } from '@core/sideQuestions.js'
 import type { StrayServer } from '@core/strayServers.js'
 import type { QuestionAnswer } from '@core/questions.js'
@@ -571,8 +572,10 @@ const api = {
     rename: (workspaceId: string, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:rename', workspaceId, name) as Promise<Result<void>>,
 
-    remove: (workspaceId: string, options: RemoveOptions = {}): Promise<Result<void>> =>
-      ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<Result<void>>,
+    remove: (workspaceId: string, options: RemoveOptions = {}): Promise<Result<CleanupOutcome>> =>
+      ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<
+        Result<CleanupOutcome>
+      >,
 
     /** Whether removing this workspace would discard uncommitted work. */
     hasChanges: (workspaceId: string): Promise<Result<boolean>> =>

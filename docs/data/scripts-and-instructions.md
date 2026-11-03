@@ -36,7 +36,10 @@ is given the same environment as the others and the workspace as its working
 directory, so it can drop a database named after it — and **it cannot stop the
 removal**. A failure, a hang, a script that was never written: all end with the
 workspace gone. A workspace that cannot be deleted because a cleanup script is
-broken is a worse problem than the one being cleaned up.
+broken is a worse problem than the one being cleaned up. It is not silent,
+though: a script that fails, or a repository's script skipped because nobody
+approved it, is reported once the workspace has gone, so a database left behind
+is known about rather than found months later.
 
 Scripts are saved executable. Without the bit, running one fails with
 "permission denied", which says nothing about what to do.

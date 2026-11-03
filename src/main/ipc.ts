@@ -876,8 +876,9 @@ export function registerIpc(
   // removal that failed leaves the workspace, and its runs are still worth asking about.
   host.handle('workspaces:remove', (_event, workspaceId: string, options: RemoveOptions) =>
     attempt(async () => {
-      await service.removeWorkspaceById(workspaceId, options)
+      const cleanup = await service.removeWorkspaceById(workspaceId, options)
       terminals.forgetRuns(workspaceId)
+      return cleanup
     })
   )
 

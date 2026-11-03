@@ -109,7 +109,11 @@ export const de: Translation = {
       'Dieser Workspace hat nicht committete Änderungen. Sie gehen verloren – es gibt keine weitere Kopie.',
     removeBranch: 'Auch den Branch {{branch}} löschen',
     removeConfirm: 'Entfernen',
-    removeCancel: 'Abbrechen'
+    removeCancel: 'Abbrechen',
+    cleanupFailed:
+      'Der Workspace ist entfernt, aber sein Aufräumskript ist fehlgeschlagen – was es zurücknehmen sollte, etwa eine Datenbank, ist womöglich noch da. Ausgabe: {{detail}}',
+    cleanupUnapproved:
+      'Der Workspace ist entfernt, aber sein Aufräumskript lief nicht: Die Skripte dieses Repositorys sind nicht freigegeben. Was es zurücknehmen sollte, etwa eine Datenbank, ist noch da.'
   },
 
   limits: {
