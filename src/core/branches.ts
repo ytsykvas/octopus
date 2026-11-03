@@ -9,7 +9,8 @@
 import { z } from 'zod'
 
 /** Remote every clone has; the only prefix worth hiding by default. */
-const DEFAULT_REMOTE_PREFIX = 'origin/'
+export const DEFAULT_REMOTE = 'origin'
+const DEFAULT_REMOTE_PREFIX = `${DEFAULT_REMOTE}/`
 
 /**
  * Drops the remote prefix.

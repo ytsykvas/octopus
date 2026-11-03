@@ -49,6 +49,31 @@ export interface ArchiveValues extends ScriptValues {
 }
 
 /**
+ * What became of the cleanup, for the window to say once the workspace has gone.
+ *
+ * Nothing here stops a removal, which made every failure silent: a script that
+ * failed, or a repository's script skipped as unapproved, left a database
+ * behind and nobody found out.
+ */
+export type CleanupOutcome =
+  | { readonly status: 'done' }
+  | { readonly status: 'none' }
+  | { readonly status: 'unapproved' }
+  | { readonly status: 'unreadable'; readonly detail: string }
+  | { readonly status: 'failed'; readonly detail: string }
+
+/** A workspace whose cleanup did not take back what it gave, by name. */
+export interface LeftBehind {
+  readonly workspace: string
+  readonly cleanup: CleanupOutcome
+}
+
+/** Whether a cleanup leaves something to report: it failed, or never ran. */
+export function leavesBehind(cleanup: CleanupOutcome): boolean {
+  return cleanup.status !== 'done' && cleanup.status !== 'none'
+}
+
+/**
  * Runs a workspace's cleanup script, if it has one.
  *
  * **Nothing here can stop the removal.** A script that fails, hangs or was

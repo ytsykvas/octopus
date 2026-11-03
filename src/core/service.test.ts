@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
 import {
   access,
   chmod,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   rename,
@@ -50,6 +52,8 @@ import {
   type ChatStatusEvent,
   type TasksEvent,
   createService as makeService,
+  type DeleteSessionFn,
+  type ListSessionsFn,
   sameWindows,
   SHUTDOWN_GRACE_MS,
   type OctopusService,
@@ -165,11 +169,13 @@ const answering = new Set<number>()
 async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
   // Nobody outranks a window and no file names a skill unless a test says so:
   // the defaults read the machine's own `~/.claude/settings.json` and
-  // environment.
+  // environment. And no session of the machine's own CLI is listed or deleted.
   const made = await makeService({
     windowOverride: () => Promise.resolve(null),
     skillsInFiles: () => Promise.resolve(new Map()),
     listening: (port) => Promise.resolve(answering.has(port)),
+    listSessions: () => Promise.resolve([]),
+    deleteSession: () => Promise.resolve(),
     ...options
   })
   started.push(made)
@@ -1838,7 +1844,9 @@ describe('projects', () => {
     const workspace = await service.createWorkspaceIn(project.id)
     await rm(workspace.path, { recursive: true, force: true })
 
-    await expect(service.removeProjectById(project.id)).resolves.toEqual([workspace.id])
+    await expect(service.removeProjectById(project.id)).resolves.toMatchObject({
+      workspaceIds: [workspace.id]
+    })
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -1853,7 +1861,9 @@ describe('projects', () => {
 
     await rm(repo, { recursive: true, force: true })
 
-    await expect(service.removeProjectById(project.id)).resolves.toHaveLength(1)
+    await expect(service.removeProjectById(project.id)).resolves.toMatchObject({
+      workspaceIds: [expect.any(String)]
+    })
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -1930,7 +1940,10 @@ describe('projects', () => {
   })
 
   it('removing a missing project does not corrupt state', async () => {
-    await expect(service.removeProjectById('missing')).resolves.toEqual([])
+    await expect(service.removeProjectById('missing')).resolves.toEqual({
+      workspaceIds: [],
+      leftBehind: []
+    })
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -2771,10 +2784,23 @@ describe('the cleanup script', () => {
       `#!/bin/sh\nprintf '%s' "$OCTOPUS_WORKSPACE_NAME" > '${marker}'\n`
     )
 
-    await service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    ).resolves.toEqual({ status: 'done' })
 
     await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
+  })
+
+  it('answers none when there is no cleanup script', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    ).resolves.toEqual({ status: 'none' })
   })
 
   // It takes back what the build made, and the build was told the set.
@@ -2813,9 +2839,34 @@ describe('the cleanup script', () => {
       `#!/bin/sh\nprintf '%s %s' "$OCTOPUS_ENV_PROFILE" "$DB_HOST" > '${marker}'\n`
     )
 
-    await service.removeProjectById(project.id)
+    // A cleanup that did its job is nothing to report.
+    await expect(service.removeProjectById(project.id)).resolves.toMatchObject({
+      leftBehind: []
+    })
 
     await expect(readFile(marker, 'utf8')).resolves.toBe('default dev.example')
+  })
+
+  // The project's removal drops what became of each cleanup — that is its own
+  // task — but a failed one must still not keep a workspace, or the project.
+  it('removes the whole project even when a workspace’s script fails', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
+
+    // And says which workspaces left something behind, for the window to name.
+    await expect(service.removeProjectById(project.id)).resolves.toEqual({
+      workspaceIds: [workspace.id],
+      leftBehind: [
+        {
+          workspace: workspace.name,
+          cleanup: { status: 'failed', detail: expect.stringContaining('archive.sh') }
+        }
+      ]
+    })
+    await expect(stat(workspace.path)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   /*
@@ -2828,11 +2879,20 @@ describe('the cleanup script', () => {
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
 
-    await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
+    await service.saveProjectScript(
+      project.id,
+      'archive',
+      "#!/bin/sh\necho 'database busy' >&2\nexit 3\n"
+    )
 
+    // Said, now: nothing stops the removal, which made every failure silent —
+    // and the script's own words are what tell the user what is left behind.
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: false })
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({
+      status: 'failed',
+      detail: expect.stringMatching(/archive\.sh[\s\S]*database busy/)
+    })
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 
@@ -2853,7 +2913,9 @@ describe('the cleanup script', () => {
 
     // `force`, because writing the script into the worktree is itself an
     // uncommitted change.
-    await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
+    ).resolves.toEqual({ status: 'unapproved' })
 
     await expect(readFile(marker, 'utf8')).rejects.toThrow()
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
@@ -2873,9 +2935,11 @@ describe('the cleanup script', () => {
     await mkdir(join(dir, 'elsewhere'), { recursive: true })
     await symlink(join(dir, 'elsewhere'), join(workspace.path, '.octopus'))
 
+    // Whatever the repository's `archive.sh` would have taken back stays, so
+    // this is said as well — with the reason, since the fix is in the layout.
     await expect(
       service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ status: 'unreadable', detail: expect.stringMatching(/\S/) })
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 
@@ -2896,6 +2960,194 @@ describe('the cleanup script', () => {
     await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
 
     await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
+  })
+})
+
+describe("the CLI's own sessions", () => {
+  // The CLI keeps its own copy of every conversation, filed by directory, and
+  // nothing took it back: eighty removed workspaces left 1.2 GB behind on one
+  // machine, and a new workspace given an old name inherited them in /resume.
+  async function withSessions(
+    listSessions: ListSessionsFn,
+    deleteSession: DeleteSessionFn = () => Promise.resolve()
+  ): Promise<{ service: OctopusService; projectId: string; path: string; id: string }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const withFakes = await createService({ ...paths(dir), listSessions, deleteSession })
+    const project = await withFakes.addProjectFromPath(repo)
+    const workspace = await withFakes.createWorkspaceIn(project.id)
+    return { service: withFakes, projectId: project.id, path: workspace.path, id: workspace.id }
+  }
+
+  it('deletes every session the CLI started in the worktree once the workspace is gone', async () => {
+    const deleteSession = vi.fn<DeleteSessionFn>(() => Promise.resolve())
+    const made = await withSessions(
+      ({ dir: path }) =>
+        Promise.resolve([
+          { sessionId: 'a', cwd: path },
+          { sessionId: 'b', cwd: path }
+        ]),
+      deleteSession
+    )
+
+    await made.service.removeWorkspaceById(made.id, { deleteBranch: false })
+
+    expect(deleteSession.mock.calls).toEqual([
+      ['a', { dir: made.path }],
+      ['b', { dir: made.path }]
+    ])
+  })
+
+  // The SDK's default answers every worktree of the repository — the other
+  // workspaces of the same project.
+  it("asks only for the worktree's own sessions, never its siblings'", async () => {
+    const listSessions = vi.fn<ListSessionsFn>(() => Promise.resolve([]))
+    const made = await withSessions(listSessions)
+
+    await made.service.removeWorkspaceById(made.id, { deleteBranch: false })
+
+    expect(listSessions).toHaveBeenCalledExactlyOnceWith({
+      dir: made.path,
+      includeWorktrees: false,
+      includeProgrammatic: true
+    })
+  })
+
+  const own: ListSessionsFn = ({ dir: path }) => Promise.resolve([{ sessionId: 'a', cwd: path }])
+
+  it.each<[string, ListSessionsFn, DeleteSessionFn]>([
+    ['listed', () => Promise.reject(new Error('unreadable')), () => Promise.resolve()],
+    ['deleted', own, () => Promise.reject(new Error('not found'))]
+  ])(
+    "still removes the workspace when the CLI's sessions cannot be %s",
+    async (_, listSessions, deleteSession) => {
+      const made = await withSessions(listSessions, deleteSession)
+
+      // The removal's own answer, not merely the absence of a throw: a failure
+      // here must not reach the cleanup outcome either.
+      await expect(
+        made.service.removeWorkspaceById(made.id, { deleteBranch: false })
+      ).resolves.toEqual({ status: 'none' })
+      await expect(made.service.listWorkspaces(made.projectId)).resolves.toHaveLength(0)
+    }
+  )
+
+  // A refused removal leaves the workspace living, and its history with it.
+  it('deletes nothing when the removal is refused', async () => {
+    const deleteSession = vi.fn<DeleteSessionFn>(() => Promise.resolve())
+    const made = await withSessions(own, deleteSession)
+
+    const run = promisify(execFile)
+    await writeFile(join(made.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: made.path })
+    await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: made.path })
+
+    await expect(
+      made.service.removeWorkspaceById(made.id, { deleteBranch: true })
+    ).rejects.toMatchObject({ code: 'branchUnmerged' })
+    expect(deleteSession).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The window the refusal above cannot reach: everything has been asked, the
+   * cleanup has run, and git then will not let the worktree go. The workspace
+   * lives on, so its history must too — which is why the sessions are deleted
+   * after the record, not after they are found.
+   */
+  it('keeps them when git refuses the worktree after the cleanup has run', async () => {
+    const deleteSession = vi.fn<DeleteSessionFn>(() => Promise.resolve())
+    const made = await withSessions(own, deleteSession)
+    const run = promisify(execFile)
+    await run('git', ['worktree', 'lock', made.path], { cwd: made.path })
+
+    await expect(
+      made.service.removeWorkspaceById(made.id, { deleteBranch: false })
+    ).rejects.toThrow()
+    await expect(made.service.listWorkspaces(made.projectId)).resolves.toHaveLength(1)
+    expect(deleteSession).not.toHaveBeenCalled()
+  })
+
+  it('deletes them for every workspace when the whole project goes', async () => {
+    const deleteSession = vi.fn<DeleteSessionFn>(() => Promise.resolve())
+    const made = await withSessions(
+      ({ dir: path }) => Promise.resolve([{ sessionId: `of ${path}`, cwd: path }]),
+      deleteSession
+    )
+    const second = await made.service.createWorkspaceIn(made.projectId)
+
+    await made.service.removeProjectById(made.projectId)
+
+    expect(deleteSession.mock.calls).toEqual([
+      [`of ${made.path}`, { dir: made.path }],
+      [`of ${second.path}`, { dir: second.path }]
+    ])
+  })
+
+  /*
+   * The SDK's own functions, against a CLI directory this test owns, so the
+   * machine's real `~/.claude` is never touched: the session is found by the
+   * folder the SDK names, and deleted once the worktree has gone.
+   *
+   * It cannot hold the guards against a sibling, and they are held above and
+   * in `cliSessions.test.ts`. Deleting after the removal is a third: by then
+   * git lists no worktrees for the path, and the SDK looks for an id in the
+   * workspace's own folder only.
+   *
+   * Under the real path of the scratch directory, because `/var` is
+   * `/private/var` on macOS and the SDK names a sibling's folder from the path
+   * git recorded — so the sibling's file sits where the SDK would look.
+   */
+  it("with the SDK's own functions, removes the workspace's session file and leaves a sibling's", async () => {
+    const root = await realpath(dir)
+    const config = join(root, 'claude-config')
+    vi.stubEnv('CLAUDE_CONFIG_DIR', config)
+    try {
+      const repo = join(root, 'planner')
+      await initRepo(repo)
+      const plain = await makeService({
+        ...paths(root),
+        listening: () => Promise.resolve(false)
+      })
+      started.push(plain)
+      const project = await plain.addProjectFromPath(repo)
+      const first = await plain.createWorkspaceIn(project.id)
+      const second = await plain.createWorkspaceIn(project.id)
+
+      // One session each, written the way the CLI writes its first line.
+      const session = async (path: string): Promise<{ folder: string; file: string }> => {
+        const real = await realpath(path)
+        const folder = join(config, 'projects', real.replace(/[^A-Za-z0-9]/g, '-'))
+        await mkdir(folder, { recursive: true })
+        const sessionId = randomUUID()
+        const line = {
+          parentUuid: null,
+          isSidechain: false,
+          type: 'user',
+          message: { role: 'user', content: 'hi' },
+          uuid: randomUUID(),
+          timestamp: '2026-11-03T00:00:00.000Z',
+          userType: 'external',
+          entrypoint: 'sdk-ts',
+          cwd: real,
+          sessionId,
+          version: '2.1.308'
+        }
+        const file = join(folder, `${sessionId}.jsonl`)
+        await writeFile(file, `${JSON.stringify(line)}\n`, 'utf8')
+        return { folder, file }
+      }
+      const mine = await session(first.path)
+      const sibling = await session(second.path)
+
+      await plain.removeWorkspaceById(first.id, { deleteBranch: false })
+
+      await expect(stat(mine.file)).rejects.toMatchObject({ code: 'ENOENT' })
+      await expect(stat(sibling.file)).resolves.toBeDefined()
+      // The folder's name is the CLI's rule, not ours, so it stays — empty.
+      await expect(readdir(mine.folder)).resolves.toEqual([])
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 
@@ -3463,7 +3715,9 @@ describe('removing a project', () => {
     await mkdir(join(dir, 'elsewhere'), { recursive: true })
     await symlink(join(dir, 'elsewhere'), join(workspace.path, '.octopus'))
 
-    await expect(service.removeProjectById(project.id)).resolves.toEqual([workspace.id])
+    await expect(service.removeProjectById(project.id)).resolves.toMatchObject({
+      workspaceIds: [workspace.id]
+    })
     expect(service.listProjects()).toHaveLength(0)
   })
 
@@ -3513,14 +3767,19 @@ describe('removing a project', () => {
     await service.createWorkspaceIn(project.id)
     await service.saveProjectScript(project.id, 'archive', '#!/bin/sh\nexit 3\n')
 
-    await expect(service.removeProjectById(project.id)).resolves.toHaveLength(1)
+    await expect(service.removeProjectById(project.id)).resolves.toMatchObject({
+      workspaceIds: [expect.any(String)]
+    })
     expect(service.listProjects()).toHaveLength(0)
   })
 
   it('cleans up after a project whose record has already gone', async () => {
     // A directory nothing points at is exactly the case worth removing, so the
     // delete runs whether or not the project is still in state.
-    await expect(service.removeProjectById('never-existed')).resolves.toEqual([])
+    await expect(service.removeProjectById('never-existed')).resolves.toEqual({
+      workspaceIds: [],
+      leftBehind: []
+    })
   })
 
   it('does not raise when the stored settings cannot be deleted', async () => {
@@ -3530,7 +3789,10 @@ describe('removing a project', () => {
      * rather than a reason to fail. An id that could never name one is the
      * cheapest way to make it fail on purpose.
      */
-    await expect(service.removeProjectById('../elsewhere')).resolves.toEqual([])
+    await expect(service.removeProjectById('../elsewhere')).resolves.toEqual({
+      workspaceIds: [],
+      leftBehind: []
+    })
   })
 })
 
@@ -5074,6 +5336,43 @@ describe('the agent chat', () => {
       uuid: 'frame',
       session_id: 'sess-1'
     }) as unknown as SDKMessage
+
+  /*
+   * A pasted image becomes a file in the data root, and its path rides in the
+   * message. Nothing took the file back: it outlived the conversation, the
+   * workspace and the project, and only a button in Settings emptied the lot.
+   */
+  describe('pasted images', () => {
+    it('go with the last conversation that sent them', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const other = await service.createWorkspaceIn(projectId)
+      const mine = await service.writePastedAttachment('image/png', Uint8Array.from([1]))
+      const shared = await service.writePastedAttachment('image/png', Uint8Array.from([2]))
+
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, `look at ${mine} and ${shared}`)
+      const elsewhere = await service.openChat(other.id)
+      await service.sendToChat(elsewhere.id, `and at ${shared}`)
+
+      await service.removeWorkspaceById(workspaceId, { deleteBranch: false })
+
+      await expect(stat(mine)).rejects.toMatchObject({ code: 'ENOENT' })
+      // Still named by a conversation that lives on — a fork carries the
+      // same paths, so this is ordinary rather than a coincidence.
+      await expect(stat(shared)).resolves.toBeDefined()
+    })
+
+    it('go with a project too', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const pasted = await service.writePastedAttachment('image/png', Uint8Array.from([1]))
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, `look at ${pasted}`)
+
+      await service.removeProjectById(projectId)
+
+      await expect(stat(pasted)).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+  })
 
   /*
    * The description is written by the model that wrote the change, which is
@@ -12002,9 +12301,9 @@ describe('the agent chat', () => {
       await rm(join(dir, 'data', 'chats'), { recursive: true, force: true })
       await writeFile(join(dir, 'data', 'chats'), 'not a directory', 'utf8')
 
-      await expect(
-        service.removeWorkspaceById(workspace.id, { force: true })
-      ).resolves.toBeUndefined()
+      await expect(service.removeWorkspaceById(workspace.id, { force: true })).resolves.toEqual({
+        status: 'none'
+      })
       expect(service.listChats(workspace.id)).toEqual([])
     })
 

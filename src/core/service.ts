@@ -13,8 +13,10 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
 
 import {
+  deleteSession as defaultDeleteSession,
   forkSession as defaultForkSession,
   getSessionMessages as defaultSessionMessages,
+  listSessions as defaultListSessions,
   query as defaultQuery
 } from '@anthropic-ai/claude-agent-sdk'
 
@@ -109,7 +111,9 @@ import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 import {
   type AttachmentStore,
   clearAttachments,
+  discardUnnamedPastes,
   measureAttachments,
+  pastesIn,
   writePastedImage
 } from './attachments.js'
 import { type CliPermission, readCliPermissions } from './cliPermissions.js'
@@ -137,7 +141,14 @@ import {
   renameProfile,
   writeProfile
 } from './envProfiles.js'
-import { runArchiveScript } from './archive.js'
+import { type CleanupOutcome, type LeftBehind, leavesBehind, runArchiveScript } from './archive.js'
+import {
+  type CliSessions,
+  cliSessionsOf,
+  type DeleteSessionFn,
+  discardCliSessions,
+  type ListSessionsFn
+} from './cliSessions.js'
 import { type ScriptValues, workspaceEnv, workspaceSlug } from './scriptEnv.js'
 import { type UsageReport, type UsageWindows, windowsFrom } from './usage.js'
 import {
@@ -204,6 +215,7 @@ import {
 } from './instructions.js'
 import {
   attachmentsDir,
+  chatTranscript,
   configFile,
   globalPromptsFile,
   globalSkillsRoot,
@@ -502,6 +514,14 @@ interface InForce {
   readonly effort: EffortChoice
 }
 
+/** What removing a project answers. */
+export interface ProjectRemoval {
+  /** Every workspace that went — what `main` drops their last runs by. */
+  readonly workspaceIds: string[]
+  /** The workspaces whose cleanup failed or never ran, for the window to name. */
+  readonly leftBehind: LeftBehind[]
+}
+
 export interface ServiceOptions {
   readonly stateFilePath?: string
   readonly stateTempFilePath?: string
@@ -577,6 +597,9 @@ export interface ServiceOptions {
   readonly forkSession?: ForkSessionFn
   /** The SDK's session reader, injected for the reason `forkSession` is. */
   readonly sessionMessages?: SessionMessagesFn
+  /** The SDK's session listing and deletion, injected for the reason `forkSession` is. */
+  readonly listSessions?: ListSessionsFn
+  readonly deleteSession?: DeleteSessionFn
   /** How long a side question may run; a parameter so the deadline can be tested. */
   readonly sideQuestionTimeoutMs?: number
   readonly uuid?: () => string
@@ -691,6 +714,7 @@ export interface ChatStatusEvent {
 }
 
 export type { TasksEvent } from './taskRegistry.js'
+export type { DeleteSessionFn, ListSessionsFn } from './cliSessions.js'
 
 /**
  * The conversations of a workspace are not the set they were.
@@ -936,9 +960,10 @@ export interface OctopusService {
   editProjectById(projectId: string, edit: ProjectEdit): Promise<void>
   /**
    * Removes a project and every workspace of it, answering with those
-   * workspaces' ids — what `main` drops their last runs by.
+   * workspaces' ids — what `main` drops their last runs by — and the ones
+   * whose cleanup left something behind, for the window to name.
    */
-  removeProjectById(projectId: string): Promise<string[]>
+  removeProjectById(projectId: string): Promise<ProjectRemoval>
   /** Saves the order the tab strip shows the projects in. */
   reorderProjects(orderedIds: readonly string[]): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
@@ -1354,7 +1379,8 @@ export interface OctopusService {
   hasWorkspace(workspaceId: string): boolean
   createWorkspaceIn(projectId: string): Promise<Workspace>
   renameWorkspaceById(workspaceId: string, name: string): Promise<void>
-  removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<void>
+  /** Answers what became of the cleanup script, which nothing lets stop the removal. */
+  removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<CleanupOutcome>
   /** Whether a workspace holds work that removal would discard. */
   workspaceHasChanges(workspaceId: string): Promise<boolean>
   /**
@@ -1870,6 +1896,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const runForkSession = options.forkSession ?? defaultForkSession
   const sideTimeoutMs = options.sideQuestionTimeoutMs ?? SIDE_TIMEOUT_MS
   const runSessionMessages = options.sessionMessages ?? defaultSessionMessages
+  const runListSessions = options.listSessions ?? defaultListSessions
+  const runDeleteSession = options.deleteSession ?? defaultDeleteSession
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
 
@@ -4391,12 +4419,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * same reason as `removeProjectData`. A record that outlives its history is
    * a conversation the pane draws empty above an agent that remembers all of
    * it; a file nothing points at is only litter. Of the two, litter.
+   *
+   * The images pasted into them go too, once no conversation still on record
+   * names them: read from the transcripts before they are deleted, checked
+   * against every one that stays.
    */
   async function discardHistories(chats: readonly Chat[]): Promise<void> {
+    const pastes = await pastesIn(chats.map((chat) => chatTranscript(chat.id, dataRoot)))
     for (const chat of chats) {
       await removeTranscript(chat.id, dataRoot).catch(() => undefined)
     }
+    const kept = state.chats.map((chat) => chatTranscript(chat.id, dataRoot))
+    await discardUnnamedPastes(pastes, kept, dataRoot)
   }
+
+  /**
+   * The agent CLI's own copy of a worktree's conversations, in two halves for
+   * the reason `closing` is read early: the ids while the worktree still
+   * exists, the files only once its record has gone.
+   */
+  const sessionsOf = (path: string): Promise<CliSessions> => cliSessionsOf(path, runListSessions)
+  const discardSessionsOf = (found: CliSessions): Promise<void> =>
+    discardCliSessions(found, runDeleteSession)
 
   /**
    * Gives a worktree the files and the variables it needs to run.
@@ -4628,11 +4672,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * The cleanup script to run for a workspace, or null for none.
+   * The cleanup script to run for a workspace, or why none runs.
    *
-   * Null covers three different things on purpose, because a removal treats
-   * them alike: the project has no cleanup script, the repository supplies one
-   * nobody has read, and the repository's scripts could not be read at all.
+   * Three reasons, kept apart because the window says the last two: the
+   * project has no cleanup script, the repository supplies one nobody has
+   * read, and the scripts could not be read at all.
    *
    * That last one is why this exists. Resolving throws on a symlinked
    * `.octopus/` — and a worktree is where an agent works, so an odd layout is
@@ -4642,27 +4686,48 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * at the call site says.
    *
    * Losing the cleanup leaves a database behind. Losing the removal leaves a
-   * project that cannot be deleted from the interface at all.
+   * project that cannot be deleted from the interface at all. So the throw
+   * becomes an answer, and the reason travels with it.
    */
   async function cleanupFor(
     project: Project,
     workspace: Workspace
-  ): Promise<ResolvedScript | null> {
+  ): Promise<
+    | { kind: 'none' }
+    | { kind: 'unapproved' }
+    | { kind: 'unreadable'; detail: string }
+    | { kind: 'run'; script: ResolvedScript }
+  > {
     let scripts: Readonly<Partial<Record<ScriptKind, ResolvedScript>>>
     try {
       scripts = await resolveScripts(workspace.path, project.id, dataRoot, project.preferLocal)
-    } catch {
-      return null
+    } catch (error) {
+      return { kind: 'unreadable', detail: describeError(error) }
     }
 
     const cleanup = scripts.archive
-    if (cleanup === undefined) return null
+    if (cleanup === undefined) return { kind: 'none' }
 
     // The user's own script is never gated; a repository's runs only once
     // somebody has read it.
     const allowed = cleanup.source === 'project' || allowedToRun(project, scriptsDigest(scripts))
 
-    return allowed ? cleanup : null
+    return allowed ? { kind: 'run', script: cleanup } : { kind: 'unapproved' }
+  }
+
+  /** Runs the workspace's cleanup and says what became of it. */
+  async function runCleanup(project: Project, workspace: Workspace): Promise<CleanupOutcome> {
+    const cleanup = await cleanupFor(project, workspace)
+    if (cleanup.kind === 'unreadable') return { status: 'unreadable', detail: cleanup.detail }
+    if (cleanup.kind !== 'run') return { status: cleanup.kind }
+
+    const { values, variables } = await scriptSetFor(project, workspace)
+    const failure = await runArchiveScript(cleanup.script, {
+      ...values,
+      path: workspace.path,
+      variables
+    })
+    return failure === null ? { status: 'done' } : { status: 'failed', detail: failure }
   }
 
   async function closeChatsOf(workspaceId: string): Promise<void> {
@@ -6187,6 +6252,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async removeProjectById(projectId) {
       const project = findProject(state, projectId)
       const closing: Chat[] = []
+      const cliSessions: CliSessions[] = []
+      const leftBehind: LeftBehind[] = []
       // Read now: the commit below drops them all, whether or not the project's own record is there.
       const removed = workspacesOfProject(state, projectId).map((workspace) => workspace.id)
 
@@ -6216,12 +6283,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
            * its workspaces had been given — the accumulation the script exists
            * to prevent, at the one moment there is most of it to clean up.
            */
-          const { values, variables } = await scriptSetFor(project, workspace)
-          await runArchiveScript(await cleanupFor(project, workspace), {
-            ...values,
-            path: workspace.path,
-            variables
-          })
+          const cleanup = await runCleanup(project, workspace)
+          if (leavesBehind(cleanup)) leftBehind.push({ workspace: workspace.name, cleanup })
+          cliSessions.push(await sessionsOf(workspace.path))
 
           // Best-effort, one by one: a worktree already deleted from outside
           // must not stop the rest — or the project — from being removed. The
@@ -6236,6 +6300,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       await commit((current) => removeProject(current, projectId))
       await discardHistories(closing)
+      for (const found of cliSessions) await discardSessionsOf(found)
 
       /*
        * After the commit, and swallowing its own failure.
@@ -6246,7 +6311,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * survives is exactly the case worth cleaning.
        */
       await removeProjectData(projectId, dataRoot).catch(() => undefined)
-      return removed
+      return { workspaceIds: removed, leftBehind }
     },
 
     async listWorkspaces(projectId) {
@@ -6420,16 +6485,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * Everywhere else an unapproved script refuses the run and says so. Here
        * it cannot: nothing may stop a workspace being removed, and a dialog in
        * the middle of a deletion is a dialog nobody can answer usefully. So the
-       * cleanup is simply not performed — which leaves a database behind, and
-       * is the lesser of the two: the alternative is executing shell that
-       * arrived with a `git pull` at the one moment the user is not looking.
+       * cleanup is not performed, and the window is told so once the workspace
+       * has gone — a database left behind is then known about, which is still
+       * the lesser of the two: the alternative is executing shell that arrived
+       * with a `git pull` at the one moment the user is not looking.
        */
-      const { values, variables } = await scriptSetFor(project, workspace)
-      await runArchiveScript(await cleanupFor(project, workspace), {
-        ...values,
-        path: workspace.path,
-        variables
-      })
+      const cleanup = await runCleanup(project, workspace)
+
+      // Read while the worktree is still there; deleted only once it has gone.
+      const cliSessions = await sessionsOf(workspace.path)
 
       /*
        * The one window this ordering cannot close, recorded rather than left
@@ -6448,6 +6512,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       await commit((current) => removeWorkspaceRecord(current, workspaceId))
       await discardHistories(closing)
+      await discardSessionsOf(cliSessions)
+      return cleanup
     },
 
     async workspaceHasChanges(workspaceId) {

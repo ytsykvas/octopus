@@ -109,6 +109,17 @@ times a second while the agent answered.
 > the rule the code exists to keep, and the day the two part company the test
 > is the one that notices.
 
+A fourth shows up as coverage that moves: `git.ts` read 99% on some runs and
+100% on the next, over the same tree. The test of a read waiting for another
+released the first after one turn of the event loop, and the second spent that
+turn in a `git rev-parse` of its own — when git was slower, the first had
+finished before the second looked, nothing was waited on, and the test passed
+without testing. The statement it existed for ran only when git was quick.
+
+> A test of two things overlapping waits for a sign that they do — a call, a
+> promise, a file — never for a turn of the event loop or a few milliseconds.
+> Coverage that differs between runs of the same tree is that test, found.
+
 ```bash
 git worktree list --porcelain   # after rm -rf on the worktree
 ```

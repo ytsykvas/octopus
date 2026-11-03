@@ -38,6 +38,8 @@ export const de: Translation = {
       'Seine {{count}} Workspaces werden samt Branches gelöscht, vorher läuft für jeden das Aufräumskript. Skripte, Mitnahmeliste und Variablen werden aus ~/.octopus gelöscht, Zugangsdaten inklusive. Das Repository selbst bleibt auf der Festplatte.',
     removeConfirm: 'Entfernen',
     removeCancel: 'Abbrechen',
+    cleanupLeftBehind:
+      'Das Projekt ist entfernt, aber die Aufräumskripte von {{names}} sind fehlgeschlagen oder liefen nicht – was sie zurücknehmen sollten, etwa Datenbanken, ist womöglich noch da.',
     collapse: 'Workspaces ausblenden',
     expand: 'Workspaces einblenden',
     settings: 'Einstellungen',
@@ -104,12 +106,19 @@ export const de: Translation = {
 
     removeTitle: 'Workspace entfernen?',
     removeMessage: '„{{name}}“ entfernen?',
-    removeDetail: 'Das Worktree-Verzeichnis wird gelöscht. Committete Arbeit bleibt im Branch.',
+    removeDetail:
+      'Das Worktree-Verzeichnis wird gelöscht, und seine Claude-Unterhaltungen mit ihm. Committete Arbeit bleibt im Branch.',
     removeDirty:
-      'Dieser Workspace hat nicht committete Änderungen. Sie gehen verloren – es gibt keine weitere Kopie.',
+      'Dieser Workspace hat nicht committete Änderungen. Sie gehen verloren – es gibt keine weitere Kopie –, und seine Claude-Unterhaltungen mit ihnen.',
     removeBranch: 'Auch den Branch {{branch}} löschen',
     removeConfirm: 'Entfernen',
-    removeCancel: 'Abbrechen'
+    removeCancel: 'Abbrechen',
+    cleanupFailed:
+      'Der Workspace ist entfernt, aber sein Aufräumskript ist fehlgeschlagen – was es zurücknehmen sollte, etwa eine Datenbank, ist womöglich noch da. Ausgabe: {{detail}}',
+    cleanupUnapproved:
+      'Der Workspace ist entfernt, aber sein Aufräumskript lief nicht: Die Skripte dieses Repositorys sind nicht freigegeben. Was es zurücknehmen sollte, etwa eine Datenbank, ist noch da.',
+    cleanupUnreadable:
+      'Der Workspace ist entfernt, aber sein Aufräumskript ließ sich nicht lesen und lief daher nicht. Was es zurücknehmen sollte, etwa eine Datenbank, ist noch da. Grund: {{detail}}'
   },
 
   limits: {

@@ -419,6 +419,16 @@ export function useWorkspaces(
         return
       }
       await refresh()
+
+      // Gone either way; what the cleanup left behind is still worth a line.
+      const cleanup = result.value
+      if (cleanup.status === 'failed') {
+        onError(t('workspaces.cleanupFailed', { detail: cleanup.detail }))
+      }
+      if (cleanup.status === 'unapproved') onError(t('workspaces.cleanupUnapproved'))
+      if (cleanup.status === 'unreadable') {
+        onError(t('workspaces.cleanupUnreadable', { detail: cleanup.detail }))
+      }
     },
     [byProject, confirm, refresh, describeFailure, onError, t]
   )

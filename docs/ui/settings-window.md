@@ -252,12 +252,14 @@ announces a session starting and a row that quietly went stale would be worse
 than one the reader knows is a snapshot.
 
 **About says how much the pasted images weigh, with a way to empty them.** It is
-the one place octopus quietly uses disk: nothing removes a pasted image on its
-own, and nothing should — a path in a sent message is a promise the file is
-there, and a transcript is read back weeks later. A reaper on start-up would
-break an old conversation to tidy a folder nobody was looking at, so the answer
-is to make the folder **visible** and leave the decision where it belongs, which
-is the shape the trust digest and the skill stores already use. The row is not
+the one place octopus quietly uses disk: a path in a sent message is a promise
+the file is there, and a transcript is read back weeks later. So nothing reaps
+the folder on start-up, which would break an old conversation to tidy a folder
+nobody was looking at. A paste goes only with the **last** conversation that
+names it — when its workspace, its project or the cap on closed conversations
+takes that one, and no conversation still on record names the file — and
+anything else stays until the reader empties the folder here, which is the shape
+the trust digest and the skill stores already use. The row is not
 drawn at all until the measurement comes back — one that said "0 images" and
 then corrected itself to twelve would be worse than one that appears once — and
 emptying asks first, saying plainly that an old message will then point at a

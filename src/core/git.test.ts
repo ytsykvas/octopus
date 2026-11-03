@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   anyBranchExists,
@@ -737,17 +737,39 @@ describe('keptIndexCopies', () => {
     await writeFile(join(dir, 'staged.txt'), 'staged\n', 'utf8')
     await run('git', ['add', 'staged.txt'], { cwd: dir })
 
-    let secondDone = false
-    const second = withIndexCopy(dir, gitIn, stagedFiles).then((staged) => {
-      secondDone = true
-      return staged
+    /*
+     * Released only once the second read is waiting on the first. A turn of
+     * the event loop was the wait here, and the second read spends that turn
+     * in a `git rev-parse` of its own: when git was slower than the turn, the
+     * first read had finished before the second looked, nothing was waited
+     * on, and the test passed without testing — which showed up as `git.ts`
+     * below 100% coverage on some runs and not others. The wait is a call to
+     * `Promise.allSettled` over the reads in flight, so that call is the sign.
+     */
+    const allSettled = Promise.allSettled.bind(Promise)
+    let waiting = (): void => undefined
+    const waited = new Promise<void>((resolve) => {
+      waiting = resolve
     })
-    await new Promise((resolve) => setImmediate(resolve))
-    expect(secondDone).toBe(false)
-    release()
+    const spy = vi.spyOn(Promise, 'allSettled').mockImplementation((values) => {
+      waiting()
+      return allSettled(values)
+    })
+    try {
+      let secondDone = false
+      const second = withIndexCopy(dir, gitIn, stagedFiles).then((staged) => {
+        secondDone = true
+        return staged
+      })
+      await waited
+      expect(secondDone).toBe(false)
+      release()
 
-    expect(await first).toBe('')
-    expect((await second).trim()).toBe('staged.txt')
+      expect(await first).toBe('')
+      expect((await second).trim()).toBe('staged.txt')
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   // The read's own failure is the one reported, and it holds nothing up.

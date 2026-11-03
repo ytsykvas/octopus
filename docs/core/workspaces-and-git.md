@@ -15,6 +15,21 @@ exactly this, and reads the remote-tracking branches as well as the local ones:
 the copy on `origin` outlives even a deleted local branch. A rename is refused
 onto either, unless the copy on `origin` is the workspace's own upstream.
 
+That copy outlived the branch itself, too: GitHub deletes a merged branch, the
+fetch keeps the copy, and the name stayed taken for good — one checkout had
+lost 25 names to branches that existed nowhere. So a creation, once its fetch
+has answered, drops the copies under the project's prefix that `origin` no
+longer has (`pruneGoneBranches` in `remotes.ts`), for the next creation to
+draw from. Never one whose branch still exists here: that is a live workspace
+whose request was merged, and its copy is what tells the pull request pane the
+work went out. A failure there costs a name, never the workspace.
+
+**Removal never deletes the branch on `origin`, and must not.** That would be a
+push the user did not make, to a repository other people share: it closes an
+open request, takes a branch somebody else may be on, and cannot be taken back
+from here. Whether a merged branch goes is GitHub's own setting, _Automatically
+delete head branches_; an unmerged one stays until a person deletes it.
+
 GitHub remembers a request after its branch is gone, so no choice of name can
 settle that alone. A request opened before the workspace came onto its branch —
 created, or renamed onto it (`branchSince`) — is never its own (`openedFor` in
@@ -93,6 +108,9 @@ between `ensureRemovable` and `discardWorkspace` exists so that a caller with
 work of its own to do in between cannot accidentally ask twice; asking twice is
 worse than it sounds, because the cleanup script runs in the worktree and a
 script that writes there would make the second answer differ from the first.
+The agent CLI's own sessions follow the same order: listed while the worktree
+still exists, deleted only once its record has gone, so a removal that fails
+keeps its history ([transcripts-and-ports.md](../data/transcripts-and-ports.md)).
 
 A removal can also stop partway. When a dev server or a test run keeps writing
 into the tree, `git worktree remove` has already dropped its own part — the

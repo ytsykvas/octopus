@@ -1794,9 +1794,10 @@ describe('workspaces of a real project', () => {
     const workspace = await createWorkspace(projectId)
     sessions.forgetRuns.mockClear()
 
+    // What the window is told: whose cleanup left something behind. Here, nobody's.
     await expect(invoke('projects:remove', projectId)).resolves.toEqual({
       ok: true,
-      value: undefined
+      value: []
     })
     expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
   })
@@ -1833,11 +1834,46 @@ describe('workspaces of a real project', () => {
     })
     expect(sessions.forgetRuns).not.toHaveBeenCalled()
 
-    expect(await invoke('workspaces:remove', workspace.id, { force: true })).toMatchObject({
-      ok: true
+    expect(await invoke('workspaces:remove', workspace.id, { force: true })).toEqual({
+      ok: true,
+      value: { status: 'none' }
     })
     expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
     await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
+  })
+
+  /*
+   * `force` decides whether uncommitted work is thrown away, and a truthy
+   * string passed for it did exactly that. The service's own options also
+   * carry the base branch and a GitHub check, which are its to supply and
+   * never the window's.
+   */
+  it.each([
+    ['a force that is not a boolean', { force: 'yes' }],
+    ['a base branch from the window', { baseBranch: 'main' }],
+    ['no options object at all', 'force']
+  ])('refuses a removal with %s, before anything goes', async (_, options) => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await expect(invoke('workspaces:remove', workspace.id, options)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    await expect(readFile(join(workspace.path, 'draft.txt'), 'utf8')).resolves.toBe('work\n')
+  })
+
+  // The name becomes a branch name; anything but a string is refused at the
+  // door with a code, rather than as a TypeError from `trim`.
+  it('refuses a new name that is not a string', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:rename', workspace.id, 42)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
   })
 
   it('carries a workspace’s diff across', async () => {

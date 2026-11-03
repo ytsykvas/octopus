@@ -11,8 +11,10 @@
 import { access, readdir, realpath, rm } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 
+import { z } from 'zod'
+
 import type { AgentKind, Chat, ChatStatus } from './chats.js'
-import { remoteBranchName, shortBranchName } from './branches.js'
+import { DEFAULT_REMOTE, remoteBranchName, shortBranchName } from './branches.js'
 import { CodedError } from './codedError.js'
 import {
   anyBranchExists,
@@ -25,7 +27,7 @@ import {
   toSlug,
   upstreamOf
 } from './git.js'
-import { fetchRemote, resolveBase } from './remotes.js'
+import { fetchRemote, pruneGoneBranches, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
 import { workspaceSlug } from './scriptEnv.js'
@@ -282,7 +284,15 @@ export async function createWorkspace(
   // Last of the local checks rather than first: the refusals above are instant,
   // and putting a network call in front of them would make a cheap "that name
   // is taken" cost half a minute.
-  await addWorktree(exec, path, branch, await freshBase(project.baseBranch, exec, fetchExec))
+  const base = await freshBase(project.baseBranch, exec, fetchExec)
+
+  // Frees the names GitHub's deleted branches held, for the next creation:
+  // this one's was drawn already. Only `origin`'s copies hold names
+  // (`takenByBranches`). Housekeeping, so a failure costs a name, never the
+  // workspace — and the network has just answered the fetch, so it is rare.
+  await pruneGoneBranches(exec, fetchExec, DEFAULT_REMOTE, project.branchPrefix).catch(() => [])
+
+  await addWorktree(exec, path, branch, base)
 
   return {
     id,
@@ -322,7 +332,8 @@ export async function createWorkspace(
  * repository is the user's own and none of our business.
  *
  * `origin`'s count too: removal deletes the local branch but not the copy
- * there, and a name drawn onto it inherits that branch's history.
+ * there, and a name drawn onto it inherits that branch's history. The copy
+ * holds the name until `origin` loses the branch and a creation prunes it.
  */
 async function takenByBranches(project: Project, exec: GitExec): Promise<string[]> {
   const prefix = `${project.branchPrefix}/`
@@ -443,6 +454,23 @@ export interface RemoveOptions {
    */
   readonly mergedRemotely?: () => Promise<boolean>
 }
+
+/**
+ * What the window may ask of a removal: the two choices its dialog offers.
+ *
+ * Strict, and narrower than `RemoveOptions`. `force` decides whether
+ * uncommitted work is thrown away, so only a boolean will do; the base branch
+ * and the GitHub check are the service's to supply, never the window's.
+ */
+export const RemovalRequestSchema = z.strictObject({
+  force: z.boolean().default(false),
+  deleteBranch: z.boolean().default(false)
+})
+/** As the window sends it: either choice may be left out, and reads as no. */
+export type RemovalRequest = z.input<typeof RemovalRequestSchema>
+
+/** A new name as it arrives; trimming and the clash checks are `renameWorkspace`'s. */
+export const WorkspaceNameSchema = z.string()
 
 /**
  * The two git contexts an operation on a workspace needs.

@@ -31,6 +31,7 @@ import type {
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type { CleanupOutcome, LeftBehind } from '@core/archive.js'
 import type { SideAnswer, SideExchange } from '@core/sideQuestions.js'
 import type { StrayServer } from '@core/strayServers.js'
 import type { QuestionAnswer } from '@core/questions.js'
@@ -48,7 +49,7 @@ import type { PullRequestDetail, RerunScope } from '@core/pullRequestShapes.js'
 import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Workspace } from '@core/store.js'
-import type { RemoveOptions, WorkspaceView } from '@core/workspaces.js'
+import type { RemovalRequest, WorkspaceView } from '@core/workspaces.js'
 import type { InstructionKind, SendOptions } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type {
@@ -571,8 +572,10 @@ const api = {
     rename: (workspaceId: string, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:rename', workspaceId, name) as Promise<Result<void>>,
 
-    remove: (workspaceId: string, options: RemoveOptions = {}): Promise<Result<void>> =>
-      ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<Result<void>>,
+    remove: (workspaceId: string, options: RemovalRequest = {}): Promise<Result<CleanupOutcome>> =>
+      ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<
+        Result<CleanupOutcome>
+      >,
 
     /** Whether removing this workspace would discard uncommitted work. */
     hasChanges: (workspaceId: string): Promise<Result<boolean>> =>
@@ -1224,8 +1227,8 @@ const api = {
     reorder: (orderedIds: readonly string[]): Promise<Result<void>> =>
       ipcRenderer.invoke('projects:reorder', orderedIds) as Promise<Result<void>>,
 
-    remove: (projectId: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<void>>,
+    remove: (projectId: string): Promise<Result<readonly LeftBehind[]>> =>
+      ipcRenderer.invoke('projects:remove', projectId) as Promise<Result<readonly LeftBehind[]>>,
 
     /** Repositories of the signed-in GitHub account. */
     listRemote: (): Promise<Result<RepositoryList>> =>

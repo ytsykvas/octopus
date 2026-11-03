@@ -125,7 +125,7 @@ export function installOctopusStub(): Api {
       read: vi.fn(() => ok(null)),
       create: vi.fn(() => ok(workspaceFixture())),
       rename: vi.fn(() => ok(undefined)),
-      remove: vi.fn(() => ok(undefined)),
+      remove: vi.fn(() => ok({ status: 'done' as const })),
       hasChanges: vi.fn(() => ok(false)),
       // Sides empty, which is the answer for a workspace with nothing in it and
       // the cue to colour from the hunks alone.
@@ -338,7 +338,7 @@ export function installOctopusStub(): Api {
       update: vi.fn(() => ok(undefined)),
       edit: vi.fn(() => ok(undefined)),
       reorder: vi.fn(() => ok(undefined)),
-      remove: vi.fn(() => ok(undefined)),
+      remove: vi.fn(() => ok([])),
       listRemote: vi.fn(() => ok({ repositories: [], capped: false, organisations: [] })),
       addFromGitHub: vi.fn(() => ok(null)),
       branches: vi.fn(() => ok(['origin/main'])),
