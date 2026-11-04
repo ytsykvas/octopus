@@ -81,6 +81,25 @@ export const de: Translation = {
     createFirstHint: 'Eigener Branch von {{branch}}',
     rename: 'Umbenennen',
     remove: 'Workspace entfernen',
+    kindTitle: 'Tag',
+    kindNote: 'Der Branch wird mit dem Tag umbenannt, solange er nicht gepusht ist.',
+    kindLabel: '{{short}} — Tag „{{kind}}“. Ändern',
+    kindDetour:
+      '{{blocker}} existiert bereits, und git kann keinen Branch unter einem anderen ablegen, deshalb heißt der Branch {{branch}}.',
+    kinds: {
+      feature: { label: 'Feature', short: 'Feature' },
+      fix: { label: 'Fix', short: 'Fix' },
+      bug: { label: 'Fehler', short: 'Fehler' },
+      research: { label: 'Recherche', short: 'Analyse' },
+      tests: { label: 'Tests', short: 'Tests' },
+      refactor: { label: 'Refactoring', short: 'Umbau' },
+      docs: { label: 'Dokumentation', short: 'Doku' },
+      chore: { label: 'Wartung', short: 'Pflege' },
+      perf: { label: 'Performance', short: 'Perf' },
+      design: { label: 'Design', short: 'Design' },
+      security: { label: 'Sicherheit', short: 'Schutz' },
+      review: { label: 'Review', short: 'Review' }
+    },
     missing: 'Verzeichnis fehlt',
     statusRunning: 'Der Agent arbeitet hier',
     statusWaiting: 'Wartet auf deine Antwort',
@@ -1392,7 +1411,7 @@ export const de: Translation = {
 
     branchPrefix: 'Branch-Präfix',
     branchPrefixHint:
-      'Workspace-Branches heißen <prefix>/<workspace>. Oft nimmt man dafür den GitHub-Benutzernamen.',
+      'Workspace-Branches heißen <prefix>/<tag>/<workspace>. Oft nimmt man dafür den GitHub-Benutzernamen.',
     branchPrefixUnusable: 'Das Präfix braucht mindestens ein Zeichen, das Git verwenden kann.',
     branchPrefixBecomes: 'Wird gespeichert als {{prefix}}',
 
@@ -1996,6 +2015,12 @@ export const de: Translation = {
     branchUnmerged:
       '{{branch}} hat Commits, die nicht im Basis-Branch sind. Entferne den Workspace ohne das Häkchen beim Branch, oder merge ihn zuerst.',
     branchExists: 'Ein Branch namens {{branch}} existiert bereits.',
+    branchBlocked:
+      '{{blocker}} existiert bereits, deshalb kann git {{branch}} nicht anlegen. Benenne {{blocker}} zuerst um oder lösche ihn.',
+    branchBlockedRemote:
+      '{{blocker}} liegt auf origin und steht {{branch}} im Weg: git kann keinen Branch unter einem anderen ablegen. Wähle einen anderen Namen oder lösche diesen Branch auf origin.',
+    branchPublished:
+      '{{branch}} wurde schon gepusht, deshalb behält der Workspace seinen Namen: ein neuer würde den Branch von seinem Pull Request wegbewegen.',
     slugTaken:
       'Ein anderer Workspace, „{{name}}“, nutzt bereits den Datenbanknamen {{slug}}. Zwei Workspaces mit derselben Datenbank überschreiben gegenseitig ihre Daten. Wähle einen Namen, der sich um mehr als einen Bindestrich oder Punkt unterscheidet.',
     pathExists: '{{path}} existiert bereits.',

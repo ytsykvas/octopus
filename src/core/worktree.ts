@@ -37,7 +37,7 @@ export interface Worktree {
  *     branch refs/heads/feature/one
  *
  * A detached worktree has a `detached` line instead of `branch`. Branch names
- * may contain slashes, which is exactly what our `<prefix>/<name>` scheme
+ * may contain slashes, which is exactly what our `<prefix>/<kind>/<name>` scheme
  * produces — only the ref prefix is stripped.
  */
 export function parseWorktrees(output: string): Worktree[] {

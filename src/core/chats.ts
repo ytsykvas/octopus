@@ -381,6 +381,8 @@ export const DEFAULT_EFFORT: Effort = 'medium'
  * says nothing about one that is there holding null. `.catch()` would cover
  * both and is deliberately not used — it would swallow a genuinely corrupt
  * level too, and `persist.ts` exists to fail loudly rather than quietly reset.
+ * (A workspace's `kind` is the one field read with it: there an unknown value
+ * is a newer build's kind, not corruption — `docs/data/state.md`.)
  *
  * Applied on the way in **and** on the way out, since `persist.ts` writes what
  * the schema returned: an old null is cleaned off the disk the next time

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { WORKSPACE_KINDS } from '@core/workspaceKinds.js'
+
 import { de } from './de.js'
 import { en } from './en.js'
 import { uk } from './uk.js'
@@ -56,5 +58,24 @@ describe.each([
     }
 
     expect(mismatches).toEqual([])
+  })
+})
+
+/*
+ * The strip on a workspace card is 14px wide and as tall as the card, and the
+ * kind is written along it: about seven letters fit. A longer word is cut
+ * off with nothing said, so the limit is held here rather than found on screen.
+ */
+describe.each([
+  ['en', en],
+  ['uk', uk],
+  ['de', de]
+])('the kinds in %s', (_, locale) => {
+  it.each(WORKSPACE_KINDS)('name %s in a word that fits the strip', (kind) => {
+    const { label, short } = locale.workspaces.kinds[kind]
+
+    expect(label).not.toBe('')
+    expect(short).not.toBe('')
+    expect(short.length).toBeLessThanOrEqual(7)
   })
 })

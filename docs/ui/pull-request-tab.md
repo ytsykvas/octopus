@@ -300,8 +300,9 @@ takes their place.
 
 The ref is asked for in full, because the pattern matches the **tail** of a ref
 path: `--heads origin anna` also finds `refs/heads/octopus/anna`. Every
-workspace branch is `<prefix>/<name>`, so a branch the remote does not have read
-as pushed whenever another prefix ended in the same segment.
+workspace branch is `<prefix>/<kind>/<name>` (`<prefix>/<name>` before kinds), so
+a branch the remote does not have read as pushed whenever another prefix ended
+in the same segment.
 
 **Push sends what is already committed.** _Commit & push_ appears only while
 the worktree is dirty, so work the agent committed — or the reader committed in

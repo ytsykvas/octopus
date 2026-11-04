@@ -1647,6 +1647,47 @@ describe('App', () => {
     expect(screen.queryByRole('textbox', { name: /name/i })).not.toBeInTheDocument()
   })
 
+  /*
+   * Opening the new workspace moves the selection, and a moved selection
+   * clears the banner — which wiped the one line saying why the branch is not
+   * under its kind, the moment it was written.
+   */
+  it('keeps the line about a detour on the workspace it opens', async () => {
+    givenTwoProjects()
+    const made = workspaceView('dora', {
+      id: 'ledger/dora',
+      projectId: 'ledger',
+      path: '/tmp/ledger/dora',
+      branch: 'ytsykvas/dora'
+    })
+    let created = false
+    vi.mocked(window.octopus.workspaces.create).mockImplementation(() => {
+      created = true
+      return Promise.resolve({
+        ok: true,
+        value: { ...made, detour: { blocker: 'ytsykvas/feature', branch: 'ytsykvas/dora' } }
+      })
+    })
+    vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+      Promise.resolve({
+        ok: true,
+        value: projectId === 'ledger' && created ? [made] : []
+      })
+    )
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+
+    const centre = within(screen.getByRole('main'))
+    await user.click(await centre.findByRole('button', { name: 'New workspace' }))
+
+    expect(await screen.findByText('Start the conversation')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'ytsykvas/feature already exists, and git cannot file a branch under another, so the branch is ytsykvas/dora.'
+      )
+    ).toBeInTheDocument()
+  })
+
   it('stays on the open workspace when a new one could not be made', async () => {
     givenTwoProjects()
     vi.mocked(window.octopus.workspaces.create).mockResolvedValue({ ok: false, error: 'no' })
@@ -1781,6 +1822,17 @@ describe('App', () => {
     await user.type(field, 'invoices{Enter}')
 
     expect(window.octopus.workspaces.rename).toHaveBeenCalledWith('ledger/carol', 'invoices')
+  })
+
+  it('gives a workspace another kind from its strip', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+
+    await user.click(await screen.findByRole('button', { name: 'feature — Feature tag. Change' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Research' }))
+
+    expect(window.octopus.workspaces.setKind).toHaveBeenCalledWith('ledger/carol', 'research')
   })
 
   // Confirming without touching the dialog takes the branch with it: a

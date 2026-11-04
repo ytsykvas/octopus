@@ -414,7 +414,7 @@ describe('reading a branch', () => {
   })
 
   /* `--heads origin <name>` matches the **tail** of a ref path, and every
-     workspace branch is `<prefix>/<name>` — so a branch the remote does not
+     workspace branch is `<prefix>/<kind>/<name>` — so a branch the remote does not
      have read as pushed whenever another prefix ended in the same segment. */
   it('does not take a branch under another prefix for this one', async () => {
     const work = join(dir, 'work')

@@ -364,10 +364,16 @@ function AsideButton({ aside }: { readonly aside: MenuAside }): React.JSX.Elemen
  * menu item that cannot be chosen would be one more stop for nothing. The note
  * still reaches it: a choice blocked by a variable set elsewhere is said by
  * the rows' own descriptions too.
+ *
+ * A group that opens the menu has nothing above it to be set apart from, so
+ * there it drops the line — the kind picker's is the first such menu.
  */
 function SectionHead({ section }: { readonly section: MenuSection }): React.JSX.Element {
   return (
-    <div role="presentation" className="border-line mt-1 border-t px-2.5 pt-2 pb-1">
+    <div
+      role="presentation"
+      className="border-line mt-1 border-t px-2.5 pt-2 pb-1 first:mt-0 first:border-t-0 first:pt-1"
+    >
       {section.title !== undefined && <p className="section-label">{section.title}</p>}
       {section.note !== undefined && (
         <p

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { allOf, oneAtATime, within } from './parallel.js'
+import { allOf, oneAtATime, oneAtATimeEach, within } from './parallel.js'
 
 /** A promise that settles after a tick, so "waited for" is observable. */
 function later<T>(value: T, ms: number, done?: () => void): Promise<T> {
@@ -205,5 +205,46 @@ describe('one at a time', () => {
     await idle
 
     expect(order).toEqual([])
+  })
+})
+
+describe('one at a time for each key', () => {
+  it('starts a task only once the one before it under the same key has settled', async () => {
+    const lines = oneAtATimeEach()
+    const order: string[] = []
+
+    const first = lines('anna', () => later('first', 20, () => order.push('first ends')))
+    const second = lines('anna', () => {
+      order.push('second starts')
+      return later('second', 1)
+    })
+
+    await expect(Promise.all([first, second])).resolves.toEqual(['first', 'second'])
+    expect(order).toEqual(['first ends', 'second starts'])
+  })
+
+  // Two workspaces have nothing to wait on each other for.
+  it('runs tasks under different keys at once', async () => {
+    const lines = oneAtATimeEach()
+    const order: string[] = []
+
+    const slow = lines('anna', () => later('anna', 20, () => order.push('anna ends')))
+    const quick = lines('bob', () => {
+      order.push('bob starts')
+      return later('bob', 1)
+    })
+
+    await Promise.all([slow, quick])
+    expect(order).toEqual(['bob starts', 'anna ends'])
+  })
+
+  it('hands a failure to its caller and keeps the key moving', async () => {
+    const lines = oneAtATimeEach()
+
+    const failing = lines('anna', () => failsLater(new Error('refused'), 10))
+    const after = lines('anna', () => Promise.resolve('after'))
+
+    await expect(failing).rejects.toThrow('refused')
+    await expect(after).resolves.toBe('after')
   })
 })

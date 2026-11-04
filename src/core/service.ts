@@ -199,7 +199,7 @@ import {
 } from './pullRequests.js'
 import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, keptIndexCopies } from './git.js'
-import { FETCH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
+import { FETCH_OPTIONS, PUSH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
 import { createRemoteRefWatch, type RemoteRefWatch, type RemoteRefWatchDeps } from './remoteRefs.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
@@ -228,7 +228,7 @@ import {
   stateTempFile
 } from './paths.js'
 import { DOWNLOAD_TIMEOUT_MS } from './download.js'
-import { oneAtATime, within } from './parallel.js'
+import { oneAtATime, oneAtATimeEach, within } from './parallel.js'
 import {
   ensureLibrary,
   importLibraryItem,
@@ -404,6 +404,7 @@ import {
   workspaceStatusFrom
 } from './store.js'
 import { listBranches, listRemoteBranches, listWorktrees } from './worktree.js'
+import type { WorkspaceKind } from './workspaceKinds.js'
 import {
   changeCount,
   countChanges,
@@ -416,10 +417,14 @@ import {
   reconcile,
   checkedOutBranches,
   viewOf,
+  rekindWorkspace,
   removeWorkspace,
+  restoreBranch,
   renameWorkspace,
   rollbackWorkspace,
   WorkspaceError,
+  type CreatedWorkspace,
+  type KindDetour,
   type WorkspaceView,
   type RemoveOptions
 } from './workspaces.js'
@@ -1085,6 +1090,13 @@ export interface OctopusService {
    */
   setWorkspaceNotes(workspaceId: string, notes: string): Promise<void>
   /**
+   * Gives a workspace another kind — the strip on its card — and moves its
+   * branch to match while the branch has never been pushed (`rekindWorkspace`).
+   * Answers the branch named after the kind that kept the branch where it was,
+   * or null.
+   */
+  setWorkspaceKind(workspaceId: string, kind: WorkspaceKind): Promise<KindDetour | null>
+  /**
    * Whether git would keep this project's env file out of a commit.
    *
    * Asked of the checkout, which shares its `.gitignore` with every worktree
@@ -1388,8 +1400,9 @@ export interface OctopusService {
   readWorkspace(workspaceId: string): Promise<WorkspaceView | null>
   /** Whether a workspace is on record — nothing read from disk, so cheap to ask. */
   hasWorkspace(workspaceId: string): boolean
-  createWorkspaceIn(projectId: string): Promise<Workspace>
-  renameWorkspaceById(workspaceId: string, name: string): Promise<void>
+  createWorkspaceIn(projectId: string): Promise<CreatedWorkspace>
+  /** Answers the detour the branch took round one named after its kind, or null. */
+  renameWorkspaceById(workspaceId: string, name: string): Promise<KindDetour | null>
   /** Answers what became of the cleanup script, which nothing lets stop the removal. */
   removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<CleanupOutcome>
   /** Whether a workspace holds work that removal would discard. */
@@ -2253,6 +2266,37 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * genuinely can land together.
    */
   const stateWrites = oneAtATime()
+
+  /*
+   * What moves a workspace's branch and what pushes it, one at a time for each
+   * workspace. A new kind or a rename decides from whether the branch has been
+   * pushed; started while the first push is on its way, it found no upstream
+   * yet and moved the branch out from under the request about to be opened
+   * from it — or the push, holding the old name, found nothing to send. Each
+   * task reads the workspace once its turn comes, so it sees the branch the one
+   * before it left.
+   */
+  const branchWork = oneAtATimeEach()
+
+  /**
+   * Stores what a rename or a new kind changed, and puts the branch back if
+   * that cannot be done — git moved it first, and a record still naming the old
+   * branch would leave the workspace reading as standing on some other one.
+   */
+  async function commitMove(
+    workspace: Workspace,
+    changed: Partial<Omit<Workspace, 'id' | 'projectId'>>,
+    exec: GitExec
+  ): Promise<void> {
+    try {
+      await commit((current) => updateWorkspace(current, workspace.id, changed))
+    } catch (error) {
+      if (changed.branch !== undefined) {
+        await restoreBranch(exec, changed.branch, workspace.branch)
+      }
+      throw error
+    }
+  }
 
   /**
    * Applies a change to the state and persists it.
@@ -3409,8 +3453,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (event.type === 'result' && pushTo !== undefined) {
       publishAfterTurn.delete(chat.id)
       if (event.ok) {
-        const workspace = requireWorkspace(chat.workspaceId)
-        background(chat, pushBranchTo(pushTo, workspace.branch, makeExec(workspace.path)))
+        background(
+          chat,
+          branchWork(chat.workspaceId, () => {
+            const workspace = requireWorkspace(chat.workspaceId)
+            return pushBranchTo(pushTo, workspace.branch, makeExec(workspace.path, PUSH_OPTIONS))
+          })
+        )
       }
     }
     if (event.type === 'result') {
@@ -6294,38 +6343,48 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (project) {
         const repository = makeExec(project.repoPath)
 
-        for (const workspace of workspacesOfProject(state, projectId)) {
-          // Read before the closing below, which leaves the records in place
-          // but is the last moment the chats are reachable from the state that
-          // is about to be rewritten.
-          closing.push(...allChatsOfWorkspace(state, workspace.id))
+        for (const listed of workspacesOfProject(state, projectId)) {
+          // In the workspace's line, as its own removal is: the branch is
+          // deleted by the name on record, and read mid-move that name is gone
+          // and the moved branch outlives the project.
+          await branchWork(listed.id, async () => {
+            // Read once its turn comes, for the branch the move before it left
+            // — and a removal that went before it may have left nothing.
+            const workspace = state.workspaces.find((each) => each.id === listed.id)
+            if (workspace === undefined) return
 
-          // The same closing `removeWorkspaceById` does, and for the same
-          // reason: a session outliving its worktree holds a child process
-          // pointed at a directory that no longer exists, and nothing in the
-          // interface can reach it again — only quitting the application ends
-          // it. Left out here, removing a project leaked every agent in it.
-          await closeChatsOf(workspace.id)
+            // Read before the closing below, which leaves the records in place
+            // but is the last moment the chats are reachable from the state that
+            // is about to be rewritten.
+            closing.push(...allChatsOfWorkspace(state, workspace.id))
 
-          /*
-           * And the cleanup script, in the same order and for the same reason
-           * `removeWorkspaceById` runs it: in the worktree while it still
-           * exists. Left out here, removing a project abandoned every database
-           * its workspaces had been given — the accumulation the script exists
-           * to prevent, at the one moment there is most of it to clean up.
-           */
-          const cleanup = await runCleanup(project, workspace)
-          if (leavesBehind(cleanup)) leftBehind.push({ workspace: workspace.name, cleanup })
-          cliSessions.push(await sessionsOf(workspace.path))
+            // The same closing `removeWorkspaceById` does, and for the same
+            // reason: a session outliving its worktree holds a child process
+            // pointed at a directory that no longer exists, and nothing in the
+            // interface can reach it again — only quitting the application ends
+            // it. Left out here, removing a project leaked every agent in it.
+            await closeChatsOf(workspace.id)
 
-          // Best-effort, one by one: a worktree already deleted from outside
-          // must not stop the rest — or the project — from being removed. The
-          // user has confirmed, so uncommitted work goes too.
-          await removeWorkspace(
-            workspace,
-            { repository, workspace: makeExec(workspace.path) },
-            { force: true, deleteBranch: true }
-          ).catch(() => undefined)
+            /*
+             * And the cleanup script, in the same order and for the same reason
+             * `removeWorkspaceById` runs it: in the worktree while it still
+             * exists. Left out here, removing a project abandoned every database
+             * its workspaces had been given — the accumulation the script exists
+             * to prevent, at the one moment there is most of it to clean up.
+             */
+            const cleanup = await runCleanup(project, workspace)
+            if (leavesBehind(cleanup)) leftBehind.push({ workspace: workspace.name, cleanup })
+            cliSessions.push(await sessionsOf(workspace.path))
+
+            // Best-effort, one by one: a worktree already deleted from outside
+            // must not stop the rest — or the project — from being removed. The
+            // user has confirmed, so uncommitted work goes too.
+            await removeWorkspace(
+              workspace,
+              { repository, workspace: makeExec(workspace.path) },
+              { force: true, deleteBranch: true }
+            ).catch(() => undefined)
+          })
         }
       }
 
@@ -6397,11 +6456,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const project = requireProject(projectId)
       const exec = makeExec(project.repoPath)
 
+      const detours: KindDetour[] = []
       // Cut from the base in effect, which the repository may state.
       const created = await createWorkspace(await liveProject(project), state, exec, {
         root: dataRoot,
         answers: listening,
-        fetchExec: makeExec(project.repoPath, FETCH_OPTIONS)
+        fetchExec: makeExec(project.repoPath, FETCH_OPTIONS),
+        onDetour: (detour) => detours.push(detour)
       })
 
       try {
@@ -6411,140 +6472,174 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         const { envFile } = await prepare(project, created)
         const workspace = { ...created, envFileApplied: envFile }
         await commit((current) => addWorkspace(current, workspace))
-        return workspace
+        // Beside the record, never in it: the state holds what the branch is,
+        // not how it came to be so.
+        const [detour] = detours
+        return detour === undefined ? workspace : { ...workspace, detour }
       } catch (error) {
         await rollbackWorkspace(created, exec)
         throw error
       }
     },
 
-    async renameWorkspaceById(workspaceId, name) {
-      const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
+    renameWorkspaceById(workspaceId, name) {
+      return branchWork(workspaceId, async () => {
+        const workspace = requireWorkspace(workspaceId)
+        const project = requireProject(workspace.projectId)
 
-      const renamed = await renameWorkspace(
-        workspace,
-        project,
-        name,
-        makeExec(project.repoPath),
-        // The siblings, for the collision a branch cannot catch: two names can
-        // differ as branches and still name one database.
-        workspacesOfProject(state, workspace.projectId)
-      )
-      await commit((current) => updateWorkspace(current, workspaceId, renamed))
+        const exec = makeExec(project.repoPath)
+
+        const detours: KindDetour[] = []
+        const renamed = await renameWorkspace(
+          workspace,
+          project,
+          name,
+          exec,
+          // The siblings, for the collision a branch cannot catch: two names can
+          // differ as branches and still name one database.
+          workspacesOfProject(state, workspace.projectId),
+          (detour) => detours.push(detour)
+        )
+        await commitMove(workspace, renamed, exec)
+        return detours[0] ?? null
+      })
     },
 
-    async removeWorkspaceById(workspaceId, options) {
-      const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
+    // Not refused while an agent works, as a rename is not: `git branch -m`
+    // carries the worktree with it, and the agent's branch guard reads the
+    // branch from the record on every call.
+    setWorkspaceKind(workspaceId, kind) {
+      return branchWork(workspaceId, async () => {
+        const workspace = requireWorkspace(workspaceId)
+        const project = requireProject(workspace.projectId)
 
-      // Resolved once and used twice below: the two answers have to be about
-      // the same ref, or a branch reads as unmerged against one and merged
-      // against the other.
-      const baseRef = await baseRefOf(project)
+        const exec = makeExec(project.repoPath)
 
-      const execs = {
-        repository: makeExec(project.repoPath),
-        workspace: makeExec(workspace.path)
-      }
-      const removal = {
-        ...options,
-        // The base branch travels with the request so "is this merged" can be
-        // answered before the worktree is destroyed rather than after.
-        baseBranch: baseRef,
-        /*
-         * What git cannot see.
-         *
-         * A squash or a rebase merge rewrites the commits, so none of them is
-         * an ancestor of the base afterwards and git reports the branch as
-         * unmerged — including when it was this app's own merge button that
-         * landed it. GitHub knows better, and is asked only after git has
-         * said no.
-         *
-         * A failure here is not a failure to remove: gh may be missing or
-         * signed out, and then the git answer is the only one there is.
-         */
-        mergedRemotely: async (): Promise<boolean> => {
-          try {
-            const view = await readPullRequest(
-              workspace,
-              baseRef,
-              makeGh(workspace.path),
-              makeExec(workspace.path)
-            )
-            return view.request?.state === 'merged'
-          } catch {
-            return false
+        const detours: KindDetour[] = []
+        const changed = await rekindWorkspace(workspace, project, kind, exec, (detour) =>
+          detours.push(detour)
+        )
+        await commitMove(workspace, changed, exec)
+        return detours[0] ?? null
+      })
+    },
+
+    removeWorkspaceById(workspaceId, options) {
+      // In the line with what moves and pushes the branch: removal deletes it by
+      // the name it reads, and a rename landing in between would leave the
+      // moved branch behind and bring the old one back for a workspace gone.
+      return branchWork(workspaceId, async () => {
+        const workspace = requireWorkspace(workspaceId)
+        const project = requireProject(workspace.projectId)
+
+        // Resolved once and used twice below: the two answers have to be about
+        // the same ref, or a branch reads as unmerged against one and merged
+        // against the other.
+        const baseRef = await baseRefOf(project)
+
+        const execs = {
+          repository: makeExec(project.repoPath),
+          workspace: makeExec(workspace.path)
+        }
+        const removal = {
+          ...options,
+          // The base branch travels with the request so "is this merged" can be
+          // answered before the worktree is destroyed rather than after.
+          baseBranch: baseRef,
+          /*
+           * What git cannot see.
+           *
+           * A squash or a rebase merge rewrites the commits, so none of them is
+           * an ancestor of the base afterwards and git reports the branch as
+           * unmerged — including when it was this app's own merge button that
+           * landed it. GitHub knows better, and is asked only after git has
+           * said no.
+           *
+           * A failure here is not a failure to remove: gh may be missing or
+           * signed out, and then the git answer is the only one there is.
+           */
+          mergedRemotely: async (): Promise<boolean> => {
+            try {
+              const view = await readPullRequest(
+                workspace,
+                baseRef,
+                makeGh(workspace.path),
+                makeExec(workspace.path)
+              )
+              return view.request?.state === 'merged'
+            } catch {
+              return false
+            }
           }
         }
-      }
 
-      /*
-       * Everything below this line destroys something, so the refusal comes
-       * first.
-       *
-       * The pane pre-ticks the delete-branch box and only forces when the
-       * worktree is dirty, so a clean workspace whose commits are not merged
-       * refuses on the ordinary path rather than a rare one. Asked afterwards,
-       * the answer arrived with the conversations already deleted and the
-       * cleanup script already run, against a workspace that then went on
-       * living — which is the opposite of what docs/core/workspaces-and-git.md promises about an
-       * operation that fails.
-       */
-      await ensureRemovable(workspace, execs, removal)
+        /*
+         * Everything below this line destroys something, so the refusal comes
+         * first.
+         *
+         * The pane pre-ticks the delete-branch box and only forces when the
+         * worktree is dirty, so a clean workspace whose commits are not merged
+         * refuses on the ordinary path rather than a rare one. Asked afterwards,
+         * the answer arrived with the conversations already deleted and the
+         * cleanup script already run, against a workspace that then went on
+         * living — which is the opposite of what docs/core/workspaces-and-git.md promises about an
+         * operation that fails.
+         */
+        await ensureRemovable(workspace, execs, removal)
 
-      // Captured before the chats are closed, because the records go with the
-      // workspace at the commit below and the transcripts are discarded after
-      // it — by which point there is nothing left to read the ids off.
-      const closing = allChatsOfWorkspace(state, workspaceId)
+        // Captured before the chats are closed, because the records go with the
+        // workspace at the commit below and the transcripts are discarded after
+        // it — by which point there is nothing left to read the ids off.
+        const closing = allChatsOfWorkspace(state, workspaceId)
 
-      // Before the worktree goes: the session's working directory is about to
-      // stop existing, and a live agent would keep a child process pointed at
-      // a path that is no longer there.
-      await closeChatsOf(workspaceId)
-      // Its description goes too. The query is left to finish — nothing here
-      // can stop it — but what it answers lands on nothing.
-      drafts.forget(workspaceId)
+        // Before the worktree goes: the session's working directory is about to
+        // stop existing, and a live agent would keep a child process pointed at
+        // a path that is no longer there.
+        await closeChatsOf(workspaceId)
+        // Its description goes too. The query is left to finish — nothing here
+        // can stop it — but what it answers lands on nothing.
+        drafts.forget(workspaceId)
 
-      // Also before it goes, and for the same reason — the script runs in the
-      // worktree. Whatever it says, the removal continues: a workspace that
-      // cannot be deleted because a cleanup script is broken is the worse
-      // problem of the two.
-      /*
-       * A repository's script that nobody has read is skipped, not run.
-       *
-       * Everywhere else an unapproved script refuses the run and says so. Here
-       * it cannot: nothing may stop a workspace being removed, and a dialog in
-       * the middle of a deletion is a dialog nobody can answer usefully. So the
-       * cleanup is not performed, and the window is told so once the workspace
-       * has gone — a database left behind is then known about, which is still
-       * the lesser of the two: the alternative is executing shell that arrived
-       * with a `git pull` at the one moment the user is not looking.
-       */
-      const cleanup = await runCleanup(project, workspace)
+        // Also before it goes, and for the same reason — the script runs in the
+        // worktree. Whatever it says, the removal continues: a workspace that
+        // cannot be deleted because a cleanup script is broken is the worse
+        // problem of the two.
+        /*
+         * A repository's script that nobody has read is skipped, not run.
+         *
+         * Everywhere else an unapproved script refuses the run and says so. Here
+         * it cannot: nothing may stop a workspace being removed, and a dialog in
+         * the middle of a deletion is a dialog nobody can answer usefully. So the
+         * cleanup is not performed, and the window is told so once the workspace
+         * has gone — a database left behind is then known about, which is still
+         * the lesser of the two: the alternative is executing shell that arrived
+         * with a `git pull` at the one moment the user is not looking.
+         */
+        const cleanup = await runCleanup(project, workspace)
 
-      // Read while the worktree is still there; deleted only once it has gone.
-      const cliSessions = await sessionsOf(workspace.path)
+        // Read while the worktree is still there; deleted only once it has gone.
+        const cliSessions = await sessionsOf(workspace.path)
 
-      /*
-       * The one window this ordering cannot close, recorded rather than left
-       * to be rediscovered: the script has run, and `discardWorkspace` below
-       * can still fail on a worktree git will not let go of. The workspace
-       * then lives on without whatever the cleanup took back.
-       *
-       * It is irreducible. The script runs *in* the worktree, so it cannot be
-       * moved after the removal, and git offers no way to ask whether a
-       * worktree would come away without trying it. What the ordering does buy
-       * is that the refusals cannot land here: everything reachable by asking
-       * has been asked above.
-       */
+        /*
+         * The one window this ordering cannot close, recorded rather than left
+         * to be rediscovered: the script has run, and `discardWorkspace` below
+         * can still fail on a worktree git will not let go of. The workspace
+         * then lives on without whatever the cleanup took back.
+         *
+         * It is irreducible. The script runs *in* the worktree, so it cannot be
+         * moved after the removal, and git offers no way to ask whether a
+         * worktree would come away without trying it. What the ordering does buy
+         * is that the refusals cannot land here: everything reachable by asking
+         * has been asked above.
+         */
 
-      await discardWorkspace(workspace, execs, removal)
+        await discardWorkspace(workspace, execs, removal)
 
-      await commit((current) => removeWorkspaceRecord(current, workspaceId))
-      await discardHistories(closing)
-      await discardSessionsOf(cliSessions)
-      return cleanup
+        await commit((current) => removeWorkspaceRecord(current, workspaceId))
+        await discardHistories(closing)
+        await discardSessionsOf(cliSessions)
+        return cleanup
+      })
     },
 
     async workspaceHasChanges(workspaceId) {
@@ -6601,19 +6696,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )
     },
 
-    async createPullRequest(workspaceId, request) {
-      const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
+    createPullRequest(workspaceId, request) {
+      return branchWork(workspaceId, async () => {
+        const workspace = requireWorkspace(workspaceId)
+        const project = requireProject(workspace.projectId)
 
-      const url = await createPullRequest(
-        { ...request, branch: workspace.branch, base: await baseRefOf(project) },
-        makeGh(workspace.path),
-        makeExec(workspace.path)
-      )
-      // The description has gone out with the request; kept, it would fill the
-      // form offered for the next one after a merge.
-      drafts.forget(workspaceId)
-      return url
+        const url = await createPullRequest(
+          { ...request, branch: workspace.branch, base: await baseRefOf(project) },
+          makeGh(workspace.path),
+          makeExec(workspace.path, PUSH_OPTIONS)
+        )
+        // The description has gone out with the request; kept, it would fill the
+        // form offered for the next one after a merge.
+        drafts.forget(workspaceId)
+        return url
+      })
     },
 
     draftPullRequest(workspaceId) {
@@ -6630,19 +6727,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     commitAndPushWorkspace(workspaceId, message) {
-      const workspace = requireWorkspace(workspaceId)
-      return commitAndPush(message, workspace.branch, makeExec(workspace.path))
+      return branchWork(workspaceId, () => {
+        const workspace = requireWorkspace(workspaceId)
+        return commitAndPush(message, workspace.branch, makeExec(workspace.path, PUSH_OPTIONS))
+      })
     },
 
-    async amendAndPushWorkspace(workspaceId) {
-      const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-      return amendAndPush(workspace.branch, await baseRefOf(project), makeExec(workspace.path))
+    amendAndPushWorkspace(workspaceId) {
+      return branchWork(workspaceId, async () => {
+        const workspace = requireWorkspace(workspaceId)
+        const project = requireProject(workspace.projectId)
+        return amendAndPush(
+          workspace.branch,
+          await baseRefOf(project),
+          makeExec(workspace.path, PUSH_OPTIONS)
+        )
+      })
     },
 
     pushWorkspace(workspaceId) {
-      const workspace = requireWorkspace(workspaceId)
-      return pushBranch(workspace.branch, makeExec(workspace.path))
+      return branchWork(workspaceId, () => {
+        const workspace = requireWorkspace(workspaceId)
+        return pushBranch(workspace.branch, makeExec(workspace.path, PUSH_OPTIONS))
+      })
     },
 
     async updateWorkspaceFromBase(workspaceId) {

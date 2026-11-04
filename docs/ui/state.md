@@ -77,7 +77,10 @@ opened — the read on open was the only one that found a session to ask.
 failure to the window takes `(message: string | null) => void` and sends `null`
 as an attempt begins, so what the banner shows is always the latest attempt's;
 and `App` clears it during render when the selection moves, so a failure about
-one project does not follow the reader into another. One transient failure used
+one project does not follow the reader into another. Except when the move is a
+creation's own: opening the new workspace counts as already shown, or the one
+line a creation can leave — that its branch went round one named after its kind
+— was wiped as it was written. One transient failure used
 to pin a red sentence to the top of the centre pane for the rest of the session
 — seven writers and nothing that ever wrote `null`. Not a dismiss control: a
 banner here clears on the next thing that happens, which is where the reader's

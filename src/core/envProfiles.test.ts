@@ -62,6 +62,7 @@ const workspace = (envProfile: string | null): Workspace => ({
   writers: {},
   notes: '',
   envFileApplied: null,
+  kind: 'feature',
   ownerId: null
 })
 

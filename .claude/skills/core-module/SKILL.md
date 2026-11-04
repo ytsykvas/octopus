@@ -118,7 +118,7 @@ its store and is what a read or a write is addressed by. Checking the name
 inside one store let a global `review` and a project `review` both exist, after
 which the switch on either row moved both.
 
-Two projects are two repositories: `octopus/anna` in each is two different
+Two projects are two repositories: `octopus/feature/anna` in each is two different
 branches, and treating that as a clash locks every project after the first out
 of the start of the name pool.
 

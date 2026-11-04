@@ -90,6 +90,28 @@ export const en = {
     createFirstHint: 'Its own branch from {{branch}}',
     rename: 'Rename',
     remove: 'Remove workspace',
+    /* The kind of work, on the strip at a card's left edge. `short` is what the
+       strip has room for, about seven letters (held in locales.test.ts);
+       `label` is the word everywhere else. */
+    kindTitle: 'Tag',
+    kindNote: 'The branch is renamed with the tag until it is pushed.',
+    kindLabel: '{{short}} — {{kind}} tag. Change',
+    kindDetour:
+      '{{blocker}} already exists, and git cannot file a branch under another, so the branch is {{branch}}.',
+    kinds: {
+      feature: { label: 'Feature', short: 'feature' },
+      fix: { label: 'Fix', short: 'fix' },
+      bug: { label: 'Bug', short: 'bug' },
+      research: { label: 'Research', short: 'explore' },
+      tests: { label: 'Tests', short: 'tests' },
+      refactor: { label: 'Refactoring', short: 'refact' },
+      docs: { label: 'Documentation', short: 'docs' },
+      chore: { label: 'Maintenance', short: 'chore' },
+      perf: { label: 'Performance', short: 'perf' },
+      design: { label: 'Design', short: 'design' },
+      security: { label: 'Security', short: 'secure' },
+      review: { label: 'Review', short: 'review' }
+    },
     missing: 'Directory is gone',
     statusRunning: 'The agent is working here',
     statusWaiting: 'Waiting for your answer',
@@ -1757,7 +1779,7 @@ export const en = {
 
     branchPrefix: 'Branch prefix',
     branchPrefixHint:
-      'Workspace branches are named <prefix>/<workspace>. A GitHub username is a common choice.',
+      'Workspace branches are named <prefix>/<tag>/<workspace>. A GitHub username is a common choice.',
     branchPrefixUnusable: 'The prefix needs at least one character git can use.',
     branchPrefixBecomes: 'Will be saved as {{prefix}}',
 
@@ -2449,6 +2471,15 @@ export const en = {
     branchUnmerged:
       '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',
     branchExists: 'A branch named {{branch}} already exists.',
+    /* Refs are files: a branch at, above or below the name leaves git no room
+       for it, and git itself only says "cannot lock ref". */
+    branchBlocked:
+      '{{blocker}} already exists, so git cannot create {{branch}}. Rename or delete {{blocker}} first.',
+    branchBlockedRemote:
+      '{{blocker}} is on origin, in the way of {{branch}}: git cannot file a branch under another. Pick another name, or delete that branch on origin.',
+    /* A pushed branch keeps its name: GitHub leaves the request on the old one. */
+    branchPublished:
+      '{{branch}} has been pushed, so the workspace keeps its name: a new one would move the branch away from its pull request.',
     slugTaken:
       'Another workspace, \u201c{{name}}\u201d, already names the database {{slug}}. Two workspaces sharing one write over each other\u2019s data. Choose a name that differs by more than a dash or a dot.',
     pathExists: '{{path}} already exists.',

@@ -19,6 +19,7 @@ import { withApproval } from './repoTrust.js'
 import { SkillKeySchema } from './skillNames.js'
 import { SourceItemIdSchema } from './sourceItems.js'
 import { UsageWindowsSchema } from './usage.js'
+import { DEFAULT_WORKSPACE_KIND, WorkspaceKindSchema } from './workspaceKinds.js'
 
 import {
   type AgentModel,
@@ -180,7 +181,7 @@ export const WorkspaceSchema = z.object({
   status: WorkspaceStatusSchema,
   port: z.number().int().min(PORT_RANGE_START).max(PORT_RANGE_END),
   createdAt: z.iso.datetime(),
-  /** When a rename brought the workspace onto its current branch; null means since `createdAt`. */
+  /** When a rename or a new kind moved the workspace onto its branch; null means since `createdAt`. */
   branchSince: z.iso.datetime().nullable().default(null),
   /**
    * A set of variables of this workspace's own, or null to follow the project.
@@ -235,6 +236,15 @@ export const WorkspaceSchema = z.object({
    * where those were written.
    */
   envFileApplied: z.string().nullable().default(null),
+  /**
+   * What kind of work this is — the strip on its card, and the segment between
+   * the prefix and the name in a branch made since kinds existed.
+   *
+   * `catch` rather than `default`: a workspace written before kinds lacks the
+   * field, and one written by a newer build may carry a kind this one has never
+   * heard of. Either is a feature here, and neither stops `state.json` loading.
+   */
+  kind: WorkspaceKindSchema.catch(DEFAULT_WORKSPACE_KIND),
   /** Reserved for future multi-user support; always null for now. */
   ownerId: z.string().nullable()
 })

@@ -75,6 +75,19 @@ import { WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
 
+/**
+ * What every push the app makes runs with: no prompt for a password nobody can
+ * type, and a stalled transfer given up on. Spelt out rather than imported, so
+ * a test cannot pass by comparing the constant with itself.
+ */
+const UNPROMPTED: GitOptions = {
+  env: {
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_HTTP_LOW_SPEED_LIMIT: '1000',
+    GIT_HTTP_LOW_SPEED_TIME: '60'
+  }
+}
+
 /** Writes a script the way a repository carries it: under `.octopus/scripts/`, executable. */
 async function carryScript(root: string, name: string, body: string): Promise<void> {
   const path = join(root, '.octopus', 'scripts', name)
@@ -594,6 +607,382 @@ describe('workspaces', () => {
     expect(listed[0]?.branch).toContain('fix-auth')
   })
 
+  /*
+   * The first push of a branch and a new kind for it, overlapping. Asked while
+   * the push is still on its way, the kind would find no upstream yet and move
+   * the branch out from under the request about to be opened from it. Lined up
+   * behind the push, it finds the branch gone and leaves it.
+   */
+  it('waits for a push before deciding a new kind may move the branch', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const remote = join(dir, 'remote')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+
+    let release = (): void => undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const service = await createService({
+      ...paths(dir),
+      makeExec: (cwd, options) => {
+        const git = gitIn(cwd, options)
+        return async (args) => {
+          if (args[0] === 'push') await held
+          return git(args)
+        }
+      }
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const pushed = service.pushWorkspace(workspace.id)
+    const rekinded = service.setWorkspaceKind(workspace.id, 'bug')
+    // Long enough for an unqueued kind change to have moved the branch.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    release()
+    await Promise.all([pushed, rekinded])
+
+    const listed = await service.listWorkspaces(project.id)
+    expect(listed[0]).toMatchObject({ kind: 'bug', branch: workspace.branch })
+    expect((await run('git', ['branch', '--list'], { cwd: repo })).stdout).not.toContain('/bug/')
+  })
+
+  /**
+   * A workspace whose git writes down, in order, when a branch is pushed,
+   * moved and removed — and holds the first command `hold` names until it is
+   * let go. The push itself is not made: what is under test is the order.
+   *
+   * `stray` is every git command about this workspace — run in its worktree,
+   * or naming its branch — that starts while the hold is on. Lined up, nothing
+   * may: the next operation has not had its turn. Caught there, an operation
+   * that skipped the line is seen at its first command, a few milliseconds in,
+   * rather than only if it reached the move or the removal inside the window.
+   */
+  async function lined(hold: 'push' | 'move' | 'remove'): Promise<{
+    service: OctopusService
+    projectId: string
+    workspaceId: string
+    events: string[]
+    stray: string[]
+    pushedWith: (GitOptions | undefined)[]
+    holding: Promise<void>
+    release: () => void
+  }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const events: string[] = []
+    const stray: string[] = []
+    const pushedWith: (GitOptions | undefined)[] = []
+    let watched: { branch: string; path: string } | null = null
+    let on = false
+    let letGo = (): void => undefined
+    const held = new Promise<void>((resolve) => {
+      letGo = resolve
+    })
+    const release = (): void => {
+      on = false
+      letGo()
+    }
+    let reached = (): void => undefined
+    const holding = new Promise<void>((resolve) => {
+      reached = resolve
+    })
+
+    const service = await createService({
+      ...paths(dir),
+      makeGh: () => () => Promise.resolve('https://x/pull/8\n'),
+      makeExec: (cwd, options) => {
+        const git = gitIn(cwd, options)
+        return async (args) => {
+          const [command, sub] = args
+          if (
+            on &&
+            watched !== null &&
+            (cwd === watched.path || args.some((arg) => arg.includes(watched?.branch ?? '')))
+          ) {
+            stray.push(args.join(' '))
+          }
+          const named =
+            command === 'push'
+              ? 'push'
+              : command === 'branch' && sub === '-m'
+                ? 'move'
+                : command === 'worktree' && sub === 'remove'
+                  ? 'remove'
+                  : null
+          if (command === 'ls-remote') return ''
+          if (named === null) return git(args)
+
+          events.push(named)
+          if (named === 'push') pushedWith.push(options)
+          if (named === hold) {
+            on = true
+            reached()
+            await held
+          }
+          const out = named === 'push' ? '' : await git(args)
+          events.push(`${named} done`)
+          return out
+        }
+      }
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    watched = { branch: workspace.branch, path: workspace.path }
+    // A commit of its own, and something left to commit: every pusher has work.
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
+    await writeFile(join(workspace.path, 'more.txt'), 'more\n', 'utf8')
+
+    return {
+      service,
+      projectId: project.id,
+      workspaceId: workspace.id,
+      events,
+      stray,
+      pushedWith,
+      holding,
+      release
+    }
+  }
+
+  /** Long enough for a move that is not lined up to have been made. */
+  const UNLINED = 300
+
+  it.each([
+    ['Push', (service: OctopusService, id: string) => service.pushWorkspace(id)],
+    [
+      'Commit & push',
+      (service: OctopusService, id: string) => service.commitAndPushWorkspace(id, 'more')
+    ],
+    ['Amend & push', (service: OctopusService, id: string) => service.amendAndPushWorkspace(id)],
+    [
+      'Create PR',
+      (service: OctopusService, id: string) =>
+        service.createPullRequest(id, { title: 'T', body: 'B', draft: false, commitMessage: null })
+    ]
+  ])('lines a new kind up behind %s', async (_, pushing) => {
+    const { service, workspaceId, events, stray, holding, release } = await lined('push')
+
+    const pushed = pushing(service, workspaceId)
+    await holding
+    const rekinded = service.setWorkspaceKind(workspaceId, 'bug')
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+    release()
+    await Promise.all([pushed, rekinded])
+
+    expect(stray).toEqual([])
+    expect(events).toEqual(['push', 'push done', 'move', 'move done'])
+  })
+
+  /*
+   * Everything else on the workspace waits behind a push now, so a push that
+   * waits on a password nobody can type, or on a transfer that stalled, holds
+   * the workspace until the app quits. No deadline: a big push and a pre-push
+   * hook running tests both legitimately take their time.
+   */
+  it.each([
+    ['Push', (service: OctopusService, id: string) => service.pushWorkspace(id)],
+    [
+      'Commit & push',
+      (service: OctopusService, id: string) => service.commitAndPushWorkspace(id, 'more')
+    ],
+    ['Amend & push', (service: OctopusService, id: string) => service.amendAndPushWorkspace(id)],
+    [
+      'Create PR',
+      (service: OctopusService, id: string) =>
+        service.createPullRequest(id, { title: 'T', body: 'B', draft: false, commitMessage: null })
+    ]
+  ])('lets %s ask for no password and give up on a stalled transfer', async (_, pushing) => {
+    const { service, workspaceId, pushedWith } = await lined('move')
+
+    await pushing(service, workspaceId)
+
+    expect(pushedWith).not.toHaveLength(0)
+    expect(pushedWith).toEqual(pushedWith.map(() => UNPROMPTED))
+  })
+
+  it('lines a rename up behind a push', async () => {
+    const { service, workspaceId, events, stray, holding, release } = await lined('push')
+
+    const pushed = service.pushWorkspace(workspaceId)
+    await holding
+    const renamed = service.renameWorkspaceById(workspaceId, 'fix auth')
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+    release()
+    await Promise.all([pushed, renamed])
+
+    expect(stray).toEqual([])
+    expect(events).toEqual(['push', 'push done', 'move', 'move done'])
+  })
+
+  // Removal deletes the branch by the name it reads: read mid-move, it would
+  // miss the moved branch and leave it behind.
+  it('lines a removal up behind a move', async () => {
+    const { service, workspaceId, events, stray, holding, release } = await lined('move')
+
+    const rekinded = service.setWorkspaceKind(workspaceId, 'bug')
+    await holding
+    const removed = service.removeWorkspaceById(workspaceId, { deleteBranch: true, force: true })
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+    release()
+    await Promise.all([rekinded, removed])
+
+    expect(stray).toEqual([])
+    expect(events.slice(0, 3)).toEqual(['move', 'move done', 'remove'])
+  })
+
+  /*
+   * Removing the project deletes each workspace's branch by the name on
+   * record, as removing the workspace does: read mid-move, that name is gone,
+   * the deletion fails quietly, and the moved branch outlives the project.
+   */
+  it('lines a project removal up behind a move', async () => {
+    const { service, projectId, events, stray, holding, release } = await lined('move')
+    const repo = join(dir, 'planner')
+
+    const rekinded = service.setWorkspaceKind(
+      (await service.listWorkspaces(projectId))[0]?.id ?? '',
+      'bug'
+    )
+    await holding
+    const removed = service.removeProjectById(projectId)
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+    release()
+    await Promise.allSettled([rekinded, removed])
+
+    expect(stray).toEqual([])
+    expect(events.slice(0, 3)).toEqual(['move', 'move done', 'remove'])
+    expect((await run('git', ['branch', '--list', 'octopus/*'], { cwd: repo })).stdout).toBe('')
+  })
+
+  // Its own removal went first and took the record: nothing is left to remove.
+  it('passes over a workspace whose own removal went before its project', async () => {
+    const { service, projectId, workspaceId, events, stray, holding, release } =
+      await lined('remove')
+
+    const gone = service.removeWorkspaceById(workspaceId, { deleteBranch: true, force: true })
+    await holding
+    const removed = service.removeProjectById(projectId)
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+    release()
+    await Promise.all([gone, removed])
+
+    expect(stray).toEqual([])
+    expect(events).toEqual(['remove', 'remove done'])
+  })
+
+  // The branch is moved before the record is written; a write that fails
+  // must not leave the two naming different branches.
+  it('puts the branch back when a new kind cannot be stored', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await rm(join(dir, 'state.json'))
+    await mkdir(join(dir, 'state.json'))
+
+    await expect(service.setWorkspaceKind(workspace.id, 'bug')).rejects.toThrow()
+
+    const branches = (await run('git', ['branch', '--list'], { cwd: join(dir, 'planner') })).stdout
+    expect(branches).toContain(workspace.branch)
+    expect(branches).not.toContain('/bug/')
+  })
+
+  it('puts the branch back when a rename cannot be stored', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await rm(join(dir, 'state.json'))
+    await mkdir(join(dir, 'state.json'))
+
+    await expect(service.renameWorkspaceById(workspace.id, 'fix auth')).rejects.toThrow()
+
+    const branches = (await run('git', ['branch', '--list'], { cwd: join(dir, 'planner') })).stdout
+    expect(branches).toContain(workspace.branch)
+    expect(branches).not.toContain('fix-auth')
+  })
+
+  it('moves no branch back when a kind that kept it cannot be stored', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await rm(join(dir, 'state.json'))
+    await mkdir(join(dir, 'state.json'))
+
+    await expect(service.setWorkspaceKind(workspace.id, 'feature')).rejects.toThrow()
+
+    const branches = (await run('git', ['branch', '--list'], { cwd: join(dir, 'planner') })).stdout
+    expect(branches).toContain(workspace.branch)
+  })
+
+  // The window is told why the branch is not under its kind; the record is not.
+  it('answers a creation that went round a branch named after its kind', async () => {
+    const { service, projectId } = await withProject()
+    await run('git', ['branch', 'octopus/feature'], { cwd: join(dir, 'planner') })
+
+    const created = await service.createWorkspaceIn(projectId)
+
+    expect(created.detour).toEqual({ blocker: 'octopus/feature', branch: created.branch })
+    expect(created.branch).toBe(`octopus/${created.name}`)
+    expect(await readFile(join(dir, 'state.json'), 'utf8')).not.toContain('detour')
+  })
+
+  it('answers a creation that went nowhere round without a detour', async () => {
+    const { service, projectId } = await withProject()
+
+    expect(await service.createWorkspaceIn(projectId)).not.toHaveProperty('detour')
+  })
+
+  it('answers a rename and a new kind that went round a branch named after the kind', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    const repo = join(dir, 'planner')
+    await run('git', ['update-ref', 'refs/remotes/origin/octopus/feature', 'HEAD'], { cwd: repo })
+    await run('git', ['branch', 'octopus/bug'], { cwd: repo })
+
+    await expect(service.renameWorkspaceById(workspace.id, 'fix auth')).resolves.toEqual({
+      blocker: 'origin/octopus/feature',
+      branch: 'octopus/fix-auth'
+    })
+    await expect(service.setWorkspaceKind(workspace.id, 'bug')).resolves.toEqual({
+      blocker: 'octopus/bug',
+      branch: 'octopus/fix-auth'
+    })
+    expect((await service.listWorkspaces(projectId))[0]).toMatchObject({
+      kind: 'bug',
+      branch: 'octopus/fix-auth'
+    })
+  })
+
+  it('answers a rename and a new kind that went nowhere round with null', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await expect(service.renameWorkspaceById(workspace.id, 'fix auth')).resolves.toBeNull()
+    await expect(service.setWorkspaceKind(workspace.id, 'bug')).resolves.toBeNull()
+  })
+
+  it('gives a workspace another kind, and its branch with it', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await service.setWorkspaceKind(workspace.id, 'bug')
+
+    const listed = await service.listWorkspaces(projectId)
+    expect(listed[0]?.kind).toBe('bug')
+    expect(listed[0]?.branch).toBe(`octopus/bug/${workspace.name}`)
+  })
+
+  it('keeps the record as it was for the kind it already has', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await service.setWorkspaceKind(workspace.id, 'feature')
+
+    const listed = await service.listWorkspaces(projectId)
+    expect(listed[0]).toMatchObject({ kind: 'feature', branch: workspace.branch })
+  })
+
   it('reports changed files', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)
@@ -659,7 +1048,7 @@ describe('workspaces', () => {
 
     const workspace = await service.createWorkspaceIn(project.id)
 
-    expect(workspace.branch).toMatch(/^octo\/[^/]+$/)
+    expect(workspace.branch).toMatch(/^octo\/feature\/[^/]+$/)
   })
 
   /*
@@ -1474,6 +1863,7 @@ describe('workspaces', () => {
     const service = await createService(paths(dir))
 
     await expect(service.renameWorkspaceById('missing', 'name')).rejects.toThrow()
+    await expect(service.setWorkspaceKind('missing', 'bug')).rejects.toThrow()
     await expect(service.removeWorkspaceById('missing')).rejects.toThrow()
     await expect(service.workspaceHasChanges('missing')).rejects.toThrow()
   })
@@ -5472,10 +5862,12 @@ describe('the agent chat', () => {
         chat: Awaited<ReturnType<OctopusService['openChat']>>
         branch: string | undefined
         pushes: string[][]
+        pushedWith: (GitOptions | undefined)[]
         moveOrigin: (url: string) => void
       }
     > {
       const pushes: string[][] = []
+      const pushedWith: (GitOptions | undefined)[] = []
       let origin = ORIGIN
       const setup = await withWorkspace({
         makeExec: (cwd, options) => {
@@ -5484,6 +5876,7 @@ describe('the agent chat', () => {
             if (args[0] === 'remote' && args[1] === 'get-url') return Promise.resolve(`${origin}\n`)
             if (args[0] !== 'push') return exec(args)
             pushes.push([...args])
+            pushedWith.push(options)
             return push()
           }
         }
@@ -5495,6 +5888,7 @@ describe('the agent chat', () => {
         chat,
         branch,
         pushes,
+        pushedWith,
         moveOrigin: (url) => {
           origin = url
         }
@@ -5502,7 +5896,7 @@ describe('the agent chat', () => {
     }
 
     it('is pushed by the app once it ends well', async () => {
-      const { service, chat, branch, pushes } = await recording()
+      const { service, chat, branch, pushes, pushedWith } = await recording()
       await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
       agent().emit(resultMessage)
@@ -5510,6 +5904,34 @@ describe('the agent chat', () => {
       await vi.waitFor(() => {
         expect(pushes).toEqual([['push', '-u', 'origin', branch]])
       })
+      // A queue waits behind it: it must not wait on a password nobody types.
+      expect(pushedWith).toEqual([UNPROMPTED])
+    })
+
+    // The push the app makes when the turn ends is a first push like any
+    // other: a new kind asked meanwhile waits for it rather than moving the
+    // branch out from under it.
+    it('lines a new kind up behind the push it makes', async () => {
+      let release = (): void => undefined
+      const held = new Promise<string>((resolve) => {
+        release = () => {
+          resolve('')
+        }
+      })
+      const { service, chat, workspaceId, projectId, branch, pushes } = await recording(() => held)
+      await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(pushes).toHaveLength(1)
+      })
+
+      const rekinded = service.setWorkspaceKind(workspaceId, 'bug')
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      expect((await service.listWorkspaces(projectId))[0]?.branch).toBe(branch)
+      release()
+      await rekinded
     })
 
     it('is pushed after its own turn, even with a message typed behind it', async () => {

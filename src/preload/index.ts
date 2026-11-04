@@ -4,6 +4,7 @@ import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.
 import type { DirectoryListing, FileTreeSnapshot } from '@core/fileTree.js'
 import type { LineChanges } from '@core/lineChanges.js'
 import type { FileContent } from '@core/workspaceFiles.js'
+import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type {
   AgentCommand,
   AgentEntry,
@@ -48,8 +49,12 @@ import type { DraftEvent } from '@core/pullRequestDraft.js'
 import type { PullRequestDetail, RerunScope } from '@core/pullRequestShapes.js'
 import type { BranchRequestList } from '@core/pullRequests.js'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
-import type { Workspace } from '@core/store.js'
-import type { RemovalRequest, WorkspaceView } from '@core/workspaces.js'
+import type {
+  CreatedWorkspace,
+  KindDetour,
+  RemovalRequest,
+  WorkspaceView
+} from '@core/workspaces.js'
 import type { InstructionKind, SendOptions } from '@core/instructions.js'
 import type { ScriptKind } from '@core/scripts.js'
 import type {
@@ -566,11 +571,21 @@ const api = {
     read: (workspaceId: string): Promise<Result<WorkspaceView | null>> =>
       ipcRenderer.invoke('workspaces:read', workspaceId) as Promise<Result<WorkspaceView | null>>,
 
-    create: (projectId: string): Promise<Result<Workspace>> =>
-      ipcRenderer.invoke('workspaces:create', projectId) as Promise<Result<Workspace>>,
+    /** The new workspace, with the detour its branch took round one named after its kind. */
+    create: (projectId: string): Promise<Result<CreatedWorkspace>> =>
+      ipcRenderer.invoke('workspaces:create', projectId) as Promise<Result<CreatedWorkspace>>,
 
-    rename: (workspaceId: string, name: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('workspaces:rename', workspaceId, name) as Promise<Result<void>>,
+    /** Answers the detour the branch took round one named after its kind, or null. */
+    rename: (workspaceId: string, name: string): Promise<Result<KindDetour | null>> =>
+      ipcRenderer.invoke('workspaces:rename', workspaceId, name) as Promise<
+        Result<KindDetour | null>
+      >,
+
+    /** Gives a workspace another kind; its branch follows while never pushed. */
+    setKind: (workspaceId: string, kind: WorkspaceKind): Promise<Result<KindDetour | null>> =>
+      ipcRenderer.invoke('workspaces:kind', workspaceId, kind) as Promise<
+        Result<KindDetour | null>
+      >,
 
     /** Saves the order of one project's workspaces: every id, first to last. */
     reorder: (projectId: string, orderedIds: readonly string[]): Promise<Result<void>> =>

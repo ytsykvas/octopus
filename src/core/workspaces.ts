@@ -18,14 +18,15 @@ import { DEFAULT_REMOTE, remoteBranchName, shortBranchName } from './branches.js
 import { CodedError } from './codedError.js'
 import {
   anyBranchExists,
+  branchBlocker,
   countAhead,
   type GitExec,
   type IndexCopyReader,
+  hasLeftMachine,
   type MakeExec,
   reasonFrom,
   refExists,
-  toSlug,
-  upstreamOf
+  toSlug
 } from './git.js'
 import { fetchRemote, pruneGoneBranches, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
@@ -34,6 +35,7 @@ import { workspaceSlug } from './scriptEnv.js'
 import { firstFreeBlock, POOL_START, type PortProbe } from './ports.js'
 import type { Project, State, Workspace } from './store.js'
 import { allOf } from './parallel.js'
+import { DEFAULT_WORKSPACE_KIND, isWorkspaceKind, type WorkspaceKind } from './workspaceKinds.js'
 import {
   addWorktree,
   changedFiles,
@@ -65,6 +67,12 @@ export type WorkspaceErrorCode =
   | 'envPathEscapes'
   /** Another workspace of this project already names the same database. */
   | 'slugTaken'
+  /** A branch at, above or below this name exists, so git cannot create it. */
+  | 'branchBlocked'
+  /** As above, but the branch in the way is a copy on `origin`. */
+  | 'branchBlockedRemote'
+  /** The branch has left this machine; moving it would leave its pull request behind. */
+  | 'branchPublished'
 
 export class WorkspaceError extends CodedError<WorkspaceErrorCode> {
   override readonly name = 'WorkspaceError'
@@ -170,10 +178,37 @@ export function workspaceId(projectId: string, name: string): string {
   return `${projectId}/${name}`
 }
 
-/** Full branch name for a workspace: `<prefix>/<name>`. */
-export function branchFor(project: Project, name: string): string {
-  return `${project.branchPrefix}/${toSlug(name)}`
+/**
+ * Full branch name for a workspace: `<prefix>/<kind>/<name>`.
+ *
+ * The kind sits in the branch so the answer to "what is this" reaches git and
+ * GitHub, not only the card. Branches made before kinds are `<prefix>/<name>`
+ * and stay that way until a rename or a new kind moves them.
+ */
+export function branchFor(project: Project, kind: WorkspaceKind, name: string): string {
+  return `${project.branchPrefix}/${kind}/${toSlug(name)}`
 }
+
+/**
+ * A branch named after a workspace's kind — `<prefix>/feature`, left by a
+ * workspace from before kinds — that kept the workspace's branch out of the
+ * kind's folder, and the branch the workspace has instead.
+ *
+ * git keeps branches as files, so `octopus/feature` and `octopus/feature/anna`
+ * cannot both exist. Refusing made every creation in such a project fail, and a
+ * kind unusable across it; going round costs only the folder, and the window
+ * says why.
+ */
+export interface KindDetour {
+  readonly blocker: string
+  readonly branch: string
+}
+
+/**
+ * A workspace as its creation answers it: the record, and the detour its
+ * branch took when there was one — for the window, never for the state.
+ */
+export type CreatedWorkspace = Workspace & { readonly detour?: KindDetour }
 
 interface CreateOptions {
   readonly root?: string
@@ -194,6 +229,8 @@ interface CreateOptions {
    * wants — there is nothing there to hang on.
    */
   readonly fetchExec?: GitExec
+  /** Told when the branch had to go round one named after its kind (`KindDetour`). */
+  readonly onDetour?: (detour: KindDetour) => void
 }
 
 /**
@@ -274,12 +311,16 @@ export async function createWorkspace(
   // The id, by contrast, must be unique across the app: it is the key for
   // renaming, removal and the jump shortcuts, none of which carry a project.
   const id = workspaceId(project.id, name)
-  const branch = branchFor(project, name)
+  // Always the default: the kind is chosen from the card once the workspace
+  // exists, while the branch is still only here and renaming it costs nothing.
+  const kind = DEFAULT_WORKSPACE_KIND
   const path = workspacePath(project.id, name, options.root)
 
   if (await exists(path)) {
     throw new WorkspaceError('pathExists', { path }, `${path} already exists.`)
   }
+
+  const { branch, blocker } = await routeBranch(exec, project, kind, name, null)
 
   // Last of the local checks rather than first: the refusals above are instant,
   // and putting a network call in front of them would make a cheap "that name
@@ -293,6 +334,7 @@ export async function createWorkspace(
   await pruneGoneBranches(exec, fetchExec, DEFAULT_REMOTE, project.branchPrefix).catch(() => [])
 
   await addWorktree(exec, path, branch, base)
+  if (blocker !== null) options.onDetour?.({ blocker, branch })
 
   return {
     id,
@@ -321,6 +363,7 @@ export async function createWorkspace(
     envFileApplied: null,
     // Nobody has written anything here yet.
     writers: {},
+    kind,
     ownerId: null
   }
 }
@@ -329,7 +372,10 @@ export async function createWorkspace(
  * Workspace names that existing branches already claim.
  *
  * Only branches under the project's prefix count; anything else in the
- * repository is the user's own and none of our business.
+ * repository is the user's own and none of our business. Both shapes are read:
+ * `<prefix>/<kind>/<name>`, and `<prefix>/<name>` from before kinds. The
+ * segment after the prefix is a kind only when it is one, since a name may
+ * hold a slash of its own.
  *
  * `origin`'s count too: removal deletes the local branch but not the copy
  * there, and a name drawn onto it inherits that branch's history. The copy
@@ -341,7 +387,15 @@ async function takenByBranches(project: Project, exec: GitExec): Promise<string[
 
   return [...local, ...remote.map(shortBranchName)]
     .filter((branch) => branch.startsWith(prefix))
-    .map((branch) => branch.slice(prefix.length))
+    .map((branch) => nameIn(branch.slice(prefix.length)))
+}
+
+/** The workspace name in what follows the prefix, with the kind taken off. */
+function nameIn(rest: string): string {
+  const slash = rest.indexOf('/')
+  if (slash === -1) return rest
+
+  return isWorkspaceKind(rest.slice(0, slash)) ? rest.slice(slash + 1) : rest
 }
 
 /**
@@ -377,7 +431,8 @@ export async function renameWorkspace(
   project: Project,
   name: string,
   exec: GitExec,
-  siblings: readonly Workspace[] = []
+  siblings: readonly Workspace[] = [],
+  onDetour: (detour: KindDetour) => void = () => undefined
 ): Promise<Pick<Workspace, 'name' | 'branch' | 'branchSince'>> {
   const trimmed = name.trim()
   if (trimmed === '') {
@@ -398,25 +453,150 @@ export async function renameWorkspace(
     )
   }
 
-  const branch = branchFor(project, trimmed)
-  if (branch === workspace.branch) {
-    // The slug did not change — nothing for git to do.
-    return { name: trimmed, branch, branchSince: workspace.branchSince }
+  // A label in other letters asks nothing of the branch. Building it afresh
+  // would bring a branch from before kinds onto the new shape, and carry a
+  // pushed one whose kind has since changed onto that kind — the lost pull
+  // request `rekindWorkspace` refused to cause.
+  if (toSlug(trimmed) === toSlug(workspace.name)) {
+    return { name: trimmed, branch: workspace.branch, branchSince: workspace.branchSince }
   }
 
+  // GitHub keeps a pull request on the branch it was opened from, so moving a
+  // pushed branch leaves the workspace without its own request — the reason
+  // `rekindWorkspace` leaves one where it is. A new name would mean a new
+  // branch, so it is refused, and said, rather than half done.
+  if (await hasLeftMachine(exec, workspace.branch)) {
+    throw new WorkspaceError(
+      'branchPublished',
+      { branch: workspace.branch },
+      `${workspace.branch} has been pushed; renaming would leave its pull request behind.`
+    )
+  }
+
+  const { branch, blocker } = await routeBranch(
+    exec,
+    project,
+    workspace.kind,
+    trimmed,
+    workspace.branch
+  )
+  const moved = await moveWorkspaceBranch(workspace, branch, exec)
+  if (blocker !== null) onDetour({ blocker, branch })
+  return { name: trimmed, ...moved }
+}
+
+/**
+ * Gives a workspace another kind, and its branch the kind's name while that
+ * costs nothing.
+ *
+ * The branch moves only while it has never left this machine. GitHub keeps a
+ * pull request on the branch it was opened from, so a workspace that moved off
+ * a pushed one would lose its own request; after the push the kind is the
+ * card's label and the branch stays as it was.
+ *
+ * The same where a branch named after the kind holds its folder (`KindDetour`):
+ * there is no other shape the branch could take that says the kind, so it stays,
+ * and `onDetour` hears why.
+ */
+export async function rekindWorkspace(
+  workspace: Workspace,
+  project: Project,
+  kind: WorkspaceKind,
+  exec: GitExec,
+  onDetour: (detour: KindDetour) => void = () => undefined
+): Promise<Partial<Pick<Workspace, 'kind' | 'branch' | 'branchSince'>>> {
+  if (kind === workspace.kind) return {}
+  if (await hasLeftMachine(exec, workspace.branch)) return { kind }
+
+  const branch = branchFor(project, kind, workspace.name)
+  // Back to the kind its branch is named for: nothing moves, so nothing can be
+  // in the way of a move.
+  if (branch === workspace.branch) {
+    return { kind, branch, branchSince: workspace.branchSince }
+  }
+
+  const blocker = await kindBlocker(exec, project, kind, branch, workspace.branch)
+  if (blocker !== null) {
+    onDetour({ blocker, branch: workspace.branch })
+    return { kind }
+  }
+
+  return { kind, ...(await moveWorkspaceBranch(workspace, branch, exec)) }
+}
+
+/**
+ * Where a workspace's branch goes for this kind and name: `<prefix>/<kind>/<name>`,
+ * or round a branch named after the kind onto `<prefix>/<name>`, the shape from
+ * before kinds — with the branch that was in the way, or null.
+ *
+ * `own` is the branch being moved onto the name, if any (`branchBlocker`).
+ */
+async function routeBranch(
+  exec: GitExec,
+  project: Project,
+  kind: WorkspaceKind,
+  name: string,
+  own: string | null
+): Promise<{ branch: string; blocker: string | null }> {
+  const branch = branchFor(project, kind, name)
+  const blocker = await kindBlocker(exec, project, kind, branch, own)
+  if (blocker === null) return { branch, blocker }
+
+  // Not onto a branch named after a kind: that would stand in that kind's way
+  // for the whole project, the very thing being gone round.
+  const slug = toSlug(name)
+  if (isWorkspaceKind(slug)) throw blockedBy(branch, blocker)
+
+  const around = `${project.branchPrefix}/${slug}`
+  await refuseBlocked(exec, around, own)
+  return { branch: around, blocker }
+}
+
+/**
+ * The branch named after `kind` that stands where `branch` needs a folder, or
+ * null where nothing does. Anything else in the way is refused: only the kind's
+ * own folder has a way round.
+ */
+async function kindBlocker(
+  exec: GitExec,
+  project: Project,
+  kind: WorkspaceKind,
+  branch: string,
+  own: string | null
+): Promise<string | null> {
+  const blocker = await branchBlocker(exec, branch, own)
+  if (blocker === null) return null
+
+  const folder = `${project.branchPrefix}/${kind}`
+  if (blocker === folder || blocker === `${DEFAULT_REMOTE}/${folder}`) return blocker
+  throw blockedBy(branch, blocker)
+}
+
+/**
+ * Moves a workspace's branch to a name already routed (`routeBranch`), refusing
+ * first a name that is taken.
+ *
+ * Shared by a rename and a new kind, the two things a branch name follows.
+ * Never asked to move a branch onto itself: a rename keeping the branch slug
+ * and a new kind its branch is already named for both return before this.
+ */
+async function moveWorkspaceBranch(
+  workspace: Workspace,
+  branch: string,
+  exec: GitExec
+): Promise<Pick<Workspace, 'branch' | 'branchSince'>> {
   // Asked before the attempt, so a failure can be named. Mapping every
   // rejection to "already exists" blamed the new name for whatever went wrong —
   // including the branch being renamed from a terminal, where the truth is that
-  // the old one is gone. `origin`'s copy counts as in `takenByBranches`, unless
-  // it is this branch's own upstream: then the name is the workspace's own.
+  // the old one is gone. `origin`'s copy counts as in `takenByBranches`, and
+  // always: a branch that has been pushed never gets this far, so the copy can
+  // never be the workspace's own.
   const onRemote = remoteBranchName(branch)
-  const [local, remote, upstream] = await allOf([
+  const [local, remote] = await allOf([
     anyBranchExists(exec, branch),
-    refExists(exec, `refs/remotes/${onRemote}`),
-    upstreamOf(exec, workspace.branch)
+    refExists(exec, `refs/remotes/${onRemote}`)
   ])
-  const own = remote && upstream === onRemote
-  if (local || (remote && !own)) {
+  if (local || remote) {
     const taken = local ? branch : onRemote
     throw new WorkspaceError('branchExists', { branch: taken }, `Branch ${taken} already exists.`)
   }
@@ -425,7 +605,27 @@ export async function renameWorkspace(
   // guess would.
   await renameBranch(exec, workspace.branch, branch)
 
-  return { name: trimmed, branch, branchSince: own ? null : new Date().toISOString() }
+  return { branch, branchSince: new Date().toISOString() }
+}
+
+/**
+ * Refuses a branch another one stands in the way of (`branchBlocker`), where
+ * `own` is the branch being moved onto it, if any.
+ */
+async function refuseBlocked(exec: GitExec, branch: string, own: string | null): Promise<void> {
+  const blocker = await branchBlocker(exec, branch, own)
+  if (blocker !== null) throw blockedBy(branch, blocker)
+}
+
+/** The refusal of `branch`, which `blocker` stands in the way of. */
+function blockedBy(branch: string, blocker: string): WorkspaceError {
+  // Told apart because the advice differs: a copy on origin is not renamed or
+  // deleted from here, and nothing local is in the way at all.
+  return new WorkspaceError(
+    blocker.startsWith(`${DEFAULT_REMOTE}/`) ? 'branchBlockedRemote' : 'branchBlocked',
+    { branch, blocker },
+    `${blocker} stops ${branch} from being created.`
+  )
 }
 
 export interface RemoveOptions {
@@ -679,6 +879,23 @@ async function holdsUncommittedWork(exec: WorkspaceExec, path: string): Promise<
     return await hasUncommittedChanges(exec.workspace)
   } catch {
     return false
+  }
+}
+
+/**
+ * Undoes a branch move whose record could not be stored.
+ *
+ * Without it the branch has its new name and the record its old one, and the
+ * workspace reads as standing on some other branch. Best-effort for the same
+ * reason as `rollbackWorkspace`: it runs while the failure that called for it
+ * is still being handled.
+ */
+export async function restoreBranch(exec: GitExec, moved: string, original: string): Promise<void> {
+  try {
+    await renameBranch(exec, moved, original)
+  } catch {
+    // The branch may have been moved again by hand; the original failure is
+    // the one worth reporting.
   }
 }
 

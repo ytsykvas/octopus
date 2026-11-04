@@ -179,6 +179,32 @@ describes, and `warning` is the one worth crossing the window for, because that
 turn has stopped and is waiting on you. A workspace holding several
 conversations draws one dot each inside the tile instead.
 
+**The strip down a card's left edge is the kind of work** — one of twelve,
+`feature` until somebody picks another (`workspaceKinds.ts`). It is the card's
+first child and a button of its own, beside the one that selects the workspace
+rather than inside it, and it reaches the card's edge through its padding so the
+1px border stays the same all round. Tinted in the kind's colour from the
+project palette, never solid: twelve solid blocks down a list are the confetti
+§10.7 rules out. The tint is strong (38%), because a fainter one lost the
+strip's edge against the card, and the word is in `ink`, because in the kind's
+own colour on that fill it fell under 3:1. The word runs bottom to top (`writing-mode: sideways-lr`) and
+is a short form of the kind, about seven letters, which is all a 46px card
+holds — `locales.test.ts` keeps every language to it. Some short words are
+not the name (`explore` for Research), so the button's label and tooltip begin
+with the word on screen and then give the name — "explore — Research tag.
+Change" — and saying what you see finds it. It says it opens a menu
+(`aria-haspopup`) and whether that menu is open (`aria-expanded`). On the
+selected card the strip sits at the hover tint, so hovering it there goes one
+step further (52%). A click opens the picker, a `DropdownMenu` of
+radio items with a note above them: the branch is renamed with the kind only
+until it is pushed, since GitHub keeps a request on the branch it was opened
+from. The list is read again after a change rather than drawn ahead of it, so
+the strip and the branch never disagree on screen. When a branch named after
+the kind left it no folder, the change is made and the banner says so once
+(`workspaces.kindDetour`): the branch went round onto `<prefix>/<name>`, or kept
+its place — the same line a creation or a rename that went round gets. The strip is not there while
+the name is being edited: the editor takes the whole card.
+
 **A workspace is added the way a repository is.** The header's "+" is
 `AddTile`, the same dashed 40px tile that ends the project strip — an empty
 slot, one level down — and turns into a spinner while creation fetches. A

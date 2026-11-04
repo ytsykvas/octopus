@@ -25,8 +25,11 @@ import {
   checkedOutBranches,
   viewOf,
   removeWorkspace,
+  rekindWorkspace,
+  restoreBranch,
   renameWorkspace,
   rollbackWorkspace,
+  type KindDetour,
   WorkspaceError
 } from './workspaces.js'
 
@@ -133,6 +136,27 @@ async function create(): Promise<Workspace> {
   return workspace
 }
 
+/**
+ * What `worktree add` from `origin/main` left on every workspace branch before
+ * `--no-track`: an upstream on the base, which the config still holds.
+ */
+async function trackBase(workspace: Workspace): Promise<void> {
+  await exec(['config', `branch.${workspace.branch}.remote`, 'origin'])
+  await exec(['config', `branch.${workspace.branch}.merge`, 'refs/heads/main'])
+}
+
+/**
+ * A workspace as one made before kinds left it: on `<prefix>/<name>`, which
+ * every record written then still points at.
+ */
+async function fromBeforeKinds(name: string): Promise<Workspace> {
+  const made = await create()
+  const branch = `${project.branchPrefix}/${name}`
+  await exec(['branch', '-m', made.branch, branch])
+
+  return { ...made, name, branch }
+}
+
 describe('a pool with nothing free in it', () => {
   /*
    * Everything else about the workspace works, so refusing to make it would
@@ -151,12 +175,12 @@ describe('a pool with nothing free in it', () => {
 })
 
 describe('branchFor', () => {
-  it('joins the prefix and a slugged name', () => {
-    expect(branchFor(project, 'fix auth')).toBe('ytsykvas/fix-auth')
+  it('joins the prefix, the kind and a slugged name', () => {
+    expect(branchFor(project, 'fix', 'fix auth')).toBe('ytsykvas/fix/fix-auth')
   })
 
   it('keeps non-Latin names readable, as git allows', () => {
-    expect(branchFor(project, 'Виправити')).toBe('ytsykvas/виправити')
+    expect(branchFor(project, 'bug', 'Виправити')).toBe('ytsykvas/bug/виправити')
   })
 })
 
@@ -184,7 +208,7 @@ describe('freshBase', () => {
   it('creates a workspace normally when there is no remote at all', async () => {
     const workspace = await createWorkspace(project, state, exec, { root, answers: nothingListens })
 
-    expect(workspace.branch).toBe(branchFor(project, workspace.name))
+    expect(workspace.branch).toBe(branchFor(project, 'feature', workspace.name))
     expect(await listWorktrees(exec)).toHaveLength(2)
   })
 
@@ -266,7 +290,7 @@ describe('createWorkspace', () => {
     const workspace = await create()
 
     const worktrees = await listWorktrees(exec)
-    expect(worktrees.map((item) => item.branch)).toContain(`ytsykvas/${FIRST_NAME}`)
+    expect(worktrees.map((item) => item.branch)).toContain(`ytsykvas/feature/${FIRST_NAME}`)
     expect(workspace.path).toContain(join('workspaces', 'planner', FIRST_NAME))
   })
 
@@ -282,7 +306,7 @@ describe('createWorkspace', () => {
   })
 
   it('skips a name whose branch is still on the remote', async () => {
-    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/${FIRST_NAME}`, 'HEAD'], {
+    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/feature/${FIRST_NAME}`, 'HEAD'], {
       cwd: repo
     })
 
@@ -296,7 +320,7 @@ describe('createWorkspace', () => {
    */
   it('frees a name whose branch the remote has since deleted', async () => {
     await addRemote()
-    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/${FIRST_NAME}`, 'HEAD'], {
+    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/feature/${FIRST_NAME}`, 'HEAD'], {
       cwd: repo
     })
 
@@ -307,7 +331,7 @@ describe('createWorkspace', () => {
   // Housekeeping: when it fails, only a name stays held, never the workspace.
   it('still creates the workspace when the remote cannot be asked about its branches', async () => {
     await addRemote()
-    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/${FIRST_NAME}`, 'HEAD'], {
+    await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/feature/${FIRST_NAME}`, 'HEAD'], {
       cwd: repo
     })
     const fetchExec: GitExec = (args) =>
@@ -327,7 +351,111 @@ describe('createWorkspace', () => {
           cwd: repo
         })
       ).stdout
-    ).toContain(`ytsykvas/${FIRST_NAME}`)
+    ).toContain(`ytsykvas/feature/${FIRST_NAME}`)
+  })
+
+  it('skips a name a branch of another kind holds', async () => {
+    await run('git', ['branch', `ytsykvas/fix/${FIRST_NAME}`], { cwd: repo })
+
+    expect((await create()).name).toBe(SECOND_NAME)
+  })
+
+  // Every branch made before kinds is `<prefix>/<name>`, and its name is as
+  // taken as it ever was.
+  it('skips a name a branch from before kinds holds', async () => {
+    await run('git', ['branch', `ytsykvas/${FIRST_NAME}`], { cwd: repo })
+
+    expect((await create()).name).toBe(SECOND_NAME)
+  })
+
+  // A name may hold a slash, so the segment after the prefix is a kind only
+  // when it is one: this branch holds `someone/<name>`, and `<name>` is free.
+  it('does not read the first segment of a name as a kind', async () => {
+    await run('git', ['branch', `ytsykvas/someone/${FIRST_NAME}`], { cwd: repo })
+
+    expect((await create()).name).toBe(FIRST_NAME)
+  })
+
+  it('starts every workspace as a feature', async () => {
+    expect((await create()).kind).toBe('feature')
+  })
+
+  /*
+   * A workspace from before kinds, once renamed to `feature`, sits on
+   * `ytsykvas/feature` — where every new branch needs a folder, and git cannot
+   * have both. Refusing left the project unable to make a workspace at all, so
+   * the new one goes round it on the shape from before kinds, and says why.
+   */
+  it('goes round a branch named after its kind', async () => {
+    await run('git', ['branch', 'ytsykvas/feature'], { cwd: repo })
+    const detours: KindDetour[] = []
+
+    const workspace = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens,
+      random: first,
+      onDetour: (detour) => detours.push(detour)
+    })
+
+    expect(workspace).toMatchObject({ kind: 'feature', branch: `ytsykvas/${FIRST_NAME}` })
+    expect(detours).toEqual([{ blocker: 'ytsykvas/feature', branch: `ytsykvas/${FIRST_NAME}` }])
+    await expect(exec(['branch', '--list', `ytsykvas/${FIRST_NAME}`])).resolves.toContain(
+      FIRST_NAME
+    )
+  })
+
+  // The copy outlives the branch: removal never deletes it on origin.
+  it('goes round a copy on origin named after its kind', async () => {
+    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/feature', 'HEAD'])
+    const detours: KindDetour[] = []
+
+    const workspace = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens,
+      random: first,
+      onDetour: (detour) => detours.push(detour)
+    })
+
+    expect(workspace.branch).toBe(`ytsykvas/${FIRST_NAME}`)
+    expect(detours).toEqual([
+      { blocker: 'origin/ytsykvas/feature', branch: `ytsykvas/${FIRST_NAME}` }
+    ])
+  })
+
+  it('goes round a branch named after its kind with nobody listening', async () => {
+    await run('git', ['branch', 'ytsykvas/feature'], { cwd: repo })
+
+    expect((await create()).branch).toBe(`ytsykvas/${FIRST_NAME}`)
+  })
+
+  // The way round is a branch like any other, and refused like one.
+  it('refuses the way round when a branch stands in the way of that too', async () => {
+    await run('git', ['branch', 'ytsykvas/feature'], { cwd: repo })
+    await run('git', ['branch', `ytsykvas/${FIRST_NAME}/x`], { cwd: repo })
+
+    const error = await create().catch((cause: unknown) => cause)
+
+    expect((error as WorkspaceError).code).toBe('branchBlocked')
+    expect((error as WorkspaceError).params).toMatchObject({
+      branch: `ytsykvas/${FIRST_NAME}`,
+      blocker: `ytsykvas/${FIRST_NAME}/x`
+    })
+    expect(await listWorktrees(exec)).toHaveLength(1)
+  })
+
+  // Only the kind's own folder is gone round; anything else in the way is
+  // refused before anything is made, rather than as "cannot lock ref" halfway.
+  it('refuses a branch in the way that is not named after its kind', async () => {
+    await run('git', ['branch', 'ytsykvas'], { cwd: repo })
+
+    const error = await create().catch((cause: unknown) => cause)
+
+    expect((error as WorkspaceError).code).toBe('branchBlocked')
+    expect((error as WorkspaceError).params).toMatchObject({
+      branch: `ytsykvas/feature/${FIRST_NAME}`,
+      blocker: 'ytsykvas'
+    })
+    expect(await listWorktrees(exec)).toHaveLength(1)
   })
 
   it('ignores branches outside the project prefix', async () => {
@@ -561,8 +689,10 @@ describe('renameWorkspace', () => {
     const renamed = await renameWorkspace(workspace, project, 'fix auth', exec)
 
     expect(renamed.name).toBe('fix auth')
-    expect(renamed.branch).toBe('ytsykvas/fix-auth')
-    await expect(exec(['branch', '--list', 'ytsykvas/fix-auth'])).resolves.toContain('fix-auth')
+    expect(renamed.branch).toBe('ytsykvas/feature/fix-auth')
+    await expect(exec(['branch', '--list', 'ytsykvas/feature/fix-auth'])).resolves.toContain(
+      'fix-auth'
+    )
   })
 
   // The directory is fixed at creation because `git worktree move` fails
@@ -601,6 +731,36 @@ describe('renameWorkspace', () => {
     expect(renamed.branchSince).toBe(workspace.branchSince)
   })
 
+  // A new label in other letters is not a reason to bring a branch from
+  // before kinds onto the new shape: nothing about the branch was asked for.
+  it('leaves a branch from before kinds alone when the slug is unchanged', async () => {
+    const workspace = await fromBeforeKinds(FIRST_NAME)
+
+    const renamed = await renameWorkspace(workspace, project, FIRST_NAME.toUpperCase(), exec)
+
+    expect(renamed.branch).toBe(`ytsykvas/${FIRST_NAME}`)
+    await expect(exec(['branch', '--list', `ytsykvas/${FIRST_NAME}`])).resolves.toContain(
+      FIRST_NAME
+    )
+  })
+
+  /*
+   * A pushed branch keeps its name when the kind changes, so the record's
+   * kind and the branch's segment disagree. A relabel must not then quietly
+   * carry the branch off to the new kind — that is the lost pull request the
+   * kind refused to cause.
+   */
+  it('leaves a pushed branch alone when only the label changes', async () => {
+    await addRemote()
+    const workspace = await create()
+    await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
+    const rekinded = { ...workspace, ...(await rekindWorkspace(workspace, project, 'bug', exec)) }
+
+    const renamed = await renameWorkspace(rekinded, project, FIRST_NAME.toUpperCase(), exec)
+
+    expect(renamed.branch).toBe(workspace.branch)
+  })
+
   it('marks when the workspace came onto its new branch', async () => {
     const workspace = await create()
     const before = Date.now()
@@ -612,25 +772,58 @@ describe('renameWorkspace', () => {
 
   it('refuses a name whose branch is still on the remote', async () => {
     const workspace = await create()
-    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/fix-auth', 'HEAD'])
+    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/feature/fix-auth', 'HEAD'])
 
     const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
       (cause: unknown) => cause
     )
 
     expect((error as WorkspaceError).code).toBe('branchExists')
-    expect((error as WorkspaceError).params).toMatchObject({ branch: 'origin/ytsykvas/fix-auth' })
+    expect((error as WorkspaceError).params).toMatchObject({
+      branch: 'origin/ytsykvas/feature/fix-auth'
+    })
   })
 
-  it('lets a workspace back onto its own branch on the remote', async () => {
+  /*
+   * GitHub keeps a pull request on the branch it was opened from, and a
+   * workspace moved off it no longer finds its own request. So once the branch
+   * has been pushed the name stays — refused and said, rather than quietly
+   * done or quietly not.
+   */
+  it('refuses to rename a workspace whose branch has been pushed', async () => {
     await addRemote()
     const workspace = await create()
     await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
-    const away = { ...workspace, ...(await renameWorkspace(workspace, project, 'fix auth', exec)) }
 
-    const back = await renameWorkspace(away, project, workspace.name, exec)
+    const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
+      (cause: unknown) => cause
+    )
 
-    expect(back).toMatchObject({ branch: workspace.branch, branchSince: null })
+    expect((error as WorkspaceError).code).toBe('branchPublished')
+    expect((error as WorkspaceError).params).toMatchObject({ branch: workspace.branch })
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(FIRST_NAME)
+  })
+
+  // Other letters ask nothing of the branch, so there is nothing to refuse.
+  it('still relabels a pushed workspace when the slug is unchanged', async () => {
+    await addRemote()
+    const workspace = await create()
+    await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
+
+    const renamed = await renameWorkspace(workspace, project, FIRST_NAME.toUpperCase(), exec)
+
+    expect(renamed).toMatchObject({ name: FIRST_NAME.toUpperCase(), branch: workspace.branch })
+  })
+
+  // Its upstream is the base it was cut from: nothing of it has left.
+  it('renames a workspace born tracking the base', async () => {
+    await addRemote()
+    const workspace = await create()
+    await trackBase(workspace)
+
+    const renamed = await renameWorkspace(workspace, project, 'fix auth', exec)
+
+    expect(renamed.branch).toBe('ytsykvas/feature/fix-auth')
   })
 
   it('refuses to collide with an existing branch', async () => {
@@ -659,6 +852,282 @@ describe('renameWorkspace', () => {
 
     expect(error).toBeInstanceOf(GitError)
     expect((error as GitError).stderr).toContain(workspace.branch)
+  })
+
+  // A workspace from before kinds comes onto the new shape the first time its
+  // branch moves anyway.
+  it('moves a branch from before kinds onto the new shape', async () => {
+    const workspace = await fromBeforeKinds(FIRST_NAME)
+
+    const renamed = await renameWorkspace(workspace, project, 'fix auth', exec)
+
+    expect(renamed.branch).toBe('ytsykvas/feature/fix-auth')
+  })
+
+  it('refuses a name a branch beneath it stands in the way of', async () => {
+    const workspace = await create()
+    await exec(['branch', 'ytsykvas/feature/fix-auth/x'])
+
+    const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchBlocked')
+    expect((error as WorkspaceError).params).toMatchObject({
+      branch: 'ytsykvas/feature/fix-auth',
+      blocker: 'ytsykvas/feature/fix-auth/x'
+    })
+  })
+
+  // Another workspace's branch from before kinds holds the kind's folder: the
+  // rename goes round it, as a creation does, rather than refusing.
+  it('goes round a branch named after its kind', async () => {
+    const workspace = await fromBeforeKinds(FIRST_NAME)
+    await exec(['branch', 'ytsykvas/feature'])
+    const detours: KindDetour[] = []
+
+    const renamed = await renameWorkspace(workspace, project, 'fix auth', exec, [], (detour) =>
+      detours.push(detour)
+    )
+
+    expect(renamed.branch).toBe('ytsykvas/fix-auth')
+    expect(detours).toEqual([{ blocker: 'ytsykvas/feature', branch: 'ytsykvas/fix-auth' }])
+  })
+
+  /*
+   * Going round to `ytsykvas/docs` would make a branch named after a kind —
+   * the very thing that made the detour necessary, now standing in the way of
+   * every new kind `docs` in the project. Refused instead, naming what was in
+   * the way of the name asked for.
+   */
+  it('refuses to go round onto a branch named after a kind', async () => {
+    const workspace = await fromBeforeKinds(FIRST_NAME)
+    await exec(['branch', 'ytsykvas/feature'])
+
+    const error = await renameWorkspace(workspace, project, 'Docs', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchBlocked')
+    expect((error as WorkspaceError).params).toMatchObject({
+      branch: 'ytsykvas/feature/docs',
+      blocker: 'ytsykvas/feature'
+    })
+    await expect(exec(['branch', '--list', 'ytsykvas/docs'])).resolves.toBe('')
+  })
+
+  it('goes round a copy on origin named after its kind with nobody listening', async () => {
+    const workspace = await create()
+    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/feature', 'HEAD'])
+
+    const renamed = await renameWorkspace(workspace, project, 'fix auth', exec)
+
+    expect(renamed.branch).toBe('ytsykvas/fix-auth')
+  })
+
+  // Nothing here stops the branch; the copy on origin would stop its push,
+  // and that copy is not something to rename from this machine.
+  it('says when the branch in the way is a copy on origin', async () => {
+    const workspace = await create()
+    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/feature/fix-auth/x', 'HEAD'])
+
+    const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchBlockedRemote')
+    expect((error as WorkspaceError).params).toMatchObject({
+      branch: 'ytsykvas/feature/fix-auth',
+      blocker: 'origin/ytsykvas/feature/fix-auth/x'
+    })
+  })
+
+  // A copy on origin is a branch that has left, upstream or not: a push from
+  // the terminal without `-u` sets none, and the request can still be open.
+  it('refuses to rename a workspace whose branch origin holds a copy of', async () => {
+    const workspace = await fromBeforeKinds('feature')
+    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/feature', 'HEAD'])
+
+    const error = await renameWorkspace(workspace, project, 'x', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchPublished')
+  })
+
+  /*
+   * A workspace once renamed to `feature` sits on `ytsykvas/feature` — the
+   * very ref every new branch needs as a folder. Its own branch is not in its
+   * way: `git branch -m` lets go of the old ref before it takes the new one.
+   */
+  it('moves a branch into a folder of its own name', async () => {
+    const workspace = await fromBeforeKinds('feature')
+
+    const renamed = await renameWorkspace(workspace, project, 'x', exec)
+
+    expect(renamed.branch).toBe('ytsykvas/feature/x')
+    await expect(exec(['branch', '--list', 'ytsykvas/feature/x'])).resolves.toContain('x')
+  })
+})
+
+describe('rekindWorkspace', () => {
+  it('moves a branch only this machine has onto the new kind', async () => {
+    const workspace = await create()
+    const before = Date.now()
+
+    const changed = await rekindWorkspace(workspace, project, 'bug', exec)
+
+    expect(Date.parse(changed.branchSince ?? '')).toBeGreaterThanOrEqual(before)
+
+    expect(changed).toMatchObject({ kind: 'bug', branch: `ytsykvas/bug/${FIRST_NAME}` })
+    await expect(exec(['branch', '--list', `ytsykvas/bug/${FIRST_NAME}`])).resolves.toContain(
+      FIRST_NAME
+    )
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  it('changes nothing, and asks git nothing, for the kind it already has', async () => {
+    const workspace = await create()
+    const asked: string[][] = []
+    const watching: GitExec = (args) => {
+      asked.push([...args])
+      return exec(args)
+    }
+
+    await expect(rekindWorkspace(workspace, project, 'feature', watching)).resolves.toEqual({})
+    expect(asked).toEqual([])
+  })
+
+  /*
+   * GitHub keeps a pull request on the branch it was opened from, and a
+   * workspace that moved off it would lose its own request. Once the branch
+   * has been pushed the kind is a label on the card and nothing more.
+   */
+  it('leaves a pushed branch where it is', async () => {
+    await addRemote()
+    const workspace = await create()
+    await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
+
+    await expect(rekindWorkspace(workspace, project, 'bug', exec)).resolves.toEqual({
+      kind: 'bug'
+    })
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(FIRST_NAME)
+  })
+
+  /*
+   * A pushed branch kept its name through a new kind; then its upstream was
+   * unset and the copy on origin dropped from a terminal. Going back to the
+   * kind the branch is named for is a move onto itself — not a branch that
+   * "already exists".
+   */
+  it('takes back the kind its branch is still named for', async () => {
+    await addRemote()
+    const workspace = await create()
+    await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
+    const kept = { ...workspace, ...(await rekindWorkspace(workspace, project, 'bug', exec)) }
+    await exec(['branch', '--unset-upstream', workspace.branch])
+    await exec(['update-ref', '-d', `refs/remotes/origin/${workspace.branch}`])
+
+    await expect(rekindWorkspace(kept, project, 'feature', exec)).resolves.toEqual({
+      kind: 'feature',
+      branch: workspace.branch,
+      branchSince: workspace.branchSince
+    })
+  })
+
+  it('moves the branch of a workspace born tracking the base', async () => {
+    await addRemote()
+    const workspace = await create()
+    await trackBase(workspace)
+
+    const changed = await rekindWorkspace(workspace, project, 'bug', exec)
+
+    expect(changed.branch).toBe(`ytsykvas/bug/${FIRST_NAME}`)
+  })
+
+  /*
+   * A label that had drifted from its branch coming back to it asks git
+   * nothing: nothing moves, so nothing can be in the way of a move.
+   */
+  it('takes back the kind its branch is named for without asking what is in the way', async () => {
+    const workspace = await create()
+    const relabelled = { ...workspace, kind: 'bug' as const }
+    await exec(['update-ref', `refs/remotes/origin/${workspace.branch}/x`, 'HEAD'])
+
+    await expect(rekindWorkspace(relabelled, project, 'feature', exec)).resolves.toEqual({
+      kind: 'feature',
+      branch: workspace.branch,
+      branchSince: workspace.branchSince
+    })
+  })
+
+  it('moves a branch from before kinds onto the new shape', async () => {
+    const workspace = await fromBeforeKinds(FIRST_NAME)
+
+    const changed = await rekindWorkspace(workspace, project, 'fix', exec)
+
+    expect(changed.branch).toBe(`ytsykvas/fix/${FIRST_NAME}`)
+  })
+
+  /*
+   * `ytsykvas/bug` — a workspace from before kinds once named so — leaves the
+   * kind no folder. Refusing would make the kind unusable across the project;
+   * the label changes, as it does for a pushed branch, and the caller hears why.
+   */
+  it('keeps the branch where a branch named after the kind is in the way', async () => {
+    const workspace = await create()
+    await exec(['branch', 'ytsykvas/bug'])
+    const detours: KindDetour[] = []
+
+    await expect(
+      rekindWorkspace(workspace, project, 'bug', exec, (detour) => detours.push(detour))
+    ).resolves.toEqual({ kind: 'bug' })
+
+    expect(detours).toEqual([{ blocker: 'ytsykvas/bug', branch: workspace.branch }])
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(FIRST_NAME)
+  })
+
+  it('keeps the branch where the kind is in the way with nobody listening', async () => {
+    const workspace = await create()
+    await exec(['branch', 'ytsykvas/bug'])
+
+    await expect(rekindWorkspace(workspace, project, 'bug', exec)).resolves.toEqual({
+      kind: 'bug'
+    })
+  })
+
+  it('refuses a kind a branch beneath it stands in the way of', async () => {
+    const workspace = await create()
+    await exec(['branch', `ytsykvas/bug/${FIRST_NAME}/x`])
+
+    const error = await rekindWorkspace(workspace, project, 'bug', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchBlocked')
+    expect((error as WorkspaceError).params).toMatchObject({
+      blocker: `ytsykvas/bug/${FIRST_NAME}/x`
+    })
+  })
+})
+
+describe('restoreBranch', () => {
+  it('puts a moved branch back under its old name', async () => {
+    const workspace = await create()
+    await exec(['branch', '-m', workspace.branch, 'ytsykvas/bug/moved'])
+
+    await restoreBranch(exec, 'ytsykvas/bug/moved', workspace.branch)
+
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(FIRST_NAME)
+  })
+
+  // It runs while another failure is being handled, and must not replace it.
+  it('says nothing when the branch is not there to put back', async () => {
+    await create()
+
+    await expect(restoreBranch(exec, 'ytsykvas/bug/nowhere', 'ytsykvas/feature/x')).resolves.toBe(
+      undefined
+    )
   })
 })
 

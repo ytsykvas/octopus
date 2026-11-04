@@ -11,6 +11,7 @@ import { access, copyFile, stat, utimes } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
+import { DEFAULT_REMOTE } from './branches.js'
 import { describeError } from './persist.js'
 
 const run = promisify(execFile)
@@ -410,13 +411,86 @@ export async function resolveRef(exec: GitExec, ref: string): Promise<string | n
   }
 }
 
-/** The remote-tracking branch a local one tracks, such as `origin/x`, or null where it has none. */
-export async function upstreamOf(exec: GitExec, branch: string): Promise<string | null> {
-  try {
-    return (await exec(['rev-parse', '--abbrev-ref', `${branch}@{upstream}`])).trim()
-  } catch {
-    return null
+/**
+ * A branch that stops `branch` from being created, or null where none does.
+ *
+ * Refs are files under `.git/refs`, so `octopus/fix` and `octopus/fix/anna`
+ * cannot both exist: one is a file where the other needs a folder. git reports
+ * it only as "cannot lock ref", halfway through whatever was asked, so the
+ * question is put first. Asked of `origin`'s copies as well — nothing stops
+ * the local branch then, but its push would be refused.
+ *
+ * The name itself does not count: whether it already exists is a different
+ * refusal. Nor does `own`, the branch being moved onto this name: `git branch
+ * -m` lets go of its ref before taking the new one, so `x` → `x/y` and
+ * `x/y` → `x` both work. Only its local ref is passed over — the copy on
+ * `origin` stays where it is, and the push would still fail on it.
+ */
+export async function branchBlocker(
+  exec: GitExec,
+  branch: string,
+  own: string | null = null
+): Promise<string | null> {
+  const segments = branch.split('/')
+  const tracking = `refs/remotes/${DEFAULT_REMOTE}/`
+
+  // Walked in order rather than raced, so the answer is the shortest blocker
+  // and the same one every time.
+  for (let length = 1; length < segments.length; length += 1) {
+    const above = segments.slice(0, length).join('/')
+    if (above !== own && (await refExists(exec, `refs/heads/${above}`))) return above
+    if (await refExists(exec, `${tracking}${above}`)) return `${DEFAULT_REMOTE}/${above}`
   }
+
+  // Two, because `own` may be the first of them and is not in the way. Full
+  // names, shortened here: git's own short name turns a branch into
+  // `heads/<branch>` when a tag shares it, which `own` would then not match.
+  const below = await exec([
+    'for-each-ref',
+    '--count=2',
+    '--format=%(refname)',
+    `refs/heads/${branch}/`,
+    `${tracking}${branch}/`
+  ])
+  const [first] = below
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && line !== `refs/heads/${own ?? ''}`)
+
+  if (first === undefined) return null
+  return first.startsWith(tracking)
+    ? `${DEFAULT_REMOTE}/${first.slice(tracking.length)}`
+    : first.slice('refs/heads/'.length)
+}
+
+/**
+ * Whether a branch has ever been pushed: it has an upstream of its own name
+ * configured, or `origin` holds a copy of it.
+ *
+ * Asked of the config rather than through `@{upstream}`, which stops resolving
+ * once GitHub has deleted a merged branch and a prune has dropped the copy here
+ * — and the pull request opened from it is still there.
+ *
+ * Of its own name, because that is what `push -u` writes. Until `--no-track`,
+ * every workspace branch was born tracking the base it was cut from, and the
+ * config still says so: read as "pushed", it froze the name of a branch that
+ * never left. A branch an older build renamed after its push tracks its former
+ * name, whose request it had already lost by then; moving it again loses
+ * nothing more.
+ *
+ * Only a missing key is an answer. Any other failure propagates: read as "never
+ * pushed", it would let a branch a pull request is open from be moved.
+ */
+export async function hasLeftMachine(exec: GitExec, branch: string): Promise<boolean> {
+  try {
+    const merge = (await exec(['config', '--get', `branch.${branch}.merge`])).trim()
+    if (merge === `refs/heads/${branch}`) return true
+  } catch (error) {
+    // `config --get` exits 1 for a key that is not set.
+    if (extractCode(error) !== '1') throw error
+  }
+
+  return refExists(exec, `refs/remotes/${DEFAULT_REMOTE}/${branch}`)
 }
 
 /** Whether a local branch with this name exists. */

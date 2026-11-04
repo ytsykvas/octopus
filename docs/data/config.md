@@ -5,7 +5,7 @@ Validated by `ConfigSchema` in [`config.ts`](../../src/core/config.ts).
 | Field                             | Meaning                                                                                                                                                                                                                                                                                                                 |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `version`                         | format version, for future migrations                                                                                                                                                                                                                                                                                   |
-| `branchPrefix`                    | branches are `<prefix>/<workspace>` — cleaned on every read and write into what git takes (`cleanBranchPrefix`), so `ytsykvas/` is read as `ytsykvas`; a project's copy is cleaned the same way                                                                                                                         |
+| `branchPrefix`                    | branches are `<prefix>/<kind>/<workspace>` — cleaned on every read and write into what git takes (`cleanBranchPrefix`), so `ytsykvas/` is read as `ytsykvas`; a project's copy is cleaned the same way                                                                                                                  |
 | `cloneDirectory`                  | where GitHub clones land; empty means "ask, then remember"                                                                                                                                                                                                                                                              |
 | `settingSources`                  | what the agent loads for itself — `all` by default, as the CLI does; `none` is available for isolation (§4)                                                                                                                                                                                                             |
 | `agentProgressSummaries`          | whether each running subagent gets a one-line status in the agent map, written by the SDK from a fork of its context about every thirty seconds — a model call per running agent, which is why it can be switched off; `true` when absent. Read as a session starts, so it reaches conversations begun after the change |
@@ -80,7 +80,10 @@ the way out, since `persist.ts` writes back what the schema returned — so the
 old null is cleaned off the disk the next time anything is saved. Same shape as
 the `alwaysAllowedTools` filtering above. A `.catch()` would cover both cases in
 fewer characters and is deliberately not used: it would also swallow a genuinely
-corrupt value, which is the one thing this reader exists to shout about.
+corrupt value, which is the one thing this reader exists to shout about. The one
+exception is a workspace's `kind`, where an unknown value is expected rather
+than corrupt — a newer build's kind — and the cost of reading it as `feature` is
+a label; [state.md](state.md) says why, and what it costs.
 
 ## Config version 2
 

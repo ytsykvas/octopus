@@ -199,6 +199,10 @@ export function App(): React.JSX.Element {
 
       setSelectedProjectId(projectId)
       setSelectedWorkspaceId(made)
+      // Moved by the creation itself, so the banner is already about where it
+      // lands: a creation that went round a branch named after its kind says
+      // so there, and clearing on the move would wipe it as it was written.
+      setShownSelection(`${projectId}/${made}`)
       setFreshWorkspaceId(made)
     },
     [workspaces]
@@ -1048,6 +1052,7 @@ export function App(): React.JSX.Element {
                 creating={workspaces.creating}
                 onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
                 onRemoveWorkspace={(id) => void workspaces.remove(id)}
+                onSetWorkspaceKind={(id, kind) => void workspaces.setKind(id, kind)}
                 editingWorkspaceId={workspaces.editingId}
                 onEditingWorkspaceChange={workspaces.setEditingId}
                 onReorderWorkspaces={(projectId, ids) => void workspaces.reorder(projectId, ids)}

@@ -892,6 +892,37 @@ describe('useWorkspaces', () => {
       expect(onError).not.toHaveBeenCalledWith(expect.any(String))
     })
 
+    // Made, and opened — on the shape from before kinds, which the reader is
+    // told about rather than left to find in the branch.
+    it('says why the branch of a new workspace went round one named after its kind', async () => {
+      const made = { ...bob, branch: 'ytsykvas/bob' }
+      vi.mocked(window.octopus.workspaces.list)
+        .mockResolvedValueOnce({ ok: true, value: [anna] })
+        .mockResolvedValue({ ok: true, value: [anna, made] })
+      vi.mocked(window.octopus.workspaces.create).mockResolvedValue({
+        ok: true,
+        value: { ...made, detour: { blocker: 'ytsykvas/feature', branch: 'ytsykvas/bob' } }
+      })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      let opened: string | null = null
+      await act(async () => {
+        opened = await result.current.create('planner')
+      })
+
+      expect(opened).toBe('planner/bob')
+      expect(result.current.flat).toEqual([anna, made])
+      expect(onError).toHaveBeenLastCalledWith(
+        'ytsykvas/feature already exists, and git cannot file a branch under another, so the branch is ytsykvas/bob.'
+      )
+    })
+
     it('explains a refused creation and answers with nothing to open', async () => {
       workspacesPerProject({ planner: [anna] })
       vi.mocked(window.octopus.workspaces.create).mockResolvedValue({
@@ -1045,6 +1076,143 @@ describe('useWorkspaces', () => {
 
       expect(onError).toHaveBeenCalledWith('The name cannot be empty.')
       // Only the load on mount: there is nothing new to read.
+      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(1)
+    })
+
+    it('says why a renamed branch went round one named after its kind', async () => {
+      const renamed = { ...anna, name: 'billing', branch: 'ytsykvas/billing' }
+      vi.mocked(window.octopus.workspaces.list)
+        .mockResolvedValueOnce({ ok: true, value: [anna] })
+        .mockResolvedValue({ ok: true, value: [renamed] })
+      vi.mocked(window.octopus.workspaces.rename).mockResolvedValue({
+        ok: true,
+        value: { blocker: 'origin/ytsykvas/feature', branch: 'ytsykvas/billing' }
+      })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.rename('planner/anna', 'billing'))
+
+      expect(result.current.flat).toEqual([renamed])
+      expect(onError).toHaveBeenLastCalledWith(
+        'origin/ytsykvas/feature already exists, and git cannot file a branch under another, so the branch is ytsykvas/billing.'
+      )
+    })
+
+    // The branch has left: the name stays, and the reader is told why.
+    it('says why a workspace whose branch has left keeps its name', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.rename).mockResolvedValue({
+        ok: false,
+        error: 'ytsykvas/feature/anna has been pushed',
+        code: 'branchPublished',
+        params: { branch: 'ytsykvas/feature/anna' }
+      })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.rename('planner/anna', 'billing'))
+
+      expect(onError).toHaveBeenCalledWith(
+        'ytsykvas/feature/anna has been pushed, so the workspace keeps its name: a new one would move the branch away from its pull request.'
+      )
+      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('giving a workspace another kind', () => {
+    it('saves the kind and reloads the list', async () => {
+      const rekinded = { ...anna, kind: 'bug' as const, branch: 'ytsykvas/bug/anna' }
+      vi.mocked(window.octopus.workspaces.list)
+        .mockResolvedValueOnce({ ok: true, value: [anna] })
+        .mockResolvedValue({ ok: true, value: [rekinded] })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.setKind('planner/anna', 'bug'))
+
+      expect(window.octopus.workspaces.setKind).toHaveBeenCalledWith('planner/anna', 'bug')
+      expect(result.current.flat).toEqual([rekinded])
+      expect(onError).not.toHaveBeenCalledWith(expect.any(String))
+    })
+
+    // A line left from the last attempt would read as this one's answer.
+    it('clears the last error before asking', async () => {
+      workspacesPerProject({ planner: [anna] })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.setKind('planner/anna', 'bug'))
+
+      expect(onError).toHaveBeenCalledWith(null)
+    })
+
+    it('says why the branch kept its place under a new kind', async () => {
+      const rekinded = { ...anna, kind: 'bug' as const }
+      vi.mocked(window.octopus.workspaces.list)
+        .mockResolvedValueOnce({ ok: true, value: [anna] })
+        .mockResolvedValue({ ok: true, value: [rekinded] })
+      vi.mocked(window.octopus.workspaces.setKind).mockResolvedValue({
+        ok: true,
+        value: { blocker: 'ytsykvas/bug', branch: anna.branch }
+      })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.setKind('planner/anna', 'bug'))
+
+      expect(result.current.flat).toEqual([rekinded])
+      expect(onError).toHaveBeenLastCalledWith(
+        `ytsykvas/bug already exists, and git cannot file a branch under another, so the branch is ${anna.branch}.`
+      )
+    })
+
+    it('reports a branch in the way and leaves the list alone', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.setKind).mockResolvedValue({
+        ok: false,
+        error: 'ytsykvas/bug stops ytsykvas/bug/anna from being created.',
+        code: 'branchBlocked',
+        params: { branch: 'ytsykvas/bug/anna', blocker: 'ytsykvas/bug' }
+      })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.setKind('planner/anna', 'bug'))
+
+      expect(onError).toHaveBeenCalledWith(
+        'ytsykvas/bug already exists, so git cannot create ytsykvas/bug/anna. Rename or delete ytsykvas/bug first.'
+      )
       expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(1)
     })
   })

@@ -83,6 +83,7 @@ import { TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
 import { RemovalRequestSchema, WorkspaceNameSchema } from '../core/workspaces.js'
+import { WorkspaceKindSchema } from '../core/workspaceKinds.js'
 import type { TerminalManager } from './terminals.js'
 import { attempt } from './result.js'
 import { resolveTheme } from './theme.js'
@@ -870,6 +871,11 @@ export function registerIpc(
      paid for by every other field in the file. */
   host.handle('workspaces:notes', (_event, workspaceId: string, notes: unknown) =>
     attempt(() => service.setWorkspaceNotes(workspaceId, NotesBodySchema.parse(notes)))
+  )
+
+  // Parsed here: the kind becomes a segment of a branch name.
+  host.handle('workspaces:kind', (_event, workspaceId: string, kind: unknown) =>
+    attempt(() => service.setWorkspaceKind(workspaceId, WorkspaceKindSchema.parse(kind)))
   )
 
   // Parsed: the name becomes a branch name.

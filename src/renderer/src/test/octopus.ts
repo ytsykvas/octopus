@@ -124,7 +124,8 @@ export function installOctopusStub(): Api {
       list: vi.fn(() => ok([])),
       read: vi.fn(() => ok(null)),
       create: vi.fn(() => ok(workspaceFixture())),
-      rename: vi.fn(() => ok(undefined)),
+      rename: vi.fn(() => ok(null)),
+      setKind: vi.fn(() => ok(null)),
       reorder: vi.fn(() => ok(undefined)),
       remove: vi.fn(() => ok({ status: 'done' as const })),
       hasChanges: vi.fn(() => ok(false)),
@@ -543,6 +544,7 @@ function workspaceFixture(): Workspace {
     writers: {},
     notes: '',
     envFileApplied: null,
+    kind: 'feature',
     ownerId: null,
     envProfile: null
   }

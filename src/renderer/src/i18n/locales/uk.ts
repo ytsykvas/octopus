@@ -81,6 +81,25 @@ export const uk: Translation = {
     createFirstHint: 'Окрема гілка від {{branch}}',
     rename: 'Перейменувати',
     remove: 'Видалити воркспейс',
+    kindTitle: 'Тег',
+    kindNote: 'Гілка перейменовується разом із тегом, доки її не запушено.',
+    kindLabel: '{{short}} — тег «{{kind}}». Змінити',
+    kindDetour:
+      '{{blocker}} уже існує, а git не може покласти гілку всередину іншої, тож гілка — {{branch}}.',
+    kinds: {
+      feature: { label: 'Фіча', short: 'фіча' },
+      fix: { label: 'Фікс', short: 'фікс' },
+      bug: { label: 'Баг', short: 'баг' },
+      research: { label: 'Дослідження', short: 'дослід' },
+      tests: { label: 'Тести', short: 'тести' },
+      refactor: { label: 'Рефакторинг', short: 'рефакт' },
+      docs: { label: 'Документація', short: 'доки' },
+      chore: { label: 'Обслуговування', short: 'рутина' },
+      perf: { label: 'Продуктивність', short: 'перф' },
+      design: { label: 'Дизайн', short: 'дизайн' },
+      security: { label: 'Безпека', short: 'захист' },
+      review: { label: 'Рев’ю', short: 'рев’ю' }
+    },
     missing: 'Теки немає',
     statusRunning: 'Агент тут працює',
     statusWaiting: 'Чекає на твою відповідь',
@@ -1367,7 +1386,7 @@ export const uk: Translation = {
 
     branchPrefix: 'Префікс гілок',
     branchPrefixHint:
-      'Гілки воркспейсів називаються <префікс>/<воркспейс>. Зазвичай беруть GitHub-username.',
+      'Гілки воркспейсів називаються <префікс>/<тег>/<воркспейс>. Зазвичай беруть GitHub-username.',
     branchPrefixUnusable: 'У префіксі має бути хоча б один символ, який приймає git.',
     branchPrefixBecomes: 'Буде збережено як {{prefix}}',
 
@@ -1964,6 +1983,12 @@ export const uk: Translation = {
     branchUnmerged:
       '{{branch}} має коміти, яких немає в базовій гілці. Зніміть прапорець видалення гілки або спершу злийте її.',
     branchExists: 'Гілка {{branch}} уже існує.',
+    branchBlocked:
+      'Уже існує {{blocker}}, тому git не може створити {{branch}}. Спершу перейменуйте або видаліть {{blocker}}.',
+    branchBlockedRemote:
+      '{{blocker}} лежить на origin і заважає {{branch}}: git не може покласти гілку всередину іншої. Оберіть іншу назву або видаліть ту гілку на origin.',
+    branchPublished:
+      'Гілку {{branch}} уже запушено, тож назва воркспейсу лишається: нова перенесла б гілку геть від її PR.',
     slugTaken:
       'Інший воркспейс, «{{name}}», уже дає базі даних імʼя {{slug}}. Два воркспейси з однією базою перезаписують дані одне одного. Оберіть імʼя, що відрізняється більше, ніж дефісом чи крапкою.',
     pathExists: '{{path}} уже існує.',

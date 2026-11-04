@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { shortBranchName } from '@core/branches.js'
 import type { Project } from '@core/store.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
+import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useDragReorder } from '../hooks/useDragReorder.js'
@@ -47,6 +48,7 @@ interface SidebarProps {
   readonly onWidthChange: (width: number) => void
   readonly onRenameWorkspace: (workspaceId: string, name: string) => void
   readonly onRemoveWorkspace: (workspaceId: string) => void
+  readonly onSetWorkspaceKind: (workspaceId: string, kind: WorkspaceKind) => void
   /** Workspace whose name is being edited — set right after creation. */
   readonly editingWorkspaceId: string | null
   readonly onEditingWorkspaceChange: (workspaceId: string | null) => void
@@ -79,6 +81,7 @@ export function Sidebar({
   onWidthChange,
   onRenameWorkspace,
   onRemoveWorkspace,
+  onSetWorkspaceKind,
   editingWorkspaceId,
   onEditingWorkspaceChange,
   onReorderWorkspaces,
@@ -144,6 +147,7 @@ export function Sidebar({
                 onSelectWorkspace={onSelectWorkspace}
                 onRenameWorkspace={onRenameWorkspace}
                 onRemoveWorkspace={onRemoveWorkspace}
+                onSetWorkspaceKind={onSetWorkspaceKind}
                 onEditingWorkspaceChange={onEditingWorkspaceChange}
                 onReorderWorkspaces={onReorderWorkspaces}
               />
@@ -176,6 +180,7 @@ function WorkspaceList({
   onSelectWorkspace,
   onRenameWorkspace,
   onRemoveWorkspace,
+  onSetWorkspaceKind,
   onEditingWorkspaceChange,
   onReorderWorkspaces
 }: Pick<
@@ -187,6 +192,7 @@ function WorkspaceList({
   | 'onSelectWorkspace'
   | 'onRenameWorkspace'
   | 'onRemoveWorkspace'
+  | 'onSetWorkspaceKind'
   | 'onEditingWorkspaceChange'
   | 'onReorderWorkspaces'
 > & { readonly projectId: string }): React.JSX.Element {
@@ -224,6 +230,9 @@ function WorkspaceList({
               }}
               onRemove={() => {
                 onRemoveWorkspace(workspace.id)
+              }}
+              onKindChange={(kind) => {
+                onSetWorkspaceKind(workspace.id, kind)
               }}
               onEditingChange={(next) => {
                 onEditingWorkspaceChange(next ? workspace.id : null)

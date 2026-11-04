@@ -13,7 +13,8 @@ otherwise. So a name free in `state.json` may still be taken in the repository,
 and `worktree add` will refuse. `takenByBranches` in `workspaces.ts` exists for
 exactly this, and reads the remote-tracking branches as well as the local ones:
 the copy on `origin` outlives even a deleted local branch. A rename is refused
-onto either, unless the copy on `origin` is the workspace's own upstream.
+onto either. The copy can never be the workspace's own: a workspace whose
+branch has been pushed is not renamed at all (below).
 
 That copy outlived the branch itself, too: GitHub deletes a merged branch, the
 fetch keeps the copy, and the name stayed taken for good — one checkout had
@@ -32,9 +33,86 @@ delete head branches_; an unmerged one stays until a person deletes it.
 
 GitHub remembers a request after its branch is gone, so no choice of name can
 settle that alone. A request opened before the workspace came onto its branch —
-created, or renamed onto it (`branchSince`) — is never its own (`openedFor` in
+created, or moved onto it by a rename or a new kind (`branchSince`) — is never its own (`openedFor` in
 `pullRequestShapes.ts`), and the pane, the list beside it and the removal
 check all ask with the workspace rather than its branch name.
+
+## The branch carries the workspace's kind
+
+A workspace branch is `<prefix>/<kind>/<name>` — `octopus/fix/anna` — where the
+kind is the strip on its card (`workspaceKinds.ts`), `feature` until somebody
+picks another. Branches made before kinds are `<prefix>/<name>` and are left
+there: a branch moves only when a rename or a new kind moves it anyway. A
+rename that leaves the branch slug as it was (`toSlug`: the same name in other
+letters) moves nothing, so it never brings such a branch onto the new shape, nor carries a
+pushed one onto a kind it was deliberately kept off.
+
+`takenByBranches` reads both shapes, and takes the segment after the prefix as
+a kind only when it is one, because a name may hold a slash of its own. That is
+approximate in one direction: a workspace from before kinds named `fix/login`
+reads as holding `login`. One name too many is held, never one too few, and the
+two shapes cannot collide in git.
+
+**A branch named after a kind leaves that kind no folder, and the branch goes
+round it** (`KindDetour`, `routeBranch` in `workspaces.ts`). A workspace from
+before kinds once renamed `feature` sits on `octopus/feature`, and git cannot
+keep `octopus/feature/anna` beside it — here or, through the push, on
+`origin`, whose copy removal never deletes. Refusing made every creation in
+such a project fail, and the kind unusable across it. So a creation or a rename
+takes the shape from before kinds, `<prefix>/<name>`, and a new kind changes
+only the label, as it does for a pushed branch. Nothing records the detour: the
+window is told once (`workspaces.kindDetour`), and the record holds the branch
+as it is. Only the kind's own folder has a way round — anything else in the way
+is refused as below — and never onto a name that is itself a kind: renamed
+`docs` round `octopus/feature`, the workspace would sit on `octopus/docs` and
+stand in the way of every new kind `docs` in the project, so that rename is
+refused. A new kind that returns a label to the kind its branch is already
+named for moves nothing and asks nothing.
+
+**A new kind moves the branch only while it has never left this machine**
+(`hasLeftMachine` in `git.ts`: an upstream of its own name in the config, or a
+copy on `origin`). GitHub keeps a pull request on the branch it was opened from,
+so a workspace that moved off a pushed branch would lose its own request; past
+the push the kind is the card's label and nothing more. The config is asked
+rather than `@{upstream}`, which stops resolving once GitHub has deleted a
+merged branch and the copy here is pruned — and the request is still there.
+Only an upstream of the branch's own name counts, which is what `push -u`
+writes: until `--no-track` every workspace branch was born tracking the base,
+the config still says so, and read as "pushed" it froze the name of every
+workspace made before then.
+
+**A rename asks the same, and refuses** (`branchPublished`): a new name is a new
+branch, and a workspace moved off a pushed one loses its request just the same.
+Refused and said, rather than done halfway — the label alone changing while the
+branch stays would leave a name the branch no longer matches. A rename that
+keeps the branch slug, the same name in other letters, moves nothing and goes
+ahead. The branch slug, not the database one (`workspaceSlug`, which turns `-`
+into `_` too): `fix-auth` to `fix_auth` keeps the database and still names
+another branch, so it is refused like any other new name.
+
+**What moves a branch and what pushes it wait on each other**, one workspace at
+a time (`oneAtATimeEach` in `parallel.ts`): a rename, a new kind, Commit & push,
+Amend & push, Push, Create PR, the push after a turn, and removal — of the
+workspace or of its whole project, one workspace at a time — which reads the
+branch it deletes. A new kind asked while the first push
+was still on its way found no upstream yet and moved the branch out from under
+the request about to be opened from it — or the push, holding the old name,
+found nothing to send. Each reads the workspace once its turn comes. And git
+moves the branch before the record is written, so a write that fails puts the
+branch back (`restoreBranch`) rather than leave the two naming different
+branches.
+
+**Refs are files**, so `octopus/feature` and `octopus/feature/anna` cannot both
+exist. git says so only as "cannot lock ref", halfway through. `branchBlocker`
+asks first — for a branch above or below the name, here or on `origin`. One
+named after the kind is gone round (above); for anything else a creation, a
+rename and a new kind each refuse with `branchBlocked`, naming the branch in the
+way — or with `branchBlockedRemote` when what is in the way is a copy on
+`origin`: nothing local stops the branch then, only its push would fail, and the
+copy is deleted on `origin` rather than renamed from here. The workspace's own
+local branch is never in its own way:
+`git branch -m` lets go of the old ref before taking the new one. Its copy on
+`origin` stays, and still counts.
 
 ## A workspace branches from a base that was just fetched
 
@@ -71,11 +149,16 @@ workspace's work onto the base branch, which is what a worktree per task exists
 to prevent. It is invisible with `push.default=current`, so looking for it on
 the wrong machine finds nothing.
 
-The fetch is the only command in `src/core` that leaves the machine on purpose,
-and the only one given a deadline and an environment. `GIT_TERMINAL_PROMPT=0` is
-the load-bearing half: git spawned from Electron has no controlling terminal, so
-a fetch that decides to ask for a password writes the prompt nowhere and waits
-for ever, behind a button with no way to cancel.
+The fetch and the pushes are the commands in `src/core` that leave the machine
+on purpose, and the only ones given an environment (`FETCH_OPTIONS`,
+`PUSH_OPTIONS` in `remotes.ts`). `GIT_TERMINAL_PROMPT=0` is the load-bearing
+half: git spawned from Electron has no controlling terminal, so a command that
+decides to ask for a password writes the prompt nowhere and waits for ever,
+behind a button with no way to cancel. The fetch also has a deadline. A push
+does not — a big one, or a pre-push hook running a test suite, legitimately
+takes minutes — and gives up instead on a transfer that has stopped moving
+(`GIT_HTTP_LOW_SPEED_*`). That matters because everything else done to the
+workspace's branch, its removal included, now waits behind its push (below).
 
 The same resolution has to serve the reads. `baseRefOf` in `service.ts` applies
 it to the diff, the count of commits ahead and the merged check — a workspace

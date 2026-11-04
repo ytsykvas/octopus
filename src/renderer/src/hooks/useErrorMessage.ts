@@ -144,6 +144,18 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.branchUnmerged', { branch: failure.params?.branch ?? '' })
         case 'branchExists':
           return t('errors.branchExists', { branch: failure.params?.branch ?? '' })
+        case 'branchBlocked':
+          return t('errors.branchBlocked', {
+            branch: failure.params?.branch ?? '',
+            blocker: failure.params?.blocker ?? ''
+          })
+        case 'branchBlockedRemote':
+          return t('errors.branchBlockedRemote', {
+            branch: failure.params?.branch ?? '',
+            blocker: failure.params?.blocker ?? ''
+          })
+        case 'branchPublished':
+          return t('errors.branchPublished', { branch: failure.params?.branch ?? '' })
         case 'slugTaken':
           return t('errors.slugTaken', {
             name: failure.params?.name ?? '',

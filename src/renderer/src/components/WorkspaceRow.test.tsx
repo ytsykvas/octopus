@@ -19,6 +19,7 @@ function renderRow(overrides: Partial<WorkspaceRowProps> = {}): WorkspaceRowProp
     onRename: vi.fn(),
     onEditingChange: vi.fn(),
     onRemove: vi.fn(),
+    onKindChange: vi.fn(),
     onMove: vi.fn(),
     ...overrides
   }
@@ -397,6 +398,29 @@ describe('WorkspaceRow', () => {
     expect(props.onRemove).toHaveBeenCalledTimes(1)
   })
 
+  it('shows the kind of work on its strip', () => {
+    renderRow({ workspace: workspaceView('anna', { kind: 'bug' }) })
+
+    expect(screen.getByRole('button', { name: 'bug — Bug tag. Change' })).toHaveTextContent('bug')
+  })
+
+  it('hands over the kind chosen on its strip', async () => {
+    const user = userEvent.setup()
+    const props = renderRow({ workspace: workspaceView('anna') })
+
+    await user.click(screen.getByRole('button', { name: 'feature — Feature tag. Change' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Tests' }))
+
+    expect(props.onKindChange).toHaveBeenCalledWith('tests')
+  })
+
+  // The editor takes the whole card while a rename is under way.
+  it('has no strip while the name is being edited', () => {
+    renderRow({ editing: true })
+
+    expect(screen.queryByRole('button', { name: /^Tag:/ })).toBeNull()
+  })
+
   it('offers the current name for editing while a rename is in progress', () => {
     renderRow({ workspace: workspaceView('anna'), editing: true })
 
@@ -676,6 +700,7 @@ describe('WorkspaceRow', () => {
           onRename={vi.fn()}
           onEditingChange={vi.fn()}
           onRemove={vi.fn()}
+          onKindChange={vi.fn()}
           onMove={vi.fn()}
         />
       )
@@ -694,6 +719,7 @@ describe('WorkspaceRow', () => {
           onRename={vi.fn()}
           onEditingChange={vi.fn()}
           onRemove={vi.fn()}
+          onKindChange={vi.fn()}
           onMove={vi.fn()}
         />
       )

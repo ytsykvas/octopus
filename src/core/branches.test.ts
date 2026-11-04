@@ -42,7 +42,7 @@ describe('shortBranchName', () => {
 })
 
 /*
- * Every workspace branch is `<prefix>/<name>`, so a prefix git refuses makes
+ * Every workspace branch is `<prefix>/<kind>/<name>`, so a prefix git refuses makes
  * every "New workspace" fail — with git's own words, nothing about the setting.
  * The way it was hit: `ytsykvas/`, typed the way the branch reads on GitHub,
  * gave `ytsykvas//magda`.

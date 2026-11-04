@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 
 import { inOrder } from '@core/lists.js'
 import type { Project } from '@core/store.js'
-import type { WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
+import type { WorkspaceKind } from '@core/workspaceKinds.js'
+import type { KindDetour, WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
 /** A conversation as the tab strip knows it: everything but the turn's start. */
 export type TabChat = Omit<WorkspaceChat, 'turnStartedAt'>
@@ -51,6 +52,8 @@ interface UseWorkspaces {
    */
   readonly creating: boolean
   readonly rename: (workspaceId: string, name: string) => Promise<void>
+  /** Another kind; the list is read again, since the branch may have moved with it. */
+  readonly setKind: (workspaceId: string, kind: WorkspaceKind) => Promise<void>
   readonly remove: (workspaceId: string) => Promise<void>
   /**
    * Puts one project's workspaces in the order the sidebar was dragged into.
@@ -330,6 +333,15 @@ export function useWorkspaces(
     }
   }, [projects])
 
+  // Done, and still worth a line, as a cleanup that failed is: the branch is
+  // not where its kind says, and the reader should not find that out from git.
+  const tellDetour = useCallback(
+    (detour: KindDetour | null) => {
+      if (detour !== null) onError(t('workspaces.kindDetour', { ...detour }))
+    },
+    [onError, t]
+  )
+
   const creatingRef = useRef(false)
   const [creating, setCreating] = useState(false)
 
@@ -368,13 +380,14 @@ export function useWorkspaces(
          * can be changed whenever it is worth it.
          */
         await refresh()
+        tellDetour(result.value.detour ?? null)
         return result.value.id
       } finally {
         creatingRef.current = false
         setCreating(false)
       }
     },
-    [refresh, describeFailure, onError]
+    [refresh, describeFailure, onError, tellDetour]
   )
 
   const rename = useCallback(
@@ -386,8 +399,26 @@ export function useWorkspaces(
         return
       }
       await refresh()
+      tellDetour(result.value)
     },
-    [refresh, describeFailure, onError]
+    [refresh, describeFailure, onError, tellDetour]
+  )
+
+  // Not drawn ahead of the answer: the kind and the branch arrive together in
+  // one record, and a strip showing the new kind beside the old branch would be
+  // a state the workspace is never in.
+  const setKind = useCallback(
+    async (workspaceId: string, kind: WorkspaceKind) => {
+      onError(null)
+      const result = await window.octopus.workspaces.setKind(workspaceId, kind)
+      if (!result.ok) {
+        onError(describeFailure(result))
+        return
+      }
+      await refresh()
+      tellDetour(result.value)
+    },
+    [refresh, describeFailure, onError, tellDetour]
   )
 
   const remove = useCallback(
@@ -480,6 +511,7 @@ export function useWorkspaces(
     create,
     creating,
     rename,
+    setKind,
     remove,
     reorder
   }

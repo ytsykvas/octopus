@@ -85,6 +85,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     writers: {},
     notes: '',
     envFileApplied: null,
+    kind: 'feature',
     ownerId: null,
     ...overrides
   }
@@ -172,6 +173,35 @@ describe('load and save', () => {
 
     const loaded = await loadState(file)
     expect(loaded.projects[0]?.icon).toBeUndefined()
+  })
+
+  // Every workspace on disk predates kinds, and one that refused to load would
+  // take the whole list with it.
+  it('loads a workspace written before kinds existed as a feature', async () => {
+    const older: Record<string, unknown> = { ...makeWorkspace() }
+    delete older.kind
+    await writeFile(file, JSON.stringify({ ...withProject, workspaces: [older] }), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.workspaces[0]?.kind).toBe('feature')
+  })
+
+  // A kind a newer build added, read by this one: the workspace still loads,
+  // under the kind it can draw.
+  it('loads a kind it does not know as a feature', async () => {
+    const stored = { ...withProject, workspaces: [{ ...makeWorkspace(), kind: 'nonsense' }] }
+    await writeFile(file, JSON.stringify(stored), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.workspaces[0]?.kind).toBe('feature')
+  })
+
+  it('keeps the kind a workspace was given', async () => {
+    const stored = { ...withProject, workspaces: [makeWorkspace({ kind: 'bug' })] }
+    await writeFile(file, JSON.stringify(stored), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.workspaces[0]?.kind).toBe('bug')
   })
 
   /*

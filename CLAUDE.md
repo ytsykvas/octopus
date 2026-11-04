@@ -64,7 +64,7 @@ The rules for one part of the tree load when you touch it:
   request. Run the gate locally before pushing; the `check` workflow runs it
   again, and `main` requires it green on a branch up to date with `main`.
 - **Inside an Octopus workspace, do not `git checkout -b`.** One workspace is
-  one branch (`octopus/<name>`) and one pull request; commit on it.
+  one branch (`octopus/<kind>/<name>`) and one pull request; commit on it.
 - **Never `git push`, open, merge or close a pull request unless the
   maintainer asked for that, in words, in the current conversation.** A green
   gate is not a request. Committing locally is fine.
