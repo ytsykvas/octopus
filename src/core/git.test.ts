@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   anyBranchExists,
+  branchBlocker,
   branchExists,
   currentBranch,
   detectBaseBranch,
@@ -26,6 +27,7 @@ import {
   gitIn,
   type GitOptions,
   hasCommits,
+  hasLeftMachine,
   ignoredAmong,
   isIgnored,
   OUTPUT_TOO_LARGE,
@@ -332,6 +334,153 @@ describe('upstreamOf', () => {
     await run('git', ['branch', '--set-upstream-to=origin/main', 'main'], { cwd: dir })
 
     await expect(upstreamOf(exec, 'main')).resolves.toBe('origin/main')
+  })
+})
+
+/*
+ * Refs are files: `octopus/fix` and `octopus/fix/anna` cannot both exist, and
+ * git says so only as "cannot lock ref" at the moment it tries.
+ */
+describe('branchBlocker', () => {
+  it('answers null for a name nothing stands in the way of', async () => {
+    await initRepo(dir)
+    await expect(branchBlocker(exec, 'octopus/fix/anna')).resolves.toBeNull()
+  })
+
+  it('names a local branch where a folder of the name would go', async () => {
+    await initRepo(dir)
+    await run('git', ['branch', 'octopus/fix'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/fix/anna')).resolves.toBe('octopus/fix')
+  })
+
+  // Nothing stops the local branch, but the push would be refused.
+  it('names the copy on origin that a push would collide with', async () => {
+    await initRepo(dir)
+    await run('git', ['update-ref', 'refs/remotes/origin/octopus/fix', 'HEAD'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/fix/anna')).resolves.toBe('origin/octopus/fix')
+  })
+
+  it('names a branch filed beneath the name', async () => {
+    await initRepo(dir)
+    await run('git', ['branch', 'octopus/fix/anna'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/fix')).resolves.toBe('octopus/fix/anna')
+  })
+
+  it('names a copy on origin filed beneath the name', async () => {
+    await initRepo(dir)
+    await run('git', ['update-ref', 'refs/remotes/origin/octopus/fix/anna', 'HEAD'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/fix')).resolves.toBe('origin/octopus/fix/anna')
+  })
+
+  // The branch itself is not in its own way; whether it exists is a
+  // different question, asked separately.
+  it('does not count the name itself', async () => {
+    await initRepo(dir)
+    await run('git', ['branch', 'octopus/fix'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/fix')).resolves.toBeNull()
+  })
+
+  // The branch being moved lets go of its ref first, so it is never in its
+  // own way — in either direction.
+  it('passes over the branch being moved', async () => {
+    await initRepo(dir)
+    await run('git', ['branch', 'octopus/feature'], { cwd: dir })
+    await run('git', ['branch', 'octopus/fix/anna/x'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/feature/x', 'octopus/feature')).resolves.toBeNull()
+    await expect(branchBlocker(exec, 'octopus/fix/anna', 'octopus/fix/anna/x')).resolves.toBeNull()
+  })
+
+  /*
+   * Only the local ref lets go. The copy on origin stays where it is, and the
+   * push of the new name would fail on it — passing over the branch must not
+   * pass over that as well.
+   */
+  it('still names the copy on origin of the branch being moved', async () => {
+    await initRepo(dir)
+    await run('git', ['branch', 'octopus/feature'], { cwd: dir })
+    await run('git', ['update-ref', 'refs/remotes/origin/octopus/feature', 'HEAD'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/feature/x', 'octopus/feature')).resolves.toBe(
+      'origin/octopus/feature'
+    )
+  })
+
+  it('names a branch beneath the name beside the one being moved', async () => {
+    await initRepo(dir)
+    await run('git', ['branch', 'octopus/fix/anna/a'], { cwd: dir })
+    await run('git', ['branch', 'octopus/fix/anna/b'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/fix/anna', 'octopus/fix/anna/a')).resolves.toBe(
+      'octopus/fix/anna/b'
+    )
+  })
+})
+
+describe('hasLeftMachine', () => {
+  let remote: string
+
+  beforeEach(async () => {
+    await initRepo(dir)
+    remote = await mkdtemp(join(tmpdir(), 'octopus-git-pushed-'))
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: dir })
+    await run('git', ['branch', 'octopus/feature/anna'], { cwd: dir })
+  })
+
+  afterEach(async () => {
+    await rm(remote, { recursive: true, force: true })
+  })
+
+  it('answers false for a branch only this machine has', async () => {
+    await expect(hasLeftMachine(exec, 'octopus/feature/anna')).resolves.toBe(false)
+  })
+
+  it('answers true once the branch has been pushed with an upstream', async () => {
+    await run('git', ['push', '-q', '-u', 'origin', 'octopus/feature/anna'], { cwd: dir })
+
+    await expect(hasLeftMachine(exec, 'octopus/feature/anna')).resolves.toBe(true)
+  })
+
+  /*
+   * GitHub deletes a merged branch and a prune drops the copy here, which is
+   * when `@{upstream}` stops resolving — and the request is still there,
+   * opened from that branch. The configured upstream outlives both.
+   */
+  it('still answers true once the copy on origin has gone', async () => {
+    await run('git', ['push', '-q', '-u', 'origin', 'octopus/feature/anna'], { cwd: dir })
+    await run('git', ['update-ref', '-d', 'refs/remotes/origin/octopus/feature/anna'], {
+      cwd: dir
+    })
+
+    await expect(hasLeftMachine(exec, 'octopus/feature/anna')).resolves.toBe(true)
+  })
+
+  // A push from the terminal without `-u` sets no upstream, but leaves the
+  // copy behind.
+  it('answers true for a branch pushed without an upstream', async () => {
+    await run('git', ['push', '-q', 'origin', 'octopus/feature/anna'], { cwd: dir })
+
+    await expect(hasLeftMachine(exec, 'octopus/feature/anna')).resolves.toBe(true)
+  })
+
+  /*
+   * Only "no such key" is an answer. Anything else read as "never pushed"
+   * would move a branch a pull request is open from, so it propagates —
+   * a fake executor, since real git will not fail like this on cue.
+   */
+  it('lets a config failure other than a missing key through', async () => {
+    const broken: GitExec = (args) =>
+      args[0] === 'config'
+        ? Promise.reject(new GitError([...args], 'could not lock config file', '255'))
+        : exec(args)
+
+    await expect(hasLeftMachine(broken, 'octopus/feature/anna')).rejects.toThrow('could not lock')
   })
 })
 

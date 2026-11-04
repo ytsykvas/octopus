@@ -18,9 +18,11 @@ import { DEFAULT_REMOTE, remoteBranchName, shortBranchName } from './branches.js
 import { CodedError } from './codedError.js'
 import {
   anyBranchExists,
+  branchBlocker,
   countAhead,
   type GitExec,
   type IndexCopyReader,
+  hasLeftMachine,
   type MakeExec,
   reasonFrom,
   refExists,
@@ -34,6 +36,7 @@ import { workspaceSlug } from './scriptEnv.js'
 import { firstFreeBlock, POOL_START, type PortProbe } from './ports.js'
 import type { Project, State, Workspace } from './store.js'
 import { allOf } from './parallel.js'
+import { DEFAULT_WORKSPACE_KIND, isWorkspaceKind, type WorkspaceKind } from './workspaceKinds.js'
 import {
   addWorktree,
   changedFiles,
@@ -65,6 +68,8 @@ export type WorkspaceErrorCode =
   | 'envPathEscapes'
   /** Another workspace of this project already names the same database. */
   | 'slugTaken'
+  /** A branch at, above or below this name exists, so git cannot create it. */
+  | 'branchBlocked'
 
 export class WorkspaceError extends CodedError<WorkspaceErrorCode> {
   override readonly name = 'WorkspaceError'
@@ -170,9 +175,15 @@ export function workspaceId(projectId: string, name: string): string {
   return `${projectId}/${name}`
 }
 
-/** Full branch name for a workspace: `<prefix>/<name>`. */
-export function branchFor(project: Project, name: string): string {
-  return `${project.branchPrefix}/${toSlug(name)}`
+/**
+ * Full branch name for a workspace: `<prefix>/<kind>/<name>`.
+ *
+ * The kind sits in the branch so the answer to "what is this" reaches git and
+ * GitHub, not only the card. Branches made before kinds are `<prefix>/<name>`
+ * and stay that way until a rename or a new kind moves them.
+ */
+export function branchFor(project: Project, kind: WorkspaceKind, name: string): string {
+  return `${project.branchPrefix}/${kind}/${toSlug(name)}`
 }
 
 interface CreateOptions {
@@ -274,12 +285,17 @@ export async function createWorkspace(
   // The id, by contrast, must be unique across the app: it is the key for
   // renaming, removal and the jump shortcuts, none of which carry a project.
   const id = workspaceId(project.id, name)
-  const branch = branchFor(project, name)
+  // Always the default: the kind is chosen from the card once the workspace
+  // exists, while the branch is still only here and renaming it costs nothing.
+  const kind = DEFAULT_WORKSPACE_KIND
+  const branch = branchFor(project, kind, name)
   const path = workspacePath(project.id, name, options.root)
 
   if (await exists(path)) {
     throw new WorkspaceError('pathExists', { path }, `${path} already exists.`)
   }
+
+  await refuseBlocked(exec, branch, null)
 
   // Last of the local checks rather than first: the refusals above are instant,
   // and putting a network call in front of them would make a cheap "that name
@@ -321,6 +337,7 @@ export async function createWorkspace(
     envFileApplied: null,
     // Nobody has written anything here yet.
     writers: {},
+    kind,
     ownerId: null
   }
 }
@@ -329,7 +346,10 @@ export async function createWorkspace(
  * Workspace names that existing branches already claim.
  *
  * Only branches under the project's prefix count; anything else in the
- * repository is the user's own and none of our business.
+ * repository is the user's own and none of our business. Both shapes are read:
+ * `<prefix>/<kind>/<name>`, and `<prefix>/<name>` from before kinds. The
+ * segment after the prefix is a kind only when it is one, since a name may
+ * hold a slash of its own.
  *
  * `origin`'s count too: removal deletes the local branch but not the copy
  * there, and a name drawn onto it inherits that branch's history. The copy
@@ -341,7 +361,15 @@ async function takenByBranches(project: Project, exec: GitExec): Promise<string[
 
   return [...local, ...remote.map(shortBranchName)]
     .filter((branch) => branch.startsWith(prefix))
-    .map((branch) => branch.slice(prefix.length))
+    .map((branch) => nameIn(branch.slice(prefix.length)))
+}
+
+/** The workspace name in what follows the prefix, with the kind taken off. */
+function nameIn(rest: string): string {
+  const slash = rest.indexOf('/')
+  if (slash === -1) return rest
+
+  return isWorkspaceKind(rest.slice(0, slash)) ? rest.slice(slash + 1) : rest
 }
 
 /**
@@ -398,10 +426,60 @@ export async function renameWorkspace(
     )
   }
 
-  const branch = branchFor(project, trimmed)
+  // A label in other letters asks nothing of the branch. Building it afresh
+  // would bring a branch from before kinds onto the new shape, and carry a
+  // pushed one whose kind has since changed onto that kind — the lost pull
+  // request `rekindWorkspace` refused to cause.
+  if (toSlug(trimmed) === toSlug(workspace.name)) {
+    return { name: trimmed, branch: workspace.branch, branchSince: workspace.branchSince }
+  }
+
+  const moved = await moveWorkspaceBranch(
+    workspace,
+    branchFor(project, workspace.kind, trimmed),
+    exec
+  )
+  return { name: trimmed, ...moved }
+}
+
+/**
+ * Gives a workspace another kind, and its branch the kind's name while that
+ * costs nothing.
+ *
+ * The branch moves only while it has never left this machine. GitHub keeps a
+ * pull request on the branch it was opened from, so a workspace that moved off
+ * a pushed one would lose its own request; after the push the kind is the
+ * card's label and the branch stays as it was.
+ */
+export async function rekindWorkspace(
+  workspace: Workspace,
+  project: Project,
+  kind: WorkspaceKind,
+  exec: GitExec
+): Promise<Partial<Pick<Workspace, 'kind' | 'branch' | 'branchSince'>>> {
+  if (kind === workspace.kind) return {}
+  if (await hasLeftMachine(exec, workspace.branch)) return { kind }
+
+  return {
+    kind,
+    ...(await moveWorkspaceBranch(workspace, branchFor(project, kind, workspace.name), exec))
+  }
+}
+
+/**
+ * Moves a workspace's branch to a new name, refusing first what git would
+ * refuse halfway.
+ *
+ * Shared by a rename and a new kind, the two things a branch name follows.
+ */
+async function moveWorkspaceBranch(
+  workspace: Workspace,
+  branch: string,
+  exec: GitExec
+): Promise<Pick<Workspace, 'branch' | 'branchSince'>> {
   if (branch === workspace.branch) {
-    // The slug did not change — nothing for git to do.
-    return { name: trimmed, branch, branchSince: workspace.branchSince }
+    // The branch it would get is the one it has — nothing for git to do.
+    return { branch, branchSince: workspace.branchSince }
   }
 
   // Asked before the attempt, so a failure can be named. Mapping every
@@ -421,11 +499,28 @@ export async function renameWorkspace(
     throw new WorkspaceError('branchExists', { branch: taken }, `Branch ${taken} already exists.`)
   }
 
+  await refuseBlocked(exec, branch, workspace.branch)
+
   // Anything else propagates with git's own stderr, which says more than a
   // guess would.
   await renameBranch(exec, workspace.branch, branch)
 
-  return { name: trimmed, branch, branchSince: own ? null : new Date().toISOString() }
+  return { branch, branchSince: own ? null : new Date().toISOString() }
+}
+
+/**
+ * Refuses a branch another one stands in the way of (`branchBlocker`), where
+ * `own` is the branch being moved onto it, if any.
+ */
+async function refuseBlocked(exec: GitExec, branch: string, own: string | null): Promise<void> {
+  const blocker = await branchBlocker(exec, branch, own)
+  if (blocker === null) return
+
+  throw new WorkspaceError(
+    'branchBlocked',
+    { branch, blocker },
+    `${blocker} stops ${branch} from being created.`
+  )
 }
 
 export interface RemoveOptions {

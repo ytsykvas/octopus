@@ -17,10 +17,18 @@ the next fetch. `resolveBase` in [`remotes.ts`](../../src/core/remotes.ts) is wh
 the question is asked, every time it is asked.
 
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
-`status`, `port`, `createdAt`, `branchSince`, `writers`, `notes`, `ownerId`.
+`status`, `port`, `createdAt`, `branchSince`, `writers`, `notes`, `kind`,
+`ownerId`.
 
 `branchSince` is when a rename brought the workspace onto its current branch, or
 null for "since `createdAt`".
+
+`kind` is what sort of work the workspace holds — one of the fixed set in
+`workspaceKinds.ts`, `feature` to start with — drawn as the strip on its card
+and carried in the branch name (see
+[core/workspaces-and-git.md](../core/workspaces-and-git.md)). Read with `catch`
+rather than `default`: a record from before kinds lacks it, one from a newer
+build may name a kind this one does not know, and both load as `feature`.
 
 `notes` is a line the user wrote to themselves about this workspace, and the one
 thing a workspace carries that the agent never reads. On the record rather than
@@ -240,8 +248,8 @@ Four identifiers, and confusing them keeps causing bugs:
 | workspace `branch` | its project — branches live in a repository                           |
 | workspace `id`     | the whole application; it is the IPC key, `<project>/<creation name>` |
 
-Two projects are two repositories, so `octopus/anna` in each is two different
-branches. Treating that as a clash locked every project after the first out of
+Two projects are two repositories, so `octopus/feature/anna` in each is two
+different branches. Treating that as a clash locked every project after the first out of
 the start of the name pool.
 
 **The id carries the name the workspace was created under**, not its current
@@ -266,7 +274,7 @@ refuse the collision instead.
 label and the branch, and deliberately leaves the directory alone: `git worktree
 move` fails whenever anything is running inside it — a dev server, an open
 terminal, an editor. So a renamed workspace may live in `anna/` while its branch
-is `ytsykvas/fix-auth`. The UI identifies a workspace by its branch, which is
+is `ytsykvas/feature/fix-auth`. The UI identifies a workspace by its branch, which is
 what appears in a pull request.
 
 ## The chat owns the session, not the workspace

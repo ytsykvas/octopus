@@ -1757,7 +1757,7 @@ export const en = {
 
     branchPrefix: 'Branch prefix',
     branchPrefixHint:
-      'Workspace branches are named <prefix>/<workspace>. A GitHub username is a common choice.',
+      'Workspace branches are named <prefix>/<tag>/<workspace>. A GitHub username is a common choice.',
     branchPrefixUnusable: 'The prefix needs at least one character git can use.',
     branchPrefixBecomes: 'Will be saved as {{prefix}}',
 
@@ -2448,6 +2448,10 @@ export const en = {
     branchUnmerged:
       '{{branch}} has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.',
     branchExists: 'A branch named {{branch}} already exists.',
+    /* Refs are files: a branch at, above or below the name leaves git no room
+       for it, and git itself only says "cannot lock ref". */
+    branchBlocked:
+      '{{blocker}} already exists, so git cannot create {{branch}}. Rename or delete {{blocker}} first.',
     slugTaken:
       'Another workspace, \u201c{{name}}\u201d, already names the database {{slug}}. Two workspaces sharing one write over each other\u2019s data. Choose a name that differs by more than a dash or a dot.',
     pathExists: '{{path}} already exists.',

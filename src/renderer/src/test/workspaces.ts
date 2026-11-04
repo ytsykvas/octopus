@@ -26,6 +26,7 @@ export function workspaceView(name: string, overrides: Partial<WorkspaceView> = 
     writers: {},
     notes: '',
     envFileApplied: null,
+    kind: 'feature',
     ownerId: null,
     envProfile: null,
     chats: [],

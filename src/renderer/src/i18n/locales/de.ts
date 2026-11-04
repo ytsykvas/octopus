@@ -1392,7 +1392,7 @@ export const de: Translation = {
 
     branchPrefix: 'Branch-Präfix',
     branchPrefixHint:
-      'Workspace-Branches heißen <prefix>/<workspace>. Oft nimmt man dafür den GitHub-Benutzernamen.',
+      'Workspace-Branches heißen <prefix>/<tag>/<workspace>. Oft nimmt man dafür den GitHub-Benutzernamen.',
     branchPrefixUnusable: 'Das Präfix braucht mindestens ein Zeichen, das Git verwenden kann.',
     branchPrefixBecomes: 'Wird gespeichert als {{prefix}}',
 
@@ -1995,6 +1995,8 @@ export const de: Translation = {
     branchUnmerged:
       '{{branch}} hat Commits, die nicht im Basis-Branch sind. Entferne den Workspace ohne das Häkchen beim Branch, oder merge ihn zuerst.',
     branchExists: 'Ein Branch namens {{branch}} existiert bereits.',
+    branchBlocked:
+      '{{blocker}} existiert bereits, deshalb kann git {{branch}} nicht anlegen. Benenne {{blocker}} zuerst um oder lösche ihn.',
     slugTaken:
       'Ein anderer Workspace, „{{name}}“, nutzt bereits den Datenbanknamen {{slug}}. Zwei Workspaces mit derselben Datenbank überschreiben gegenseitig ihre Daten. Wähle einen Namen, der sich um mehr als einen Bindestrich oder Punkt unterscheidet.',
     pathExists: '{{path}} existiert bereits.',

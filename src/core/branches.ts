@@ -45,7 +45,7 @@ export const DEFAULT_BRANCH_PREFIX = 'octopus'
 /**
  * A branch prefix as git will take it.
  *
- * Every workspace branch is `<prefix>/<name>`, and the prefix is typed by a
+ * Every workspace branch is `<prefix>/<kind>/<name>`, and the prefix is typed by a
  * person — `ytsykvas/`, the way the branch reads on GitHub, gave
  * `ytsykvas//magda` and every "New workspace" failed with git's own words.
  * So the slashes around it and the empty parts inside go, each part is
@@ -56,7 +56,7 @@ export const DEFAULT_BRANCH_PREFIX = 'octopus'
  * Empty when nothing usable was typed.
  *
  * A dot at the end of a part stays: git refuses one only at the end of the
- * whole name, and the prefix is always followed by `/<name>`. Stripping it
+ * whole name, and the prefix is always followed by `/<kind>/<name>`. Stripping it
  * anyway turned `x.lock.` into `x.lock`, which git refuses.
  */
 export function cleanBranchPrefix(value: string): string {

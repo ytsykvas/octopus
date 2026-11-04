@@ -4,6 +4,7 @@ import type { AccountKind, AccountsStatus, GitHubAccount } from '@core/accounts.
 import type { DirectoryListing, FileTreeSnapshot } from '@core/fileTree.js'
 import type { LineChanges } from '@core/lineChanges.js'
 import type { FileContent } from '@core/workspaceFiles.js'
+import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type {
   AgentCommand,
   AgentEntry,
@@ -571,6 +572,10 @@ const api = {
 
     rename: (workspaceId: string, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:rename', workspaceId, name) as Promise<Result<void>>,
+
+    /** Gives a workspace another kind; its branch follows while never pushed. */
+    setKind: (workspaceId: string, kind: WorkspaceKind): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:kind', workspaceId, kind) as Promise<Result<void>>,
 
     remove: (workspaceId: string, options: RemovalRequest = {}): Promise<Result<CleanupOutcome>> =>
       ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<

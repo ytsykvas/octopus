@@ -302,8 +302,9 @@ async function listPullRequests(
  *
  * Asked by full ref, because the pattern matches the **tail** of a ref path:
  * `--heads origin anna` also matches `refs/heads/octopus/anna`. Every workspace
- * branch is `<prefix>/<name>`, so two prefixes ending in the same segment made
- * this answer yes for a branch the remote does not have.
+ * branch is `<prefix>/<kind>/<name>` (or `<prefix>/<name>`, from before kinds), so
+ * two prefixes ending in the same segment made this answer yes for a branch the
+ * remote does not have.
  */
 async function remoteTip(branch: string, git: GitExec): Promise<string | null> {
   let out: string

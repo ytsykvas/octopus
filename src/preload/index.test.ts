@@ -255,6 +255,11 @@ describe('channel names', () => {
       () => method('workspaces', 'rename')('w' as never, 'n' as never),
       'workspaces:rename'
     ],
+    [
+      'workspaces.setKind',
+      () => method('workspaces', 'setKind')('w' as never, 'bug' as never),
+      'workspaces:kind'
+    ],
     ['workspaces.remove', () => method('workspaces', 'remove')('w' as never), 'workspaces:remove'],
     [
       'workspaces.hasChanges',

@@ -403,6 +403,7 @@ import {
   workspaceStatusFrom
 } from './store.js'
 import { listBranches, listRemoteBranches, listWorktrees } from './worktree.js'
+import type { WorkspaceKind } from './workspaceKinds.js'
 import {
   changeCount,
   countChanges,
@@ -415,6 +416,7 @@ import {
   reconcile,
   checkedOutBranches,
   viewOf,
+  rekindWorkspace,
   removeWorkspace,
   renameWorkspace,
   rollbackWorkspace,
@@ -1081,6 +1083,11 @@ export interface OctopusService {
    * this does is store it.
    */
   setWorkspaceNotes(workspaceId: string, notes: string): Promise<void>
+  /**
+   * Gives a workspace another kind — the strip on its card — and moves its
+   * branch to match while the branch has never been pushed (`rekindWorkspace`).
+   */
+  setWorkspaceKind(workspaceId: string, kind: WorkspaceKind): Promise<void>
   /**
    * Whether git would keep this project's env file out of a commit.
    *
@@ -6401,6 +6408,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         workspacesOfProject(state, workspace.projectId)
       )
       await commit((current) => updateWorkspace(current, workspaceId, renamed))
+    },
+
+    // Not refused while an agent works, as a rename is not: `git branch -m`
+    // carries the worktree with it, and the agent's branch guard reads the
+    // branch from the record on every call.
+    async setWorkspaceKind(workspaceId, kind) {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      const changed = await rekindWorkspace(workspace, project, kind, makeExec(project.repoPath))
+      await commit((current) => updateWorkspace(current, workspaceId, changed))
     },
 
     async removeWorkspaceById(workspaceId, options) {

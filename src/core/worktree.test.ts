@@ -93,7 +93,7 @@ describe('parseWorktrees', () => {
     expect(parseWorktrees(output)).toHaveLength(2)
   })
 
-  // Our branches are `<prefix>/<name>`, so this is the normal case, not an edge one.
+  // Our branches are `<prefix>/<kind>/<name>`, so this is the normal case, not an edge one.
   it('keeps slashes in branch names', () => {
     const output = 'worktree /repo/wt\nHEAD abc\nbranch refs/heads/ytsykvas/fix-auth\n'
     expect(parseWorktrees(output)[0]?.branch).toBe('ytsykvas/fix-auth')
@@ -469,7 +469,7 @@ describe('listBranches', () => {
     await expect(listBranches(exec)).resolves.toEqual(['main'])
   })
 
-  // The short name keeps the slashes our `<prefix>/<name>` scheme produces —
+  // The short name keeps the slashes our `<prefix>/<kind>/<name>` scheme produces —
   // stripping them would make every branch look unclaimed.
   it('keeps slashes in branch names', async () => {
     await addWorktree(exec, join(dir, 'wt'), 'ytsykvas/fix-auth', 'main')

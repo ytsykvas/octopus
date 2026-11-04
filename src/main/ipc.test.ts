@@ -455,6 +455,7 @@ describe('channel table', () => {
     'workspaces:create',
     'workspaces:rename',
     'workspaces:notes',
+    'workspaces:kind',
     'workspaces:remove',
     'workspaces:hasChanges',
     'workspaces:changes',
@@ -1749,6 +1750,28 @@ describe('workspaces of a real project', () => {
     await expect(invoke('workspaces:list', projectId)).resolves.toMatchObject({
       ok: true,
       value: [{ name: 'fix auth' }]
+    })
+  })
+
+  it('gives a workspace another kind and lists it with its new branch', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    expect(await invoke('workspaces:kind', workspace.id, 'bug')).toMatchObject({ ok: true })
+
+    await expect(invoke('workspaces:list', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: [{ kind: 'bug', branch: expect.stringContaining('/bug/') as unknown }]
+    })
+  })
+
+  // The kind becomes a segment of a branch name, so only the set is let in.
+  it('refuses a kind outside the set', async () => {
+    const workspace = await createWorkspace(await addProject())
+
+    await expect(invoke('workspaces:kind', workspace.id, 'nonsense')).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
     })
   })
 

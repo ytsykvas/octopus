@@ -581,6 +581,27 @@ describe('workspaces', () => {
     expect(listed[0]?.branch).toContain('fix-auth')
   })
 
+  it('gives a workspace another kind, and its branch with it', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await service.setWorkspaceKind(workspace.id, 'bug')
+
+    const listed = await service.listWorkspaces(projectId)
+    expect(listed[0]?.kind).toBe('bug')
+    expect(listed[0]?.branch).toBe(`octopus/bug/${workspace.name}`)
+  })
+
+  it('keeps the record as it was for the kind it already has', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await service.setWorkspaceKind(workspace.id, 'feature')
+
+    const listed = await service.listWorkspaces(projectId)
+    expect(listed[0]).toMatchObject({ kind: 'feature', branch: workspace.branch })
+  })
+
   it('reports changed files', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)
@@ -646,7 +667,7 @@ describe('workspaces', () => {
 
     const workspace = await service.createWorkspaceIn(project.id)
 
-    expect(workspace.branch).toMatch(/^octo\/[^/]+$/)
+    expect(workspace.branch).toMatch(/^octo\/feature\/[^/]+$/)
   })
 
   /*
@@ -1461,6 +1482,7 @@ describe('workspaces', () => {
     const service = await createService(paths(dir))
 
     await expect(service.renameWorkspaceById('missing', 'name')).rejects.toThrow()
+    await expect(service.setWorkspaceKind('missing', 'bug')).rejects.toThrow()
     await expect(service.removeWorkspaceById('missing')).rejects.toThrow()
     await expect(service.workspaceHasChanges('missing')).rejects.toThrow()
   })

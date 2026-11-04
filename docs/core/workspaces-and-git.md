@@ -36,6 +36,39 @@ created, or renamed onto it (`branchSince`) — is never its own (`openedFor` in
 `pullRequestShapes.ts`), and the pane, the list beside it and the removal
 check all ask with the workspace rather than its branch name.
 
+## The branch carries the workspace's kind
+
+A workspace branch is `<prefix>/<kind>/<name>` — `octopus/fix/anna` — where the
+kind is the strip on its card (`workspaceKinds.ts`), `feature` until somebody
+picks another. Branches made before kinds are `<prefix>/<name>` and are left
+there: a branch moves only when a rename or a new kind moves it anyway. A
+rename that leaves the slug as it was — the same name in other letters — moves
+nothing, so it never brings such a branch onto the new shape, nor carries a
+pushed one onto a kind it was deliberately kept off.
+
+`takenByBranches` reads both shapes, and takes the segment after the prefix as
+a kind only when it is one, because a name may hold a slash of its own. That is
+approximate in one direction: a workspace from before kinds named `fix/login`
+reads as holding `login`. One name too many is held, never one too few, and the
+two shapes cannot collide in git.
+
+**A new kind moves the branch only while it has never left this machine**
+(`hasLeftMachine` in `git.ts`: an upstream in the config, or a copy on
+`origin`). GitHub keeps a pull request on the branch it was opened from, so a
+workspace that moved off a pushed branch would lose its own request; past the
+push the kind is the card's label and nothing more. The config is asked rather
+than `@{upstream}`, which stops resolving once GitHub has deleted a merged
+branch and the copy here is pruned — and the request is still there. A rename
+does not ask this, and loses the request when it moves a pushed branch.
+
+**Refs are files**, so `octopus/feature` and `octopus/feature/anna` cannot both
+exist. git says so only as "cannot lock ref", halfway through. `branchBlocker`
+asks first — for a branch above or below the name, here or on `origin` — and a
+creation, a rename and a new kind each refuse with `branchBlocked`, naming the
+branch in the way. The workspace's own local branch is never in its own way:
+`git branch -m` lets go of the old ref before taking the new one. Its copy on
+`origin` stays, and still counts.
+
 ## A workspace branches from a base that was just fetched
 
 `git worktree add` was given the project's base branch, which meant this

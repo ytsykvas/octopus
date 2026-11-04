@@ -11,6 +11,7 @@ import { access, copyFile, stat, utimes } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
+import { DEFAULT_REMOTE } from './branches.js'
 import { describeError } from './persist.js'
 
 const run = promisify(execFile)
@@ -417,6 +418,77 @@ export async function upstreamOf(exec: GitExec, branch: string): Promise<string 
   } catch {
     return null
   }
+}
+
+/**
+ * A branch that stops `branch` from being created, or null where none does.
+ *
+ * Refs are files under `.git/refs`, so `octopus/fix` and `octopus/fix/anna`
+ * cannot both exist: one is a file where the other needs a folder. git reports
+ * it only as "cannot lock ref", halfway through whatever was asked, so the
+ * question is put first. Asked of `origin`'s copies as well — nothing stops
+ * the local branch then, but its push would be refused.
+ *
+ * The name itself does not count: whether it already exists is a different
+ * refusal. Nor does `own`, the branch being moved onto this name: `git branch
+ * -m` lets go of its ref before taking the new one, so `x` → `x/y` and
+ * `x/y` → `x` both work. Only its local ref is passed over — the copy on
+ * `origin` stays where it is, and the push would still fail on it.
+ */
+export async function branchBlocker(
+  exec: GitExec,
+  branch: string,
+  own: string | null = null
+): Promise<string | null> {
+  const segments = branch.split('/')
+  const tracking = `refs/remotes/${DEFAULT_REMOTE}/`
+
+  // Walked in order rather than raced, so the answer is the shortest blocker
+  // and the same one every time.
+  for (let length = 1; length < segments.length; length += 1) {
+    const above = segments.slice(0, length).join('/')
+    if (above !== own && (await refExists(exec, `refs/heads/${above}`))) return above
+    if (await refExists(exec, `${tracking}${above}`)) return `${DEFAULT_REMOTE}/${above}`
+  }
+
+  // Two, because `own` may be the first of them and is not in the way. A local
+  // ref's short name is the branch and a remote one's starts `origin/`, so
+  // `own` can only ever match one line.
+  const below = await exec([
+    'for-each-ref',
+    '--count=2',
+    '--format=%(refname:short)',
+    `refs/heads/${branch}/`,
+    `${tracking}${branch}/`
+  ])
+  const [first] = below
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && line !== own)
+
+  return first ?? null
+}
+
+/**
+ * Whether a branch has ever been pushed: it has an upstream configured, or
+ * `origin` holds a copy of it.
+ *
+ * Asked of the config rather than through `@{upstream}`, which stops resolving
+ * once GitHub has deleted a merged branch and a prune has dropped the copy here
+ * — and the pull request opened from it is still there.
+ *
+ * Only a missing key is an answer. Any other failure propagates: read as "never
+ * pushed", it would let a branch a pull request is open from be moved.
+ */
+export async function hasLeftMachine(exec: GitExec, branch: string): Promise<boolean> {
+  try {
+    if ((await exec(['config', '--get', `branch.${branch}.merge`])).trim() !== '') return true
+  } catch (error) {
+    // `config --get` exits 1 for a key that is not set.
+    if (extractCode(error) !== '1') throw error
+  }
+
+  return refExists(exec, `refs/remotes/${DEFAULT_REMOTE}/${branch}`)
 }
 
 /** Whether a local branch with this name exists. */
