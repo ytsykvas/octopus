@@ -386,6 +386,20 @@ describe('ProjectTabs', () => {
       expect(screen.queryByTestId('drop-line')).toBeNull()
     })
 
+    // A file dragged in from the Finder is not ours to place, and the drag never
+    // ends here, so a line drawn for it would stay on the tile. Swallowed all
+    // the same: let through, the browser opens the file in place of the window.
+    it('draws no line for a drag that started outside the strip, and keeps it', () => {
+      const props = renderTabs({ projects: three })
+
+      // `false` is a cancelled event: the browser does not take it over.
+      expect(fireEvent.dragOver(tab('ES'))).toBe(false)
+      expect(screen.queryByTestId('drop-line')).toBeNull()
+
+      expect(fireEvent.drop(tab('ES'))).toBe(false)
+      expect(props.onReorder).not.toHaveBeenCalled()
+    })
+
     it('still selects on a click', async () => {
       const props = renderTabs({ projects: three })
 

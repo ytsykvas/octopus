@@ -67,9 +67,14 @@ export function useDragReorder(
         setDraggingId(id)
       },
       onDragOver: (event) => {
-        // Without this the browser refuses the drop.
+        // Without this the browser refuses the drop — and a refused drop of a
+        // file from the Finder is one it handles itself, by opening the file
+        // in place of the window. So a drag from elsewhere is accepted too, and
+        // comes to nothing in `drop`.
         event.preventDefault()
-        setOverId(id)
+        // Not marked, though: its end never reaches us, and the line drawn for
+        // it would stay until the next drag of our own.
+        if (draggingId !== null) setOverId(id)
       },
       onDrop: (event) => {
         event.preventDefault()

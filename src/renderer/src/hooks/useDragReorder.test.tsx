@@ -142,6 +142,27 @@ describe('useDragReorder', () => {
     for (const id of IDS) expect(result.current.dropEdge(id)).toBeNull()
   })
 
+  // A file from the Finder: not ours to place, and not to be let through
+  // either, or the browser opens it in place of the window.
+  it('swallows a drag from elsewhere without marking a target', () => {
+    const { result, onReorder } = setUp()
+    const overPrevented = vi.fn()
+    const dropPrevented = vi.fn()
+
+    act(() => {
+      result.current.itemProps('b').onDragOver(dragEvent(overPrevented))
+    })
+    for (const id of IDS) expect(result.current.dropEdge(id)).toBeNull()
+
+    act(() => {
+      result.current.itemProps('b').onDrop(dragEvent(dropPrevented))
+    })
+
+    expect(overPrevented).toHaveBeenCalled()
+    expect(dropPrevented).toHaveBeenCalled()
+    expect(onReorder).not.toHaveBeenCalled()
+  })
+
   it('makes every item draggable', () => {
     const { result } = setUp()
 
