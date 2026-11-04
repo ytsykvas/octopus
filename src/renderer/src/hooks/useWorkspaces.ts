@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
 import type { WorkspaceKind } from '@core/workspaceKinds.js'
-import type { WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
+import type { KindDetour, WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
 /** A conversation as the tab strip knows it: everything but the turn's start. */
 export type TabChat = Omit<WorkspaceChat, 'turnStartedAt'>
@@ -323,6 +323,15 @@ export function useWorkspaces(
     }
   }, [projects])
 
+  // Done, and still worth a line, as a cleanup that failed is: the branch is
+  // not where its kind says, and the reader should not find that out from git.
+  const tellDetour = useCallback(
+    (detour: KindDetour | null) => {
+      if (detour !== null) onError(t('workspaces.kindDetour', { ...detour }))
+    },
+    [onError, t]
+  )
+
   const creatingRef = useRef(false)
   const [creating, setCreating] = useState(false)
 
@@ -361,13 +370,14 @@ export function useWorkspaces(
          * can be changed whenever it is worth it.
          */
         await refresh()
+        tellDetour(result.value.detour ?? null)
         return result.value.id
       } finally {
         creatingRef.current = false
         setCreating(false)
       }
     },
-    [refresh, describeFailure, onError]
+    [refresh, describeFailure, onError, tellDetour]
   )
 
   const rename = useCallback(
@@ -379,8 +389,9 @@ export function useWorkspaces(
         return
       }
       await refresh()
+      tellDetour(result.value)
     },
-    [refresh, describeFailure, onError]
+    [refresh, describeFailure, onError, tellDetour]
   )
 
   // Not drawn ahead of the answer: the kind and the branch arrive together in
@@ -395,8 +406,9 @@ export function useWorkspaces(
         return
       }
       await refresh()
+      tellDetour(result.value)
     },
-    [refresh, describeFailure, onError]
+    [refresh, describeFailure, onError, tellDetour]
   )
 
   const remove = useCallback(

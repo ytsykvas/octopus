@@ -96,6 +96,8 @@ export const en = {
     kindTitle: 'Tag',
     kindNote: 'The branch is renamed with the tag until it is pushed.',
     kindLabel: 'Tag: {{kind}}. Change',
+    kindDetour:
+      '{{blocker}} already exists, and git cannot file a branch under another, so the branch is {{branch}}.',
     kinds: {
       feature: { label: 'Feature', short: 'feature' },
       fix: { label: 'Fix', short: 'fix' },

@@ -1745,7 +1745,10 @@ describe('workspaces of a real project', () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
 
-    expect(await invoke('workspaces:rename', workspace.id, 'fix auth')).toMatchObject({ ok: true })
+    expect(await invoke('workspaces:rename', workspace.id, 'fix auth')).toEqual({
+      ok: true,
+      value: null
+    })
 
     await expect(invoke('workspaces:list', projectId)).resolves.toMatchObject({
       ok: true,
@@ -1757,7 +1760,7 @@ describe('workspaces of a real project', () => {
     const projectId = await addProject()
     const workspace = await createWorkspace(projectId)
 
-    expect(await invoke('workspaces:kind', workspace.id, 'bug')).toMatchObject({ ok: true })
+    expect(await invoke('workspaces:kind', workspace.id, 'bug')).toEqual({ ok: true, value: null })
 
     await expect(invoke('workspaces:list', projectId)).resolves.toMatchObject({
       ok: true,

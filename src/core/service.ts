@@ -422,6 +422,8 @@ import {
   renameWorkspace,
   rollbackWorkspace,
   WorkspaceError,
+  type CreatedWorkspace,
+  type KindDetour,
   type WorkspaceView,
   type RemoveOptions
 } from './workspaces.js'
@@ -1087,8 +1089,10 @@ export interface OctopusService {
   /**
    * Gives a workspace another kind — the strip on its card — and moves its
    * branch to match while the branch has never been pushed (`rekindWorkspace`).
+   * Answers the branch named after the kind that kept the branch where it was,
+   * or null.
    */
-  setWorkspaceKind(workspaceId: string, kind: WorkspaceKind): Promise<void>
+  setWorkspaceKind(workspaceId: string, kind: WorkspaceKind): Promise<KindDetour | null>
   /**
    * Whether git would keep this project's env file out of a commit.
    *
@@ -1385,8 +1389,9 @@ export interface OctopusService {
   readWorkspace(workspaceId: string): Promise<WorkspaceView | null>
   /** Whether a workspace is on record — nothing read from disk, so cheap to ask. */
   hasWorkspace(workspaceId: string): boolean
-  createWorkspaceIn(projectId: string): Promise<Workspace>
-  renameWorkspaceById(workspaceId: string, name: string): Promise<void>
+  createWorkspaceIn(projectId: string): Promise<CreatedWorkspace>
+  /** Answers the detour the branch took round one named after its kind, or null. */
+  renameWorkspaceById(workspaceId: string, name: string): Promise<KindDetour | null>
   /** Answers what became of the cleanup script, which nothing lets stop the removal. */
   removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<CleanupOutcome>
   /** Whether a workspace holds work that removal would discard. */
@@ -6410,11 +6415,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       const project = requireProject(projectId)
       const exec = makeExec(project.repoPath)
 
+      const detours: KindDetour[] = []
       // Cut from the base in effect, which the repository may state.
       const created = await createWorkspace(await liveProject(project), state, exec, {
         root: dataRoot,
         answers: listening,
-        fetchExec: makeExec(project.repoPath, FETCH_OPTIONS)
+        fetchExec: makeExec(project.repoPath, FETCH_OPTIONS),
+        onDetour: (detour) => detours.push(detour)
       })
 
       try {
@@ -6424,7 +6431,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         const { envFile } = await prepare(project, created)
         const workspace = { ...created, envFileApplied: envFile }
         await commit((current) => addWorkspace(current, workspace))
-        return workspace
+        // Beside the record, never in it: the state holds what the branch is,
+        // not how it came to be so.
+        const [detour] = detours
+        return detour === undefined ? workspace : { ...workspace, detour }
       } catch (error) {
         await rollbackWorkspace(created, exec)
         throw error
@@ -6438,6 +6448,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
         const exec = makeExec(project.repoPath)
 
+        const detours: KindDetour[] = []
         const renamed = await renameWorkspace(
           workspace,
           project,
@@ -6445,9 +6456,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           exec,
           // The siblings, for the collision a branch cannot catch: two names can
           // differ as branches and still name one database.
-          workspacesOfProject(state, workspace.projectId)
+          workspacesOfProject(state, workspace.projectId),
+          (detour) => detours.push(detour)
         )
         await commitMove(workspace, renamed, exec)
+        return detours[0] ?? null
       })
     },
 
@@ -6461,8 +6474,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
         const exec = makeExec(project.repoPath)
 
-        const changed = await rekindWorkspace(workspace, project, kind, exec)
+        const detours: KindDetour[] = []
+        const changed = await rekindWorkspace(workspace, project, kind, exec, (detour) =>
+          detours.push(detour)
+        )
         await commitMove(workspace, changed, exec)
+        return detours[0] ?? null
       })
     },
 

@@ -194,7 +194,10 @@ button's label and its tooltip. A click opens the picker, a `DropdownMenu` of
 radio items with a note above them: the branch is renamed with the kind only
 until it is pushed, since GitHub keeps a request on the branch it was opened
 from. The list is read again after a change rather than drawn ahead of it, so
-the strip and the branch never disagree on screen. The strip is not there while
+the strip and the branch never disagree on screen. When a branch named after
+the kind left it no folder, the change is made and the banner says so once
+(`workspaces.kindDetour`): the branch went round onto `<prefix>/<name>`, or kept
+its place — the same line a creation or a rename that went round gets. The strip is not there while
 the name is being edited: the editor takes the whole card.
 
 **A workspace is added the way a repository is.** The header's "+" is

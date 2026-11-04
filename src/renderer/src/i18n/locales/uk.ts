@@ -84,6 +84,8 @@ export const uk: Translation = {
     kindTitle: 'Тег',
     kindNote: 'Гілка перейменовується разом із тегом, доки її не запушено.',
     kindLabel: 'Тег: {{kind}}. Змінити',
+    kindDetour:
+      '{{blocker}} уже існує, а git не може покласти гілку всередину іншої, тож гілка — {{branch}}.',
     kinds: {
       feature: { label: 'Фіча', short: 'фіча' },
       fix: { label: 'Фікс', short: 'фікс' },

@@ -783,6 +783,53 @@ describe('workspaces', () => {
     expect(branches).toContain(workspace.branch)
   })
 
+  // The window is told why the branch is not under its kind; the record is not.
+  it('answers a creation that went round a branch named after its kind', async () => {
+    const { service, projectId } = await withProject()
+    await run('git', ['branch', 'octopus/feature'], { cwd: join(dir, 'planner') })
+
+    const created = await service.createWorkspaceIn(projectId)
+
+    expect(created.detour).toEqual({ blocker: 'octopus/feature', branch: created.branch })
+    expect(created.branch).toBe(`octopus/${created.name}`)
+    expect(await readFile(join(dir, 'state.json'), 'utf8')).not.toContain('detour')
+  })
+
+  it('answers a creation that went nowhere round without a detour', async () => {
+    const { service, projectId } = await withProject()
+
+    expect(await service.createWorkspaceIn(projectId)).not.toHaveProperty('detour')
+  })
+
+  it('answers a rename and a new kind that went round a branch named after the kind', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    const repo = join(dir, 'planner')
+    await run('git', ['update-ref', 'refs/remotes/origin/octopus/feature', 'HEAD'], { cwd: repo })
+    await run('git', ['branch', 'octopus/bug'], { cwd: repo })
+
+    await expect(service.renameWorkspaceById(workspace.id, 'fix auth')).resolves.toEqual({
+      blocker: 'origin/octopus/feature',
+      branch: 'octopus/fix-auth'
+    })
+    await expect(service.setWorkspaceKind(workspace.id, 'bug')).resolves.toEqual({
+      blocker: 'octopus/bug',
+      branch: 'octopus/fix-auth'
+    })
+    expect((await service.listWorkspaces(projectId))[0]).toMatchObject({
+      kind: 'bug',
+      branch: 'octopus/fix-auth'
+    })
+  })
+
+  it('answers a rename and a new kind that went nowhere round with null', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+
+    await expect(service.renameWorkspaceById(workspace.id, 'fix auth')).resolves.toBeNull()
+    await expect(service.setWorkspaceKind(workspace.id, 'bug')).resolves.toBeNull()
+  })
+
   it('gives a workspace another kind, and its branch with it', async () => {
     const { service, projectId } = await withProject()
     const workspace = await service.createWorkspaceIn(projectId)

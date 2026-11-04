@@ -53,6 +53,18 @@ approximate in one direction: a workspace from before kinds named `fix/login`
 reads as holding `login`. One name too many is held, never one too few, and the
 two shapes cannot collide in git.
 
+**A branch named after a kind leaves that kind no folder, and the branch goes
+round it** (`KindDetour`, `routeBranch` in `workspaces.ts`). A workspace from
+before kinds once renamed `feature` sits on `octopus/feature`, and git cannot
+keep `octopus/feature/anna` beside it — here or, through the push, on
+`origin`, whose copy removal never deletes. Refusing made every creation in
+such a project fail, and the kind unusable across it. So a creation or a rename
+takes the shape from before kinds, `<prefix>/<name>`, and a new kind changes
+only the label, as it does for a pushed branch. Nothing records the detour: the
+window is told once (`workspaces.kindDetour`), and the record holds the branch
+as it is. Only the kind's own folder has a way round — anything else in the way
+is refused as below.
+
 **A new kind moves the branch only while it has never left this machine**
 (`hasLeftMachine` in `git.ts`: an upstream of its own name in the config, or a
 copy on `origin`). GitHub keeps a pull request on the branch it was opened from,
@@ -84,11 +96,13 @@ branches.
 
 **Refs are files**, so `octopus/feature` and `octopus/feature/anna` cannot both
 exist. git says so only as "cannot lock ref", halfway through. `branchBlocker`
-asks first — for a branch above or below the name, here or on `origin` — and a
-creation, a rename and a new kind each refuse with `branchBlocked`, naming the
-branch in the way — or with `branchBlockedRemote` when what is in the way is a
-copy on `origin`: nothing local stops the branch then, only its push would fail,
-and the copy is deleted on `origin` rather than renamed from here. The workspace's own local branch is never in its own way:
+asks first — for a branch above or below the name, here or on `origin`. One
+named after the kind is gone round (above); for anything else a creation, a
+rename and a new kind each refuse with `branchBlocked`, naming the branch in the
+way — or with `branchBlockedRemote` when what is in the way is a copy on
+`origin`: nothing local stops the branch then, only its push would fail, and the
+copy is deleted on `origin` rather than renamed from here. The workspace's own
+local branch is never in its own way:
 `git branch -m` lets go of the old ref before taking the new one. Its copy on
 `origin` stays, and still counts.
 
