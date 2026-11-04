@@ -461,19 +461,27 @@ export async function branchBlocker(
 }
 
 /**
- * Whether a branch has ever been pushed: it has an upstream configured, or
- * `origin` holds a copy of it.
+ * Whether a branch has ever been pushed: it has an upstream of its own name
+ * configured, or `origin` holds a copy of it.
  *
  * Asked of the config rather than through `@{upstream}`, which stops resolving
  * once GitHub has deleted a merged branch and a prune has dropped the copy here
  * — and the pull request opened from it is still there.
+ *
+ * Of its own name, because that is what `push -u` writes. Until `--no-track`,
+ * every workspace branch was born tracking the base it was cut from, and the
+ * config still says so: read as "pushed", it froze the name of a branch that
+ * never left. A branch an older build renamed after its push tracks its former
+ * name, whose request it had already lost by then; moving it again loses
+ * nothing more.
  *
  * Only a missing key is an answer. Any other failure propagates: read as "never
  * pushed", it would let a branch a pull request is open from be moved.
  */
 export async function hasLeftMachine(exec: GitExec, branch: string): Promise<boolean> {
   try {
-    if ((await exec(['config', '--get', `branch.${branch}.merge`])).trim() !== '') return true
+    const merge = (await exec(['config', '--get', `branch.${branch}.merge`])).trim()
+    if (merge === `refs/heads/${branch}`) return true
   } catch (error) {
     // `config --get` exits 1 for a key that is not set.
     if (extractCode(error) !== '1') throw error

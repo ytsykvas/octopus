@@ -136,6 +136,15 @@ async function create(): Promise<Workspace> {
 }
 
 /**
+ * What `worktree add` from `origin/main` left on every workspace branch before
+ * `--no-track`: an upstream on the base, which the config still holds.
+ */
+async function trackBase(workspace: Workspace): Promise<void> {
+  await exec(['config', `branch.${workspace.branch}.remote`, 'origin'])
+  await exec(['config', `branch.${workspace.branch}.merge`, 'refs/heads/main'])
+}
+
+/**
  * A workspace as one made before kinds left it: on `<prefix>/<name>`, which
  * every record written then still points at.
  */
@@ -745,6 +754,17 @@ describe('renameWorkspace', () => {
     expect(renamed).toMatchObject({ name: FIRST_NAME.toUpperCase(), branch: workspace.branch })
   })
 
+  // Its upstream is the base it was cut from: nothing of it has left.
+  it('renames a workspace born tracking the base', async () => {
+    await addRemote()
+    const workspace = await create()
+    await trackBase(workspace)
+
+    const renamed = await renameWorkspace(workspace, project, 'fix auth', exec)
+
+    expect(renamed.branch).toBe('ytsykvas/feature/fix-auth')
+  })
+
   it('refuses to collide with an existing branch', async () => {
     const first = await create()
     const second = await create()
@@ -889,6 +909,16 @@ describe('rekindWorkspace', () => {
       branch: workspace.branch,
       branchSince: workspace.branchSince
     })
+  })
+
+  it('moves the branch of a workspace born tracking the base', async () => {
+    await addRemote()
+    const workspace = await create()
+    await trackBase(workspace)
+
+    const changed = await rekindWorkspace(workspace, project, 'bug', exec)
+
+    expect(changed.branch).toBe(`ytsykvas/bug/${FIRST_NAME}`)
   })
 
   it('moves a branch from before kinds onto the new shape', async () => {

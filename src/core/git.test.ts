@@ -444,6 +444,21 @@ describe('hasLeftMachine', () => {
     await expect(hasLeftMachine(exec, 'octopus/feature/anna')).resolves.toBe(true)
   })
 
+  /*
+   * Until `--no-track`, `worktree add` from `origin/main` left every workspace
+   * branch tracking the base, and the config outlived the change. That
+   * upstream says where the branch came from, not that it ever left.
+   */
+  it('answers false for a branch born tracking the base', async () => {
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: dir })
+    await run('git', ['config', 'branch.octopus/feature/anna.remote', 'origin'], { cwd: dir })
+    await run('git', ['config', 'branch.octopus/feature/anna.merge', 'refs/heads/main'], {
+      cwd: dir
+    })
+
+    await expect(hasLeftMachine(exec, 'octopus/feature/anna')).resolves.toBe(false)
+  })
+
   // A push from the terminal without `-u` sets no upstream, but leaves the
   // copy behind.
   it('answers true for a branch pushed without an upstream', async () => {

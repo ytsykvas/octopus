@@ -54,12 +54,16 @@ reads as holding `login`. One name too many is held, never one too few, and the
 two shapes cannot collide in git.
 
 **A new kind moves the branch only while it has never left this machine**
-(`hasLeftMachine` in `git.ts`: an upstream in the config, or a copy on
-`origin`). GitHub keeps a pull request on the branch it was opened from, so a
-workspace that moved off a pushed branch would lose its own request; past the
-push the kind is the card's label and nothing more. The config is asked rather
-than `@{upstream}`, which stops resolving once GitHub has deleted a merged
-branch and the copy here is pruned — and the request is still there.
+(`hasLeftMachine` in `git.ts`: an upstream of its own name in the config, or a
+copy on `origin`). GitHub keeps a pull request on the branch it was opened from,
+so a workspace that moved off a pushed branch would lose its own request; past
+the push the kind is the card's label and nothing more. The config is asked
+rather than `@{upstream}`, which stops resolving once GitHub has deleted a
+merged branch and the copy here is pruned — and the request is still there.
+Only an upstream of the branch's own name counts, which is what `push -u`
+writes: until `--no-track` every workspace branch was born tracking the base,
+the config still says so, and read as "pushed" it froze the name of every
+workspace made before then.
 
 **A rename asks the same, and refuses** (`branchPublished`): a new name is a new
 branch, and a workspace moved off a pushed one loses its request just the same.
