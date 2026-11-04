@@ -7,6 +7,8 @@
  * distinct enough that two of them are never confused at a glance.
  */
 
+import { workspaceSlug } from './scriptEnv.js'
+
 /**
  * Common given names, chosen to be plain ASCII with no spaces or diacritics —
  * so they pass through `toSlug` unchanged and are valid as both a git ref and
@@ -289,9 +291,12 @@ export type Random = () => number
  *
  * Once the pool is exhausted it appends a counter — `anna-2`, `mila-2` — so a
  * project with more workspaces than names keeps working rather than failing.
+ *
+ * Compared by slug, not as written: the slug names the workspace's database,
+ * and a sibling renamed `Anna` or `anna_2` holds it as surely as `anna` would.
  */
 export function nextWorkspaceName(taken: readonly string[], random: Random = Math.random): string {
-  const used = new Set(taken)
+  const used = new Set(taken.map(workspaceSlug))
   // Randomness enters as where to start reading the pool; from there the first
   // free name wins. Walking the whole pool from that point is what guarantees a
   // free name is found whenever one exists.
@@ -300,7 +305,7 @@ export function nextWorkspaceName(taken: readonly string[], random: Random = Mat
   for (let round = 1; ; round++) {
     for (const name of ordered) {
       const candidate = round === 1 ? name : `${name}-${String(round)}`
-      if (!used.has(candidate)) return candidate
+      if (!used.has(workspaceSlug(candidate))) return candidate
     }
   }
 }

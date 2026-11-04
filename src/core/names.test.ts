@@ -46,6 +46,19 @@ describe('nextWorkspaceName', () => {
     expect(taken).not.toContain(nextWorkspaceName(taken, first))
   })
 
+  // The slug names the workspace's database, so a name taken in other letters
+  // or other punctuation is taken all the same.
+  it('skips a name whose slug a taken one already has', () => {
+    const [firstName, secondName] = WORKSPACE_NAMES
+    expect(nextWorkspaceName([firstName!.toUpperCase()], () => 0)).toBe(secondName)
+  })
+
+  it('skips a counted name whose slug a taken one already has', () => {
+    const [firstName] = WORKSPACE_NAMES
+    const taken = [...WORKSPACE_NAMES, `${firstName!}_2`]
+    expect(nextWorkspaceName(taken, () => 0)).not.toBe(`${firstName!}-2`)
+  })
+
   it('never returns a name that is taken', () => {
     const taken: string[] = []
     while (taken.length < NAME_POOL_SIZE + 5) {
