@@ -2472,6 +2472,9 @@ export const en = {
        for it, and git itself only says "cannot lock ref". */
     branchBlocked:
       '{{blocker}} already exists, so git cannot create {{branch}}. Rename or delete {{blocker}} first.',
+    /* A pushed branch keeps its name: GitHub leaves the request on the old one. */
+    branchPublished:
+      '{{branch}} has been pushed, so the workspace keeps its name: a new one would move the branch away from its pull request.',
     slugTaken:
       'Another workspace, \u201c{{name}}\u201d, already names the database {{slug}}. Two workspaces sharing one write over each other\u2019s data. Choose a name that differs by more than a dash or a dot.',
     pathExists: '{{path}} already exists.',

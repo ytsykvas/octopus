@@ -13,7 +13,8 @@ otherwise. So a name free in `state.json` may still be taken in the repository,
 and `worktree add` will refuse. `takenByBranches` in `workspaces.ts` exists for
 exactly this, and reads the remote-tracking branches as well as the local ones:
 the copy on `origin` outlives even a deleted local branch. A rename is refused
-onto either, unless the copy on `origin` is the workspace's own upstream.
+onto either. The copy can never be the workspace's own: a workspace whose
+branch has been pushed is not renamed at all (below).
 
 That copy outlived the branch itself, too: GitHub deletes a merged branch, the
 fetch keeps the copy, and the name stayed taken for good — one checkout had
@@ -58,8 +59,13 @@ two shapes cannot collide in git.
 workspace that moved off a pushed branch would lose its own request; past the
 push the kind is the card's label and nothing more. The config is asked rather
 than `@{upstream}`, which stops resolving once GitHub has deleted a merged
-branch and the copy here is pruned — and the request is still there. A rename
-does not ask this, and loses the request when it moves a pushed branch.
+branch and the copy here is pruned — and the request is still there.
+
+**A rename asks the same, and refuses** (`branchPublished`): a new name is a new
+branch, and a workspace moved off a pushed one loses its request just the same.
+Refused and said, rather than done halfway — the label alone changing while the
+branch stays would leave a name the branch no longer matches. A rename that
+keeps the slug, the same name in other letters, moves nothing and goes ahead.
 
 **Refs are files**, so `octopus/feature` and `octopus/feature/anna` cannot both
 exist. git says so only as "cannot lock ref", halfway through. `branchBlocker`

@@ -26,8 +26,7 @@ import {
   type MakeExec,
   reasonFrom,
   refExists,
-  toSlug,
-  upstreamOf
+  toSlug
 } from './git.js'
 import { fetchRemote, pruneGoneBranches, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
@@ -70,6 +69,8 @@ export type WorkspaceErrorCode =
   | 'slugTaken'
   /** A branch at, above or below this name exists, so git cannot create it. */
   | 'branchBlocked'
+  /** The branch has left this machine; moving it would leave its pull request behind. */
+  | 'branchPublished'
 
 export class WorkspaceError extends CodedError<WorkspaceErrorCode> {
   override readonly name = 'WorkspaceError'
@@ -434,6 +435,18 @@ export async function renameWorkspace(
     return { name: trimmed, branch: workspace.branch, branchSince: workspace.branchSince }
   }
 
+  // GitHub keeps a pull request on the branch it was opened from, so moving a
+  // pushed branch leaves the workspace without its own request — the reason
+  // `rekindWorkspace` leaves one where it is. A new name would mean a new
+  // branch, so it is refused, and said, rather than half done.
+  if (await hasLeftMachine(exec, workspace.branch)) {
+    throw new WorkspaceError(
+      'branchPublished',
+      { branch: workspace.branch },
+      `${workspace.branch} has been pushed; renaming would leave its pull request behind.`
+    )
+  }
+
   const moved = await moveWorkspaceBranch(
     workspace,
     branchFor(project, workspace.kind, trimmed),
@@ -485,16 +498,15 @@ async function moveWorkspaceBranch(
   // Asked before the attempt, so a failure can be named. Mapping every
   // rejection to "already exists" blamed the new name for whatever went wrong —
   // including the branch being renamed from a terminal, where the truth is that
-  // the old one is gone. `origin`'s copy counts as in `takenByBranches`, unless
-  // it is this branch's own upstream: then the name is the workspace's own.
+  // the old one is gone. `origin`'s copy counts as in `takenByBranches`, and
+  // always: a branch that has been pushed never gets this far, so the copy can
+  // never be the workspace's own.
   const onRemote = remoteBranchName(branch)
-  const [local, remote, upstream] = await allOf([
+  const [local, remote] = await allOf([
     anyBranchExists(exec, branch),
-    refExists(exec, `refs/remotes/${onRemote}`),
-    upstreamOf(exec, workspace.branch)
+    refExists(exec, `refs/remotes/${onRemote}`)
   ])
-  const own = remote && upstream === onRemote
-  if (local || (remote && !own)) {
+  if (local || remote) {
     const taken = local ? branch : onRemote
     throw new WorkspaceError('branchExists', { branch: taken }, `Branch ${taken} already exists.`)
   }
@@ -505,7 +517,7 @@ async function moveWorkspaceBranch(
   // guess would.
   await renameBranch(exec, workspace.branch, branch)
 
-  return { branch, branchSince: own ? null : new Date().toISOString() }
+  return { branch, branchSince: new Date().toISOString() }
 }
 
 /**

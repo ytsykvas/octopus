@@ -20,8 +20,8 @@ A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
 `status`, `port`, `createdAt`, `branchSince`, `writers`, `notes`, `kind`,
 `ownerId`.
 
-`branchSince` is when a rename brought the workspace onto its current branch, or
-null for "since `createdAt`".
+`branchSince` is when a rename or a new kind brought the workspace onto its
+current branch, or null for "since `createdAt`".
 
 `kind` is what sort of work the workspace holds — one of the fixed set in
 `workspaceKinds.ts`, `feature` to start with — drawn as the strip on its card

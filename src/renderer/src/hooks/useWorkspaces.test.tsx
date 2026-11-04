@@ -1047,6 +1047,31 @@ describe('useWorkspaces', () => {
       // Only the load on mount: there is nothing new to read.
       expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(1)
     })
+
+    // The branch has left: the name stays, and the reader is told why.
+    it('says why a workspace whose branch has left keeps its name', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.rename).mockResolvedValue({
+        ok: false,
+        error: 'ytsykvas/feature/anna has been pushed',
+        code: 'branchPublished',
+        params: { branch: 'ytsykvas/feature/anna' }
+      })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.rename('planner/anna', 'billing'))
+
+      expect(onError).toHaveBeenCalledWith(
+        'ytsykvas/feature/anna has been pushed, so the workspace keeps its name: a new one would move the branch away from its pull request.'
+      )
+      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('giving a workspace another kind', () => {

@@ -713,15 +713,35 @@ describe('renameWorkspace', () => {
     })
   })
 
-  it('lets a workspace back onto its own branch on the remote', async () => {
+  /*
+   * GitHub keeps a pull request on the branch it was opened from, and a
+   * workspace moved off it no longer finds its own request. So once the branch
+   * has been pushed the name stays — refused and said, rather than quietly
+   * done or quietly not.
+   */
+  it('refuses to rename a workspace whose branch has been pushed', async () => {
     await addRemote()
     const workspace = await create()
     await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
-    const away = { ...workspace, ...(await renameWorkspace(workspace, project, 'fix auth', exec)) }
 
-    const back = await renameWorkspace(away, project, workspace.name, exec)
+    const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
+      (cause: unknown) => cause
+    )
 
-    expect(back).toMatchObject({ branch: workspace.branch, branchSince: null })
+    expect((error as WorkspaceError).code).toBe('branchPublished')
+    expect((error as WorkspaceError).params).toMatchObject({ branch: workspace.branch })
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(FIRST_NAME)
+  })
+
+  // Other letters ask nothing of the branch, so there is nothing to refuse.
+  it('still relabels a pushed workspace when the slug is unchanged', async () => {
+    await addRemote()
+    const workspace = await create()
+    await run('git', ['push', '-q', '-u', 'origin', workspace.branch], { cwd: workspace.path })
+
+    const renamed = await renameWorkspace(workspace, project, FIRST_NAME.toUpperCase(), exec)
+
+    expect(renamed).toMatchObject({ name: FIRST_NAME.toUpperCase(), branch: workspace.branch })
   })
 
   it('refuses to collide with an existing branch', async () => {
@@ -782,9 +802,9 @@ describe('renameWorkspace', () => {
    * very ref every new branch needs as a folder. Its own branch is not in its
    * way: `git branch -m` lets go of the old ref before it takes the new one.
    */
-  // Its own local ref lets go; the copy on origin does not, and the push of
-  // the new name would fail on it.
-  it('refuses a move into a folder of its own branch that origin still holds', async () => {
+  // A copy on origin is a branch that has left, upstream or not: a push from
+  // the terminal without `-u` sets none, and the request can still be open.
+  it('refuses to rename a workspace whose branch origin holds a copy of', async () => {
     const workspace = await fromBeforeKinds('feature')
     await exec(['update-ref', 'refs/remotes/origin/ytsykvas/feature', 'HEAD'])
 
@@ -792,8 +812,7 @@ describe('renameWorkspace', () => {
       (cause: unknown) => cause
     )
 
-    expect((error as WorkspaceError).code).toBe('branchBlocked')
-    expect((error as WorkspaceError).params).toMatchObject({ blocker: 'origin/ytsykvas/feature' })
+    expect((error as WorkspaceError).code).toBe('branchPublished')
   })
 
   it('moves a branch into a folder of its own name', async () => {

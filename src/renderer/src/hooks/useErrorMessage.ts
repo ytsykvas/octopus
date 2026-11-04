@@ -149,6 +149,8 @@ export function useErrorMessage(): (failure: Failure) => string {
             branch: failure.params?.branch ?? '',
             blocker: failure.params?.blocker ?? ''
           })
+        case 'branchPublished':
+          return t('errors.branchPublished', { branch: failure.params?.branch ?? '' })
         case 'slugTaken':
           return t('errors.slugTaken', {
             name: failure.params?.name ?? '',
