@@ -95,7 +95,7 @@ export const en = {
        `label` is the word everywhere else. */
     kindTitle: 'Tag',
     kindNote: 'The branch is renamed with the tag until it is pushed.',
-    kindLabel: 'Tag: {{kind}}. Change',
+    kindLabel: '{{short}} — {{kind}} tag. Change',
     kindDetour:
       '{{blocker}} already exists, and git cannot file a branch under another, so the branch is {{branch}}.',
     kinds: {

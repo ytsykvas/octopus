@@ -1788,7 +1788,7 @@ describe('App', () => {
     const user = await openApp()
     await user.click(await screen.findByRole('button', { name: 'LE' }))
 
-    await user.click(await screen.findByRole('button', { name: 'Tag: Feature. Change' }))
+    await user.click(await screen.findByRole('button', { name: 'feature — Feature tag. Change' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Research' }))
 
     expect(window.octopus.workspaces.setKind).toHaveBeenCalledWith('ledger/carol', 'research')

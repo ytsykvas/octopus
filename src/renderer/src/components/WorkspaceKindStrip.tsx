@@ -21,22 +21,27 @@ interface WorkspaceKindStripProps {
  */
 export function WorkspaceKindStrip({ kind, onChange }: WorkspaceKindStripProps): React.JSX.Element {
   const { t } = useTranslation()
-  const named = t('workspaces.kindLabel', { kind: t(`workspaces.kinds.${kind}.label`) })
+  const short = t(`workspaces.kinds.${kind}.short`)
+  // Starting with the word on screen: saying what you see — "click explore" —
+  // has to find the button, and some short words are not the full name.
+  const named = t('workspaces.kindLabel', { short, kind: t(`workspaces.kinds.${kind}.label`) })
 
   return (
     <DropdownMenu
       align="left"
-      trigger={({ onClick }) => (
+      trigger={({ onClick, open }) => (
         <button
           type="button"
           onClick={onClick}
+          aria-haspopup="menu"
+          aria-expanded={open}
           aria-label={named}
           title={named}
           className="workspace-kind focus-ring"
           // The one dynamic value, and it still resolves to a token.
           style={{ '--kind-color': `var(--project-${KIND_COLORS[kind]})` } as React.CSSProperties}
         >
-          <span aria-hidden>{t(`workspaces.kinds.${kind}.short`)}</span>
+          <span aria-hidden>{short}</span>
         </button>
       )}
       actions={WORKSPACE_KINDS.map((each, index) => ({

@@ -790,6 +790,12 @@
     background-color: color-mix(in srgb, var(--kind-color) 45%, transparent);
   }
 
+  /* The selected card already draws its strip at the hover tint, so the hover
+     there goes one step further — or the strip would not answer the pointer. */
+  .workspace-card-selected .workspace-kind:hover {
+    background-color: color-mix(in srgb, var(--kind-color) 52%, transparent);
+  }
+
   /* Syntax colours, which shiki emits as a pair of custom properties on every
      token so one tokenising serves both themes. The class on the container is
      what stops these reaching anything else; the fallback is what an

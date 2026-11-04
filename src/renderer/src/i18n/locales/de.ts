@@ -83,7 +83,7 @@ export const de: Translation = {
     remove: 'Workspace entfernen',
     kindTitle: 'Tag',
     kindNote: 'Der Branch wird mit dem Tag umbenannt, solange er nicht gepusht ist.',
-    kindLabel: 'Tag: {{kind}}. Ändern',
+    kindLabel: '{{short}} — Tag „{{kind}}“. Ändern',
     kindDetour:
       '{{blocker}} existiert bereits, und git kann keinen Branch unter einem anderen ablegen, deshalb heißt der Branch {{branch}}.',
     kinds: {

@@ -189,8 +189,13 @@ project palette, never solid: twelve solid blocks down a list are the confetti
 strip's edge against the card, and the word is in `ink`, because in the kind's
 own colour on that fill it fell under 3:1. The word runs bottom to top (`writing-mode: sideways-lr`) and
 is a short form of the kind, about seven letters, which is all a 46px card
-holds — `locales.test.ts` keeps every language to it; the full name is the
-button's label and its tooltip. A click opens the picker, a `DropdownMenu` of
+holds — `locales.test.ts` keeps every language to it. Some short words are
+not the name (`explore` for Research), so the button's label and tooltip begin
+with the word on screen and then give the name — "explore — Research tag.
+Change" — and saying what you see finds it. It says it opens a menu
+(`aria-haspopup`) and whether that menu is open (`aria-expanded`). On the
+selected card the strip sits at the hover tint, so hovering it there goes one
+step further (52%). A click opens the picker, a `DropdownMenu` of
 radio items with a note above them: the branch is renamed with the kind only
 until it is pushed, since GitHub keeps a request on the branch it was opened
 from. The list is read again after a change rather than drawn ahead of it, so

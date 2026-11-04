@@ -1151,6 +1151,22 @@ describe('useWorkspaces', () => {
       expect(onError).not.toHaveBeenCalledWith(expect.any(String))
     })
 
+    // A line left from the last attempt would read as this one's answer.
+    it('clears the last error before asking', async () => {
+      workspacesPerProject({ planner: [anna] })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.setKind('planner/anna', 'bug'))
+
+      expect(onError).toHaveBeenCalledWith(null)
+    })
+
     it('says why the branch kept its place under a new kind', async () => {
       const rekinded = { ...anna, kind: 'bug' as const }
       vi.mocked(window.octopus.workspaces.list)

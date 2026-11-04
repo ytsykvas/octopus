@@ -83,7 +83,7 @@ export const uk: Translation = {
     remove: 'Видалити воркспейс',
     kindTitle: 'Тег',
     kindNote: 'Гілка перейменовується разом із тегом, доки її не запушено.',
-    kindLabel: 'Тег: {{kind}}. Змінити',
+    kindLabel: '{{short}} — тег «{{kind}}». Змінити',
     kindDetour:
       '{{blocker}} уже існує, а git не може покласти гілку всередину іншої, тож гілка — {{branch}}.',
     kinds: {
