@@ -1048,6 +1048,7 @@ export function App(): React.JSX.Element {
                 creating={workspaces.creating}
                 onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
                 onRemoveWorkspace={(id) => void workspaces.remove(id)}
+                onSetWorkspaceKind={(id, kind) => void workspaces.setKind(id, kind)}
                 editingWorkspaceId={workspaces.editingId}
                 onEditingWorkspaceChange={workspaces.setEditingId}
                 width={sidebarWidth}

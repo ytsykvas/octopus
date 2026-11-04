@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next'
 
 import { AGENT_NAMES } from '@core/chats.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
+import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import {
@@ -32,6 +33,7 @@ import { useWorkspaceAgents } from '../hooks/backgroundTasks.js'
 import { useDraftState } from '../hooks/pullRequestDrafts.js'
 import { RequestMark } from './RequestMark.js'
 import { NameEditor } from './NameEditor.js'
+import { WorkspaceKindStrip } from './WorkspaceKindStrip.js'
 
 interface WorkspaceRowProps {
   readonly workspace: WorkspaceView
@@ -43,6 +45,7 @@ interface WorkspaceRowProps {
   readonly onRename: (name: string) => void
   readonly onEditingChange: (editing: boolean) => void
   readonly onRemove: () => void
+  readonly onKindChange: (kind: WorkspaceKind) => void
 }
 
 /**
@@ -60,7 +63,8 @@ export function WorkspaceRow({
   onSelect,
   onRename,
   onEditingChange,
-  onRemove
+  onRemove,
+  onKindChange
 }: WorkspaceRowProps): React.JSX.Element {
   const { t } = useTranslation()
   // Agents a turn sent off, still at work after it ended: the reason the row
@@ -94,6 +98,8 @@ export function WorkspaceRow({
     <div
       className={`workspace-card group flex items-center gap-1 p-1.5 ${selected ? 'workspace-card-selected' : ''}`}
     >
+      <WorkspaceKindStrip kind={workspace.kind} onChange={onKindChange} />
+
       <button
         type="button"
         onClick={onSelect}

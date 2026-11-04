@@ -90,6 +90,26 @@ export const en = {
     createFirstHint: 'Its own branch from {{branch}}',
     rename: 'Rename',
     remove: 'Remove workspace',
+    /* The kind of work, on the strip at a card's left edge. `short` is what the
+       strip has room for, about seven letters (held in locales.test.ts);
+       `label` is the word everywhere else. */
+    kindTitle: 'Tag',
+    kindNote: 'The branch is renamed with the tag until it is pushed.',
+    kindLabel: 'Tag: {{kind}}. Change',
+    kinds: {
+      feature: { label: 'Feature', short: 'feature' },
+      fix: { label: 'Fix', short: 'fix' },
+      bug: { label: 'Bug', short: 'bug' },
+      research: { label: 'Research', short: 'explore' },
+      tests: { label: 'Tests', short: 'tests' },
+      refactor: { label: 'Refactoring', short: 'refact' },
+      docs: { label: 'Documentation', short: 'docs' },
+      chore: { label: 'Maintenance', short: 'chore' },
+      perf: { label: 'Performance', short: 'perf' },
+      design: { label: 'Design', short: 'design' },
+      security: { label: 'Security', short: 'secure' },
+      review: { label: 'Review', short: 'review' }
+    },
     missing: 'Directory is gone',
     statusRunning: 'The agent is working here',
     statusWaiting: 'Waiting for your answer',

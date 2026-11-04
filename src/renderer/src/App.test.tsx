@@ -1783,6 +1783,17 @@ describe('App', () => {
     expect(window.octopus.workspaces.rename).toHaveBeenCalledWith('ledger/carol', 'invoices')
   })
 
+  it('gives a workspace another kind from its strip', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'LE' }))
+
+    await user.click(await screen.findByRole('button', { name: 'Tag: Feature. Change' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Research' }))
+
+    expect(window.octopus.workspaces.setKind).toHaveBeenCalledWith('ledger/carol', 'research')
+  })
+
   // Confirming without touching the dialog takes the branch with it: a
   // workspace is one task, and the branch behind a finished one is finished too.
   it('removes a workspace from its menu, branch and all', async () => {

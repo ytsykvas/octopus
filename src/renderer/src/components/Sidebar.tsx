@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { shortBranchName } from '@core/branches.js'
 import type { Project } from '@core/store.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
+import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { AddTile } from './AddTile.js'
@@ -45,6 +46,7 @@ interface SidebarProps {
   readonly onWidthChange: (width: number) => void
   readonly onRenameWorkspace: (workspaceId: string, name: string) => void
   readonly onRemoveWorkspace: (workspaceId: string) => void
+  readonly onSetWorkspaceKind: (workspaceId: string, kind: WorkspaceKind) => void
   /** Workspace whose name is being edited — set right after creation. */
   readonly editingWorkspaceId: string | null
   readonly onEditingWorkspaceChange: (workspaceId: string | null) => void
@@ -75,6 +77,7 @@ export function Sidebar({
   onWidthChange,
   onRenameWorkspace,
   onRemoveWorkspace,
+  onSetWorkspaceKind,
   editingWorkspaceId,
   onEditingWorkspaceChange,
   onHelp,
@@ -146,6 +149,9 @@ export function Sidebar({
                       }}
                       onRemove={() => {
                         onRemoveWorkspace(workspace.id)
+                      }}
+                      onKindChange={(kind) => {
+                        onSetWorkspaceKind(workspace.id, kind)
                       }}
                       onEditingChange={(editing) => {
                         onEditingWorkspaceChange(editing ? workspace.id : null)

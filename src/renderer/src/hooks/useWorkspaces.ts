@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Project } from '@core/store.js'
+import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type { WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
 /** A conversation as the tab strip knows it: everything but the turn's start. */
@@ -50,6 +51,8 @@ interface UseWorkspaces {
    */
   readonly creating: boolean
   readonly rename: (workspaceId: string, name: string) => Promise<void>
+  /** Another kind; the list is read again, since the branch may have moved with it. */
+  readonly setKind: (workspaceId: string, kind: WorkspaceKind) => Promise<void>
   readonly remove: (workspaceId: string) => Promise<void>
 }
 
@@ -380,6 +383,22 @@ export function useWorkspaces(
     [refresh, describeFailure, onError]
   )
 
+  // Not drawn ahead of the answer: the kind and the branch arrive together in
+  // one record, and a strip showing the new kind beside the old branch would be
+  // a state the workspace is never in.
+  const setKind = useCallback(
+    async (workspaceId: string, kind: WorkspaceKind) => {
+      onError(null)
+      const result = await window.octopus.workspaces.setKind(workspaceId, kind)
+      if (!result.ok) {
+        onError(describeFailure(result))
+        return
+      }
+      await refresh()
+    },
+    [refresh, describeFailure, onError]
+  )
+
   const remove = useCallback(
     async (workspaceId: string) => {
       const workspace = [...byProject.values()].flat().find((item) => item.id === workspaceId)
@@ -447,6 +466,7 @@ export function useWorkspaces(
     create,
     creating,
     rename,
+    setKind,
     remove
   }
 }

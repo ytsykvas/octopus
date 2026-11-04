@@ -1049,6 +1049,52 @@ describe('useWorkspaces', () => {
     })
   })
 
+  describe('giving a workspace another kind', () => {
+    it('saves the kind and reloads the list', async () => {
+      const rekinded = { ...anna, kind: 'bug' as const, branch: 'ytsykvas/bug/anna' }
+      vi.mocked(window.octopus.workspaces.list)
+        .mockResolvedValueOnce({ ok: true, value: [anna] })
+        .mockResolvedValue({ ok: true, value: [rekinded] })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.setKind('planner/anna', 'bug'))
+
+      expect(window.octopus.workspaces.setKind).toHaveBeenCalledWith('planner/anna', 'bug')
+      expect(result.current.flat).toEqual([rekinded])
+      expect(onError).not.toHaveBeenCalledWith(expect.any(String))
+    })
+
+    it('reports a branch in the way and leaves the list alone', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.setKind).mockResolvedValue({
+        ok: false,
+        error: 'ytsykvas/bug stops ytsykvas/bug/anna from being created.',
+        code: 'branchBlocked',
+        params: { branch: 'ytsykvas/bug/anna', blocker: 'ytsykvas/bug' }
+      })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.setKind('planner/anna', 'bug'))
+
+      expect(onError).toHaveBeenCalledWith(
+        'ytsykvas/bug already exists, so git cannot create ytsykvas/bug/anna. Rename or delete ytsykvas/bug first.'
+      )
+      expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('removing a workspace', () => {
     it('asks by name, then deletes the worktree and keeps the branch', async () => {
       workspacesPerProject({ planner: [anna] })

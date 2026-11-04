@@ -43,6 +43,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}): SidebarProps {
     onWidthChange: vi.fn(),
     onRenameWorkspace: vi.fn(),
     onRemoveWorkspace: vi.fn(),
+    onSetWorkspaceKind: vi.fn(),
     editingWorkspaceId: null,
     onEditingWorkspaceChange: vi.fn(),
     onHelp: vi.fn(),
@@ -216,6 +217,18 @@ describe('Sidebar', () => {
     await user.type(field, 'robert{Enter}')
 
     expect(props.onRenameWorkspace).toHaveBeenCalledWith('planner/bob', 'robert')
+  })
+
+  it('gives another kind to the workspace whose strip was used', async () => {
+    const user = userEvent.setup()
+    const props = renderSidebar({
+      workspaces: [workspaceView('anna'), workspaceView('bob', { kind: 'docs' })]
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Tag: Documentation. Change' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Bug' }))
+
+    expect(props.onSetWorkspaceKind).toHaveBeenCalledWith('planner/bob', 'bug')
   })
 
   it('starts renaming the workspace whose menu was used', async () => {
