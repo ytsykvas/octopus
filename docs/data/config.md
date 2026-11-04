@@ -80,7 +80,10 @@ the way out, since `persist.ts` writes back what the schema returned — so the
 old null is cleaned off the disk the next time anything is saved. Same shape as
 the `alwaysAllowedTools` filtering above. A `.catch()` would cover both cases in
 fewer characters and is deliberately not used: it would also swallow a genuinely
-corrupt value, which is the one thing this reader exists to shout about.
+corrupt value, which is the one thing this reader exists to shout about. The one
+exception is a workspace's `kind`, where an unknown value is expected rather
+than corrupt — a newer build's kind — and the cost of reading it as `feature` is
+a label; [state.md](state.md) says why, and what it costs.
 
 ## Config version 2
 

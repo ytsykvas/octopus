@@ -34,7 +34,12 @@ project**, not derived from its name — a hash would repaint a project the mome
 it was renamed, and constancy is what makes it recognisable.
 
 Applied by setting `--project-color` inline on a container. That inline style is
-the sanctioned exception: the value is dynamic, but still resolves to a token.
+a sanctioned exception: the value is dynamic, but still resolves to a token.
+
+The same palette colours the twelve kinds of work (`KIND_COLORS` in
+`workspaceKinds.ts`), and the kind strip on a workspace card sets
+`--kind-color` inline the same way — the other sanctioned exception, for the
+same reason.
 
 The colour is one half of a project's mark; the other is what sits inside the
 tab. By default that is two initials, which collide readily — two repositories

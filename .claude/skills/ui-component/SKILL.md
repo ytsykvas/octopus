@@ -160,8 +160,11 @@ about to draw.
 
 A project's colour comes from `--project-<name>`, declared once per theme, and
 is applied by setting `--project-color` inline on a container. That inline style
-is the one sanctioned exception: the value is dynamic, but it still resolves to
-a token.
+is a sanctioned exception: the value is dynamic, but it still resolves to a
+token. The kind strip on a workspace card is the other one, for the same
+reason: `--kind-color` is `var(--project-<name>)` from `KIND_COLORS` in
+`workspaceKinds.ts`. Any third needs that same property — a variable set
+inline, whose value is a token.
 
 Two rules that are easy to get wrong:
 

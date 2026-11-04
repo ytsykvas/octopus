@@ -43,8 +43,8 @@ A workspace branch is `<prefix>/<kind>/<name>` — `octopus/fix/anna` — where 
 kind is the strip on its card (`workspaceKinds.ts`), `feature` until somebody
 picks another. Branches made before kinds are `<prefix>/<name>` and are left
 there: a branch moves only when a rename or a new kind moves it anyway. A
-rename that leaves the slug as it was — the same name in other letters — moves
-nothing, so it never brings such a branch onto the new shape, nor carries a
+rename that leaves the branch slug as it was (`toSlug`: the same name in other
+letters) moves nothing, so it never brings such a branch onto the new shape, nor carries a
 pushed one onto a kind it was deliberately kept off.
 
 `takenByBranches` reads both shapes, and takes the segment after the prefix as
@@ -81,7 +81,10 @@ workspace made before then.
 branch, and a workspace moved off a pushed one loses its request just the same.
 Refused and said, rather than done halfway — the label alone changing while the
 branch stays would leave a name the branch no longer matches. A rename that
-keeps the slug, the same name in other letters, moves nothing and goes ahead.
+keeps the branch slug, the same name in other letters, moves nothing and goes
+ahead. The branch slug, not the database one (`workspaceSlug`, which turns `-`
+into `_` too): `fix-auth` to `fix_auth` keeps the database and still names
+another branch, so it is refused like any other new name.
 
 **What moves a branch and what pushes it wait on each other**, one workspace at
 a time (`oneAtATimeEach` in `parallel.ts`): a rename, a new kind, Commit & push,

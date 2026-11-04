@@ -28,7 +28,11 @@ current branch, or null for "since `createdAt`".
 and carried in the branch name (see
 [core/workspaces-and-git.md](../core/workspaces-and-git.md)). Read with `catch`
 rather than `default`: a record from before kinds lacks it, one from a newer
-build may name a kind this one does not know, and both load as `feature`.
+build may name a kind this one does not know, and both load as `feature`. The
+only `catch` in the state, against the rule in [config.md](config.md), because
+here an unknown value is expected rather than corrupt. What it costs: the next
+save writes `feature` back over the newer build's kind. A label, not data — the
+branch keeps its name either way.
 
 `notes` is a line the user wrote to themselves about this workspace, and the one
 thing a workspace carries that the agent never reads. On the record rather than
