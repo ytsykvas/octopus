@@ -26,8 +26,9 @@ export interface DragReorder {
  * A list put in order by dragging its items onto one another.
  *
  * The project strip and the saved prompts each wrote this out, and the copies
- * only ever differed in which list they changed. What the caller keeps is the
- * order; this keeps only where the drag is.
+ * differed in which list they changed and in whether the keyboard could move
+ * an item — only the prompts' could. What the caller keeps is the order; this
+ * keeps only where the drag is.
  */
 export function useDragReorder(
   ids: readonly string[],
