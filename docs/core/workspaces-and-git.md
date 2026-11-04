@@ -63,7 +63,11 @@ takes the shape from before kinds, `<prefix>/<name>`, and a new kind changes
 only the label, as it does for a pushed branch. Nothing records the detour: the
 window is told once (`workspaces.kindDetour`), and the record holds the branch
 as it is. Only the kind's own folder has a way round — anything else in the way
-is refused as below.
+is refused as below — and never onto a name that is itself a kind: renamed
+`docs` round `octopus/feature`, the workspace would sit on `octopus/docs` and
+stand in the way of every new kind `docs` in the project, so that rename is
+refused. A new kind that returns a label to the kind its branch is already
+named for moves nothing and asks nothing.
 
 **A new kind moves the branch only while it has never left this machine**
 (`hasLeftMachine` in `git.ts`: an upstream of its own name in the config, or a

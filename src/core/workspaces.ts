@@ -509,6 +509,12 @@ export async function rekindWorkspace(
   if (await hasLeftMachine(exec, workspace.branch)) return { kind }
 
   const branch = branchFor(project, kind, workspace.name)
+  // Back to the kind its branch is named for: nothing moves, so nothing can be
+  // in the way of a move.
+  if (branch === workspace.branch) {
+    return { kind, branch, branchSince: workspace.branchSince }
+  }
+
   const blocker = await kindBlocker(exec, project, kind, branch, workspace.branch)
   if (blocker !== null) {
     onDetour({ blocker, branch: workspace.branch })
@@ -536,7 +542,12 @@ async function routeBranch(
   const blocker = await kindBlocker(exec, project, kind, branch, own)
   if (blocker === null) return { branch, blocker }
 
-  const around = `${project.branchPrefix}/${toSlug(name)}`
+  // Not onto a branch named after a kind: that would stand in that kind's way
+  // for the whole project, the very thing being gone round.
+  const slug = toSlug(name)
+  if (isWorkspaceKind(slug)) throw blockedBy(branch, blocker)
+
+  const around = `${project.branchPrefix}/${slug}`
   await refuseBlocked(exec, around, own)
   return { branch: around, blocker }
 }
@@ -566,17 +577,14 @@ async function kindBlocker(
  * first a name that is taken.
  *
  * Shared by a rename and a new kind, the two things a branch name follows.
+ * Never asked to move a branch onto itself: a rename keeping the branch slug
+ * and a new kind its branch is already named for both return before this.
  */
 async function moveWorkspaceBranch(
   workspace: Workspace,
   branch: string,
   exec: GitExec
 ): Promise<Pick<Workspace, 'branch' | 'branchSince'>> {
-  if (branch === workspace.branch) {
-    // The branch it would get is the one it has — nothing for git to do.
-    return { branch, branchSince: workspace.branchSince }
-  }
-
   // Asked before the attempt, so a failure can be named. Mapping every
   // rejection to "already exists" blamed the new name for whatever went wrong —
   // including the branch being renamed from a terminal, where the truth is that

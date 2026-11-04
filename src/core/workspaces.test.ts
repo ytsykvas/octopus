@@ -894,6 +894,28 @@ describe('renameWorkspace', () => {
     expect(detours).toEqual([{ blocker: 'ytsykvas/feature', branch: 'ytsykvas/fix-auth' }])
   })
 
+  /*
+   * Going round to `ytsykvas/docs` would make a branch named after a kind —
+   * the very thing that made the detour necessary, now standing in the way of
+   * every new kind `docs` in the project. Refused instead, naming what was in
+   * the way of the name asked for.
+   */
+  it('refuses to go round onto a branch named after a kind', async () => {
+    const workspace = await fromBeforeKinds(FIRST_NAME)
+    await exec(['branch', 'ytsykvas/feature'])
+
+    const error = await renameWorkspace(workspace, project, 'Docs', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchBlocked')
+    expect((error as WorkspaceError).params).toMatchObject({
+      branch: 'ytsykvas/feature/docs',
+      blocker: 'ytsykvas/feature'
+    })
+    await expect(exec(['branch', '--list', 'ytsykvas/docs'])).resolves.toBe('')
+  })
+
   it('goes round a copy on origin named after its kind with nobody listening', async () => {
     const workspace = await create()
     await exec(['update-ref', 'refs/remotes/origin/ytsykvas/feature', 'HEAD'])
@@ -1021,6 +1043,22 @@ describe('rekindWorkspace', () => {
     const changed = await rekindWorkspace(workspace, project, 'bug', exec)
 
     expect(changed.branch).toBe(`ytsykvas/bug/${FIRST_NAME}`)
+  })
+
+  /*
+   * A label that had drifted from its branch coming back to it asks git
+   * nothing: nothing moves, so nothing can be in the way of a move.
+   */
+  it('takes back the kind its branch is named for without asking what is in the way', async () => {
+    const workspace = await create()
+    const relabelled = { ...workspace, kind: 'bug' as const }
+    await exec(['update-ref', `refs/remotes/origin/${workspace.branch}/x`, 'HEAD'])
+
+    await expect(rekindWorkspace(relabelled, project, 'feature', exec)).resolves.toEqual({
+      kind: 'feature',
+      branch: workspace.branch,
+      branchSince: workspace.branchSince
+    })
   })
 
   it('moves a branch from before kinds onto the new shape', async () => {
