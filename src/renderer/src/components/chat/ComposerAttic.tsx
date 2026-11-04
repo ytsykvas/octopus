@@ -52,8 +52,12 @@ interface ComposerAtticProps {
   readonly onOpenSettings: () => void
   /** Which project's prompts the fan offers, besides the installation's. */
   readonly projectId: string
+  /** The checkout whose `.claude/commands` the fan offers after the prompts. */
+  readonly workspaceId: string
   /** Writes a chosen prompt's text into the field, where its caret is. */
   readonly onInsert: (text: string) => void
+  /** Writes a chosen command at the start of the field, the only place it runs from. */
+  readonly onInsertCommand: (name: string) => void
   /** Where the fan sends someone who has no prompts yet, or wants to order them. */
   readonly onOpenPromptSettings: () => void
   /** Opens the file dialog. The paperclip is the visible way in of three. */
@@ -110,7 +114,9 @@ export function ComposerAttic({
   onRefreshSkills,
   onOpenSettings,
   projectId,
+  workspaceId,
   onInsert,
+  onInsertCommand,
   onOpenPromptSettings,
   onAttach,
   onAutoCompact
@@ -396,7 +402,13 @@ export function ComposerAttic({
             onOpenSettings={onOpenSettings}
           />
 
-          <PromptFan projectId={projectId} onPick={onInsert} onManage={onOpenPromptSettings} />
+          <PromptFan
+            projectId={projectId}
+            workspaceId={workspaceId}
+            onPick={onInsert}
+            onCommand={onInsertCommand}
+            onManage={onOpenPromptSettings}
+          />
 
           {/* One of three ways in, and the least used: a file is more often
               dragged onto the composer or pasted into it. It is here because it

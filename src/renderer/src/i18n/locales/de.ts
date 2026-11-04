@@ -1694,6 +1694,7 @@ export const de: Translation = {
     pick: 'Gespeicherte Prompts',
     sectionProject: 'Dieses Projekt',
     sectionGlobal: '\u00dcberall',
+    sectionCommands: 'Befehle im Repository',
     more: 'Mehr\u2026 ({{count}})',
     manage: 'Prompts verwalten\u2026'
   },

@@ -10,6 +10,7 @@ import {
   insertPaths,
   mergeNotes,
   noteKey,
+  withCommand,
   withNotes
 } from './attachments.js'
 
@@ -321,5 +322,30 @@ describe('writing a file pointed at into the draft', () => {
   // A caret left past the text — the draft shortened under it — writes at the end.
   it('writes at the end when the caret is past it', () => {
     expect(insertPaths('hi', 9, ['/a.png'])).toEqual({ draft: 'hi /a.png ', caret: 10 })
+  })
+})
+
+describe('withCommand', () => {
+  it.each([
+    { draft: '', written: '/review ', caret: 8 },
+    { draft: 'fix it', written: '/review fix it', caret: 8 },
+    { draft: '  fix it', written: '/review fix it', caret: 8 },
+    { draft: '\tfix it', written: '/review fix it', caret: 8 },
+    // A command already leading the message is replaced, not stacked.
+    { draft: '/ship now', written: '/review now', caret: 8 },
+    { draft: '/ship', written: '/review ', caret: 8 },
+    { draft: '  /ship now', written: '/review now', caret: 8 },
+    { draft: '/frontend:ship now', written: '/review now', caret: 8 },
+    { draft: '/ревю now', written: '/review now', caret: 8 },
+    // The lines under it are the message's own, and stay where they were.
+    { draft: '/ship\nthe body', written: '/review\nthe body', caret: 7 },
+    { draft: '\n  indented', written: '/review\n  indented', caret: 7 },
+    { draft: 'fix it\n  indented', written: '/review fix it\n  indented', caret: 8 },
+    // A path is not a command, and stays as what the command is about.
+    { draft: '/tmp/x is broken', written: '/review /tmp/x is broken', caret: 8 },
+    // Only the one leading the message is a command; the rest are words.
+    { draft: 'see /ship', written: '/review see /ship', caret: 8 }
+  ])('writes $written over $draft', ({ draft, written, caret }) => {
+    expect(withCommand(draft, 'review')).toEqual({ draft: written, caret })
   })
 })

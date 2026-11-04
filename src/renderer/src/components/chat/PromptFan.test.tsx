@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { LibraryEntry } from '@core/library.js'
 import type { Prompt } from '@core/promptSchema.js'
 
 import { octopus } from '../../test/octopus.js'
@@ -28,8 +29,18 @@ function answering(project: readonly Prompt[], global: readonly Prompt[]): void 
   )
 }
 
+function command(name: string, description = ''): LibraryEntry {
+  return { kind: 'command', name, description, path: `/repo/.claude/commands/${name}.md` }
+}
+
+/** What the checkout carries in `.claude/commands`, as the bridge reads it. */
+function carrying(...entries: LibraryEntry[]): void {
+  vi.mocked(octopus().library.inRepository).mockResolvedValue({ ok: true, value: entries })
+}
+
 interface Rendered {
   readonly onPick: ReturnType<typeof vi.fn>
+  readonly onCommand: ReturnType<typeof vi.fn>
   readonly onManage: ReturnType<typeof vi.fn>
   readonly container: HTMLElement
   readonly button: () => HTMLElement
@@ -65,6 +76,10 @@ async function renderFan(
   options: {
     readonly planOnly?: boolean
     readonly manage?: boolean
+    /** Whether the fan is told which checkout it is in; the composer's is. */
+    readonly workspace?: boolean
+    /** Whether it is told what to do with a command; the composer's is. */
+    readonly command?: boolean
     readonly at?: { top: number; left: number }
     readonly inDialog?: boolean
     /** The colour the pane carries down, as `ChatSession` sets it inline. */
@@ -73,6 +88,7 @@ async function renderFan(
 ): Promise<Rendered> {
   const onPick = vi.fn()
   const onManage = vi.fn()
+  const onCommand = vi.fn()
 
   const fan = (
     <PromptFan
@@ -80,6 +96,8 @@ async function renderFan(
       onPick={onPick}
       {...(options.planOnly === true && { planOnly: true })}
       {...(options.manage !== false && { onManage })}
+      {...(options.workspace === true && { workspaceId: 'planner/main' })}
+      {...(options.command === true && { onCommand })}
     />
   )
   const inner = options.inDialog === true ? <dialog open>{fan}</dialog> : fan
@@ -105,7 +123,7 @@ async function renderFan(
     place(button(), options.at ?? ROOMY)
   }
 
-  return { onPick, onManage, container, button }
+  return { onPick, onCommand, onManage, container, button }
 }
 
 // What a pill is called, as a reader would hear it: the way to settings is a
@@ -306,17 +324,125 @@ describe('more than the fan has room for', () => {
   })
 })
 
+describe('the checkout’s commands', () => {
+  const composer = { workspace: true, command: true } as const
+
+  it('lays them out after the prompts, as /name', async () => {
+    answering([prompt('Review')], [prompt('Explain')])
+    carrying(command('qa'), command('ship'))
+    const user = userEvent.setup()
+    const { button } = await renderFan({ ...composer, at: OPEN })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['Review', 'Explain', '/qa', '/ship', 'Manage prompts…'])
+    expect(octopus().library.inRepository).toHaveBeenCalledWith('planner/main')
+  })
+
+  it('says the description on hover, and the name when there is none', async () => {
+    answering([], [])
+    carrying(command('qa', 'Runs the checks.'), command('ship'))
+    const user = userEvent.setup()
+    const { button } = await renderFan({ ...composer, at: OPEN })
+
+    await user.click(button())
+
+    expect(screen.getByRole('menuitem', { name: '/qa' })).toHaveAttribute(
+      'title',
+      'Runs the checks.'
+    )
+    expect(screen.getByRole('menuitem', { name: '/ship' })).toHaveAttribute('title', '/ship')
+  })
+
+  it('hands over the name and closes when one is chosen', async () => {
+    answering([], [])
+    carrying(command('qa'))
+    const user = userEvent.setup()
+    const { button, onCommand, onPick } = await renderFan(composer)
+
+    await user.click(button())
+    await user.click(screen.getByRole('menuitem', { name: '/qa' }))
+
+    expect(onCommand).toHaveBeenCalledWith('qa')
+    expect(onPick).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('offers none without a workspace', async () => {
+    answering([prompt('Review')], [])
+    carrying(command('qa'))
+    const user = userEvent.setup()
+    const { button } = await renderFan({ command: true })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['Review', 'Manage prompts…'])
+    expect(octopus().library.inRepository).not.toHaveBeenCalled()
+  })
+
+  it('offers none when nobody is told what to do with one', async () => {
+    answering([prompt('Review')], [])
+    carrying(command('qa'))
+    const user = userEvent.setup()
+    const { button } = await renderFan({ workspace: true })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['Review', 'Manage prompts…'])
+    expect(octopus().library.inRepository).not.toHaveBeenCalled()
+  })
+
+  // The plan dialog's field is a correction to a plan, not a message: a
+  // command written there would never reach the CLI as one.
+  it('offers none in the plan dialog', async () => {
+    answering([prompt('Tighten', { forPlan: true })], [])
+    carrying(command('qa'))
+    const user = userEvent.setup()
+    const { button } = await renderFan({ ...composer, planOnly: true })
+
+    await user.click(button())
+
+    expect(pills()).toEqual(['Tighten'])
+    expect(octopus().library.inRepository).not.toHaveBeenCalled()
+  })
+
+  it('lists the ones that did not fit under their own section, after the prompts', async () => {
+    answering([prompt('P1'), prompt('P2')], [prompt('G1'), prompt('G2')])
+    carrying(command('qa'), command('ship', 'Ships it.'))
+    const user = userEvent.setup()
+    const { button, onCommand } = await renderFan(composer)
+
+    await user.click(button())
+    // Five rungs: three prompts, "more", settings.
+    await user.click(screen.getByRole('menuitem', { name: 'More… (3)' }))
+
+    expect(pills().slice(0, 3)).toEqual(['G2', '/qa', '/ship'])
+    const sections = screen.getAllByRole('presentation').map((section) => section.textContent)
+    expect(sections).toEqual(['Everywhere', 'Commands in this repository'])
+    expect(screen.getByRole('menuitem', { name: '/ship' })).toHaveAttribute('title', 'Ships it.')
+
+    await user.click(screen.getByRole('menuitem', { name: '/ship' }))
+    expect(onCommand).toHaveBeenCalledWith('ship')
+  })
+})
+
 // jsdom measures a dialog as nothing at all, which leaves no room round the button.
 describe('with no room round the button', () => {
   it('opens the list at once, with everything in it and the way to settings last', async () => {
     answering([prompt('A')], [prompt('B')])
+    carrying(command('qa'))
     const user = userEvent.setup()
-    const { button, onManage } = await renderFan({ inDialog: true })
+    const { button, onManage } = await renderFan({
+      inDialog: true,
+      workspace: true,
+      command: true
+    })
 
     await user.click(button())
 
-    expect(pills()).toEqual(['A', 'B', 'Manage prompts…'])
+    expect(pills()).toEqual(['A', 'B', '/qa', 'Manage prompts…'])
     expect(screen.getByText('This project')).toBeInTheDocument()
+    expect(screen.getByText('Commands in this repository')).toBeInTheDocument()
     expect(screen.getAllByRole('menuitem')[0]?.style.getPropertyValue('--fan-index')).toBe('')
 
     await user.click(screen.getByRole('menuitem', { name: 'Manage prompts…' }))

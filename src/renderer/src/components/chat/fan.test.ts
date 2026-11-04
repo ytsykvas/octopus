@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Prompt } from '@core/promptSchema.js'
 
-import { fanItems, type FanSlot, fanSlots, PILL_MAX } from './fan.js'
+import { type FanChoice, fanItems, type FanSlot, fanSlots, PILL_MAX } from './fan.js'
 
 // Room for the upper-left quarter and the top of the circle only: nothing below
 // the button's row, and too little on the right for the right side.
@@ -187,68 +187,73 @@ function prompt(title: string): Prompt {
 const five = ['p1', 'p2', 'p3', 'p4', 'p5'].map(prompt)
 const [p1, p2, p3, p4, p5] = five as [Prompt, Prompt, Prompt, Prompt, Prompt]
 
-const entry = (found: Prompt): { kind: 'prompt'; prompt: Prompt } => ({
-  kind: 'prompt',
-  prompt: found
-})
+const entry = (found: Prompt): FanChoice => ({ kind: 'prompt', prompt: found })
+const choices = five.map(entry)
+
+function command(name: string): FanChoice {
+  return {
+    kind: 'command',
+    command: { kind: 'command', name, description: '', path: `/repo/.claude/commands/${name}.md` }
+  }
+}
 
 describe('fanItems', () => {
   it('shows everything, with the way to settings last, when it all fits', () => {
-    const { entries, rest } = fanItems(five, 8, { manage: true })
+    const { entries, rest } = fanItems(choices, 8, { manage: true })
 
-    expect(entries).toEqual([...five.map(entry), { kind: 'manage' }])
+    expect(entries).toEqual([...choices, { kind: 'manage' }])
     expect(rest).toEqual([])
   })
 
   it('fits exactly when the prompts and the way to settings fill the slots', () => {
-    const { entries, rest } = fanItems([p1, p2, p3], 4, { manage: true })
+    const { entries, rest } = fanItems([p1, p2, p3].map(entry), 4, { manage: true })
 
     expect(entries).toEqual([entry(p1), entry(p2), entry(p3), { kind: 'manage' }])
     expect(rest).toEqual([])
   })
 
   it('makes room for "more" and keeps settings last when one prompt too many', () => {
-    const { entries, rest } = fanItems([p1, p2, p3, p4], 4, { manage: true })
+    const { entries, rest } = fanItems([p1, p2, p3, p4].map(entry), 4, { manage: true })
 
     expect(entries).toEqual([entry(p1), entry(p2), { kind: 'more', count: 2 }, { kind: 'manage' }])
-    expect(rest).toEqual([p3, p4])
+    expect(rest).toEqual([entry(p3), entry(p4)])
   })
 
   it('shows the highest priority first and hands the rest to the list', () => {
-    const { entries, rest } = fanItems(five, 4, { manage: true })
+    const { entries, rest } = fanItems(choices, 4, { manage: true })
 
     expect(entries).toEqual([entry(p1), entry(p2), { kind: 'more', count: 3 }, { kind: 'manage' }])
-    expect(rest).toEqual([p3, p4, p5])
+    expect(rest).toEqual([entry(p3), entry(p4), entry(p5)])
   })
 
   it('has no way to settings, and a slot more for prompts, in the plan dialog', () => {
-    const { entries, rest } = fanItems(five, 3, { manage: false })
+    const { entries, rest } = fanItems(choices, 3, { manage: false })
 
     expect(entries).toEqual([entry(p1), entry(p2), { kind: 'more', count: 3 }])
-    expect(rest).toEqual([p3, p4, p5])
+    expect(rest).toEqual([entry(p3), entry(p4), entry(p5)])
   })
 
   it('is "more" alone when that is all the slots hold and there is no settings pill', () => {
-    const { entries, rest } = fanItems(five, 1, { manage: false })
+    const { entries, rest } = fanItems(choices, 1, { manage: false })
 
     expect(entries).toEqual([{ kind: 'more', count: 5 }])
-    expect(rest).toEqual(five)
+    expect(rest).toEqual(choices)
   })
 
   // Too few slots for "more" and settings both: the list takes over, and it has
   // a row for settings of its own.
   it('leaves everything to the list when "more" and settings cannot both fit', () => {
-    const { entries, rest } = fanItems(five, 1, { manage: true })
+    const { entries, rest } = fanItems(choices, 1, { manage: true })
 
     expect(entries).toEqual([])
-    expect(rest).toEqual(five)
+    expect(rest).toEqual(choices)
   })
 
   it('leaves everything to the list when there are no slots at all', () => {
-    const { entries, rest } = fanItems(five, 0, { manage: true })
+    const { entries, rest } = fanItems(choices, 0, { manage: true })
 
     expect(entries).toEqual([])
-    expect(rest).toEqual(five)
+    expect(rest).toEqual(choices)
   })
 
   it('is only the way to settings when there are no prompts', () => {
@@ -257,5 +262,24 @@ describe('fanItems', () => {
       rest: []
     })
     expect(fanItems([], 3, { manage: false })).toEqual({ entries: [], rest: [] })
+  })
+
+  it('lays commands out after the prompts, and gives the list what did not fit', () => {
+    const [c1, c2, c3] = ['review', 'ship', 'tests'].map(command) as [
+      FanChoice,
+      FanChoice,
+      FanChoice
+    ]
+
+    const { entries, rest } = fanItems([entry(p1), entry(p2), c1, c2, c3], 5, { manage: true })
+
+    expect(entries).toEqual([
+      entry(p1),
+      entry(p2),
+      c1,
+      { kind: 'more', count: 2 },
+      { kind: 'manage' }
+    ])
+    expect(rest).toEqual([c2, c3])
   })
 })

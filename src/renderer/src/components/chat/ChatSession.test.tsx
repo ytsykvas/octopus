@@ -384,6 +384,30 @@ describe('the saved prompts of the project it belongs to', () => {
 
     expect(onOpenPromptSettings).toHaveBeenCalledOnce()
   })
+
+  // The commands live in the checkout, so the fan is told which one: another
+  // workspace of the same project may be on a branch that carries others.
+  it('offer the commands of this workspace’s checkout, written where they run', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().library.inRepository).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          kind: 'command',
+          name: 'review',
+          description: '',
+          path: '/repo/.claude/commands/review.md'
+        }
+      ]
+    })
+    render(<ChatPane workspace={workspaceView('anna')} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: '/review' }))
+
+    expect(octopus().library.inRepository).toHaveBeenCalledWith('planner/anna')
+    expect(field()).toHaveValue('/review ')
+  })
 })
 
 describe('a /btw typed into the main field', () => {

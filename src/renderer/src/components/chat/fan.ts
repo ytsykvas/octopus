@@ -1,3 +1,4 @@
+import type { LibraryEntry } from '@core/library.js'
 import type { Prompt } from '@core/promptSchema.js'
 
 /**
@@ -142,8 +143,13 @@ export function fanSlots(anchor: { x: number; y: number }, bounds: FanBounds): F
   return sweep.filter((kept): kept is FanSlot => kept !== null)
 }
 
-export type FanEntry =
+/** What a pill can offer: a saved prompt, or a command the checkout carries. */
+export type FanChoice =
   | { readonly kind: 'prompt'; readonly prompt: Prompt }
+  | { readonly kind: 'command'; readonly command: LibraryEntry }
+
+export type FanEntry =
+  | FanChoice
   /** The pill that opens the list of what did not fit, and how many that is. */
   | { readonly kind: 'more'; readonly count: number }
   | { readonly kind: 'manage' }
@@ -151,38 +157,32 @@ export type FanEntry =
 /**
  * What goes into the slots, in priority order, and what is left for the list.
  *
- * The prompts come first, in the order given; when they do not all fit, the
+ * The choices come first, in the order given; when they do not all fit, the
  * last slots go to "more" and, in the composer, to the way to settings — which
- * is always the last pill, so it is in the same place however many prompts
+ * is always the last pill, so it is in the same place however many choices
  * there are. When there is not room for both of those, `entries` is empty and
  * the whole of `rest` is the list's: a fan of one pill that only says "more"
  * would be a button with a button inside it.
  */
 export function fanItems(
-  prompts: readonly Prompt[],
+  choices: readonly FanChoice[],
   slots: number,
   options: { readonly manage: boolean }
-): { readonly entries: FanEntry[]; readonly rest: Prompt[] } {
+): { readonly entries: FanEntry[]; readonly rest: FanChoice[] } {
   const manage: FanEntry[] = options.manage ? [{ kind: 'manage' }] : []
-  const asEntries = (shown: readonly Prompt[]): FanEntry[] =>
-    shown.map((prompt) => ({ kind: 'prompt', prompt }))
 
-  if (prompts.length + manage.length <= slots) {
-    return { entries: [...asEntries(prompts), ...manage], rest: [] }
+  if (choices.length + manage.length <= slots) {
+    return { entries: [...choices, ...manage], rest: [] }
   }
 
   // "More", and the way to settings if there is one, are not optional once
   // something does not fit — and without room for both, the list is the answer.
-  if (slots < manage.length + 1) return { entries: [], rest: [...prompts] }
+  if (slots < manage.length + 1) return { entries: [], rest: [...choices] }
 
-  const shown = prompts.slice(0, slots - manage.length - 1)
+  const shown = choices.slice(0, slots - manage.length - 1)
 
   return {
-    entries: [
-      ...asEntries(shown),
-      { kind: 'more', count: prompts.length - shown.length },
-      ...manage
-    ],
-    rest: prompts.slice(shown.length)
+    entries: [...shown, { kind: 'more', count: choices.length - shown.length }, ...manage],
+    rest: choices.slice(shown.length)
   }
 }
