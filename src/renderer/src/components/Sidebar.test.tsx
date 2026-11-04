@@ -270,10 +270,10 @@ describe('Sidebar', () => {
 
       fireEvent.dragStart(row('bob'))
       fireEvent.dragOver(row('carol'))
-      expect(screen.getByTestId('drop-line').className).toContain('-bottom-')
+      expect(screen.getByTestId('drop-line')).toHaveAttribute('data-edge', 'below')
 
       fireEvent.dragOver(row('anna'))
-      expect(screen.getByTestId('drop-line').className).toContain('-top-')
+      expect(screen.getByTestId('drop-line')).toHaveAttribute('data-edge', 'above')
 
       fireEvent.dragEnd(row('bob'))
       expect(screen.queryByTestId('drop-line')).toBeNull()
@@ -289,17 +289,23 @@ describe('Sidebar', () => {
       expect(row('anna').closest('li')).toHaveAttribute('draggable', 'true')
     })
 
-    it('moves a workspace with Alt and an arrow', async () => {
+    it('moves a workspace with Alt and an arrow, either way', async () => {
       const user = userEvent.setup()
       const props = renderSidebar({ workspaces: three })
       row('bob').focus()
 
       await user.keyboard('{Alt>}{ArrowUp}{/Alt}')
-
-      expect(props.onReorderWorkspaces).toHaveBeenCalledWith('planner', [
+      expect(props.onReorderWorkspaces).toHaveBeenLastCalledWith('planner', [
         'planner/bob',
         'planner/anna',
         'planner/carol'
+      ])
+
+      await user.keyboard('{Alt>}{ArrowDown}{/Alt}')
+      expect(props.onReorderWorkspaces).toHaveBeenLastCalledWith('planner', [
+        'planner/anna',
+        'planner/carol',
+        'planner/bob'
       ])
     })
   })

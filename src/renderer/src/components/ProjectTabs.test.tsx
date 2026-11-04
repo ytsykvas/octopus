@@ -366,10 +366,10 @@ describe('ProjectTabs', () => {
 
       fireEvent.dragStart(tab('LE'))
       fireEvent.dragOver(tab('ES'))
-      expect(screen.getByTestId('drop-line').className).toContain('-bottom-')
+      expect(screen.getByTestId('drop-line')).toHaveAttribute('data-edge', 'below')
 
       fireEvent.dragOver(tab('PL'))
-      expect(screen.getByTestId('drop-line').className).toContain('-top-')
+      expect(screen.getByTestId('drop-line')).toHaveAttribute('data-edge', 'above')
     })
 
     it('draws no line over the tile being dragged, and none once it ends', () => {

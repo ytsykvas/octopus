@@ -1069,6 +1069,40 @@ describe('useWorkspaces', () => {
       expect(onError).not.toHaveBeenCalledWith(expect.any(String))
     })
 
+    // The point of drawing first: the row must not sit back where it came from
+    // while the save is on its way.
+    it('draws the new order before the save has answered', async () => {
+      workspacesPerProject({ planner: [anna, bob] })
+      let answer: (result: Result<void>) => void = () => undefined
+      vi.mocked(window.octopus.workspaces.reorder).mockReturnValueOnce(
+        new Promise((resolve) => {
+          answer = resolve
+        })
+      )
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna, bob])
+      })
+
+      let saved: Promise<void> = Promise.resolve()
+      act(() => {
+        saved = result.current.reorder('planner', [bob.id, anna.id])
+      })
+
+      expect(result.current.byProject.get('planner')).toEqual([bob, anna])
+      // A banner left by an earlier refusal goes as the next try starts.
+      expect(onError).toHaveBeenCalledWith(null)
+
+      await act(async () => {
+        answer({ ok: true, value: undefined })
+        await saved
+      })
+      expect(result.current.byProject.get('planner')).toEqual([bob, anna])
+    })
+
     it('says what went wrong and reads the stored order back', async () => {
       workspacesPerProject({ planner: [anna, bob] })
       vi.mocked(window.octopus.workspaces.reorder).mockResolvedValue({

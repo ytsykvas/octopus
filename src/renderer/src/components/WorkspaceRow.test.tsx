@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -642,6 +642,18 @@ describe('WorkspaceRow', () => {
       await user.keyboard('{Alt>}{ArrowLeft}{/Alt}')
 
       expect(props.onMove).not.toHaveBeenCalled()
+    })
+
+    // Option and an arrow scrolls the list a page in Chromium on macOS, which
+    // would throw the row out of view as it moved; any other key is left to
+    // whatever else wants it.
+    it('keeps the browser from acting on the keys that move it, and only those', () => {
+      renderRow()
+
+      expect(fireEvent.keyDown(row(), { key: 'ArrowUp', altKey: true })).toBe(false)
+      expect(fireEvent.keyDown(row(), { key: 'ArrowDown', altKey: true })).toBe(false)
+      expect(fireEvent.keyDown(row(), { key: 'ArrowLeft', altKey: true })).toBe(true)
+      expect(fireEvent.keyDown(row(), { key: 'ArrowDown' })).toBe(true)
     })
 
     it('names the keys that move it', () => {
