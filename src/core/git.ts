@@ -442,22 +442,25 @@ export async function branchBlocker(
     if (await refExists(exec, `${tracking}${above}`)) return `${DEFAULT_REMOTE}/${above}`
   }
 
-  // Two, because `own` may be the first of them and is not in the way. A local
-  // ref's short name is the branch and a remote one's starts `origin/`, so
-  // `own` can only ever match one line.
+  // Two, because `own` may be the first of them and is not in the way. Full
+  // names, shortened here: git's own short name turns a branch into
+  // `heads/<branch>` when a tag shares it, which `own` would then not match.
   const below = await exec([
     'for-each-ref',
     '--count=2',
-    '--format=%(refname:short)',
+    '--format=%(refname)',
     `refs/heads/${branch}/`,
     `${tracking}${branch}/`
   ])
   const [first] = below
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line !== '' && line !== own)
+    .filter((line) => line !== '' && line !== `refs/heads/${own ?? ''}`)
 
-  return first ?? null
+  if (first === undefined) return null
+  return first.startsWith(tracking)
+    ? `${DEFAULT_REMOTE}/${first.slice(tracking.length)}`
+    : first.slice('refs/heads/'.length)
 }
 
 /**

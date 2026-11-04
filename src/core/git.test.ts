@@ -394,6 +394,16 @@ describe('branchBlocker', () => {
     )
   })
 
+  // A tag of the same name makes git shorten the branch to `heads/…`, which
+  // no longer reads as the branch being moved.
+  it('passes over the branch being moved when a tag shares its name', async () => {
+    await initRepo(dir)
+    await run('git', ['branch', 'octopus/fix/anna/x'], { cwd: dir })
+    await run('git', ['tag', 'octopus/fix/anna/x'], { cwd: dir })
+
+    await expect(branchBlocker(exec, 'octopus/fix/anna', 'octopus/fix/anna/x')).resolves.toBeNull()
+  })
+
   it('names a branch beneath the name beside the one being moved', async () => {
     await initRepo(dir)
     await run('git', ['branch', 'octopus/fix/anna/a'], { cwd: dir })
