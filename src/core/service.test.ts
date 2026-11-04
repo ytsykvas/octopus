@@ -75,6 +75,19 @@ import { WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
 
+/**
+ * What every push the app makes runs with: no prompt for a password nobody can
+ * type, and a stalled transfer given up on. Spelt out rather than imported, so
+ * a test cannot pass by comparing the constant with itself.
+ */
+const UNPROMPTED: GitOptions = {
+  env: {
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_HTTP_LOW_SPEED_LIMIT: '1000',
+    GIT_HTTP_LOW_SPEED_TIME: '60'
+  }
+}
+
 /** Writes a script the way a repository carries it: under `.octopus/scripts/`, executable. */
 async function carryScript(root: string, name: string, body: string): Promise<void> {
   const path = join(root, '.octopus', 'scripts', name)
@@ -632,12 +645,14 @@ describe('workspaces', () => {
     service: OctopusService
     workspaceId: string
     events: string[]
+    pushedWith: (GitOptions | undefined)[]
     holding: Promise<void>
     release: () => void
   }> {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     const events: string[] = []
+    const pushedWith: (GitOptions | undefined)[] = []
     let release = (): void => undefined
     const held = new Promise<void>((resolve) => {
       release = resolve
@@ -666,6 +681,7 @@ describe('workspaces', () => {
           if (named === null) return git(args)
 
           events.push(named)
+          if (named === 'push') pushedWith.push(options)
           if (named === hold) {
             reached()
             await held
@@ -684,7 +700,7 @@ describe('workspaces', () => {
     await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
     await writeFile(join(workspace.path, 'more.txt'), 'more\n', 'utf8')
 
-    return { service, workspaceId: workspace.id, events, holding, release }
+    return { service, workspaceId: workspace.id, events, pushedWith, holding, release }
   }
 
   /** Long enough for a move that is not lined up to have been made. */
@@ -713,6 +729,33 @@ describe('workspaces', () => {
     await Promise.all([pushed, rekinded])
 
     expect(events).toEqual(['push', 'push done', 'move', 'move done'])
+  })
+
+  /*
+   * Everything else on the workspace waits behind a push now, so a push that
+   * waits on a password nobody can type, or on a transfer that stalled, holds
+   * the workspace until the app quits. No deadline: a big push and a pre-push
+   * hook running tests both legitimately take their time.
+   */
+  it.each([
+    ['Push', (service: OctopusService, id: string) => service.pushWorkspace(id)],
+    [
+      'Commit & push',
+      (service: OctopusService, id: string) => service.commitAndPushWorkspace(id, 'more')
+    ],
+    ['Amend & push', (service: OctopusService, id: string) => service.amendAndPushWorkspace(id)],
+    [
+      'Create PR',
+      (service: OctopusService, id: string) =>
+        service.createPullRequest(id, { title: 'T', body: 'B', draft: false, commitMessage: null })
+    ]
+  ])('lets %s ask for no password and give up on a stalled transfer', async (_, pushing) => {
+    const { service, workspaceId, pushedWith } = await lined('move')
+
+    await pushing(service, workspaceId)
+
+    expect(pushedWith).not.toHaveLength(0)
+    expect(pushedWith).toEqual(pushedWith.map(() => UNPROMPTED))
   })
 
   it('lines a rename up behind a push', async () => {
@@ -5730,10 +5773,12 @@ describe('the agent chat', () => {
         chat: Awaited<ReturnType<OctopusService['openChat']>>
         branch: string | undefined
         pushes: string[][]
+        pushedWith: (GitOptions | undefined)[]
         moveOrigin: (url: string) => void
       }
     > {
       const pushes: string[][] = []
+      const pushedWith: (GitOptions | undefined)[] = []
       let origin = ORIGIN
       const setup = await withWorkspace({
         makeExec: (cwd, options) => {
@@ -5742,6 +5787,7 @@ describe('the agent chat', () => {
             if (args[0] === 'remote' && args[1] === 'get-url') return Promise.resolve(`${origin}\n`)
             if (args[0] !== 'push') return exec(args)
             pushes.push([...args])
+            pushedWith.push(options)
             return push()
           }
         }
@@ -5753,6 +5799,7 @@ describe('the agent chat', () => {
         chat,
         branch,
         pushes,
+        pushedWith,
         moveOrigin: (url) => {
           origin = url
         }
@@ -5760,7 +5807,7 @@ describe('the agent chat', () => {
     }
 
     it('is pushed by the app once it ends well', async () => {
-      const { service, chat, branch, pushes } = await recording()
+      const { service, chat, branch, pushes, pushedWith } = await recording()
       await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
       agent().emit(resultMessage)
@@ -5768,6 +5815,8 @@ describe('the agent chat', () => {
       await vi.waitFor(() => {
         expect(pushes).toEqual([['push', '-u', 'origin', branch]])
       })
+      // A queue waits behind it: it must not wait on a password nobody types.
+      expect(pushedWith).toEqual([UNPROMPTED])
     })
 
     // The push the app makes when the turn ends is a first push like any

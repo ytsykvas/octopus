@@ -65,6 +65,27 @@ export const FETCH_OPTIONS: GitOptions = {
 }
 
 /**
+ * What a push runs with — the fetch's refusal to prompt, and no deadline.
+ *
+ * It matters more than it did: everything else done to a workspace's branch
+ * now waits behind its push (`branchWork` in `service.ts`), so a push left
+ * waiting on a password nobody can type held the workspace — its removal
+ * included — until the app quit.
+ *
+ * No deadline, because a big push and a pre-push hook running a test suite
+ * both legitimately take minutes. What hangs instead is a transfer that has
+ * stopped moving, and git gives that up itself: under 1000 bytes a second
+ * for a minute ends an HTTPS push, however long the healthy part took.
+ */
+export const PUSH_OPTIONS: GitOptions = {
+  env: {
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_HTTP_LOW_SPEED_LIMIT: '1000',
+    GIT_HTTP_LOW_SPEED_TIME: '60'
+  }
+}
+
+/**
  * The names in `git remote`, `origin` first.
  *
  * Its own function so it can be tested on strings. The ordering is what makes a

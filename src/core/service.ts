@@ -199,7 +199,7 @@ import {
 } from './pullRequests.js'
 import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, keptIndexCopies } from './git.js'
-import { FETCH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
+import { FETCH_OPTIONS, PUSH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
 import { createRemoteRefWatch, type RemoteRefWatch, type RemoteRefWatchDeps } from './remoteRefs.js'
 import { type InstructionSource, instructionSources } from './instructionSources.js'
 import { assertShown, capabilityFiles, type RepositoryTrust, trustDigest } from './repoTrust.js'
@@ -3446,7 +3446,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           chat,
           branchWork(chat.workspaceId, () => {
             const workspace = requireWorkspace(chat.workspaceId)
-            return pushBranchTo(pushTo, workspace.branch, makeExec(workspace.path))
+            return pushBranchTo(pushTo, workspace.branch, makeExec(workspace.path, PUSH_OPTIONS))
           })
         )
       }
@@ -6663,7 +6663,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         const url = await createPullRequest(
           { ...request, branch: workspace.branch, base: await baseRefOf(project) },
           makeGh(workspace.path),
-          makeExec(workspace.path)
+          makeExec(workspace.path, PUSH_OPTIONS)
         )
         // The description has gone out with the request; kept, it would fill the
         // form offered for the next one after a merge.
@@ -6688,7 +6688,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     commitAndPushWorkspace(workspaceId, message) {
       return branchWork(workspaceId, () => {
         const workspace = requireWorkspace(workspaceId)
-        return commitAndPush(message, workspace.branch, makeExec(workspace.path))
+        return commitAndPush(message, workspace.branch, makeExec(workspace.path, PUSH_OPTIONS))
       })
     },
 
@@ -6696,14 +6696,18 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return branchWork(workspaceId, async () => {
         const workspace = requireWorkspace(workspaceId)
         const project = requireProject(workspace.projectId)
-        return amendAndPush(workspace.branch, await baseRefOf(project), makeExec(workspace.path))
+        return amendAndPush(
+          workspace.branch,
+          await baseRefOf(project),
+          makeExec(workspace.path, PUSH_OPTIONS)
+        )
       })
     },
 
     pushWorkspace(workspaceId) {
       return branchWork(workspaceId, () => {
         const workspace = requireWorkspace(workspaceId)
-        return pushBranch(workspace.branch, makeExec(workspace.path))
+        return pushBranch(workspace.branch, makeExec(workspace.path, PUSH_OPTIONS))
       })
     },
 
