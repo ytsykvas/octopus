@@ -2089,6 +2089,21 @@ describe('App', () => {
     expect(window.octopus.projects.reorder).toHaveBeenCalledWith(['ledger', 'planner'])
   })
 
+  it('saves the order a workspace row is dragged into', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    const bob = await screen.findByRole('button', { name: /^bob/ })
+
+    fireEvent.dragStart(bob)
+    fireEvent.drop(screen.getByRole('button', { name: /^anna/ }))
+
+    expect(window.octopus.workspaces.reorder).toHaveBeenCalledWith('planner', [
+      'planner/bob',
+      'planner/anna'
+    ])
+  })
+
   it('closes the project settings again', async () => {
     givenTwoProjects()
     const user = await openApp()

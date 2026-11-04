@@ -7,9 +7,11 @@ import type { Project } from '@core/store.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
+import { useDragReorder } from '../hooks/useDragReorder.js'
 import { AddTile } from './AddTile.js'
 import { chatCapHint } from './chat/chatName.js'
 import { DropdownMenu } from './DropdownMenu.js'
+import { DropLine } from './DropLine.js'
 import type { HelpKind } from './helpMessage.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
@@ -48,6 +50,8 @@ interface SidebarProps {
   /** Workspace whose name is being edited — set right after creation. */
   readonly editingWorkspaceId: string | null
   readonly onEditingWorkspaceChange: (workspaceId: string | null) => void
+  /** Every workspace id of the project, in the order the user dragged them into. */
+  readonly onReorderWorkspaces: (projectId: string, orderedIds: readonly string[]) => void
   /** Opens a conversation in the selected workspace and sends Help's text there. */
   readonly onHelp: (kind: HelpKind) => void
   /** Whether another conversation fits; Help opens one, so it waits for room. */
@@ -77,6 +81,7 @@ export function Sidebar({
   onRemoveWorkspace,
   editingWorkspaceId,
   onEditingWorkspaceChange,
+  onReorderWorkspaces,
   onHelp,
   canStartChat
 }: SidebarProps): React.JSX.Element {
@@ -130,30 +135,18 @@ export function Sidebar({
                 onCreate={onCreateWorkspace}
               />
             ) : (
-              <ul className="space-y-1.5">
-                {workspaces.map((workspace) => (
-                  <li key={workspace.id}>
-                    <WorkspaceRow
-                      workspace={workspace}
-                      request={requests.get(workspace.branch) ?? null}
-                      selected={workspace.id === selectedWorkspaceId}
-                      editing={workspace.id === editingWorkspaceId}
-                      onSelect={() => {
-                        onSelectWorkspace(workspace.id)
-                      }}
-                      onRename={(name) => {
-                        onRenameWorkspace(workspace.id, name)
-                      }}
-                      onRemove={() => {
-                        onRemoveWorkspace(workspace.id)
-                      }}
-                      onEditingChange={(editing) => {
-                        onEditingWorkspaceChange(editing ? workspace.id : null)
-                      }}
-                    />
-                  </li>
-                ))}
-              </ul>
+              <WorkspaceList
+                projectId={project.id}
+                workspaces={workspaces}
+                requests={requests}
+                selectedWorkspaceId={selectedWorkspaceId}
+                editingWorkspaceId={editingWorkspaceId}
+                onSelectWorkspace={onSelectWorkspace}
+                onRenameWorkspace={onRenameWorkspace}
+                onRemoveWorkspace={onRemoveWorkspace}
+                onEditingWorkspaceChange={onEditingWorkspaceChange}
+                onReorderWorkspaces={onReorderWorkspaces}
+              />
             )}
           </nav>
         </div>
@@ -165,6 +158,86 @@ export function Sidebar({
 
       {inWorkspace && <HelpMenu onHelp={onHelp} canStartChat={canStartChat} />}
     </aside>
+  )
+}
+
+/**
+ * The rows, in the order the user dragged them into.
+ *
+ * Its own component because the drag needs the project's id, which only
+ * exists once there is a project — and this is only drawn then.
+ */
+function WorkspaceList({
+  projectId,
+  workspaces,
+  requests,
+  selectedWorkspaceId,
+  editingWorkspaceId,
+  onSelectWorkspace,
+  onRenameWorkspace,
+  onRemoveWorkspace,
+  onEditingWorkspaceChange,
+  onReorderWorkspaces
+}: Pick<
+  SidebarProps,
+  | 'workspaces'
+  | 'requests'
+  | 'selectedWorkspaceId'
+  | 'editingWorkspaceId'
+  | 'onSelectWorkspace'
+  | 'onRenameWorkspace'
+  | 'onRemoveWorkspace'
+  | 'onEditingWorkspaceChange'
+  | 'onReorderWorkspaces'
+> & { readonly projectId: string }): React.JSX.Element {
+  const reorder = useDragReorder(
+    workspaces.map((workspace) => workspace.id),
+    (orderedIds) => {
+      onReorderWorkspaces(projectId, orderedIds)
+    }
+  )
+
+  return (
+    <ul className="space-y-1.5">
+      {workspaces.map((workspace) => {
+        const editing = workspace.id === editingWorkspaceId
+        const edge = reorder.dropEdge(workspace.id)
+
+        return (
+          <li
+            key={workspace.id}
+            // Not while its name is being typed: selecting the text would pick
+            // the row up instead.
+            {...(editing ? {} : reorder.itemProps(workspace.id))}
+            className={`relative ${workspace.id === reorder.draggingId ? 'opacity-40' : ''}`}
+          >
+            <WorkspaceRow
+              workspace={workspace}
+              request={requests.get(workspace.branch) ?? null}
+              selected={workspace.id === selectedWorkspaceId}
+              editing={editing}
+              onSelect={() => {
+                onSelectWorkspace(workspace.id)
+              }}
+              onRename={(name) => {
+                onRenameWorkspace(workspace.id, name)
+              }}
+              onRemove={() => {
+                onRemoveWorkspace(workspace.id)
+              }}
+              onEditingChange={(next) => {
+                onEditingWorkspaceChange(next ? workspace.id : null)
+              }}
+              onMove={(step) => {
+                reorder.moveBy(workspace.id, step)
+              }}
+            />
+
+            {edge !== null && <DropLine edge={edge} />}
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 

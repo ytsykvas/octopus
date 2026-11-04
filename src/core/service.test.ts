@@ -407,6 +407,19 @@ describe('workspaces', () => {
     expect(reopened.listProjects().map((item) => item.id)).toEqual([other.id, projectId])
   })
 
+  it('keeps the order the workspaces were reordered into across a restart', async () => {
+    const { service, projectId } = await withProject()
+    const first = await service.createWorkspaceIn(projectId)
+    const second = await service.createWorkspaceIn(projectId)
+    const third = await service.createWorkspaceIn(projectId)
+
+    await service.reorderWorkspaces(projectId, [third.id, first.id, second.id])
+
+    const reopened = await createService(paths(dir))
+    const listed = await reopened.listWorkspaces(projectId)
+    expect(listed.map((item) => item.id)).toEqual([third.id, first.id, second.id])
+  })
+
   it('creates a workspace with a generated name', async () => {
     const { service, projectId } = await withProject()
 

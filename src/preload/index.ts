@@ -572,6 +572,10 @@ const api = {
     rename: (workspaceId: string, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('workspaces:rename', workspaceId, name) as Promise<Result<void>>,
 
+    /** Saves the order of one project's workspaces: every id, first to last. */
+    reorder: (projectId: string, orderedIds: readonly string[]): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:reorder', projectId, orderedIds) as Promise<Result<void>>,
+
     remove: (workspaceId: string, options: RemovalRequest = {}): Promise<Result<CleanupOutcome>> =>
       ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<
         Result<CleanupOutcome>

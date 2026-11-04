@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -19,6 +19,7 @@ function renderRow(overrides: Partial<WorkspaceRowProps> = {}): WorkspaceRowProp
     onRename: vi.fn(),
     onEditingChange: vi.fn(),
     onRemove: vi.fn(),
+    onMove: vi.fn(),
     ...overrides
   }
 
@@ -617,6 +618,51 @@ describe('WorkspaceRow', () => {
     })
   })
 
+  describe('moving it from the keyboard', () => {
+    const row = (): HTMLElement => screen.getByRole('button', { name: /^anna/ })
+
+    it('moves up on Alt and the up arrow, and down on Alt and the down arrow', async () => {
+      const user = userEvent.setup()
+      const props = renderRow()
+      row().focus()
+
+      await user.keyboard('{Alt>}{ArrowUp}{/Alt}')
+      expect(props.onMove).toHaveBeenLastCalledWith(-1)
+
+      await user.keyboard('{Alt>}{ArrowDown}{/Alt}')
+      expect(props.onMove).toHaveBeenLastCalledWith(1)
+    })
+
+    it('leaves a bare arrow, and Alt with another key, alone', async () => {
+      const user = userEvent.setup()
+      const props = renderRow()
+      row().focus()
+
+      await user.keyboard('{ArrowDown}')
+      await user.keyboard('{Alt>}{ArrowLeft}{/Alt}')
+
+      expect(props.onMove).not.toHaveBeenCalled()
+    })
+
+    // Option and an arrow scrolls the list a page in Chromium on macOS, which
+    // would throw the row out of view as it moved; any other key is left to
+    // whatever else wants it.
+    it('keeps the browser from acting on the keys that move it, and only those', () => {
+      renderRow()
+
+      expect(fireEvent.keyDown(row(), { key: 'ArrowUp', altKey: true })).toBe(false)
+      expect(fireEvent.keyDown(row(), { key: 'ArrowDown', altKey: true })).toBe(false)
+      expect(fireEvent.keyDown(row(), { key: 'ArrowLeft', altKey: true })).toBe(true)
+      expect(fireEvent.keyDown(row(), { key: 'ArrowDown' })).toBe(true)
+    })
+
+    it('names the keys that move it', () => {
+      renderRow()
+
+      expect(row()).toHaveAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown')
+    })
+  })
+
   describe('tile', () => {
     // The one state that changes on its own, so the glyph turns.
     it('turns the glyph while the agent works', () => {
@@ -630,6 +676,7 @@ describe('WorkspaceRow', () => {
           onRename={vi.fn()}
           onEditingChange={vi.fn()}
           onRemove={vi.fn()}
+          onMove={vi.fn()}
         />
       )
 
@@ -647,6 +694,7 @@ describe('WorkspaceRow', () => {
           onRename={vi.fn()}
           onEditingChange={vi.fn()}
           onRemove={vi.fn()}
+          onMove={vi.fn()}
         />
       )
 

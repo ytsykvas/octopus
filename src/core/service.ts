@@ -387,6 +387,7 @@ import {
   removeChat,
   removeProject,
   reorderProjects,
+  reorderWorkspaces,
   type ProjectPatch,
   type ProjectEdit,
   editProject,
@@ -966,6 +967,8 @@ export interface OctopusService {
   removeProjectById(projectId: string): Promise<ProjectRemoval>
   /** Saves the order the tab strip shows the projects in. */
   reorderProjects(orderedIds: readonly string[]): Promise<void>
+  /** Saves the order the sidebar shows one project's workspaces in. */
+  reorderWorkspaces(projectId: string, orderedIds: readonly string[]): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
   listProjectBranches(projectId: string): Promise<string[]>
 
@@ -6247,6 +6250,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async reorderProjects(orderedIds) {
       await commit((current) => reorderProjects(current, orderedIds))
+    },
+
+    async reorderWorkspaces(projectId, orderedIds) {
+      await commit((current) => reorderWorkspaces(current, projectId, orderedIds))
     },
 
     async removeProjectById(projectId) {
