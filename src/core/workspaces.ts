@@ -790,6 +790,23 @@ async function holdsUncommittedWork(exec: WorkspaceExec, path: string): Promise<
 }
 
 /**
+ * Undoes a branch move whose record could not be stored.
+ *
+ * Without it the branch has its new name and the record its old one, and the
+ * workspace reads as standing on some other branch. Best-effort for the same
+ * reason as `rollbackWorkspace`: it runs while the failure that called for it
+ * is still being handled.
+ */
+export async function restoreBranch(exec: GitExec, moved: string, original: string): Promise<void> {
+  try {
+    await renameBranch(exec, moved, original)
+  } catch {
+    // The branch may have been moved again by hand; the original failure is
+    // the one worth reporting.
+  }
+}
+
+/**
  * Undoes a half-finished creation.
  *
  * A worktree without a record is invisible to the app yet blocks every later

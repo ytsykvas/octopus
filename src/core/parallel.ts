@@ -135,3 +135,27 @@ export interface Line {
   /** Settles once every task queued so far has, whatever each one did. */
   readonly idle: () => Promise<void>
 }
+
+/**
+ * `oneAtATime` for each key: tasks under one key wait in line, tasks under
+ * different keys run at once.
+ *
+ * For work that must not overlap on one thing and has no reason to wait on
+ * another — a workspace's branch, where a move and a push of the same branch
+ * have to happen one after the other, and two workspaces have nothing to do
+ * with each other. A line is kept for each key ever used rather than let go of
+ * once it empties: the keys here are workspaces, a handful, and the bookkeeping
+ * for letting go would be the only thing in this file able to get it wrong.
+ */
+export function oneAtATimeEach(): <T>(key: string, task: () => Promise<T>) => Promise<T> {
+  const lines = new Map<string, Line>()
+
+  return (key, task) => {
+    let line = lines.get(key)
+    if (line === undefined) {
+      line = oneAtATime()
+      lines.set(key, line)
+    }
+    return line(task)
+  }
+}

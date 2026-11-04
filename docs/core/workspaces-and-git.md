@@ -33,7 +33,7 @@ delete head branches_; an unmerged one stays until a person deletes it.
 
 GitHub remembers a request after its branch is gone, so no choice of name can
 settle that alone. A request opened before the workspace came onto its branch —
-created, or renamed onto it (`branchSince`) — is never its own (`openedFor` in
+created, or moved onto it by a rename or a new kind (`branchSince`) — is never its own (`openedFor` in
 `pullRequestShapes.ts`), and the pane, the list beside it and the removal
 check all ask with the workspace rather than its branch name.
 
@@ -66,6 +66,17 @@ branch, and a workspace moved off a pushed one loses its request just the same.
 Refused and said, rather than done halfway — the label alone changing while the
 branch stays would leave a name the branch no longer matches. A rename that
 keeps the slug, the same name in other letters, moves nothing and goes ahead.
+
+**What moves a branch and what pushes it wait on each other**, one workspace at
+a time (`oneAtATimeEach` in `parallel.ts`): a rename, a new kind, Commit & push,
+Amend & push, Push, Create PR, the push after a turn, and removal — which reads
+the branch it deletes. A new kind asked while the first push
+was still on its way found no upstream yet and moved the branch out from under
+the request about to be opened from it — or the push, holding the old name,
+found nothing to send. Each reads the workspace once its turn comes. And git
+moves the branch before the record is written, so a write that fails puts the
+branch back (`restoreBranch`) rather than leave the two naming different
+branches.
 
 **Refs are files**, so `octopus/feature` and `octopus/feature/anna` cannot both
 exist. git says so only as "cannot lock ref", halfway through. `branchBlocker`

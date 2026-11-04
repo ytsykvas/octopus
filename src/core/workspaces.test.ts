@@ -26,6 +26,7 @@ import {
   viewOf,
   removeWorkspace,
   rekindWorkspace,
+  restoreBranch,
   renameWorkspace,
   rollbackWorkspace,
   WorkspaceError
@@ -908,6 +909,26 @@ describe('rekindWorkspace', () => {
 
     expect((error as WorkspaceError).code).toBe('branchBlocked')
     expect((error as WorkspaceError).params).toMatchObject({ blocker: 'ytsykvas/bug' })
+  })
+})
+
+describe('restoreBranch', () => {
+  it('puts a moved branch back under its old name', async () => {
+    const workspace = await create()
+    await exec(['branch', '-m', workspace.branch, 'ytsykvas/bug/moved'])
+
+    await restoreBranch(exec, 'ytsykvas/bug/moved', workspace.branch)
+
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(FIRST_NAME)
+  })
+
+  // It runs while another failure is being handled, and must not replace it.
+  it('says nothing when the branch is not there to put back', async () => {
+    await create()
+
+    await expect(restoreBranch(exec, 'ytsykvas/bug/nowhere', 'ytsykvas/feature/x')).resolves.toBe(
+      undefined
+    )
   })
 })
 
