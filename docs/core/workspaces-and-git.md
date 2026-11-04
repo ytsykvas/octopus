@@ -86,7 +86,9 @@ branches.
 exist. git says so only as "cannot lock ref", halfway through. `branchBlocker`
 asks first — for a branch above or below the name, here or on `origin` — and a
 creation, a rename and a new kind each refuse with `branchBlocked`, naming the
-branch in the way. The workspace's own local branch is never in its own way:
+branch in the way — or with `branchBlockedRemote` when what is in the way is a
+copy on `origin`: nothing local stops the branch then, only its push would fail,
+and the copy is deleted on `origin` rather than renamed from here. The workspace's own local branch is never in its own way:
 `git branch -m` lets go of the old ref before taking the new one. Its copy on
 `origin` stays, and still counts.
 

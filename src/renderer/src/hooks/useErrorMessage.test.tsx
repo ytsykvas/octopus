@@ -106,6 +106,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   branchUnmerged: { branch: 'ytsykvas/anna' },
   branchExists: { branch: 'ytsykvas/anna' },
   branchBlocked: { branch: 'ytsykvas/feature/anna', blocker: 'ytsykvas/feature' },
+  branchBlockedRemote: { branch: 'ytsykvas/feature/anna', blocker: 'origin/ytsykvas/feature' },
   branchPublished: { branch: 'ytsykvas/feature/anna' },
   slugTaken: { name: 'fix-login', slug: 'fix_login' },
   pathExists: { path: '/tmp/planner/anna' },

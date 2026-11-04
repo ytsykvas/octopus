@@ -69,6 +69,8 @@ export type WorkspaceErrorCode =
   | 'slugTaken'
   /** A branch at, above or below this name exists, so git cannot create it. */
   | 'branchBlocked'
+  /** As above, but the branch in the way is a copy on `origin`. */
+  | 'branchBlockedRemote'
   /** The branch has left this machine; moving it would leave its pull request behind. */
   | 'branchPublished'
 
@@ -528,8 +530,10 @@ async function refuseBlocked(exec: GitExec, branch: string, own: string | null):
   const blocker = await branchBlocker(exec, branch, own)
   if (blocker === null) return
 
+  // Told apart because the advice differs: a copy on origin is not renamed or
+  // deleted from here, and nothing local is in the way at all.
   throw new WorkspaceError(
-    'branchBlocked',
+    blocker.startsWith(`${DEFAULT_REMOTE}/`) ? 'branchBlockedRemote' : 'branchBlocked',
     { branch, blocker },
     `${blocker} stops ${branch} from being created.`
   )

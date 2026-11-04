@@ -2014,6 +2014,8 @@ export const de: Translation = {
     branchExists: 'Ein Branch namens {{branch}} existiert bereits.',
     branchBlocked:
       '{{blocker}} existiert bereits, deshalb kann git {{branch}} nicht anlegen. Benenne {{blocker}} zuerst um oder lösche ihn.',
+    branchBlockedRemote:
+      '{{blocker}} liegt auf origin und steht {{branch}} im Weg: git kann keinen Branch unter einem anderen ablegen. Wähle einen anderen Namen oder lösche diesen Branch auf origin.',
     branchPublished:
       '{{branch}} wurde schon gepusht, deshalb behält der Workspace seinen Namen: ein neuer würde den Branch von seinem Pull Request wegbewegen.',
     slugTaken:

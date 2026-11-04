@@ -818,6 +818,23 @@ describe('renameWorkspace', () => {
     })
   })
 
+  // Nothing here stops the branch; the copy on origin would stop its push,
+  // and that copy is not something to rename from this machine.
+  it('says when the branch in the way is a copy on origin', async () => {
+    const workspace = await create()
+    await exec(['update-ref', 'refs/remotes/origin/ytsykvas/feature/fix-auth/x', 'HEAD'])
+
+    const error = await renameWorkspace(workspace, project, 'fix auth', exec).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as WorkspaceError).code).toBe('branchBlockedRemote')
+    expect((error as WorkspaceError).params).toMatchObject({
+      branch: 'ytsykvas/feature/fix-auth',
+      blocker: 'origin/ytsykvas/feature/fix-auth/x'
+    })
+  })
+
   /*
    * A workspace once renamed to `feature` sits on `ytsykvas/feature` — the
    * very ref every new branch needs as a folder. Its own branch is not in its

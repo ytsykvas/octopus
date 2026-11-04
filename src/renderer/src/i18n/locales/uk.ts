@@ -1982,6 +1982,8 @@ export const uk: Translation = {
     branchExists: 'Гілка {{branch}} уже існує.',
     branchBlocked:
       'Уже існує {{blocker}}, тому git не може створити {{branch}}. Спершу перейменуйте або видаліть {{blocker}}.',
+    branchBlockedRemote:
+      '{{blocker}} лежить на origin і заважає {{branch}}: git не може покласти гілку всередину іншої. Оберіть іншу назву або видаліть ту гілку на origin.',
     branchPublished:
       'Гілку {{branch}} уже запушено, тож назва воркспейсу лишається: нова перенесла б гілку геть від її PR.',
     slugTaken:
