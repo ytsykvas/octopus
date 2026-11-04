@@ -117,7 +117,8 @@ adding new button components.
 
 Existing pieces, worth checking before writing another: `Modal`,
 `DropdownMenu`, `Combobox` (a select with search), `Field`, `NameEditor`,
-`ResizeHandle`, `Terminal`, and the pair in `Disclosure.tsx` for anything that
+`ResizeHandle`, `Terminal`, `useDragReorder` with `DropLine` for a list put in
+order by dragging (and Alt and an arrow), and the pair in `Disclosure.tsx` for anything that
 folds — `DisclosureButton` for the toggle, `DisclosureChevron` alone where the control
 is not a plain button (a `Button`, a tree row, a `<summary>`).
 

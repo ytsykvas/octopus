@@ -36,6 +36,7 @@ import {
   rememberSkills,
   removeProject,
   reorderProjects,
+  reorderWorkspaces,
   removeWorkspace,
   updateProject,
   saveState,
@@ -595,6 +596,78 @@ describe('projects', () => {
         'esl',
         'planner'
       ])
+    })
+  })
+
+  describe('reorderWorkspaces', () => {
+    const ws = (projectId: string, name: string): Workspace =>
+      makeWorkspace({
+        id: `${projectId}/${name}`,
+        projectId,
+        name,
+        branch: `ytsykvas/${name}`,
+        path: `/ws/${projectId}/${name}`
+      })
+    // Interleaved, as creation in two projects leaves them.
+    const state = [
+      ws('planner', 'anna'),
+      ws('esl', 'kyiv'),
+      ws('planner', 'bob'),
+      ws('esl', 'lviv'),
+      ws('planner', 'carol')
+    ].reduce(
+      addWorkspace,
+      addProject(withProject, { ...project, id: 'esl', repoPath: '/repos/esl' })
+    )
+    const idsOf = (next: State, projectId: string): string[] =>
+      workspacesOfProject(next, projectId).map((workspace) => workspace.id)
+
+    it("puts one project's workspaces in the order given", () => {
+      const next = reorderWorkspaces(state, 'planner', [
+        'planner/carol',
+        'planner/anna',
+        'planner/bob'
+      ])
+
+      expect(idsOf(next, 'planner')).toEqual(['planner/carol', 'planner/anna', 'planner/bob'])
+    })
+
+    it("leaves another project's workspaces in their own order", () => {
+      const next = reorderWorkspaces(state, 'planner', [
+        'planner/carol',
+        'planner/bob',
+        'planner/anna'
+      ])
+
+      expect(idsOf(next, 'esl')).toEqual(['esl/kyiv', 'esl/lviv'])
+    })
+
+    // The window's list can be a step behind: a workspace made since it was
+    // read must not vanish, nor one removed since come back.
+    it('keeps a workspace the list lacks, last, and ignores an id that is gone', () => {
+      const next = reorderWorkspaces(state, 'planner', [
+        'planner/gone',
+        'planner/bob',
+        'planner/anna'
+      ])
+
+      expect(idsOf(next, 'planner')).toEqual(['planner/bob', 'planner/anna', 'planner/carol'])
+      expect(next.workspaces).toHaveLength(5)
+    })
+
+    it("does not move another project's workspace named in the list", () => {
+      const next = reorderWorkspaces(state, 'planner', ['esl/lviv', 'planner/bob'])
+
+      expect(idsOf(next, 'esl')).toEqual(['esl/kyiv', 'esl/lviv'])
+      expect(idsOf(next, 'planner')).toEqual(['planner/bob', 'planner/anna', 'planner/carol'])
+    })
+
+    // A project removed while its row was being dragged.
+    it('changes nothing for a project that is gone', () => {
+      const next = reorderWorkspaces(state, 'ledger', ['planner/carol', 'esl/lviv'])
+
+      expect(idsOf(next, 'planner')).toEqual(idsOf(state, 'planner'))
+      expect(idsOf(next, 'esl')).toEqual(idsOf(state, 'esl'))
     })
   })
 

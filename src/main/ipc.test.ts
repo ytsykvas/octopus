@@ -439,6 +439,7 @@ describe('channel table', () => {
     'library:remove',
     'library:rename',
     'library:inspect',
+    'library:inRepository',
     'prompts:list',
     'prompts:create',
     'prompts:update',
@@ -454,6 +455,7 @@ describe('channel table', () => {
     'workspaces:read',
     'workspaces:create',
     'workspaces:rename',
+    'workspaces:reorder',
     'workspaces:notes',
     'workspaces:kind',
     'workspaces:remove',
@@ -983,6 +985,32 @@ describe('skills', () => {
     await expect(invoke('skills:inRepository', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: [{ name: 'in-repo' }]
+    })
+  })
+
+  it("carries the checkout's own commands across", async () => {
+    const projectId = await addProject('commanded')
+    const workspace = await createWorkspace(projectId)
+    const path = join(workspace.path, '.claude', 'commands')
+    await mkdir(path, { recursive: true })
+    await writeFile(join(path, 'review.md'), 'Look it over.\n', 'utf8')
+
+    await expect(invoke('library:inRepository', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ name: 'review' }]
+    })
+  })
+
+  // Refused by the parse at the handler, before it is a lookup: a lookup
+  // would refuse too, but as a missing checkout rather than a bad argument.
+  it('refuses a checkout named by anything but a string', async () => {
+    await expect(invoke('library:inRepository', 42)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    await expect(invoke('library:inRepository', '')).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
     })
   })
 
@@ -1776,6 +1804,45 @@ describe('workspaces of a real project', () => {
       ok: false,
       code: 'valueRefused'
     })
+  })
+
+  it("saves the order of a project's workspaces", async () => {
+    const projectId = await addProject()
+    const first = await createWorkspace(projectId)
+    const second = await createWorkspace(projectId)
+
+    await expect(
+      invoke('workspaces:reorder', projectId, [second.id, first.id])
+    ).resolves.toMatchObject({ ok: true })
+
+    await expect(invoke('workspaces:list', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: [{ id: second.id }, { id: first.id }]
+    })
+  })
+
+  it('refuses a workspace order that is not a list of ids', async () => {
+    const projectId = await addProject()
+
+    await expect(invoke('workspaces:reorder', projectId, 'anna')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('refuses a workspace order longer than any list could be', async () => {
+    const projectId = await addProject()
+    const many = Array.from({ length: 1001 }, (_, index) => `planner/${String(index)}`)
+
+    await expect(invoke('workspaces:reorder', projectId, many)).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(invoke('workspaces:reorder', projectId, many.slice(1))).resolves.toMatchObject({
+      ok: true
+    })
+  })
+
+  it('refuses a workspace order with no project', async () => {
+    await expect(invoke('workspaces:reorder', '', [])).resolves.toMatchObject({ ok: false })
   })
 
   it('keeps a Run the Scripts tab refused, its purpose and reason parsed', async () => {

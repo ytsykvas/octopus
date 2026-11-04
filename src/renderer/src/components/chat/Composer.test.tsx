@@ -70,6 +70,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}): {
       onRefreshSkills={vi.fn()}
       onOpenSettings={vi.fn()}
       projectId="planner"
+      workspaceId="planner/main"
       onOpenPromptSettings={onOpenPromptSettings}
       notes={[]}
       onRemoveNote={vi.fn()}
@@ -1746,5 +1747,79 @@ describe('a saved prompt', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Manage prompts…' }))
 
     expect(onOpenPromptSettings).toHaveBeenCalledOnce()
+  })
+})
+
+describe('a command the checkout carries', () => {
+  // jsdom measures nothing, so the fan opens as its list, where the command
+  // is a row like any other.
+  const chosen = async (user: ReturnType<typeof userEvent.setup>): Promise<void> => {
+    vi.mocked(octopus().library.inRepository).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          kind: 'command',
+          name: 'review',
+          description: '',
+          path: '/repo/.claude/commands/review.md'
+        }
+      ]
+    })
+    await user.click(screen.getByRole('button', { name: 'Saved prompts' }))
+    await user.click(await screen.findByRole('menuitem', { name: '/review' }))
+  }
+
+  /* At the start of the message rather than at the caret: the CLI reads a
+     command only where it leads, and what was typed becomes its arguments. */
+  it('goes to the start of the message, with what was typed as its arguments', async () => {
+    const user = userEvent.setup()
+    renderComposer()
+
+    await user.type(field(), 'fix it')
+    await chosen(user)
+
+    const textarea = field() as HTMLTextAreaElement
+    expect(textarea).toHaveValue('/review fix it')
+    expect(textarea).toHaveFocus()
+    expect(textarea.selectionStart).toBe('/review '.length)
+  })
+
+  /* With nothing after it on the first line the command is written bare, and
+     a bare `/review` at the start is what opens the suggestions — over a
+     command just chosen, where they would take the first Enter. */
+  it('opens no suggestions over the command just written', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer({
+      initialDraft: '\nthe body',
+      commands: [{ name: 'review', description: '', argumentHint: '', aliases: [], skill: false }]
+    })
+
+    await chosen(user)
+
+    expect(field()).toHaveValue('/review\nthe body')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    await user.keyboard('{Enter}')
+    expect(onSend).toHaveBeenCalledWith('/review\nthe body')
+  })
+
+  it('reads the commands of the checkout the composer is in', async () => {
+    const user = userEvent.setup()
+    renderComposer()
+
+    await chosen(user)
+
+    expect(octopus().library.inRepository).toHaveBeenCalledWith('planner/main')
+  })
+
+  it('goes out as the command it is', async () => {
+    const user = userEvent.setup()
+    const { onSend } = renderComposer()
+
+    await user.type(field(), 'fix it')
+    await chosen(user)
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(onSend).toHaveBeenCalledWith('/review fix it')
   })
 })

@@ -387,6 +387,7 @@ import {
   removeChat,
   removeProject,
   reorderProjects,
+  reorderWorkspaces,
   type ProjectPatch,
   type ProjectEdit,
   editProject,
@@ -971,6 +972,8 @@ export interface OctopusService {
   removeProjectById(projectId: string): Promise<ProjectRemoval>
   /** Saves the order the tab strip shows the projects in. */
   reorderProjects(orderedIds: readonly string[]): Promise<void>
+  /** Saves the order the sidebar shows one project's workspaces in. */
+  reorderWorkspaces(projectId: string, orderedIds: readonly string[]): Promise<void>
   /** Branches the project's repository offers as a base, remotes included. */
   listProjectBranches(projectId: string): Promise<string[]>
 
@@ -1313,6 +1316,14 @@ export interface OctopusService {
    * there either way and can be taken a copy of.
    */
   listRepositorySkills(workspaceId: string): Promise<SkillEntry[]>
+  /**
+   * The commands the checkout carries in `.claude/commands`, top level only,
+   * for the composer's fan. Read from disk rather than asked of the session,
+   * so they are there before the first message — and none at all when the
+   * session would not load them: the setting reads nothing of the project, or
+   * the checkout's settings wait for approval.
+   */
+  listRepositoryCommands(workspaceId: string): Promise<LibraryEntry[]>
   /** One of them, opened: the form's two fields and the raw document. */
   /**
    * One skill of a store, addressed by the directory the listing found it in.
@@ -4984,8 +4995,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   /**
    * Whether a session loads the skills of our stores and the checkout at all:
    * only with the project layer, under which the SDK reads every root's
-   * `.claude/skills`. One rule for the roots a session is handed and the list
-   * the panel draws, so neither offers what the other cannot reach.
+   * `.claude/skills` — and the checkout's `.claude/commands` with them. One
+   * rule for the roots a session is handed, the list the panel draws and the
+   * commands the composer's fan offers, so none offers what the session cannot
+   * reach.
    */
   function loadsOurSkills(settingSources: readonly SettingSourceName[]): boolean {
     return settingSources.includes('project')
@@ -6017,6 +6030,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return readSkillsIn(join(requireWorkspace(workspaceId).path, '.claude', 'skills'))
     },
 
+    async listRepositoryCommands(workspaceId) {
+      const workspace = requireWorkspace(workspaceId)
+      // What the session would not load is not offered: the fan would write a
+      // command that goes out as words.
+      if (!loadsOurSkills(await sourcesFor(workspace))) return []
+
+      const listed = await readLibraryIn(join(workspace.path, '.claude', 'commands'), 'command')
+
+      // A name with a space in it is no command once typed: the CLI would read
+      // its first word and take the rest for arguments. A file called `.md`
+      // names nothing at all.
+      return listed.filter((entry) => /^\S+$/.test(entry.name))
+    },
+
     listPlugins() {
       return listInstalled(plugins)
     },
@@ -6296,6 +6323,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async reorderProjects(orderedIds) {
       await commit((current) => reorderProjects(current, orderedIds))
+    },
+
+    async reorderWorkspaces(projectId, orderedIds) {
+      await commit((current) => reorderWorkspaces(current, projectId, orderedIds))
     },
 
     async removeProjectById(projectId) {

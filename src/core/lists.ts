@@ -29,3 +29,23 @@ export function movedTo<T>(list: readonly T[], from: number, to: number): T[] {
   next.splice(to, 0, ...next.splice(from, 1))
   return next
 }
+
+/**
+ * The items in the order `orderedIds` gives — a drop hands over the whole new
+ * order, not a move.
+ *
+ * The window's list can be a step behind what is stored: an id that is gone is
+ * ignored, and an item the list never heard of goes last, keeping the order it
+ * already had.
+ */
+export function inOrder<T extends { readonly id: string }>(
+  items: readonly T[],
+  orderedIds: readonly string[]
+): T[] {
+  const rank = (item: T): number => {
+    const index = orderedIds.indexOf(item.id)
+    return index === -1 ? orderedIds.length : index
+  }
+
+  return items.toSorted((a, b) => rank(a) - rank(b))
+}

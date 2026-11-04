@@ -1055,6 +1055,7 @@ export function App(): React.JSX.Element {
                 onSetWorkspaceKind={(id, kind) => void workspaces.setKind(id, kind)}
                 editingWorkspaceId={workspaces.editingId}
                 onEditingWorkspaceChange={workspaces.setEditingId}
+                onReorderWorkspaces={(projectId, ids) => void workspaces.reorder(projectId, ids)}
                 width={sidebarWidth}
                 onWidthChange={(next) => void updateConfig({ sidebarWidth: next })}
                 onHelp={startHelp}

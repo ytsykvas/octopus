@@ -46,6 +46,11 @@ interface WorkspaceRowProps {
   readonly onEditingChange: (editing: boolean) => void
   readonly onRemove: () => void
   readonly onKindChange: (kind: WorkspaceKind) => void
+  /**
+   * One step up or down the list, from the keyboard — an order that only a
+   * pointer can change is one that only some people get to have.
+   */
+  readonly onMove: (step: -1 | 1) => void
 }
 
 /**
@@ -64,7 +69,8 @@ export function WorkspaceRow({
   onRename,
   onEditingChange,
   onRemove,
-  onKindChange
+  onKindChange,
+  onMove
 }: WorkspaceRowProps): React.JSX.Element {
   const { t } = useTranslation()
   // Agents a turn sent off, still at work after it ended: the reason the row
@@ -106,6 +112,15 @@ export function WorkspaceRow({
         onDoubleClick={() => {
           onEditingChange(true)
         }}
+        onKeyDown={(event) => {
+          if (!event.altKey) return
+          if (event.key === 'ArrowUp') onMove(-1)
+          else if (event.key === 'ArrowDown') onMove(1)
+          else return
+
+          event.preventDefault()
+        }}
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
         className="focus-ring flex min-w-0 flex-1 items-center gap-2.5 rounded-[var(--radius-control)] text-left"
         title={workspace.missing ? t('workspaces.missingHint') : workspace.branch}
         // Selection is a surface and a coloured edge, neither of which a screen

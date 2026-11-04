@@ -1681,6 +1681,7 @@ export const uk: Translation = {
     pick: 'Збережені промпти',
     sectionProject: 'Цей проєкт',
     sectionGlobal: 'Загальні',
+    sectionCommands: 'Команди репозиторію',
     more: 'Ще\u2026 ({{count}})',
     manage: 'Керувати промптами\u2026'
   },

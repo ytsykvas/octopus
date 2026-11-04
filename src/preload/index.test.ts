@@ -260,6 +260,11 @@ describe('channel names', () => {
       () => method('workspaces', 'setKind')('w' as never, 'bug' as never),
       'workspaces:kind'
     ],
+    [
+      'workspaces.reorder',
+      () => method('workspaces', 'reorder')('p' as never, ['w'] as never),
+      'workspaces:reorder'
+    ],
     ['workspaces.remove', () => method('workspaces', 'remove')('w' as never), 'workspaces:remove'],
     [
       'workspaces.hasChanges',
@@ -556,6 +561,11 @@ describe('channel names', () => {
       'library.inspect',
       () => method('library', 'inspect')('command' as never, { kind: 'text', text: '' } as never),
       'library:inspect'
+    ],
+    [
+      'library.inRepository',
+      () => method('library', 'inRepository')('w' as never),
+      'library:inRepository'
     ],
     ['skills.list', () => method('skills', 'list')({ kind: 'global' } as never), 'skills:list'],
     [

@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { LibraryEntry } from '@core/library.js'
 import type { Prompt } from '@core/promptSchema.js'
 
 import { held } from '../test/held.js'
@@ -18,6 +19,13 @@ const EVERYWHERE: Prompt = {
   ...HERE,
   id: '8a1d2c3b-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
   title: 'Everywhere'
+}
+
+const REVIEW: LibraryEntry = {
+  kind: 'command',
+  name: 'review',
+  description: 'Looks it over.',
+  path: '/repo/.claude/commands/review.md'
 }
 
 const failed = { ok: false, error: 'No.' } as const
@@ -112,6 +120,83 @@ describe('usePrompts', () => {
         expect(result.current.global).toEqual([EVERYWHERE])
       })
       expect(result.current.project).toEqual([])
+    })
+  })
+
+  describe('the checkout’s commands', () => {
+    it('reads them when given a workspace', async () => {
+      answering({ project: [], global: [] })
+      vi.mocked(octopus().library.inRepository).mockResolvedValue({ ok: true, value: [REVIEW] })
+
+      const { result } = renderHook(() => usePrompts('planner', 'planner/main'))
+
+      await waitFor(() => {
+        expect(result.current.commands).toEqual([REVIEW])
+      })
+      expect(octopus().library.inRepository).toHaveBeenCalledWith('planner/main')
+    })
+
+    it('asks for none without a workspace', async () => {
+      answering({ project: [HERE], global: [] })
+
+      const { result } = renderHook(() => usePrompts('planner'))
+
+      await waitFor(() => {
+        expect(result.current.project).toEqual([HERE])
+      })
+      expect(result.current.commands).toEqual([])
+      expect(octopus().library.inRepository).not.toHaveBeenCalled()
+    })
+
+    it('reads none, not a failure, when the checkout cannot be read', async () => {
+      answering({ project: [HERE], global: [] })
+      vi.mocked(octopus().library.inRepository).mockResolvedValue(failed)
+
+      const { result } = renderHook(() => usePrompts('planner', 'planner/main'))
+
+      await waitFor(() => {
+        expect(result.current.project).toEqual([HERE])
+      })
+      expect(result.current.commands).toEqual([])
+    })
+
+    it('reads again for another workspace, and refreshes from that one', async () => {
+      answering({ project: [], global: [] })
+      const { result, rerender } = renderHook(({ ws }) => usePrompts('planner', ws), {
+        initialProps: { ws: 'planner/main' }
+      })
+      await waitFor(() => {
+        expect(octopus().library.inRepository).toHaveBeenCalledWith('planner/main')
+      })
+
+      vi.mocked(octopus().library.inRepository).mockResolvedValue({ ok: true, value: [REVIEW] })
+      rerender({ ws: 'planner/other' })
+
+      await waitFor(() => {
+        expect(result.current.commands).toEqual([REVIEW])
+      })
+      expect(octopus().library.inRepository).toHaveBeenLastCalledWith('planner/other')
+
+      vi.mocked(octopus().library.inRepository).mockClear()
+      await act(async () => {
+        await result.current.refresh()
+      })
+      expect(octopus().library.inRepository).toHaveBeenCalledWith('planner/other')
+    })
+
+    it('reads them again when asked, which is how a command just written shows up', async () => {
+      answering({ project: [], global: [] })
+      const { result } = renderHook(() => usePrompts('planner', 'planner/main'))
+      await waitFor(() => {
+        expect(octopus().library.inRepository).toHaveBeenCalledTimes(1)
+      })
+
+      vi.mocked(octopus().library.inRepository).mockResolvedValue({ ok: true, value: [REVIEW] })
+      await act(async () => {
+        await result.current.refresh()
+      })
+
+      expect(result.current.commands).toEqual([REVIEW])
     })
   })
 

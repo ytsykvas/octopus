@@ -2133,6 +2133,7 @@ export const en = {
     pick: 'Saved prompts',
     sectionProject: 'This project',
     sectionGlobal: 'Everywhere',
+    sectionCommands: 'Commands in this repository',
     more: 'More\u2026 ({{count}})',
     manage: 'Manage prompts\u2026'
   },

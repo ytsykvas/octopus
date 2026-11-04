@@ -587,6 +587,10 @@ const api = {
         Result<KindDetour | null>
       >,
 
+    /** Saves the order of one project's workspaces: every id, first to last. */
+    reorder: (projectId: string, orderedIds: readonly string[]): Promise<Result<void>> =>
+      ipcRenderer.invoke('workspaces:reorder', projectId, orderedIds) as Promise<Result<void>>,
+
     remove: (workspaceId: string, options: RemovalRequest = {}): Promise<Result<CleanupOutcome>> =>
       ipcRenderer.invoke('workspaces:remove', workspaceId, options) as Promise<
         Result<CleanupOutcome>
@@ -875,7 +879,9 @@ const api = {
   },
 
   /**
-   * The commands and subagents beside the skills, in the same two stores.
+   * The commands and subagents beside the skills, in the same two stores —
+   * and `inRepository`, the commands the checkout itself carries, for the
+   * composer's fan.
    *
    * A section of its own rather than more of `skills`, because none of it is a
    * skill: these are single files, nothing is keyed on their names, and neither
@@ -928,7 +934,11 @@ const api = {
      * between the two steps.
      */
     inspect: (kind: LibraryKind, request: LibraryImport): Promise<Result<LibraryPreview>> =>
-      ipcRenderer.invoke('library:inspect', kind, request) as Promise<Result<LibraryPreview>>
+      ipcRenderer.invoke('library:inspect', kind, request) as Promise<Result<LibraryPreview>>,
+
+    /** The commands the checkout carries in `.claude/commands`, for the composer's fan. */
+    inRepository: (workspaceId: string): Promise<Result<LibraryEntry[]>> =>
+      ipcRenderer.invoke('library:inRepository', workspaceId) as Promise<Result<LibraryEntry[]>>
   },
 
   /**

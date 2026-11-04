@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { inOrder } from '@core/lists.js'
 import type { Project } from '@core/store.js'
 import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type { KindDetour, WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
@@ -54,6 +55,15 @@ interface UseWorkspaces {
   /** Another kind; the list is read again, since the branch may have moved with it. */
   readonly setKind: (workspaceId: string, kind: WorkspaceKind) => Promise<void>
   readonly remove: (workspaceId: string) => Promise<void>
+  /**
+   * Puts one project's workspaces in the order the sidebar was dragged into.
+   *
+   * Drawn at once and saved after, rather than saved and read back as the
+   * project strip does: a read asks git about every workspace of every
+   * project, and the row would sit back where it came from while it ran. Only
+   * a refusal reads the stored order back.
+   */
+  readonly reorder: (projectId: string, orderedIds: readonly string[]) => Promise<void>
 }
 
 /**
@@ -464,6 +474,29 @@ export function useWorkspaces(
     [byProject, confirm, refresh, describeFailure, onError, t]
   )
 
+  const reorder = useCallback(
+    async (projectId: string, orderedIds: readonly string[]) => {
+      // A full read that started before this and lands after it draws the old
+      // order until the next one. Rare — it takes a create, rename, removal or
+      // a change of projects in the same instant — and it heals itself, so it
+      // is not worth a lock.
+      setByProject((current) => {
+        const held = current.get(projectId)
+        return held === undefined
+          ? current
+          : new Map(current).set(projectId, inOrder(held, orderedIds))
+      })
+
+      onError(null)
+      const result = await window.octopus.workspaces.reorder(projectId, orderedIds)
+      if (!result.ok) {
+        onError(describeFailure(result))
+        await refresh()
+      }
+    },
+    [refresh, describeFailure, onError]
+  )
+
   // Held against the map: a list made anew on every render was a new value
   // for every memo downstream that takes it, on every render of the window.
   const flat = useMemo(() => [...byProject.values()].flat(), [byProject])
@@ -479,6 +512,7 @@ export function useWorkspaces(
     creating,
     rename,
     setKind,
-    remove
+    remove,
+    reorder
   }
 }

@@ -2,13 +2,14 @@ import { GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { movedTo } from '@core/lists.js'
 import { firstLine, type Prompt } from '@core/promptSchema.js'
 import type { Store } from '@core/stores.js'
 
 import { useConfirm } from '../../hooks/useConfirm.js'
+import { useDragReorder } from '../../hooks/useDragReorder.js'
 import { usePromptStore } from '../../hooks/usePromptStore.js'
 import { Button } from '../Button.js'
+import { DropLine } from '../DropLine.js'
 import { PromptEditor } from './PromptEditor.js'
 
 interface PromptsSectionProps {
@@ -34,11 +35,10 @@ export function PromptsSection({ store }: PromptsSectionProps): React.JSX.Elemen
 
   const [editing, setEditing] = useState<Prompt | null>(null)
   const [creating, setCreating] = useState(false)
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [overId, setOverId] = useState<string | null>(null)
-
-  const ids = prompts.prompts.map((prompt) => prompt.id)
-  const indexOf = (id: string | null): number => ids.indexOf(id ?? '')
+  const reorder = useDragReorder(
+    prompts.prompts.map((prompt) => prompt.id),
+    (orderedIds) => void prompts.reorder(orderedIds)
+  )
 
   const requestRemove = async (prompt: Prompt): Promise<void> => {
     const { confirmed } = await confirm({
@@ -50,22 +50,6 @@ export function PromptsSection({ store }: PromptsSectionProps): React.JSX.Elemen
     })
 
     if (confirmed) await prompts.remove(prompt.id)
-  }
-
-  // Dropped on a row, the dragged prompt takes that row's place, so moving down
-  // lands below it and moving up lands above it — as the tab strip does.
-  const drop = (targetId: string): void => {
-    const from = indexOf(draggingId)
-    const to = indexOf(targetId)
-    if (from !== -1 && from !== to) void prompts.reorder(movedTo(ids, from, to))
-
-    setDraggingId(null)
-    setOverId(null)
-  }
-
-  const moveBy = (index: number, step: -1 | 1): void => {
-    if (index + step < 0 || index + step >= ids.length) return
-    void prompts.reorder(movedTo(ids, index, index + step))
   }
 
   const dialogOpen = creating || editing !== null
@@ -98,37 +82,16 @@ export function PromptsSection({ store }: PromptsSectionProps): React.JSX.Elemen
         <p className="text-ink-faint">{t('prompts.empty')}</p>
       ) : (
         <ul className="border-line divide-line divide-y rounded-[var(--radius-panel)] border">
-          {prompts.prompts.map((prompt, index) => {
-            const dropEdge =
-              prompt.id === overId && prompt.id !== draggingId
-                ? index > indexOf(draggingId)
-                  ? 'below'
-                  : 'above'
-                : null
+          {prompts.prompts.map((prompt) => {
+            const dropEdge = reorder.dropEdge(prompt.id)
 
             return (
               <li
                 key={prompt.id}
                 aria-label={prompt.title}
-                draggable
-                onDragStart={() => {
-                  setDraggingId(prompt.id)
-                }}
-                onDragOver={(event) => {
-                  // Without this the browser refuses the drop.
-                  event.preventDefault()
-                  setOverId(prompt.id)
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  drop(prompt.id)
-                }}
-                onDragEnd={() => {
-                  setDraggingId(null)
-                  setOverId(null)
-                }}
+                {...reorder.itemProps(prompt.id)}
                 className={`relative flex items-center gap-2 px-3 py-2 ${
-                  prompt.id === draggingId ? 'opacity-40' : ''
+                  prompt.id === reorder.draggingId ? 'opacity-40' : ''
                 }`}
               >
                 <button
@@ -136,8 +99,8 @@ export function PromptsSection({ store }: PromptsSectionProps): React.JSX.Elemen
                   aria-label={t('prompts.reorderHandle', { title: prompt.title })}
                   onKeyDown={(event) => {
                     if (!event.altKey) return
-                    if (event.key === 'ArrowUp') moveBy(index, -1)
-                    else if (event.key === 'ArrowDown') moveBy(index, 1)
+                    if (event.key === 'ArrowUp') reorder.moveBy(prompt.id, -1)
+                    else if (event.key === 'ArrowDown') reorder.moveBy(prompt.id, 1)
                     else return
 
                     event.preventDefault()
@@ -179,15 +142,7 @@ export function PromptsSection({ store }: PromptsSectionProps): React.JSX.Elemen
                   <Trash2 aria-hidden size={12} />
                 </Button>
 
-                {dropEdge !== null && (
-                  <span
-                    data-testid="drop-line"
-                    aria-hidden
-                    className={`bg-accent pointer-events-none absolute right-0 left-0 h-0.5 rounded-full ${
-                      dropEdge === 'above' ? '-top-[3px]' : '-bottom-[3px]'
-                    }`}
-                  />
-                )}
+                {dropEdge !== null && <DropLine edge={dropEdge} />}
               </li>
             )
           })}

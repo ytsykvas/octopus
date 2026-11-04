@@ -14,7 +14,7 @@ import { BranchPrefixSchema } from './branches.js'
 import { CodedError } from './codedError.js'
 import { NotesBodySchema } from './notes.js'
 import type { AgentSkill } from './agent.js'
-import { withMember } from './lists.js'
+import { inOrder, withMember } from './lists.js'
 import { withApproval } from './repoTrust.js'
 import { SkillKeySchema } from './skillNames.js'
 import { SourceItemIdSchema } from './sourceItems.js'
@@ -752,12 +752,27 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
  * ignored, and a project the list never heard of goes last in its old place.
  */
 export function reorderProjects(state: State, orderedIds: readonly string[]): State {
-  const rank = (project: Project): number => {
-    const index = orderedIds.indexOf(project.id)
-    return index === -1 ? orderedIds.length : index
-  }
+  return { ...state, projects: inOrder(state.projects, orderedIds) }
+}
 
-  return { ...state, projects: state.projects.toSorted((a, b) => rank(a) - rank(b)) }
+/**
+ * Puts one project's workspaces in the order `orderedIds` gives — the order
+ * the sidebar shows and ⌃1–⌃9 count by.
+ *
+ * Only the order within a project is ever read, so the others keep theirs and
+ * this project's go after them. Applied to the state the commit hands over,
+ * for the same reason as `reorderProjects`.
+ */
+export function reorderWorkspaces(
+  state: State,
+  projectId: string,
+  orderedIds: readonly string[]
+): State {
+  const others = state.workspaces.filter((workspace) => workspace.projectId !== projectId)
+  return {
+    ...state,
+    workspaces: [...others, ...inOrder(workspacesOfProject(state, projectId), orderedIds)]
+  }
 }
 
 /** Removes a project together with its workspaces — no orphans are left behind. */

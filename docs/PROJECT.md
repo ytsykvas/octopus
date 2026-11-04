@@ -345,7 +345,7 @@ The layout of the existing tools is the model — proven by daily use and free o
 
 **Title bar — where you are.** The project's directory (its name is the sidebar's, which is always open) and the branch of the selected workspace. At its right end, beside the fold toggle, the selected workspace's server: Play, then a link to its port and Stop while it serves — the Scripts tab's own controls, from the same state. The branch used to sit in the chat's own header, which spent a whole row on one short string while answering a question about the window rather than about any conversation in it — the row it left belongs to the tab strip now.
 
-**Second pane — workspaces of the active project.** Carries a gradient wash of that project's colour, strongest at the project name and fading down the list, so "where am I" reads peripherally rather than by reading names. A workspace is recognised primarily **by its branch name**; the directory name is the secondary identifier. Down each card's left edge a narrow strip says what kind of work it holds — feature, fix, bug, research, tests and seven more — in the kind's own colour, tinted rather than solid, the word running bottom to top; a click on it changes the kind, and the branch with it while the branch has never been pushed (`<prefix>/<kind>/<name>`).
+**Second pane — workspaces of the active project.** Carries a gradient wash of that project's colour, strongest at the project name and fading down the list, so "where am I" reads peripherally rather than by reading names. A workspace is recognised primarily **by its branch name**; the directory name is the secondary identifier. Down each card's left edge a narrow strip says what kind of work it holds — feature, fix, bug, research, tests and seven more — in the kind's own colour, tinted rather than solid, the word running bottom to top; a click on it changes the kind, and the branch with it while the branch has never been pushed (`<prefix>/<kind>/<name>`). Rows are dragged up and down to put the workspaces in order, as the project tiles are, and a focused row moves a step with ⌥↑ and ⌥↓; the order is stored as the order of the `workspaces` array, so ⌃1–⌃9 follow it.
 
 **Centre — agent chat.** The main working area: the session event stream and the input field. The stream is shaped like Claude Code's own transcript — the agent's prose, and every tool call as one row with what came back under it, a diff under an edit, a checklist under a task list — and a row opens on a click to its input and its whole output. `⌘O` opens every row at once.
 
@@ -370,6 +370,7 @@ The log says the same at the row that started the agent: the row keeps spinning 
 | `⌘⇧N`       | new workspace, opened on its chat    |
 | `⌘1`–`⌘9`   | switch project                       |
 | `⌃1`–`⌃9`   | jump to a workspace                  |
+| `⌥↑` `⌥↓`   | move the focused workspace row       |
 | `⌥1`–`⌥3`   | switch conversation                  |
 | `⌘T`        | new conversation                     |
 | `⌘⇧T`       | reopen the last closed conversation  |

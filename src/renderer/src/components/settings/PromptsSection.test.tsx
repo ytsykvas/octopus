@@ -230,10 +230,10 @@ describe('putting them in order', () => {
 
     fireEvent.dragStart(row('Tests'))
     fireEvent.dragOver(row('Explain'))
-    expect(screen.getByTestId('drop-line').className).toContain('-bottom-')
+    expect(screen.getByTestId('drop-line')).toHaveAttribute('data-edge', 'below')
 
     fireEvent.dragOver(row('Review'))
-    expect(screen.getByTestId('drop-line').className).toContain('-top-')
+    expect(screen.getByTestId('drop-line')).toHaveAttribute('data-edge', 'above')
   })
 
   it('draws no line over the row being dragged, and none once it ends', async () => {

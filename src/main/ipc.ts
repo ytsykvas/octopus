@@ -769,6 +769,10 @@ export function registerIpc(
     attempt(() => service.listRepositorySkills(workspaceId))
   )
 
+  host.handle('library:inRepository', (_event, workspaceId: unknown) =>
+    attempt(() => service.listRepositoryCommands(z.string().min(1).parse(workspaceId)))
+  )
+
   host.handle('skills:forChat', (_event, chatId: string) =>
     attempt(() => service.skillsForChat(chatId))
   )
@@ -877,6 +881,17 @@ export function registerIpc(
   // Parsed: the name becomes a branch name.
   host.handle('workspaces:rename', (_event, workspaceId: string, name: unknown) =>
     attempt(() => service.renameWorkspaceById(workspaceId, WorkspaceNameSchema.parse(name)))
+  )
+
+  // The whole new order, as `projects:reorder` takes it, and bounded as
+  // `prompts:reorder` is: it arrives from the window in one piece.
+  host.handle('workspaces:reorder', (_event, projectId: unknown, orderedIds: unknown) =>
+    attempt(() =>
+      service.reorderWorkspaces(
+        z.string().min(1).parse(projectId),
+        z.array(z.string()).max(1000).parse(orderedIds)
+      )
+    )
   )
 
   // A removed workspace's last runs go with it, and only once it has gone: a

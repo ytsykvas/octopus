@@ -126,6 +126,7 @@ export function installOctopusStub(): Api {
       create: vi.fn(() => ok(workspaceFixture())),
       rename: vi.fn(() => ok(null)),
       setKind: vi.fn(() => ok(null)),
+      reorder: vi.fn(() => ok(undefined)),
       remove: vi.fn(() => ok({ status: 'done' as const })),
       hasChanges: vi.fn(() => ok(false)),
       // Sides empty, which is the answer for a workspace with nothing in it and
@@ -233,6 +234,7 @@ export function installOctopusStub(): Api {
     },
     library: {
       list: vi.fn(() => ok([])),
+      inRepository: vi.fn(() => ok([])),
       read: vi.fn(() =>
         ok({
           kind: 'command' as const,
