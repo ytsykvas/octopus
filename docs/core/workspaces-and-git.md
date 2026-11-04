@@ -85,8 +85,9 @@ keeps the slug, the same name in other letters, moves nothing and goes ahead.
 
 **What moves a branch and what pushes it wait on each other**, one workspace at
 a time (`oneAtATimeEach` in `parallel.ts`): a rename, a new kind, Commit & push,
-Amend & push, Push, Create PR, the push after a turn, and removal — which reads
-the branch it deletes. A new kind asked while the first push
+Amend & push, Push, Create PR, the push after a turn, and removal — of the
+workspace or of its whole project, one workspace at a time — which reads the
+branch it deletes. A new kind asked while the first push
 was still on its way found no upstream yet and moved the branch out from under
 the request about to be opened from it — or the push, holding the old name,
 found nothing to send. Each reads the workspace once its turn comes. And git

@@ -647,7 +647,7 @@ describe('workspaces', () => {
    * that skipped the line is seen at its first command, a few milliseconds in,
    * rather than only if it reached the move or the removal inside the window.
    */
-  async function lined(hold: 'push' | 'move'): Promise<{
+  async function lined(hold: 'push' | 'move' | 'remove'): Promise<{
     service: OctopusService
     projectId: string
     workspaceId: string
@@ -820,6 +820,46 @@ describe('workspaces', () => {
 
     expect(stray).toEqual([])
     expect(events.slice(0, 3)).toEqual(['move', 'move done', 'remove'])
+  })
+
+  /*
+   * Removing the project deletes each workspace's branch by the name on
+   * record, as removing the workspace does: read mid-move, that name is gone,
+   * the deletion fails quietly, and the moved branch outlives the project.
+   */
+  it('lines a project removal up behind a move', async () => {
+    const { service, projectId, events, stray, holding, release } = await lined('move')
+    const repo = join(dir, 'planner')
+
+    const rekinded = service.setWorkspaceKind(
+      (await service.listWorkspaces(projectId))[0]?.id ?? '',
+      'bug'
+    )
+    await holding
+    const removed = service.removeProjectById(projectId)
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+    release()
+    await Promise.allSettled([rekinded, removed])
+
+    expect(stray).toEqual([])
+    expect(events.slice(0, 3)).toEqual(['move', 'move done', 'remove'])
+    expect((await run('git', ['branch', '--list', 'octopus/*'], { cwd: repo })).stdout).toBe('')
+  })
+
+  // Its own removal went first and took the record: nothing is left to remove.
+  it('passes over a workspace whose own removal went before its project', async () => {
+    const { service, projectId, workspaceId, events, stray, holding, release } =
+      await lined('remove')
+
+    const gone = service.removeWorkspaceById(workspaceId, { deleteBranch: true, force: true })
+    await holding
+    const removed = service.removeProjectById(projectId)
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+    release()
+    await Promise.all([gone, removed])
+
+    expect(stray).toEqual([])
+    expect(events).toEqual(['remove', 'remove done'])
   })
 
   // The branch is moved before the record is written; a write that fails

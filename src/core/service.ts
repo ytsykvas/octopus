@@ -6312,38 +6312,48 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       if (project) {
         const repository = makeExec(project.repoPath)
 
-        for (const workspace of workspacesOfProject(state, projectId)) {
-          // Read before the closing below, which leaves the records in place
-          // but is the last moment the chats are reachable from the state that
-          // is about to be rewritten.
-          closing.push(...allChatsOfWorkspace(state, workspace.id))
+        for (const listed of workspacesOfProject(state, projectId)) {
+          // In the workspace's line, as its own removal is: the branch is
+          // deleted by the name on record, and read mid-move that name is gone
+          // and the moved branch outlives the project.
+          await branchWork(listed.id, async () => {
+            // Read once its turn comes, for the branch the move before it left
+            // — and a removal that went before it may have left nothing.
+            const workspace = state.workspaces.find((each) => each.id === listed.id)
+            if (workspace === undefined) return
 
-          // The same closing `removeWorkspaceById` does, and for the same
-          // reason: a session outliving its worktree holds a child process
-          // pointed at a directory that no longer exists, and nothing in the
-          // interface can reach it again — only quitting the application ends
-          // it. Left out here, removing a project leaked every agent in it.
-          await closeChatsOf(workspace.id)
+            // Read before the closing below, which leaves the records in place
+            // but is the last moment the chats are reachable from the state that
+            // is about to be rewritten.
+            closing.push(...allChatsOfWorkspace(state, workspace.id))
 
-          /*
-           * And the cleanup script, in the same order and for the same reason
-           * `removeWorkspaceById` runs it: in the worktree while it still
-           * exists. Left out here, removing a project abandoned every database
-           * its workspaces had been given — the accumulation the script exists
-           * to prevent, at the one moment there is most of it to clean up.
-           */
-          const cleanup = await runCleanup(project, workspace)
-          if (leavesBehind(cleanup)) leftBehind.push({ workspace: workspace.name, cleanup })
-          cliSessions.push(await sessionsOf(workspace.path))
+            // The same closing `removeWorkspaceById` does, and for the same
+            // reason: a session outliving its worktree holds a child process
+            // pointed at a directory that no longer exists, and nothing in the
+            // interface can reach it again — only quitting the application ends
+            // it. Left out here, removing a project leaked every agent in it.
+            await closeChatsOf(workspace.id)
 
-          // Best-effort, one by one: a worktree already deleted from outside
-          // must not stop the rest — or the project — from being removed. The
-          // user has confirmed, so uncommitted work goes too.
-          await removeWorkspace(
-            workspace,
-            { repository, workspace: makeExec(workspace.path) },
-            { force: true, deleteBranch: true }
-          ).catch(() => undefined)
+            /*
+             * And the cleanup script, in the same order and for the same reason
+             * `removeWorkspaceById` runs it: in the worktree while it still
+             * exists. Left out here, removing a project abandoned every database
+             * its workspaces had been given — the accumulation the script exists
+             * to prevent, at the one moment there is most of it to clean up.
+             */
+            const cleanup = await runCleanup(project, workspace)
+            if (leavesBehind(cleanup)) leftBehind.push({ workspace: workspace.name, cleanup })
+            cliSessions.push(await sessionsOf(workspace.path))
+
+            // Best-effort, one by one: a worktree already deleted from outside
+            // must not stop the rest — or the project — from being removed. The
+            // user has confirmed, so uncommitted work goes too.
+            await removeWorkspace(
+              workspace,
+              { repository, workspace: makeExec(workspace.path) },
+              { force: true, deleteBranch: true }
+            ).catch(() => undefined)
+          })
         }
       }
 
