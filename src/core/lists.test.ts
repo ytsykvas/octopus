@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { movedTo, withMember } from './lists.js'
+import { inOrder, movedTo, withMember } from './lists.js'
 
 describe('withMember', () => {
   it('adds an item the list does not hold, at the end', () => {
@@ -42,5 +42,28 @@ describe('movedTo', () => {
     expect(movedTo(['a', 'b'], 0, -1)).toEqual(['a', 'b'])
     expect(movedTo(['a', 'b'], 2, 0)).toEqual(['a', 'b'])
     expect(movedTo(['a', 'b'], 0, 2)).toEqual(['a', 'b'])
+  })
+})
+
+describe('inOrder', () => {
+  const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+  const idsOf = (list: readonly { id: string }[]): string[] => list.map((item) => item.id)
+
+  it('puts the items in the order given', () => {
+    expect(idsOf(inOrder(items, ['c', 'a', 'b']))).toEqual(['c', 'a', 'b'])
+  })
+
+  // The window's list can be a step behind: an item added since it was read
+  // must not vanish, nor one removed since come back.
+  it('keeps an item the order lacks, last, in the place it had', () => {
+    expect(idsOf(inOrder(items, ['c']))).toEqual(['c', 'a', 'b'])
+  })
+
+  it('ignores an id that is gone', () => {
+    expect(idsOf(inOrder(items, ['x', 'b', 'a']))).toEqual(['b', 'a', 'c'])
+  })
+
+  it('returns a copy', () => {
+    expect(inOrder(items, [])).not.toBe(items)
   })
 })

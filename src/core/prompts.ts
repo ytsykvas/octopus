@@ -15,6 +15,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { CodedError } from './codedError.js'
+import { inOrder } from './lists.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 import { type Prompt, type PromptDraft, type PromptFile, PromptFileSchema } from './promptSchema.js'
 
@@ -98,13 +99,5 @@ export async function removePrompt(file: string, id: string): Promise<void> {
  * the list never heard of goes last, in the order it already had.
  */
 export async function reorderPrompts(file: string, orderedIds: readonly string[]): Promise<void> {
-  const rank = (prompt: Prompt): number => {
-    const index = orderedIds.indexOf(prompt.id)
-    return index === -1 ? orderedIds.length : index
-  }
-
-  await save(
-    file,
-    (await load(file)).toSorted((a, b) => rank(a) - rank(b))
-  )
+  await save(file, inOrder(await load(file), orderedIds))
 }

@@ -14,7 +14,7 @@ import { BranchPrefixSchema } from './branches.js'
 import { CodedError } from './codedError.js'
 import { NotesBodySchema } from './notes.js'
 import type { AgentSkill } from './agent.js'
-import { withMember } from './lists.js'
+import { inOrder, withMember } from './lists.js'
 import { withApproval } from './repoTrust.js'
 import { SkillKeySchema } from './skillNames.js'
 import { SourceItemIdSchema } from './sourceItems.js'
@@ -742,12 +742,7 @@ export function updateProject(state: State, projectId: string, patch: ProjectPat
  * ignored, and a project the list never heard of goes last in its old place.
  */
 export function reorderProjects(state: State, orderedIds: readonly string[]): State {
-  const rank = (project: Project): number => {
-    const index = orderedIds.indexOf(project.id)
-    return index === -1 ? orderedIds.length : index
-  }
-
-  return { ...state, projects: state.projects.toSorted((a, b) => rank(a) - rank(b)) }
+  return { ...state, projects: inOrder(state.projects, orderedIds) }
 }
 
 /** Removes a project together with its workspaces — no orphans are left behind. */
