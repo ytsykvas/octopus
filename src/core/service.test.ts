@@ -640,11 +640,19 @@ describe('workspaces', () => {
    * A workspace whose git writes down, in order, when a branch is pushed,
    * moved and removed — and holds the first command `hold` names until it is
    * let go. The push itself is not made: what is under test is the order.
+   *
+   * `stray` is every git command about this workspace — run in its worktree,
+   * or naming its branch — that starts while the hold is on. Lined up, nothing
+   * may: the next operation has not had its turn. Caught there, an operation
+   * that skipped the line is seen at its first command, a few milliseconds in,
+   * rather than only if it reached the move or the removal inside the window.
    */
   async function lined(hold: 'push' | 'move'): Promise<{
     service: OctopusService
+    projectId: string
     workspaceId: string
     events: string[]
+    stray: string[]
     pushedWith: (GitOptions | undefined)[]
     holding: Promise<void>
     release: () => void
@@ -652,11 +660,18 @@ describe('workspaces', () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
     const events: string[] = []
+    const stray: string[] = []
     const pushedWith: (GitOptions | undefined)[] = []
-    let release = (): void => undefined
+    let watched: { branch: string; path: string } | null = null
+    let on = false
+    let letGo = (): void => undefined
     const held = new Promise<void>((resolve) => {
-      release = resolve
+      letGo = resolve
     })
+    const release = (): void => {
+      on = false
+      letGo()
+    }
     let reached = (): void => undefined
     const holding = new Promise<void>((resolve) => {
       reached = resolve
@@ -669,6 +684,13 @@ describe('workspaces', () => {
         const git = gitIn(cwd, options)
         return async (args) => {
           const [command, sub] = args
+          if (
+            on &&
+            watched !== null &&
+            (cwd === watched.path || args.some((arg) => arg.includes(watched?.branch ?? '')))
+          ) {
+            stray.push(args.join(' '))
+          }
           const named =
             command === 'push'
               ? 'push'
@@ -683,6 +705,7 @@ describe('workspaces', () => {
           events.push(named)
           if (named === 'push') pushedWith.push(options)
           if (named === hold) {
+            on = true
             reached()
             await held
           }
@@ -694,13 +717,23 @@ describe('workspaces', () => {
     })
     const project = await service.addProjectFromPath(repo)
     const workspace = await service.createWorkspaceIn(project.id)
+    watched = { branch: workspace.branch, path: workspace.path }
     // A commit of its own, and something left to commit: every pusher has work.
     await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
     await run('git', ['add', '.'], { cwd: workspace.path })
     await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
     await writeFile(join(workspace.path, 'more.txt'), 'more\n', 'utf8')
 
-    return { service, workspaceId: workspace.id, events, pushedWith, holding, release }
+    return {
+      service,
+      projectId: project.id,
+      workspaceId: workspace.id,
+      events,
+      stray,
+      pushedWith,
+      holding,
+      release
+    }
   }
 
   /** Long enough for a move that is not lined up to have been made. */
@@ -719,7 +752,7 @@ describe('workspaces', () => {
         service.createPullRequest(id, { title: 'T', body: 'B', draft: false, commitMessage: null })
     ]
   ])('lines a new kind up behind %s', async (_, pushing) => {
-    const { service, workspaceId, events, holding, release } = await lined('push')
+    const { service, workspaceId, events, stray, holding, release } = await lined('push')
 
     const pushed = pushing(service, workspaceId)
     await holding
@@ -728,6 +761,7 @@ describe('workspaces', () => {
     release()
     await Promise.all([pushed, rekinded])
 
+    expect(stray).toEqual([])
     expect(events).toEqual(['push', 'push done', 'move', 'move done'])
   })
 
@@ -759,7 +793,7 @@ describe('workspaces', () => {
   })
 
   it('lines a rename up behind a push', async () => {
-    const { service, workspaceId, events, holding, release } = await lined('push')
+    const { service, workspaceId, events, stray, holding, release } = await lined('push')
 
     const pushed = service.pushWorkspace(workspaceId)
     await holding
@@ -768,13 +802,14 @@ describe('workspaces', () => {
     release()
     await Promise.all([pushed, renamed])
 
+    expect(stray).toEqual([])
     expect(events).toEqual(['push', 'push done', 'move', 'move done'])
   })
 
   // Removal deletes the branch by the name it reads: read mid-move, it would
   // miss the moved branch and leave it behind.
   it('lines a removal up behind a move', async () => {
-    const { service, workspaceId, events, holding, release } = await lined('move')
+    const { service, workspaceId, events, stray, holding, release } = await lined('move')
 
     const rekinded = service.setWorkspaceKind(workspaceId, 'bug')
     await holding
@@ -783,6 +818,7 @@ describe('workspaces', () => {
     release()
     await Promise.all([rekinded, removed])
 
+    expect(stray).toEqual([])
     expect(events.slice(0, 3)).toEqual(['move', 'move done', 'remove'])
   })
 
