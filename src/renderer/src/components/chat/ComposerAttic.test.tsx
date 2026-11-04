@@ -69,7 +69,9 @@ function renderAttic(
       onRefreshSkills={onRefreshSkills}
       onOpenSettings={onOpenSettings}
       projectId="planner"
+      workspaceId="planner/main"
       onInsert={onInsert}
+      onInsertCommand={vi.fn()}
       onOpenPromptSettings={onOpenPromptSettings}
       onAttach={onAttach}
       onAutoCompact={onAutoCompact}

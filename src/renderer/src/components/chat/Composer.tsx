@@ -23,7 +23,7 @@ import type { ChatMode } from '../../hooks/useChat.js'
 
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { useLatest } from '../../hooks/useLatest.js'
-import { type ChatNote, insertAtCaret, insertPaths, withNotes } from './attachments.js'
+import { type ChatNote, insertAtCaret, insertPaths, withCommand, withNotes } from './attachments.js'
 import { ComposerAttachments } from './ComposerAttachments.js'
 import { ComposerAttic } from './ComposerAttic.js'
 import { EffortPicker } from './EffortPicker.js'
@@ -132,6 +132,8 @@ interface ComposerProps {
   readonly onOpenSettings: () => void
   /** The project whose saved prompts the fan offers, beside the installation's. */
   readonly projectId: string
+  /** The checkout whose `.claude/commands` the fan offers after the prompts. */
+  readonly workspaceId: string
   /** Where the fan sends someone who has no prompts yet, or wants to order them. */
   readonly onOpenPromptSettings: () => void
   /** Answers whether the message went; the field and the notes clear only then. */
@@ -256,6 +258,7 @@ export function Composer({
   onRefreshSkills,
   onOpenSettings,
   projectId,
+  workspaceId,
   onOpenPromptSettings,
   onSend,
   onSideQuestion,
@@ -329,17 +332,30 @@ export function Composer({
     textarea.current?.focus()
   }, [])
 
-  // A saved prompt chosen from the fan is written where the caret is, as a path
-  // is — text the reader can still change before it goes, not a command the
-  // agent expands out of sight. The body of the `files` effect below, in a
-  // handler: this one is asked for by a click, not handed over by a prop.
-  const insertPrompt = (text: string): void => {
-    const next = insertAtCaret(latest.current, caretRef.current, text)
+  // What the fan writes into the field. The body of the `files` effect below,
+  // in a handler: this one is asked for by a click, not handed over by a prop.
+  const writeFromFan = (next: { readonly draft: string; readonly caret: number }): void => {
     latest.current = next.draft
     caretAfterWrite.current = next.caret
     setDraft(next.draft)
     setCaret(next.caret)
     textarea.current?.focus()
+  }
+
+  // A saved prompt is written where the caret is, as a path is — text the
+  // reader can still change before it goes, not a command the agent expands
+  // out of sight.
+  const insertPrompt = (text: string): void => {
+    writeFromFan(insertAtCaret(latest.current, caretRef.current, text))
+  }
+
+  // A command goes to the start of the message instead: the CLI reads one only
+  // where it leads, and what was typed becomes its arguments.
+  const insertCommand = (name: string): void => {
+    writeFromFan(withCommand(latest.current, name))
+    // Closed over it, as `complete` does: a bare `/name` leading the field is
+    // a trigger, and the list would open on a command already chosen.
+    setDismissedAt(0)
   }
 
   // Replaces the draft, as Claude Code's own rewind does: the message is what
@@ -627,7 +643,9 @@ export function Composer({
           onRefreshSkills={onRefreshSkills}
           onOpenSettings={onOpenSettings}
           projectId={projectId}
+          workspaceId={workspaceId}
           onInsert={insertPrompt}
+          onInsertCommand={insertCommand}
           onOpenPromptSettings={onOpenPromptSettings}
           onAttach={onAttachFiles}
           onAutoCompact={onAutoCompact}

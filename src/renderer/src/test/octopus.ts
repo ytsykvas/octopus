@@ -233,6 +233,7 @@ export function installOctopusStub(): Api {
     },
     library: {
       list: vi.fn(() => ok([])),
+      inRepository: vi.fn(() => ok([])),
       read: vi.fn(() =>
         ok({
           kind: 'command' as const,

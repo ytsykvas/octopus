@@ -3,23 +3,29 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
-import type { Prompt } from '@core/promptSchema.js'
+import type { LibraryEntry } from '@core/library.js'
 
 import { useCloseOnMove } from '../../hooks/useCloseOnMove.js'
 import { useDismiss } from '../../hooks/useDismiss.js'
 import { usePrompts } from '../../hooks/usePrompts.js'
-import { FAN_MARGIN, fanItems, type FanSlot, fanSlots } from './fan.js'
+import { FAN_MARGIN, type FanChoice, fanItems, type FanSlot, fanSlots } from './fan.js'
 
 interface PromptFanProps {
   readonly projectId: string
   /** Hands over a prompt's text, which the caller puts where its caret is. */
   readonly onPick: (text: string) => void
   /**
-   * Only the prompts marked for plan refinement, and no way to settings: the
-   * plan dialog is for deciding about a plan, not for tidying a list.
+   * Only the prompts marked for plan refinement, no way to settings and none
+   * of the checkout's commands: the plan dialog is for deciding about a plan,
+   * not for tidying a list, and its field is not a message a command could
+   * lead.
    */
   readonly planOnly?: boolean
   readonly onManage?: () => void
+  /** The checkout whose `.claude/commands` the fan offers after the prompts. */
+  readonly workspaceId?: string
+  /** Hands over a chosen command's name, which the caller puts at the start of the message. */
+  readonly onCommand?: (name: string) => void
 }
 
 /** How far the list may grow before it scrolls, and the air between it and the button. */
@@ -48,6 +54,9 @@ interface Opened {
 const PILL =
   'fan-in fan-pill focus-ring inline-flex h-6 items-center gap-1.5 rounded-full border px-3 text-[12px] shadow-[var(--shadow-pop)]'
 
+/** A row of the list the fan opens when it has no room, or is asked for more. */
+const ROW = 'row focus-ring flex w-full items-center gap-2 px-2.5 py-1.5 text-left'
+
 /** The way to settings, as a gear in a circle: it is not one of the prompts. */
 const CIRCLE =
   'fan-in fan-pill focus-ring grid size-8 place-items-center rounded-full border shadow-[var(--shadow-pop)]'
@@ -55,6 +64,11 @@ const CIRCLE =
 /** The plan's own icon, the one the composer's mode picker uses for it. */
 function PlanIcon(): React.JSX.Element {
   return <Map aria-hidden data-testid="plan-icon" size={12} className="shrink-0" />
+}
+
+/** What hovering a command says: its own description, or its name when it has none. */
+function commandTitle(command: LibraryEntry): string {
+  return command.description === '' ? `/${command.name}` : command.description
 }
 
 /**
@@ -66,7 +80,8 @@ function PlanIcon(): React.JSX.Element {
  * so the fan never shows a pill cut off by the edge of the window, and never
  * more than can be told apart at a glance. The order is the user's: the
  * project's own prompts, then the installation's, each as the settings section
- * lists them.
+ * lists them — and after both, when the composer asks for them, the commands
+ * the checkout carries in `.claude/commands`, by name.
  *
  * Drawn into the `<dialog>` the button sits in, when there is one, because
  * `showModal()` makes everything outside the dialog inert: a fan in the body
@@ -78,10 +93,18 @@ export function PromptFan({
   projectId,
   onPick,
   planOnly = false,
-  onManage
+  onManage,
+  workspaceId,
+  onCommand
 }: PromptFanProps): React.JSX.Element | null {
   const { t } = useTranslation()
-  const { project, global, refresh } = usePrompts(projectId)
+  // Not in the plan dialog: its field corrects a plan, it is not a message, so
+  // a command written there would never reach the CLI as one.
+  const offersCommands = !planOnly && onCommand !== undefined
+  const { project, global, commands, refresh } = usePrompts(
+    projectId,
+    offersCommands ? workspaceId : undefined
+  )
 
   const [opened, setOpened] = useState<Opened | null>(null)
   const [listing, setListing] = useState(false)
@@ -102,11 +125,16 @@ export function PromptFan({
     panel.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
   }, [opened, listing])
 
-  const prompts = [...project, ...global].filter((prompt) => !planOnly || prompt.forPlan)
-  if (planOnly && prompts.length === 0) return null
+  const choices: FanChoice[] = [
+    ...[...project, ...global]
+      .filter((prompt) => !planOnly || prompt.forPlan)
+      .map((prompt) => ({ kind: 'prompt' as const, prompt })),
+    ...(offersCommands ? commands.map((command) => ({ kind: 'command' as const, command })) : [])
+  ]
+  if (planOnly && choices.length === 0) return null
 
   const manage = planOnly ? undefined : onManage
-  const { entries, rest } = fanItems(prompts, opened?.slots.length ?? 0, {
+  const { entries, rest } = fanItems(choices, opened?.slots.length ?? 0, {
     manage: manage !== undefined
   })
   // The list, when it was asked for or when there is nothing for the fan to say.
@@ -146,6 +174,11 @@ export function PromptFan({
     close()
   }
 
+  const chooseCommand = (name: string): void => {
+    onCommand?.(name)
+    close()
+  }
+
   const manageAndClose = (): void => {
     manage?.()
     close()
@@ -166,24 +199,43 @@ export function PromptFan({
     items[(at + step + items.length) % items.length]?.focus()
   }
 
-  const row = (prompt: Prompt): React.JSX.Element => (
-    <button
-      key={prompt.id}
-      type="button"
-      role="menuitem"
-      title={prompt.title}
-      onClick={() => {
-        choose(prompt.text)
-      }}
-      className="row focus-ring flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
-    >
-      {prompt.forPlan && <PlanIcon />}
-      <span className="truncate">{prompt.title}</span>
-    </button>
-  )
+  const row = (choice: FanChoice): React.JSX.Element =>
+    choice.kind === 'prompt' ? (
+      <button
+        key={choice.prompt.id}
+        type="button"
+        role="menuitem"
+        title={choice.prompt.title}
+        onClick={() => {
+          choose(choice.prompt.text)
+        }}
+        className={ROW}
+      >
+        {choice.prompt.forPlan && <PlanIcon />}
+        <span className="truncate">{choice.prompt.title}</span>
+      </button>
+    ) : (
+      <button
+        key={`command:${choice.command.name}`}
+        type="button"
+        role="menuitem"
+        title={commandTitle(choice.command)}
+        onClick={() => {
+          chooseCommand(choice.command.name)
+        }}
+        className={ROW}
+      >
+        <span className="truncate">/{choice.command.name}</span>
+      </button>
+    )
 
-  const fromProject = rest.filter((prompt) => project.includes(prompt))
-  const fromGlobal = rest.filter((prompt) => !project.includes(prompt))
+  const fromProject = rest.filter(
+    (choice) => choice.kind === 'prompt' && project.includes(choice.prompt)
+  )
+  const fromGlobal = rest.filter(
+    (choice) => choice.kind === 'prompt' && !project.includes(choice.prompt)
+  )
+  const fromCommands = rest.filter((choice) => choice.kind === 'command')
 
   return (
     <span ref={wrapper} className="contents">
@@ -238,6 +290,14 @@ export function PromptFan({
                       {t('prompts.sectionGlobal')}
                     </p>
                     {fromGlobal.map(row)}
+                  </>
+                )}
+                {fromCommands.length > 0 && (
+                  <>
+                    <p role="presentation" className="section-label px-2.5 pt-1.5 pb-0.5">
+                      {t('prompts.sectionCommands')}
+                    </p>
+                    {fromCommands.map(row)}
                   </>
                 )}
                 {manage !== undefined && (
@@ -297,6 +357,26 @@ export function PromptFan({
                     >
                       {entry.prompt.forPlan && <PlanIcon />}
                       <span className="truncate">{entry.prompt.title}</span>
+                    </button>
+                  )
+                }
+
+                if (entry.kind === 'command') {
+                  return (
+                    <button
+                      key={`command:${entry.command.name}`}
+                      type="button"
+                      role="menuitem"
+                      // Framed as the project's own prompts are, being the
+                      // checkout's; the slash is what tells it is a command.
+                      title={commandTitle(entry.command)}
+                      style={style}
+                      onClick={() => {
+                        chooseCommand(entry.command.name)
+                      }}
+                      className={`${PILL} ${place} fixed z-50`}
+                    >
+                      <span className="truncate">/{entry.command.name}</span>
                     </button>
                   )
                 }

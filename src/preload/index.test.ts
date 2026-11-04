@@ -557,6 +557,11 @@ describe('channel names', () => {
       () => method('library', 'inspect')('command' as never, { kind: 'text', text: '' } as never),
       'library:inspect'
     ],
+    [
+      'library.inRepository',
+      () => method('library', 'inRepository')('w' as never),
+      'library:inRepository'
+    ],
     ['skills.list', () => method('skills', 'list')({ kind: 'global' } as never), 'skills:list'],
     [
       'skills.read',

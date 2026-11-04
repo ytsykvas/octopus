@@ -15068,6 +15068,86 @@ describe('the agent chat', () => {
     })
 
     /*
+     * Read from the checkout rather than asked of a session, so the composer's
+     * fan has them before the first message. A subfolder is not read: the
+     * library's own reader keeps to the top level, as the settings count does.
+     */
+    it("lists the checkout's own commands, top level only, and only those a slash can name", async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      const commands = join(workspace.path, '.claude', 'commands')
+      await mkdir(join(commands, 'nested'), { recursive: true })
+      await writeFile(
+        join(commands, 'review.md'),
+        '---\ndescription: Looks it over.\n---\n\nBody\n',
+        'utf8'
+      )
+      await writeFile(join(commands, 'ship.md'), 'Ship it.\n', 'utf8')
+      await writeFile(join(commands, 'nested', 'deep.md'), 'Deep.\n', 'utf8')
+      // Typed as `/my notes`, the CLI would read `/my` and an argument.
+      await writeFile(join(commands, 'my notes.md'), 'Spaced.\n', 'utf8')
+      // A file called `.md` names nothing, and its pill would read `/`.
+      await writeFile(join(commands, '.md'), 'Nameless.\n', 'utf8')
+
+      const listed = await service.listRepositoryCommands(workspaceId)
+
+      expect(listed).toMatchObject([
+        { kind: 'command', name: 'review', description: 'Looks it over.' },
+        { kind: 'command', name: 'ship', description: '' }
+      ])
+      expect(listed).toHaveLength(2)
+    })
+
+    /*
+     * The SDK reads `.claude/commands` under the project layer only, so a pill
+     * for one the session would not load would write a command that goes out
+     * as words. The same rule as the panel's skills: empty rather than inert.
+     */
+    it('lists no commands when the settings would load nothing of the project', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      await mkdir(join(workspace.path, '.claude', 'commands'), { recursive: true })
+      await writeFile(join(workspace.path, '.claude', 'commands', 'review.md'), 'Look.\n', 'utf8')
+
+      await service.updateConfig({ settingSources: 'none' })
+
+      await expect(service.listRepositoryCommands(workspaceId)).resolves.toEqual([])
+    })
+
+    it('lists the commands only once the checkout’s settings are approved', async () => {
+      const { service, projectId, workspaceId } = await withWorkspace()
+      const workspace = (await service.listWorkspaces(projectId))[0]
+      if (!workspace) throw new Error('no workspace')
+      await mkdir(join(workspace.path, '.claude', 'commands'), { recursive: true })
+      await writeFile(join(workspace.path, '.claude', 'commands', 'review.md'), 'Look.\n', 'utf8')
+      await writeFile(join(workspace.path, '.claude', 'settings.json'), '{"a":1}', 'utf8')
+
+      await expect(service.listRepositoryCommands(workspaceId)).resolves.toEqual([])
+
+      await approveSettingsIn(service, workspaceId)
+
+      await expect(service.listRepositoryCommands(workspaceId)).resolves.toMatchObject([
+        { name: 'review' }
+      ])
+    })
+
+    it('lists no commands for a checkout without the folder', async () => {
+      const { service, workspaceId } = await withWorkspace()
+
+      await expect(service.listRepositoryCommands(workspaceId)).resolves.toEqual([])
+    })
+
+    it('refuses to list commands for a checkout that is not there', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.listRepositoryCommands('planner/nowhere')).rejects.toBeInstanceOf(
+        WorkspaceError
+      )
+    })
+
+    /*
      * A switch over something the session would not load is a control with
      * nothing behind it — and ours are in that boat too, since a store reaches
      * a session as an extra working-directory root rather than as a plugin. A

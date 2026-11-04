@@ -79,13 +79,32 @@ is written where the caret is, with the same spacing as a path
 (`insertAtCaret` in `attachments.ts`, which `insertPaths` is now made of), so a
 prompt dropped into the middle of a sentence reads as part of it.
 
+**The checkout's own commands ride in the same fan, after the prompts.** What
+the worktree carries in `.claude/commands` is offered as `/name` pills, read
+from disk (`library:inRepository`) each time the fan opens — so they are there
+before the first message, which the `/` list, filled by the session, cannot
+promise. Only the folder's top level is read — files, as `instructionSources.ts`
+counts them for the list of what the agent loads; a subfolder's commands and a
+symlinked file are not offered — and only when the session would load them: with
+the project layer on and the checkout's settings approved, the rule the skills
+panel keeps. A file whose name has a space, or is only `.md`, is left out, since
+no `/name` could call it. A command is **not** written at the caret: it goes to
+the start of the field (`withCommand` in `attachments.ts`), replacing a command
+already leading it, and everything already typed stays after it — the CLI reads
+a command only where it leads the message, and hands the whole rest of it, every
+line, to the command as its arguments. Choosing one closes the `/` suggestions
+over it, as completing one does. Hovering one shows its frontmatter
+`description`, or its `/name` when it declares none. The plan dialog's fan offers
+none: its field corrects a plan and is not a message, so a command written there
+would never run.
+
 The pills lie on a circle round the button, close to it, and are **read the way
 a clock is: from 9 o'clock round, in one unbroken sweep** — up the left to 12,
 down the right past 3 to 6, straight below the button, and up the left again to
-just under 9. The prompts fill that sweep in their order and stop where they do,
-so a few sit on the upper left and many go on round. The lower half lies over
-the field for as long as the fan is open; a pill that would run past the
-window's edge is left out, and what does not fit goes behind "More…". Two
+just under 9. What the fan offers fills that sweep in its order and stops where
+it does, so a few sit on the upper left and many go on round. The lower half
+lies over the field for as long as the fan is open; a pill that would run past
+the window's edge is left out, and what does not fit goes behind "More…". Two
 earlier shapes read as two piles rather than one fan: running from 12 down to 9
 and starting the right side again from the top, and a round arc whose sides —
 each growing outwards from the button — sat far apart with nothing over it.
@@ -100,14 +119,17 @@ right on the right, and half of it either way for the centred pills at 12 and 6
 the circle has eleven rows and twenty slots at most; nearer the button holds
 fewer, and further holds more but reaches away from the control it belongs to.
 The rest go behind a last-but-one pill, "More… (N)", which opens a list of only
-what did not fit, under the sections "This project" and "Everywhere"; the last
-pill is always the way to the settings that keep and order them. That last one
-is **not a pill**: it is a larger circle with a gear and no words, because it is
-not one of the prompts and should read as the fan's own control — always the end
-of the fan, wherever that is (it keeps its words in the list). The
+what did not fit, under the sections "This project", "Everywhere" and "Commands
+in this repository"; the last pill is always the way to the settings that keep
+and order the prompts. That last one is **not a pill**: it is a larger circle
+with a gear and no words, because it is not one of the prompts and should read
+as the fan's own control — always the end of the fan, wherever that is (it keeps
+its words in the list). The
 installation's prompts wear a **heavier frame** than the project's own — 2 px in
 the project's colour itself, over a fill a step deeper, against a soft 1 px line
-— so the two stores tell apart in the fan without a heading. A prompt marked for
+— so the two stores tell apart in the fan without a heading. The checkout's
+commands wear the project's frame, being the checkout's own; the leading slash is
+what marks them. A prompt marked for
 the plan carries the plan's icon, the one the mode picker uses, so it is found
 at a glance. The pills wear **the project's colour** — the same wash as the sent
 bubble and the active tab — which the component reads off the button when the
@@ -119,6 +141,9 @@ component only draws.
 **The order is the priority.** The project's own prompts come first, then the
 installation's, each as the Prompts section lists them — so dragging one up in
 Settings is how it is made easier to reach, and there is no second field for it.
+The checkout's commands come after both, by name, and in the list they have a
+section of their own, "Commands in this repository"; a project with fifteen of
+them does not push its saved prompts behind "More…".
 The lists are read again each time the fan opens, which is why a prompt saved a
 moment ago is there without anything telling the composer: a subscription would
 be a second way for the same list to go stale, for a list looked at a few times

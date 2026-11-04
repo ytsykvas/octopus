@@ -97,6 +97,27 @@ export function insertAtCaret(
 }
 
 /**
+ * Puts a command at the start of a draft, which is the only place the CLI
+ * reads one: a command dropped mid-sentence would go out as words. A command
+ * already leading the draft is replaced rather than stacked, together with the
+ * blank space before it; everything after stays, and the CLI takes the whole
+ * of it, every line, as the command's arguments. A path of more than one
+ * segment, such as `/tmp/x`, is not taken for a command and stays — one of a
+ * single segment, `/tmp`, cannot be told from one here and is replaced.
+ * Otherwise only the first line's leading blanks go: the lines under it keep
+ * their indentation.
+ */
+export function withCommand(
+  draft: string,
+  name: string
+): { readonly draft: string; readonly caret: number } {
+  const rest = draft.replace(/^\s*\/[^\s/]+(?=\s|$)/, '').replace(/^[ \t]+/, '')
+  const head = rest.startsWith('\n') ? `/${name}` : `/${name} `
+
+  return { draft: `${head}${rest}`, caret: head.length }
+}
+
+/**
  * Writes the paths of files pointed at into a draft, at the caret.
  *
  * The whole of an attachment is its path, written where the reader is typing —

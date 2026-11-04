@@ -439,6 +439,7 @@ describe('channel table', () => {
     'library:remove',
     'library:rename',
     'library:inspect',
+    'library:inRepository',
     'prompts:list',
     'prompts:create',
     'prompts:update',
@@ -983,6 +984,32 @@ describe('skills', () => {
     await expect(invoke('skills:inRepository', workspace.id)).resolves.toMatchObject({
       ok: true,
       value: [{ name: 'in-repo' }]
+    })
+  })
+
+  it("carries the checkout's own commands across", async () => {
+    const projectId = await addProject('commanded')
+    const workspace = await createWorkspace(projectId)
+    const path = join(workspace.path, '.claude', 'commands')
+    await mkdir(path, { recursive: true })
+    await writeFile(join(path, 'review.md'), 'Look it over.\n', 'utf8')
+
+    await expect(invoke('library:inRepository', workspace.id)).resolves.toMatchObject({
+      ok: true,
+      value: [{ name: 'review' }]
+    })
+  })
+
+  // Refused by the parse at the handler, before it is a lookup: a lookup
+  // would refuse too, but as a missing checkout rather than a bad argument.
+  it('refuses a checkout named by anything but a string', async () => {
+    await expect(invoke('library:inRepository', 42)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    await expect(invoke('library:inRepository', '')).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
     })
   })
 

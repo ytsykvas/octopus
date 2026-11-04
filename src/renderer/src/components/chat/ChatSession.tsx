@@ -969,6 +969,7 @@ export function ChatSession({
               onRefreshSkills={skills.refresh}
               onOpenSettings={onOpenSkillSettings}
               projectId={workspace.projectId}
+              workspaceId={workspace.id}
               onOpenPromptSettings={onOpenPromptSettings}
               onSend={send}
               onStop={() => void chat.interrupt()}
