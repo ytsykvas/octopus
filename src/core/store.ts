@@ -745,6 +745,26 @@ export function reorderProjects(state: State, orderedIds: readonly string[]): St
   return { ...state, projects: inOrder(state.projects, orderedIds) }
 }
 
+/**
+ * Puts one project's workspaces in the order `orderedIds` gives — the order
+ * the sidebar shows and ⌃1–⌃9 count by.
+ *
+ * Only the order within a project is ever read, so the others keep theirs and
+ * this project's go after them. Applied to the state the commit hands over,
+ * for the same reason as `reorderProjects`.
+ */
+export function reorderWorkspaces(
+  state: State,
+  projectId: string,
+  orderedIds: readonly string[]
+): State {
+  const others = state.workspaces.filter((workspace) => workspace.projectId !== projectId)
+  return {
+    ...state,
+    workspaces: [...others, ...inOrder(workspacesOfProject(state, projectId), orderedIds)]
+  }
+}
+
 /** Removes a project together with its workspaces — no orphans are left behind. */
 export function removeProject(state: State, projectId: string): State {
   const dropped = new Set(workspacesOfProject(state, projectId).map((workspace) => workspace.id))

@@ -454,6 +454,7 @@ describe('channel table', () => {
     'workspaces:read',
     'workspaces:create',
     'workspaces:rename',
+    'workspaces:reorder',
     'workspaces:notes',
     'workspaces:remove',
     'workspaces:hasChanges',
@@ -1750,6 +1751,45 @@ describe('workspaces of a real project', () => {
       ok: true,
       value: [{ name: 'fix auth' }]
     })
+  })
+
+  it("saves the order of a project's workspaces", async () => {
+    const projectId = await addProject()
+    const first = await createWorkspace(projectId)
+    const second = await createWorkspace(projectId)
+
+    await expect(
+      invoke('workspaces:reorder', projectId, [second.id, first.id])
+    ).resolves.toMatchObject({ ok: true })
+
+    await expect(invoke('workspaces:list', projectId)).resolves.toMatchObject({
+      ok: true,
+      value: [{ id: second.id }, { id: first.id }]
+    })
+  })
+
+  it('refuses a workspace order that is not a list of ids', async () => {
+    const projectId = await addProject()
+
+    await expect(invoke('workspaces:reorder', projectId, 'anna')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('refuses a workspace order longer than any list could be', async () => {
+    const projectId = await addProject()
+    const many = Array.from({ length: 1001 }, (_, index) => `planner/${String(index)}`)
+
+    await expect(invoke('workspaces:reorder', projectId, many)).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(invoke('workspaces:reorder', projectId, many.slice(1))).resolves.toMatchObject({
+      ok: true
+    })
+  })
+
+  it('refuses a workspace order with no project', async () => {
+    await expect(invoke('workspaces:reorder', '', [])).resolves.toMatchObject({ ok: false })
   })
 
   it('keeps a Run the Scripts tab refused, its purpose and reason parsed', async () => {

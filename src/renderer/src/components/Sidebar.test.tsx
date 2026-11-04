@@ -45,6 +45,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}): SidebarProps {
     onRemoveWorkspace: vi.fn(),
     editingWorkspaceId: null,
     onEditingWorkspaceChange: vi.fn(),
+    onReorderWorkspaces: vi.fn(),
     onHelp: vi.fn(),
     canStartChat: true,
     ...overrides
@@ -230,6 +231,77 @@ describe('Sidebar', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Rename' }))
 
     expect(props.onEditingWorkspaceChange).toHaveBeenCalledExactlyOnceWith('planner/bob')
+  })
+
+  describe('dragging a workspace', () => {
+    const three = [workspaceView('anna'), workspaceView('bob'), workspaceView('carol')]
+    const row = (name: string): HTMLElement =>
+      screen.getByRole('button', { name: new RegExp(`^${name}`) })
+
+    it('moves a workspace down onto the row it is dropped on', () => {
+      const props = renderSidebar({ workspaces: three })
+
+      fireEvent.dragStart(row('anna'))
+      fireEvent.dragOver(row('carol'))
+      fireEvent.drop(row('carol'))
+
+      expect(props.onReorderWorkspaces).toHaveBeenCalledWith('planner', [
+        'planner/bob',
+        'planner/carol',
+        'planner/anna'
+      ])
+    })
+
+    it('moves a workspace up onto the row it is dropped on', () => {
+      const props = renderSidebar({ workspaces: three })
+
+      fireEvent.dragStart(row('carol'))
+      fireEvent.drop(row('anna'))
+
+      expect(props.onReorderWorkspaces).toHaveBeenCalledWith('planner', [
+        'planner/carol',
+        'planner/anna',
+        'planner/bob'
+      ])
+    })
+
+    it('draws the line on the edge the workspace would land against', () => {
+      renderSidebar({ workspaces: three })
+
+      fireEvent.dragStart(row('bob'))
+      fireEvent.dragOver(row('carol'))
+      expect(screen.getByTestId('drop-line').className).toContain('-bottom-')
+
+      fireEvent.dragOver(row('anna'))
+      expect(screen.getByTestId('drop-line').className).toContain('-top-')
+
+      fireEvent.dragEnd(row('bob'))
+      expect(screen.queryByTestId('drop-line')).toBeNull()
+    })
+
+    // Selecting the name being typed is a drag of its own, and must not pick
+    // the row up.
+    it('does not drag a row whose name is being edited', () => {
+      renderSidebar({ workspaces: three, editingWorkspaceId: 'planner/bob' })
+
+      const field = screen.getByTitle('Enter to save, Escape to cancel')
+      expect(field.closest('li')).not.toHaveAttribute('draggable')
+      expect(row('anna').closest('li')).toHaveAttribute('draggable', 'true')
+    })
+
+    it('moves a workspace with Alt and an arrow', async () => {
+      const user = userEvent.setup()
+      const props = renderSidebar({ workspaces: three })
+      row('bob').focus()
+
+      await user.keyboard('{Alt>}{ArrowUp}{/Alt}')
+
+      expect(props.onReorderWorkspaces).toHaveBeenCalledWith('planner', [
+        'planner/bob',
+        'planner/anna',
+        'planner/carol'
+      ])
+    })
   })
 
   // The pane follows the cursor throughout, but the width worth keeping is
