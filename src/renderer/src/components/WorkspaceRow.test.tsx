@@ -401,14 +401,14 @@ describe('WorkspaceRow', () => {
   it('shows the kind of work on its strip', () => {
     renderRow({ workspace: workspaceView('anna', { kind: 'bug' }) })
 
-    expect(screen.getByRole('button', { name: 'bug — Bug tag. Change' })).toHaveTextContent('bug')
+    expect(screen.getByRole('button', { name: 'Bug — Bug tag. Change' })).toHaveTextContent('Bug')
   })
 
   it('hands over the kind chosen on its strip', async () => {
     const user = userEvent.setup()
     const props = renderRow({ workspace: workspaceView('anna') })
 
-    await user.click(screen.getByRole('button', { name: 'feature — Feature tag. Change' }))
+    await user.click(screen.getByRole('button', { name: 'Feature — Feature tag. Change' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Tests' }))
 
     expect(props.onKindChange).toHaveBeenCalledWith('tests')

@@ -91,26 +91,27 @@ export const en = {
     rename: 'Rename',
     remove: 'Remove workspace',
     /* The kind of work, on the strip at a card's left edge. `short` is what the
-       strip has room for, about seven letters (held in locales.test.ts);
-       `label` is the word everywhere else. */
+       strip has room for, about seven letters: the `label` itself, or its start
+       closed by a full stop (both held in locales.test.ts). `label` is the word
+       everywhere else. */
     kindTitle: 'Tag',
     kindNote: 'The branch is renamed with the tag until it is pushed.',
     kindLabel: '{{short}} — {{kind}} tag. Change',
     kindDetour:
       '{{blocker}} already exists, and git cannot file a branch under another, so the branch is {{branch}}.',
     kinds: {
-      feature: { label: 'Feature', short: 'feature' },
-      fix: { label: 'Fix', short: 'fix' },
-      bug: { label: 'Bug', short: 'bug' },
-      research: { label: 'Research', short: 'explore' },
-      tests: { label: 'Tests', short: 'tests' },
-      refactor: { label: 'Refactoring', short: 'refact' },
-      docs: { label: 'Documentation', short: 'docs' },
-      chore: { label: 'Maintenance', short: 'chore' },
-      perf: { label: 'Performance', short: 'perf' },
-      design: { label: 'Design', short: 'design' },
-      security: { label: 'Security', short: 'secure' },
-      review: { label: 'Review', short: 'review' }
+      feature: { label: 'Feature', short: 'Feature' },
+      fix: { label: 'Fix', short: 'Fix' },
+      bug: { label: 'Bug', short: 'Bug' },
+      research: { label: 'Research', short: 'Resear.' },
+      tests: { label: 'Tests', short: 'Tests' },
+      refactor: { label: 'Refactoring', short: 'Refact.' },
+      docs: { label: 'Documentation', short: 'Doc.' },
+      chore: { label: 'Maintenance', short: 'Maint.' },
+      perf: { label: 'Performance', short: 'Perf.' },
+      design: { label: 'Design', short: 'Design' },
+      security: { label: 'Security', short: 'Secur.' },
+      review: { label: 'Review', short: 'Review' }
     },
     missing: 'Directory is gone',
     statusRunning: 'The agent is working here',

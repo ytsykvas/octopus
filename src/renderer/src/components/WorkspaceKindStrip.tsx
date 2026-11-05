@@ -22,8 +22,8 @@ interface WorkspaceKindStripProps {
 export function WorkspaceKindStrip({ kind, onChange }: WorkspaceKindStripProps): React.JSX.Element {
   const { t } = useTranslation()
   const short = t(`workspaces.kinds.${kind}.short`)
-  // Starting with the word on screen: saying what you see — "click explore" —
-  // has to find the button, and some short words are not the full name.
+  // Starting with the word on screen: saying what you see — "click Refact." —
+  // has to find the button, and a cut word is not the full name.
   const named = t('workspaces.kindLabel', { short, kind: t(`workspaces.kinds.${kind}.label`) })
 
   return (
