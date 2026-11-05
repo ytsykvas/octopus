@@ -188,11 +188,13 @@ project palette, never solid: twelve solid blocks down a list are the confetti
 §10.7 rules out. The tint is strong (38%), because a fainter one lost the
 strip's edge against the card, and the word is in `ink`, because in the kind's
 own colour on that fill it fell under 3:1. The word runs bottom to top (`writing-mode: sideways-lr`) and
-is a short form of the kind, about seven letters, which is all a 46px card
-holds — `locales.test.ts` keeps every language to it. Some short words are
-not the name (`explore` for Research), so the button's label and tooltip begin
-with the word on screen and then give the name — "explore — Research tag.
-Change" — and saying what you see finds it. It says it opens a menu
+is the kind's name as the picker shows it, or — when that is longer than the
+seven or so letters a 46px card holds — its start closed by a full stop
+(`Refact.` for Refactoring). Never a word of its own: "chore" under
+Maintenance read as a different tag from the one chosen. `locales.test.ts`
+holds every language to both rules. A cut word is not the name, so the
+button's label and tooltip begin with the word on screen and then give the
+name — "Refact. — Refactoring tag. Change" — and saying what you see finds it. It says it opens a menu
 (`aria-haspopup`) and whether that menu is open (`aria-expanded`). On the
 selected card the strip sits at the hover tint, so hovering it there goes one
 step further (52%). A click opens the picker, a `DropdownMenu` of

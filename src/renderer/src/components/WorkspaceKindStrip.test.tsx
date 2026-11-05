@@ -5,20 +5,21 @@ import { describe, expect, it, vi } from 'vitest'
 import { WorkspaceKindStrip } from './WorkspaceKindStrip.js'
 
 describe('WorkspaceKindStrip', () => {
-  // The strip shows the short word; a screen reader is told the whole one and
-  // that pressing it changes it. The name starts with the word on screen, so
-  // saying what you see — "click explore" — finds it.
+  // The strip shows the name, or the start of it when the name is too long for
+  // it; a screen reader is told the whole one and that pressing it changes it.
+  // The name starts with the word on screen, so saying what you see — "click
+  // Resear." — finds it.
   it('shows the kind in a word and names it in full, starting with that word', () => {
     render(<WorkspaceKindStrip kind="research" onChange={vi.fn()} />)
 
-    const strip = screen.getByRole('button', { name: /^explore/ })
-    expect(strip).toHaveTextContent('explore')
-    expect(strip).toHaveAccessibleName('explore — Research tag. Change')
+    const strip = screen.getByRole('button', { name: /^Resear\./ })
+    expect(strip).toHaveTextContent('Resear.')
+    expect(strip).toHaveAccessibleName('Resear. — Research tag. Change')
   })
 
   it('says it opens a menu, and whether the menu is open', async () => {
     render(<WorkspaceKindStrip kind="feature" onChange={vi.fn()} />)
-    const strip = screen.getByRole('button', { name: /^feature/ })
+    const strip = screen.getByRole('button', { name: /^Feature/ })
 
     expect(strip).toHaveAttribute('aria-haspopup', 'menu')
     expect(strip).toHaveAttribute('aria-expanded', 'false')
@@ -29,7 +30,7 @@ describe('WorkspaceKindStrip', () => {
   it('offers every kind, with the current one chosen', async () => {
     render(<WorkspaceKindStrip kind="feature" onChange={vi.fn()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'feature — Feature tag. Change' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Feature — Feature tag. Change' }))
 
     const choices = screen.getAllByRole('menuitemradio')
     expect(choices).toHaveLength(12)
@@ -47,7 +48,7 @@ describe('WorkspaceKindStrip', () => {
   it('says the branch follows the tag only until it is pushed', async () => {
     render(<WorkspaceKindStrip kind="feature" onChange={vi.fn()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'feature — Feature tag. Change' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Feature — Feature tag. Change' }))
 
     expect(
       screen.getByText('The branch is renamed with the tag until it is pushed.')
@@ -58,7 +59,7 @@ describe('WorkspaceKindStrip', () => {
     const onChange = vi.fn()
     render(<WorkspaceKindStrip kind="feature" onChange={onChange} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'feature — Feature tag. Change' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Feature — Feature tag. Change' }))
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Bug' }))
 
     expect(onChange).toHaveBeenCalledWith('bug')
@@ -69,7 +70,7 @@ describe('WorkspaceKindStrip', () => {
     const onChange = vi.fn()
     render(<WorkspaceKindStrip kind="feature" onChange={onChange} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'feature — Feature tag. Change' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Feature — Feature tag. Change' }))
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Feature' }))
 
     expect(onChange).not.toHaveBeenCalled()

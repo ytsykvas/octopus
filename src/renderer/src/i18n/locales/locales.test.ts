@@ -65,6 +65,8 @@ describe.each([
  * The strip on a workspace card is 14px wide and as tall as the card, and the
  * kind is written along it: about seven letters fit. A longer word is cut
  * off with nothing said, so the limit is held here rather than found on screen.
+ * The word is the name the picker shows, or the start of it closed by a full
+ * stop: a word of its own — "chore" for Maintenance — read as another tag.
  */
 describe.each([
   ['en', en],
@@ -77,5 +79,13 @@ describe.each([
     expect(label).not.toBe('')
     expect(short).not.toBe('')
     expect(short.length).toBeLessThanOrEqual(7)
+  })
+
+  it.each(WORKSPACE_KINDS)('write %s on the strip as the start of its name', (kind) => {
+    const { label, short } = locale.workspaces.kinds[kind]
+    const stem = short.slice(0, -1)
+    const cut = short.endsWith('.') && stem !== '' && stem.length < label.length
+
+    expect(short === label || (cut && label.startsWith(stem)), `${short} for ${label}`).toBe(true)
   })
 })

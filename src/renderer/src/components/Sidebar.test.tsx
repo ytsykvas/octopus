@@ -226,7 +226,7 @@ describe('Sidebar', () => {
       workspaces: [workspaceView('anna'), workspaceView('bob', { kind: 'docs' })]
     })
 
-    await user.click(screen.getByRole('button', { name: 'docs — Documentation tag. Change' }))
+    await user.click(screen.getByRole('button', { name: 'Doc. — Documentation tag. Change' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Bug' }))
 
     expect(props.onSetWorkspaceKind).toHaveBeenCalledWith('planner/bob', 'bug')
