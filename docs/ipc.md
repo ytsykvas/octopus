@@ -30,12 +30,12 @@ The only channel outside this shape is `theme:get`, which cannot fail.
 
 ### Theme and config
 
-| Channel         | Arguments | Notes                                                                                                                                                                  |
-| --------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `theme:get`     | —         | resolves `system` against the OS                                                                                                                                       |
-| `config:get`    | —         |                                                                                                                                                                        |
-| `config:update` | `patch`   | broadcasts `theme:changed` and `config:changed` to every window                                                                                                        |
-| `config:edit`   | `edit`    | one list changed by an operation (`ConfigEditSchema`): a skill off or on by default, a tip dismissed, a standing permission forgotten. Broadcasts like `config:update` |
+| Channel         | Arguments | Notes                                                                                                                                                                                                                                                                      |
+| --------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `theme:get`     | —         | resolves `system` against the OS                                                                                                                                                                                                                                           |
+| `config:get`    | —         |                                                                                                                                                                                                                                                                            |
+| `config:update` | `patch`   | parsed strictly with `ConfigPatchSchema`: the lists (`config:edit`), `version`, `deviceId`, `installedAt`, unknown keys and a key sent as `undefined` are refused, and a setting left out stays as it was. Broadcasts `theme:changed` and `config:changed` to every window |
+| `config:edit`   | `edit`    | one list changed by an operation (`ConfigEditSchema`): a skill off or on by default, a tip dismissed, a standing permission forgotten. Broadcasts like `config:update`                                                                                                     |
 
 ### Projects
 

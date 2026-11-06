@@ -813,6 +813,49 @@ describe('validation at the boundary', () => {
     const result = await invoke('terminal:create', { command: ['ls'] })
     expect(result).toMatchObject({ ok: false })
   })
+
+  /*
+   * The lists change one operation at a time through `config:edit`, and the
+   * identity fields are not the window's to set. `ConfigPatch` typed them away,
+   * but a type says nothing across the bridge: one call from a window drawing
+   * agent output granted `Bash` for good.
+   */
+  it('refuses a config patch that grants itself a standing permission', async () => {
+    const result = await invoke('config:update', { alwaysAllowedTools: ['Bash'] })
+
+    expect(result).toMatchObject({ ok: false })
+    expect(service.getConfig().alwaysAllowedTools).toEqual([])
+  })
+
+  it('refuses a config patch that rewrites the device id', async () => {
+    const before = service.getConfig().deviceId
+
+    const result = await invoke('config:update', {
+      deviceId: '00000000-0000-4000-8000-000000000000'
+    })
+
+    expect(result).toMatchObject({ ok: false })
+    expect(service.getConfig().deviceId).toBe(before)
+  })
+
+  /*
+   * The trap a patch schema falls into: a default still fires for a key left
+   * out, so changing the theme would put every other setting back. Asserted
+   * field by field, as for projects above.
+   */
+  it('leaves the settings a config patch does not carry where they were', async () => {
+    await invoke('config:update', { effort: 'max' })
+    await invoke('config:update', { rightPanelTab: 'files' })
+    await invoke('config:update', { rightPanelWidth: 500 })
+
+    await invoke('config:update', { theme: 'dark' })
+
+    const config = service.getConfig()
+    expect(config.effort).toBe('max')
+    expect(config.rightPanelTab).toBe('files')
+    expect(config.rightPanelWidth).toBe(500)
+    expect(config.theme).toBe('dark')
+  })
 })
 
 describe('failures come back as results', () => {

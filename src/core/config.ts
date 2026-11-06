@@ -16,12 +16,14 @@ import { StandingPermissionSchema, withoutStanding } from './standingPermissions
 import {
   DEFAULT_EFFORT,
   type Effort,
+  EffortSchema,
   EXIT_PLAN_MODE,
   PlanExecutionModeSchema,
   StoredEffortSchema,
   type WorkingMode,
   WorkingModeSchema
 } from './chats.js'
+import { withoutDefaults } from './patchSchema.js'
 import { configFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 import { ASK_USER_QUESTION } from './questions.js'
@@ -374,6 +376,44 @@ export const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>
 
 /**
+ * What the window may change by sending the new value — parsed at the bridge,
+ * because a type says nothing across it.
+ *
+ * Built from `ConfigSchema`, so a new setting reaches it without a second list.
+ * Six fields are left out. The lists change one switch at a time through
+ * `ConfigEdit`: a list sent whole is a snapshot of the window's copy, and
+ * `alwaysAllowedTools` sent whole is the window granting itself any tool.
+ * `version`, `deviceId` and `installedAt` are not the window's to set.
+ *
+ * The defaults are taken off, or a patch of one field would come back with
+ * every defaulted field beside it and reset them all. `effort` and
+ * `rightPanelTab` are replaced with their plain schemas: the stored ones keep a
+ * default inside a pipe, out of `withoutDefaults`' reach, and accept the `null`
+ * and the old tab names only so files written by older builds load — the
+ * window speaks the current vocabulary. `exactPartial` rather than `partial`:
+ * a key sent as `undefined` would be spread over the config and parse back as
+ * its default, and the type it gives is what `updateConfig` takes under
+ * `exactOptionalPropertyTypes`.
+ */
+export const ConfigPatchSchema = z
+  .strictObject(
+    withoutDefaults(
+      ConfigSchema.omit({
+        version: true,
+        deviceId: true,
+        installedAt: true,
+        alwaysAllowedTools: true,
+        disabledSkillDefaults: true,
+        dismissedTips: true
+      }).shape
+    )
+  )
+  .extend({ effort: EffortSchema, rightPanelTab: RightPanelTabSchema })
+  .exactPartial()
+
+export type ConfigPatch = z.infer<typeof ConfigPatchSchema>
+
+/**
  * One change to a list in the config, as the window asks for it.
  *
  * An operation rather than the finished list. The window used to send the list
@@ -393,16 +433,6 @@ export const ConfigEditSchema = z.discriminatedUnion('kind', [
 export type ConfigEdit = z.infer<typeof ConfigEditSchema>
 
 /** The part of the config an edit changes, worked out from the config as it stands. */
-/**
- * What the window may change by sending the new value: every setting except the
- * lists, which change one switch at a time through `ConfigEdit`. A list sent
- * whole is a snapshot of the window's copy, and two switches inside one round
- * trip wrote the first back out.
- */
-export type ConfigPatch = Partial<
-  Omit<Config, 'disabledSkillDefaults' | 'dismissedTips' | 'alwaysAllowedTools'>
->
-
 export function editedConfig(config: Config, edit: ConfigEdit): Partial<Config> {
   switch (edit.kind) {
     case 'skillDefault':

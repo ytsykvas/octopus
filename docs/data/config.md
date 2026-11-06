@@ -34,6 +34,13 @@ was approved before anything was drawn: no dialog, no record that planning had
 ended, and the toggle still lit over an agent editing files. It went unnoticed
 for a day. `NEVER_STANDING` in `config.ts` is what strips it.
 
+The window cannot write it. `config:update` parses its patch with
+`ConfigPatchSchema`, which leaves out all three lists and `version`, `deviceId`
+and `installedAt`: a window drawing agent output could otherwise grant itself
+`Bash` for good in one call. The lists change through `config:edit`, one
+operation at a time, and only the core adds a standing answer — when the user
+presses "Always allow".
+
 **An entry is a rule, not a tool name.** It used to be the name alone, so
 answering "always" about one file under `.claude/` granted every `Edit` in every
 workspace from then on — an approval an order of magnitude wider than the
