@@ -522,6 +522,8 @@ six channels at once:
 1. Add the member to `IpcHost` in `main/ipc.ts` and call it from the service
    listener that has the news.
 2. Add the sender to `src/main/broadcast.ts`, taking its windows as a parameter.
+   Send through `pushAll` (or `toEach`): it skips a window that is gone and
+   keeps one window's failure from costing the others their copy.
 3. **Assert the channel string in `src/main/broadcast.test.ts`.** This is the
    half that catches a rename. It is not optional and it is not covered by
    `ipc.test.ts`, which asserts that `registerIpc` called the host function —

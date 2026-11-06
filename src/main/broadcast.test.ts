@@ -15,10 +15,13 @@ import {
 } from './broadcast.js'
 
 /** Stands in for a window, the way `terminals.test.ts` stands in for its WebContents. */
-function target(): {
+function target({ gone = false, failing = false } = {}): {
   sent: [string, unknown][]
   colours: string[]
-  webContents: { send: (channel: string, payload?: unknown) => void }
+  webContents: {
+    send: (channel: string, payload?: unknown) => void
+    isDestroyed: () => boolean
+  }
   setBackgroundColor: (color: string) => void
 } {
   const state = {
@@ -26,8 +29,10 @@ function target(): {
     colours: [] as string[],
     webContents: {
       send(channel: string, payload?: unknown) {
+        if (failing) throw new Error('Object has been destroyed')
         state.sent.push([channel, payload])
-      }
+      },
+      isDestroyed: () => gone
     },
     setBackgroundColor(color: string) {
       state.colours.push(color)
@@ -182,5 +187,48 @@ describe('what the main process pushes, and on which channel', () => {
     expect(() => {
       pushChatEvent([], { chatId: 'chat-1' })
     }).not.toThrow()
+  })
+})
+
+describe('a window that cannot take a push', () => {
+  const event = { chatId: 'chat-1' }
+
+  it('skips a window that is gone', () => {
+    const gone = target({ gone: true })
+    const open = target()
+
+    pushChatEvent([gone, open], event)
+    pushTheme([gone, open], 'dark')
+
+    expect(gone.sent).toEqual([])
+    expect(gone.colours).toEqual([])
+    expect(open.sent).toEqual([
+      ['chats:event', event],
+      ['theme:changed', 'dark']
+    ])
+  })
+
+  it('does not let one window failing cost the others their copy', () => {
+    const broken = target({ failing: true })
+    const open = target()
+
+    expect(() => {
+      pushChatEvent([broken, open], event)
+      pushTheme([broken, open], 'dark')
+    }).not.toThrow()
+    expect(open.sent).toEqual([
+      ['chats:event', event],
+      ['theme:changed', 'dark']
+    ])
+  })
+
+  it('opens settings nowhere when the focused window is gone or failing', () => {
+    const gone = target({ gone: true })
+
+    expect(() => {
+      pushSettingsOpen(gone)
+      pushSettingsOpen(target({ failing: true }))
+    }).not.toThrow()
+    expect(gone.sent).toEqual([])
   })
 })
