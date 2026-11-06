@@ -586,10 +586,10 @@ export function Composer({
       {/* `relative` so the suggestion list can hang off the top of the whole
           block rather than off the field: it opens upwards, and anchoring it
           to the textarea would put it over the text being typed. */}
-      {/* The whole box takes a drop, not the field alone. Aiming at a textarea
-          that is two lines tall is a worse target than the frame around it, and
-          a drop that lands a pixel outside would do the browser's own thing —
-          navigate the window to the file. */}
+      {/* The whole box takes a drop, not the field alone: a textarea two lines
+          tall is a worse target than the frame around it. A drop that misses
+          it comes to nothing: the window is made with `navigateOnDragDrop`
+          off, so the file is never opened in its place. */}
       <div
         ref={field}
         onDragOver={(event) => {

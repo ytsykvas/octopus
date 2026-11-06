@@ -91,6 +91,18 @@ a parameter — the seam `terminals.ts` uses — so a test fills them with objec
 that collect what was sent, and the channel names are asserted where they are
 written.
 
+`navigation.ts` keeps every WebContents on the application's own document. Any
+page in the window gets the preload and the whole of `window.octopus`, so a
+navigation anywhere else — a script setting `location`, a link without
+`target="_blank"`, a form, a server redirect — is refused, with the decision in
+`core/appNavigation.ts`. It is attached through `web-contents-created`, so a
+window added later is covered too, and `index.ts` computes the document's URL
+once, for loading it and for comparing against it. A file or link dropped on
+the window never navigates in the first place: `navigateOnDragDrop` is off
+(Electron's default, written out in `createWindow` so that turning it on is a
+visible decision), and a drop then starts no navigation at all — checked by
+hand, with the renderer's own drop handlers out of the way.
+
 `terminals.ts` is the one part of `main/` that owns something rather than
 forwarding it: pseudo-terminals are process resources bound to a window, which
 is why they cannot live in the core. Ending one is the whole of what it knows
