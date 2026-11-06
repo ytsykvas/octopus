@@ -1968,6 +1968,24 @@ describe('workspaces of a real project', () => {
     await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
   })
 
+  it('refuses to drop unmerged commits even when uncommitted work is forced', async () => {
+    service = await useService({
+      makeGh: () => () => Promise.reject(new Error('gh: not logged in'))
+    })
+    const workspace = await createWorkspace(await addProject())
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: workspace.path })
+    await writeFile(join(workspace.path, 'draft.txt'), 'draft\n', 'utf8')
+    sessions.forgetRuns.mockClear()
+
+    expect(
+      await invoke('workspaces:remove', workspace.id, { force: true, deleteBranch: true })
+    ).toMatchObject({ ok: false, code: 'branchUnmerged' })
+    expect(sessions.forgetRuns).not.toHaveBeenCalled()
+    await expect(readFile(join(workspace.path, 'draft.txt'), 'utf8')).resolves.toBe('draft\n')
+  })
+
   /*
    * `force` decides whether uncommitted work is thrown away, and a truthy
    * string passed for it did exactly that. The service's own options also

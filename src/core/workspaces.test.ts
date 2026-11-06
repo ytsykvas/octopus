@@ -1496,9 +1496,7 @@ describe('removeWorkspace', () => {
     await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
   })
 
-  // Removing a project agrees to lose everything in it, so an unmerged branch
-  // is not a reason to stop half way.
-  it('deletes an unmerged branch when forced', async () => {
+  it('refuses an unmerged branch on a clean workspace even when forced', async () => {
     const workspace = await create()
     const inside = gitIn(workspace.path)
 
@@ -1506,12 +1504,85 @@ describe('removeWorkspace', () => {
     await inside(['add', '.'])
     await inside(['commit', '-q', '-m', 'committed, never merged'])
 
-    await removeWorkspace(
+    const error = await removeWorkspace(
       workspace,
       { repository: exec, workspace: inside },
       { force: true, deleteBranch: true, baseBranch: 'main' }
+    ).catch((cause: unknown) => cause)
+
+    expect((error as WorkspaceError).code).toBe('branchUnmerged')
+    await expect(listWorktrees(exec)).resolves.toHaveLength(2)
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(workspace.name)
+  })
+
+  it('refuses an unmerged branch on a dirty workspace even when forced', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'committed, never merged'])
+    await writeFile(join(workspace.path, 'draft.txt'), 'draft\n', 'utf8')
+
+    const error = await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      {
+        force: true,
+        deleteBranch: true,
+        baseBranch: 'main',
+        mergedRemotely: () => Promise.resolve(false)
+      }
+    ).catch((cause: unknown) => cause)
+
+    expect((error as WorkspaceError).code).toBe('branchUnmerged')
+    await expect(listWorktrees(exec)).resolves.toHaveLength(2)
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(workspace.name)
+    await expect(access(join(workspace.path, 'draft.txt'))).resolves.toBeUndefined()
+  })
+
+  it('removes a dirty workspace and its merged branch when forced', async () => {
+    const workspace = await create()
+    await writeFile(join(workspace.path, 'draft.txt'), 'draft\n', 'utf8')
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: gitIn(workspace.path) },
+      { force: true, deleteBranch: true, baseBranch: 'main' }
     )
 
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
+  })
+
+  it('asks the remote about a dirty squash-merged branch', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'committed, then squashed away'])
+    await exec(['merge', '--squash', workspace.branch])
+    await exec(['commit', '-q', '-m', 'squashed'])
+    await writeFile(join(workspace.path, 'draft.txt'), 'draft\n', 'utf8')
+
+    let asked = 0
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      {
+        force: true,
+        deleteBranch: true,
+        baseBranch: 'main',
+        mergedRemotely: () => {
+          asked += 1
+          return Promise.resolve(true)
+        }
+      }
+    )
+
+    expect(asked).toBe(1)
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
     await expect(exec(['branch', '--list', workspace.branch])).resolves.toBe('')
   })
 
@@ -1564,7 +1635,7 @@ describe('removeWorkspace', () => {
     await expect(listWorktrees(exec)).resolves.toHaveLength(1)
   })
 
-  it('drops an unmerged branch when forced', async () => {
+  it('drops an unmerged branch when no base branch is given', async () => {
     const workspace = await create()
     const inside = gitIn(workspace.path)
     await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')

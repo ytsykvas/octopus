@@ -71,7 +71,7 @@ import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
 import { listWorktrees } from './worktree.js'
 import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
-import { WorkspaceError } from './workspaces.js'
+import { type RemoveOptions, WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
 
@@ -664,6 +664,7 @@ describe('workspaces', () => {
     service: OctopusService
     projectId: string
     workspaceId: string
+    branch: string
     events: string[]
     stray: string[]
     pushedWith: (GitOptions | undefined)[]
@@ -741,6 +742,7 @@ describe('workspaces', () => {
       service,
       projectId: project.id,
       workspaceId: workspace.id,
+      branch: workspace.branch,
       events,
       stray,
       pushedWith,
@@ -822,7 +824,9 @@ describe('workspaces', () => {
   // Removal deletes the branch by the name it reads: read mid-move, it would
   // miss the moved branch and leave it behind.
   it('lines a removal up behind a move', async () => {
-    const { service, workspaceId, events, stray, holding, release } = await lined('move')
+    const { service, workspaceId, branch, events, stray, holding, release } = await lined('move')
+    // Merged so the merged check lets the removal through; what is under test is the order.
+    await run('git', ['merge', '-q', '--ff-only', branch], { cwd: join(dir, 'planner') })
 
     const rekinded = service.setWorkspaceKind(workspaceId, 'bug')
     await holding
@@ -861,8 +865,10 @@ describe('workspaces', () => {
 
   // Its own removal went first and took the record: nothing is left to remove.
   it('passes over a workspace whose own removal went before its project', async () => {
-    const { service, projectId, workspaceId, events, stray, holding, release } =
+    const { service, projectId, workspaceId, branch, events, stray, holding, release } =
       await lined('remove')
+    // Merged so the merged check lets the removal through; what is under test is the order.
+    await run('git', ['merge', '-q', '--ff-only', branch], { cwd: join(dir, 'planner') })
 
     const gone = service.removeWorkspaceById(workspaceId, { deleteBranch: true, force: true })
     await holding
@@ -12610,27 +12616,10 @@ describe('the agent chat', () => {
       expect(seen).toEqual([])
     })
 
-    // The worktree is about to stop existing, and a live agent would keep a
-    // child process pointed at a path that is no longer there.
-    it('closes the session and discards the history when the workspace goes', async () => {
-      const { service, workspaceId } = await withWorkspace()
-      const chat = await service.openChat(workspaceId)
-      await service.sendToChat(chat.id, 'work')
-
-      await service.removeWorkspaceById(workspaceId, { force: true })
-
-      expect(agent().closed()).toBe(1)
-      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
-    })
-
-    /*
-     * The mirror of the test above, and the ordinary path rather than the
-     * exotic one: the pane pre-ticks the branch checkbox and only forces when
-     * the worktree is dirty, so a clean workspace whose commits are not merged
-     * refuses every time. Cancelling must cost nothing — the refusal has to
-     * happen before the sessions close and before the cleanup runs.
-     */
-    it('keeps the conversation and runs no cleanup when the removal is refused', async () => {
+    async function unmergedWithChat(): Promise<{
+      path: string
+      refuses: (options: RemoveOptions) => Promise<void>
+    }> {
       const repo = join(dir, 'planner')
       await initRepo(repo)
 
@@ -12656,14 +12645,53 @@ describe('the agent chat', () => {
       await run('git', ['add', '.'], { cwd: workspace.path })
       await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: workspace.path })
 
-      await expect(
-        service.removeWorkspaceById(workspace.id, { deleteBranch: true })
-      ).rejects.toMatchObject({ code: 'branchUnmerged' })
+      const refuses = async (options: RemoveOptions): Promise<void> => {
+        await expect(service.removeWorkspaceById(workspace.id, options)).rejects.toMatchObject({
+          code: 'branchUnmerged'
+        })
 
-      await expect(service.chatHistory(chat.id)).resolves.toHaveLength(1)
-      expect(agent().closed()).toBe(0)
-      await expect(access(marker)).rejects.toThrow()
-      await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
+        await expect(service.chatHistory(chat.id)).resolves.toHaveLength(1)
+        expect(agent().closed()).toBe(0)
+        await expect(access(marker)).rejects.toThrow()
+        await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
+      }
+
+      return { path: workspace.path, refuses }
+    }
+
+    // The worktree is about to stop existing, and a live agent would keep a
+    // child process pointed at a path that is no longer there.
+    it('closes the session and discards the history when the workspace goes', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.removeWorkspaceById(workspaceId, { force: true })
+
+      expect(agent().closed()).toBe(1)
+      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+    })
+
+    /*
+     * The mirror of the test above, and the ordinary path rather than the
+     * exotic one: the pane pre-ticks the branch checkbox and only forces when
+     * the worktree is dirty, so a clean workspace whose commits are not merged
+     * refuses every time. Cancelling must cost nothing — the refusal has to
+     * happen before the sessions close and before the cleanup runs.
+     */
+    it('keeps the conversation and runs no cleanup when the removal is refused', async () => {
+      const { refuses } = await unmergedWithChat()
+
+      await refuses({ deleteBranch: true })
+    })
+
+    it('refuses a dirty workspace with unmerged commits even when forced', async () => {
+      const { path, refuses } = await unmergedWithChat()
+      await writeFile(join(path, 'draft.txt'), 'draft\n', 'utf8')
+
+      await refuses({ deleteBranch: true, force: true })
+
+      await expect(readFile(join(path, 'draft.txt'), 'utf8')).resolves.toBe('draft\n')
     })
 
     /*

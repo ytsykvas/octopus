@@ -186,14 +186,18 @@ Removal is the same rule read backwards. `removeWorkspaceById` asks
 `ensureRemovable` before it closes a single session, because everything after
 that line destroys something a refusal cannot give back — and the refusal is
 the ordinary path, not a rare one: the pane pre-ticks the delete-branch box, so
-a clean workspace whose commits are not merged refuses every time. The split
-between `ensureRemovable` and `discardWorkspace` exists so that a caller with
-work of its own to do in between cannot accidentally ask twice; asking twice is
-worse than it sounds, because the cleanup script runs in the worktree and a
-script that writes there would make the second answer differ from the first.
-The agent CLI's own sessions follow the same order: listed while the worktree
-still exists, deleted only once its record has gone, so a removal that fails
-keeps its history ([transcripts-and-ports.md](../data/transcripts-and-ports.md)).
+a workspace whose commits are not merged refuses every time, dirty or clean.
+`force` throws away uncommitted work, never committed work: the merged check runs
+whether it is set or not. Only removing a project deletes an unmerged branch —
+it passes no `baseBranch`, so the check is skipped, and its dialog has already
+said every branch goes. The split between `ensureRemovable` and
+`discardWorkspace` exists so that a caller with work of its own to do in
+between cannot accidentally ask twice; asking twice is worse than it sounds,
+because the cleanup script runs in the worktree and a script that writes there
+would make the second answer differ from the first. The agent CLI's own
+sessions follow the same order: listed while the worktree still exists, deleted
+only once its record has gone, so a removal that fails keeps its history
+([transcripts-and-ports.md](../data/transcripts-and-ports.md)).
 
 A removal can also stop partway. When a dev server or a test run keeps writing
 into the tree, `git worktree remove` has already dropped its own part — the

@@ -1476,6 +1476,37 @@ describe('useWorkspaces', () => {
       expect(result.current.flat).toEqual([anna])
     })
 
+    it('explains an unmerged branch when a dirty workspace is refused', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.hasChanges).mockResolvedValue({ ok: true, value: true })
+      vi.mocked(window.octopus.workspaces.remove).mockResolvedValue({
+        ok: false,
+        error: 'ytsykvas/anna has commits that are not in main.',
+        code: 'branchUnmerged',
+        params: { name: 'anna', branch: 'ytsykvas/anna' }
+      })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() =>
+        useWorkspaces(projects, acceptsAndDeletesBranch(), onError)
+      )
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.remove('planner/anna'))
+
+      expect(window.octopus.workspaces.remove).toHaveBeenCalledWith('planner/anna', {
+        force: true,
+        deleteBranch: true
+      })
+      expect(onError).toHaveBeenCalledWith(
+        'ytsykvas/anna has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.'
+      )
+      expect(result.current.flat).toEqual([anna])
+    })
+
     // The workspace has gone either way; a cleanup that did not happen leaves
     // a database behind, and nothing else would say so.
     it.each([

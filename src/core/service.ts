@@ -6573,18 +6573,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           }
         }
 
-        /*
-         * Everything below this line destroys something, so the refusal comes
-         * first.
-         *
-         * The pane pre-ticks the delete-branch box and only forces when the
-         * worktree is dirty, so a clean workspace whose commits are not merged
-         * refuses on the ordinary path rather than a rare one. Asked afterwards,
-         * the answer arrived with the conversations already deleted and the
-         * cleanup script already run, against a workspace that then went on
-         * living — which is the opposite of what docs/core/workspaces-and-git.md promises about an
-         * operation that fails.
-         */
+        // Refuses before anything is destroyed, dirty or clean: a refusal after the chats close
+        // and the cleanup runs would cost the history of a workspace that then lives on.
         await ensureRemovable(workspace, execs, removal)
 
         // Captured before the chats are closed, because the records go with the

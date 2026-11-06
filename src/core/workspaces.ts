@@ -629,17 +629,11 @@ function blockedBy(branch: string, blocker: string): WorkspaceError {
 }
 
 export interface RemoveOptions {
-  /** Discard uncommitted work. Only ever true after the user was told. */
+  /** Discard uncommitted work. Commits are never lost to it: the merged check still runs. */
   readonly force?: boolean
-  /** Also delete the branch, losing any commits that were never merged. */
+  /** Also delete the branch; one holding commits found nowhere else is refused. */
   readonly deleteBranch?: boolean
-  /**
-   * The branch to measure "merged" against, when one is being deleted.
-   *
-   * Supplied so the check can happen before anything is destroyed. Without it
-   * the branch is deleted with `-D`, which is what removing a whole project
-   * does — there, the user has already agreed to lose the lot.
-   */
+  /** What "merged" is measured against; only removing a project omits it, losing unmerged work. */
   readonly baseBranch?: string
   /**
    * A second opinion on "merged", asked only when git says no.
@@ -717,7 +711,7 @@ export async function ensureRemovable(
   // unmerged branch, and refusing after the worktree is gone leaves the caller
   // with half an operation: the directory deleted, the branch still there, and
   // an error about the branch.
-  if (options.deleteBranch === true && !force && options.baseBranch !== undefined) {
+  if (options.deleteBranch === true && options.baseBranch !== undefined) {
     /*
      * Three questions, cheapest first, and none of them is "is it merged".
      *
@@ -761,8 +755,8 @@ export async function discardWorkspace(
   await discardWorktree(exec.repository, workspace.path, options.force ?? false)
 
   if (options.deleteBranch === true) {
-    // Forced by this point: either the caller asked for force, or the branch
-    // was shown to be merged above. Anything else has already thrown.
+    // -D is safe here: ensureRemovable showed the branch merged, or the caller left out
+    // baseBranch (removing a project) and so agreed to lose it.
     await deleteBranch(exec.repository, workspace.branch, true)
   }
 }
