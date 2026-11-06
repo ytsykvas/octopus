@@ -95,7 +95,8 @@ function profilePath(projectId: ProjectId, name: string, root?: string): string 
  *
  * Filtered by the schema rather than listed raw: `writeTextFile` writes its
  * temporary file as a sibling, so a crash between write and rename leaves a
- * `prod.tmp` in here — and a name with a `.` in it is not one this accepts.
+ * `prod.<random>.tmp` in here — and a name with a `.` in it is not one this
+ * accepts.
  */
 export async function listProfiles(projectId: ProjectId, root?: string): Promise<string[]> {
   try {

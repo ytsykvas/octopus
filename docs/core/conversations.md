@@ -2,21 +2,22 @@
 
 ## One writer at a time
 
-`persist.ts` writes to a fixed temporary path and renames it, so two saves in
-flight race for that one file — the first rename wins and the second fails with
-`ENOENT`.
+`writeJsonFile` writes to a fixed temporary path and renames it, so two saves
+in flight race for that one file — one clears or renames the other's temporary
+file, and the loser fails with `ENOENT` or `EEXIST`.
 
-`writeTextFile` shares that mechanism, and the env block is written through it
-with no queue in front. The race is bounded rather than prevented, which is
-deliberate: writing the block is idempotent and convergent — every run strips any
-block of ours and appends a fresh one — so two of them land the same file, and
-the only cost of losing the race is one spurious `ENOENT`. A queue would buy
-nothing here, and a lock file would live inside somebody's repository.
+`writeTextFile` does not share that race: its temporary file has a random name
+(see [migrations and writes](../data/migrations-and-writes.md#atomic-writes)),
+so two writes of the env block each rename their own, and the last one wins.
+There is no queue in front, which is deliberate: writing the block is
+idempotent and convergent — every run strips any block of ours and appends a
+fresh one — so either landing is the same file. A lock file would live inside
+somebody's repository.
 
-That function also **re-asserts the mode** rather than passing it to `writeFile`,
-whose `mode` option reaches `open(2)` and is ignored unless the call creates the
-file. Appending credentials to a `.env` carried in from a checkout would
-otherwise leave it as readable as the copy was.
+That function also **sets the mode on the descriptor** of the file it creates,
+rather than leaving it to the target, whose existing mode `open(2)` would keep.
+Appending credentials to a `.env` carried in from a checkout would otherwise
+leave it as readable as the copy was.
 
 Agent events arrive from a callback nobody awaits, so a status change
 from the agent and one the user asked for genuinely do land together. `commit`

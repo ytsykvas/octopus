@@ -17,7 +17,7 @@ import {
   writeFile
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import type {
@@ -13960,24 +13960,30 @@ describe('the agent chat', () => {
         expect(service.listChats(workspaceId)[0]?.resumeAt).toBeNull()
       })
 
-      // Nothing was sent on top of the cut yet, so putting the record back
-      // makes the failure exact.
+      /*
+       * Nothing was sent on top of the cut yet, so putting the record back
+       * makes the failure exact. The cut is made to fail by closing the
+       * directory it writes its temporary file in: that file has a random
+       * name, so there is no fixed path to block, and the log itself can
+       * still be read.
+       */
       it('puts the record back when the log cannot be cut', async () => {
         const { service, workspaceId, chatId, second } = await spokenTwice()
-        await mkdir(`${chatTranscript(chatId, join(dir, 'data'))}.tmp`, { recursive: true })
-        await writeFile(
-          join(`${chatTranscript(chatId, join(dir, 'data'))}.tmp`, 'blocker'),
-          '',
-          'utf8'
-        )
+        const chats = dirname(chatTranscript(chatId, join(dir, 'data')))
+        await chmod(chats, 0o500)
 
-        await expect(service.rewindChat(chatId, second, 'conversation')).rejects.toThrow()
+        try {
+          await expect(service.rewindChat(chatId, second, 'conversation')).rejects.toThrow()
 
-        expect(service.listChats(workspaceId)[0]).toMatchObject({
-          sessionId: 'sess-1',
-          resumeAt: null
-        })
-        await expect(saidIn(service, chatId)).resolves.toHaveLength(2)
+          expect(service.listChats(workspaceId)[0]).toMatchObject({
+            sessionId: 'sess-1',
+            resumeAt: null
+          })
+          await expect(saidIn(service, chatId)).resolves.toHaveLength(2)
+        } finally {
+          // Or the directory could not be cleaned up after the test.
+          await chmod(chats, 0o700)
+        }
       })
     })
 

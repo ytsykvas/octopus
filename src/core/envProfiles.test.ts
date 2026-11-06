@@ -115,8 +115,8 @@ describe('listProfiles', () => {
   it('sorts what it finds and ignores what is not a name', async () => {
     /*
      * `writeTextFile` writes its temporary file as a sibling, so a crash
-     * between write and rename leaves `prod.tmp` in here — and a name with a
-     * dot in it is not one this accepts.
+     * between write and rename leaves `prod.<random>.tmp` in here — and a name
+     * with a dot in it is not one this accepts.
      */
     await writeProfile('planner', 'prod', 'A=1\n', root)
     await writeProfile('planner', 'dev', 'A=1\n', root)
