@@ -122,12 +122,7 @@ describe('whether a standing answer covers a call', () => {
     expect(covers(rule, 'Edit', { file_path: '/w/docsy/ui.md' })).toBe(false)
   })
 
-  /*
-   * The finding this exists for. The path is compared as the agent sent it,
-   * so `..` walked out of the granted place and the edit went through without
-   * a question. Refused even where it would land inside: resolving it is a
-   * guess about a string the tool reads raw, and asking again costs a click.
-   */
+  // Refused even where it would land inside (`a/../b.md`): the path is never resolved.
   it('covers nothing that climbs out of the place with ..', () => {
     const docs = narrow('Edit', '/w/docs/**')
 
@@ -138,11 +133,8 @@ describe('whether a standing answer covers a call', () => {
     )
   })
 
-  /*
-   * A rule with `..` in it is one this cannot read with certainty, so it
-   * covers nothing. After a wildcard the literal prefix never sees it; and a
-   * rule resolved to `/w/**` would cover far more than the one written.
-   */
+  // A `..` after a wildcard never reaches the literal prefix, so the rule is checked whole;
+  // the second case goes red if a rule is ever resolved (`/w/docs/../**` is `/w/**`).
   it('covers nothing for a rule that itself climbs', () => {
     expect(covers(narrow('Edit', '/w/docs/**/../..'), 'Edit', { file_path: '/w/docs/a.ts' })).toBe(
       false
@@ -150,7 +142,6 @@ describe('whether a standing answer covers a call', () => {
     expect(covers(narrow('Edit', '/w/docs/../**'), 'Edit', { file_path: '/w/a.ts' })).toBe(false)
   })
 
-  /* A segment, not a substring: two dots inside a name are a name. */
   it('still covers a name that merely contains two dots', () => {
     const docs = narrow('Edit', '/w/docs/**')
 
@@ -158,7 +149,6 @@ describe('whether a standing answer covers a call', () => {
     expect(covers(docs, 'Edit', { file_path: '/w/docs/..hidden/a.md' })).toBe(true)
   })
 
-  /* The whole tool was granted, so there is no place for `..` to leave. */
   it('still answers for the whole tool wherever the path goes', () => {
     expect(covers(whole('Edit'), 'Edit', { file_path: '/w/../etc/x' })).toBe(true)
   })

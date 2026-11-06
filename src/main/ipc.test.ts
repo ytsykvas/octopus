@@ -814,12 +814,6 @@ describe('validation at the boundary', () => {
     expect(result).toMatchObject({ ok: false })
   })
 
-  /*
-   * The lists change one operation at a time through `config:edit`, and the
-   * identity fields are not the window's to set. `ConfigPatch` typed them away,
-   * but a type says nothing across the bridge: one call from a window drawing
-   * agent output granted `Bash` for good.
-   */
   it('refuses a config patch that grants itself a standing permission', async () => {
     const result = await invoke('config:update', { alwaysAllowedTools: ['Bash'] })
 
@@ -838,11 +832,7 @@ describe('validation at the boundary', () => {
     expect(service.getConfig().deviceId).toBe(before)
   })
 
-  /*
-   * The trap a patch schema falls into: a default still fires for a key left
-   * out, so changing the theme would put every other setting back. Asserted
-   * field by field, as for projects above.
-   */
+  // A default fires for a key left out, so one setting's patch could reset the rest.
   it('leaves the settings a config patch does not carry where they were', async () => {
     await invoke('config:update', { effort: 'max' })
     await invoke('config:update', { rightPanelTab: 'files' })

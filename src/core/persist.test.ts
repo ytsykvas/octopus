@@ -1,5 +1,6 @@
 import {
   chmod,
+  type FileHandle,
   lstat,
   mkdir,
   mkdtemp,
@@ -21,7 +22,6 @@ import {
   describeError,
   InvalidFileError,
   readJsonFile,
-  temporarySibling,
   writeJsonFile,
   writeTextFile
 } from './persist.js'
@@ -48,28 +48,18 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
-/** Every leftover a write could leave beside its target, whatever it was named. */
 async function temporaries(): Promise<string[]> {
   return (await readdir(dir)).filter((entry) => entry.endsWith('.tmp'))
 }
 
-/** The one method of `FileHandle` the spy replaces. */
-interface Syncing {
-  sync(): Promise<void>
-}
-
-/**
- * Counts `fsync` calls on every file handle.
- *
- * `FileHandle` is not exported, so its prototype is only reachable through an
- * instance; the probe is closed and removed before the code under test runs.
- */
-async function spyOnSync(): Promise<MockInstance<Syncing['sync']>> {
+// `FileHandle` is not exported as a value, so its prototype is reachable only through an
+// instance: a probe opened and removed before the code under test runs.
+async function spyOnSync(): Promise<MockInstance<FileHandle['sync']>> {
   const probe = await open(join(dir, 'probe'), 'w')
   const prototype: unknown = Object.getPrototypeOf(probe)
   await probe.close()
   await rm(join(dir, 'probe'))
-  return vi.spyOn(prototype as Syncing, 'sync')
+  return vi.spyOn(prototype as FileHandle, 'sync')
 }
 
 describe('describeError', () => {
@@ -178,7 +168,6 @@ describe('writeJsonFile', () => {
     await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({ name: 'lviv', count: 7 })
   })
 
-  // Without it a power cut after the rename can leave an empty `state.json`.
   it('syncs the contents before it renames', async () => {
     const sync = await spyOnSync()
 
@@ -189,6 +178,17 @@ describe('writeJsonFile', () => {
 })
 
 describe('writeTextFile', () => {
+  let umask: number
+
+  // Pinned: the mode tests prove nothing under umask 000 and fail under 027.
+  beforeEach(() => {
+    umask = process.umask(0o022)
+  })
+
+  afterEach(() => {
+    process.umask(umask)
+  })
+
   /** The mode of a path, as the three digits anybody reads. */
   async function modeOf(path: string): Promise<number> {
     return (await stat(path)).mode & 0o777
@@ -256,7 +256,7 @@ describe('writeTextFile', () => {
   })
 
   /*
-   * These land in a git worktree, where a leftover `.env.tmp` is an untracked
+   * These land in a git worktree, where a leftover temporary file is an untracked
    * file somebody has to explain. A directory at the target is the honest way
    * to fail after the temporary file exists: the write succeeds, the rename
    * cannot.
@@ -288,16 +288,6 @@ describe('writeTextFile', () => {
     }
   })
 
-  it('names the temporary file beside the target', () => {
-    expect(temporarySibling('/w/.env', () => 'abc')).toBe('/w/.env.abc.tmp')
-    expect(temporarySibling('/w/.env')).toMatch(/^\/w\/\.env\.[0-9a-f]{12}\.tmp$/)
-  })
-
-  /*
-   * The file lands in a git worktree, and a repository can commit a symbolic
-   * link at any fixed name beside it. Followed, it would carry the variables
-   * — credentials among them — to wherever it points.
-   */
   it('does not follow a link planted at the temporary path', async () => {
     const outside = join(dir, 'outside.txt')
     await writeFile(outside, 'KEEP', { encoding: 'utf8', mode: 0o644 })
@@ -312,8 +302,6 @@ describe('writeTextFile', () => {
     await expect(readFile(path, 'utf8')).resolves.toBe('A=1\n')
   })
 
-  // Even at the one name it would have picked, it refuses, and the link stays:
-  // it is somebody else's file.
   it('refuses rather than writes through a link at the exact temporary name', async () => {
     const outside = join(dir, 'outside.txt')
     await writeFile(outside, 'KEEP', 'utf8')
@@ -334,6 +322,32 @@ describe('writeTextFile', () => {
     await writeTextFile(join(dir, '.env'), 'A=1\n')
 
     expect(sync).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the old file when the contents cannot be synced', async () => {
+    const path = join(dir, '.env')
+    await writeFile(path, 'old\n', 'utf8')
+    const sync = await spyOnSync()
+    sync.mockRejectedValueOnce(new Error('EIO'))
+
+    await expect(writeTextFile(path, 'new\n')).rejects.toThrow('EIO')
+
+    await expect(readFile(path, 'utf8')).resolves.toBe('old\n')
+    expect(await temporaries()).toEqual([])
+  })
+
+  it('reports the failure rather than the cleanup that failed after it', async () => {
+    const path = join(dir, '.env')
+    const temp = `${path}.fixed.tmp`
+    const sync = await spyOnSync()
+    // A directory where the temporary file was makes the cleanup `rm` throw too.
+    sync.mockImplementationOnce(async () => {
+      await rm(temp)
+      await mkdir(temp)
+      throw new Error('EIO')
+    })
+
+    await expect(writeTextFile(path, 'A=1\n', undefined, () => 'fixed')).rejects.toThrow('EIO')
   })
 })
 

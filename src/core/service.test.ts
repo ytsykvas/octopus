@@ -9809,8 +9809,6 @@ describe('the agent chat', () => {
       await asked
     })
 
-    /* The rule is read against the path as the agent sent it, so a `..` that
-       walks out of the granted place is asked about rather than waved through. */
     it('asks about a path that climbs out of the place it was granted', async () => {
       const { service, workspaceId, events } = await withWorkspace()
       await service.updateConfig({
@@ -9822,7 +9820,7 @@ describe('the agent chat', () => {
       const asked = agent().ask('Edit', { file_path: '/w/docs/../../etc/hosts' })
       const requestId = await waitForRequest(events)
 
-      // Answered rather than left hanging, as in the test above.
+      // Answered: an open request holds the turn, and its transcript write races teardown.
       await service.answerPermission(requestId, 'deny')
       await expect(asked).resolves.toMatchObject({ behavior: 'deny' })
     })
@@ -13978,20 +13976,17 @@ describe('the agent chat', () => {
         expect(service.listChats(workspaceId)[0]?.resumeAt).toBeNull()
       })
 
-      /*
-       * Nothing was sent on top of the cut yet, so putting the record back
-       * makes the failure exact. The cut is made to fail by closing the
-       * directory it writes its temporary file in: that file has a random
-       * name, so there is no fixed path to block, and the log itself can
-       * still be read.
-       */
+      // Closing the directory makes the cut fail: its temporary file has a random name, so no
+      // fixed path can be blocked, and the log itself stays readable.
       it('puts the record back when the log cannot be cut', async () => {
         const { service, workspaceId, chatId, second } = await spokenTwice()
         const chats = dirname(chatTranscript(chatId, join(dir, 'data')))
         await chmod(chats, 0o500)
 
         try {
-          await expect(service.rewindChat(chatId, second, 'conversation')).rejects.toThrow()
+          await expect(service.rewindChat(chatId, second, 'conversation')).rejects.toMatchObject({
+            code: 'EACCES'
+          })
 
           expect(service.listChats(workspaceId)[0]).toMatchObject({
             sessionId: 'sess-1',

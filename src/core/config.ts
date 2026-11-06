@@ -375,26 +375,6 @@ export const ConfigSchema = z.object({
 
 export type Config = z.infer<typeof ConfigSchema>
 
-/**
- * What the window may change by sending the new value — parsed at the bridge,
- * because a type says nothing across it.
- *
- * Built from `ConfigSchema`, so a new setting reaches it without a second list.
- * Six fields are left out. The lists change one switch at a time through
- * `ConfigEdit`: a list sent whole is a snapshot of the window's copy, and
- * `alwaysAllowedTools` sent whole is the window granting itself any tool.
- * `version`, `deviceId` and `installedAt` are not the window's to set.
- *
- * The defaults are taken off, or a patch of one field would come back with
- * every defaulted field beside it and reset them all. `effort` and
- * `rightPanelTab` are replaced with their plain schemas: the stored ones keep a
- * default inside a pipe, out of `withoutDefaults`' reach, and accept the `null`
- * and the old tab names only so files written by older builds load — the
- * window speaks the current vocabulary. `exactPartial` rather than `partial`:
- * a key sent as `undefined` would be spread over the config and parse back as
- * its default, and the type it gives is what `updateConfig` takes under
- * `exactOptionalPropertyTypes`.
- */
 export const ConfigPatchSchema = z
   .strictObject(
     withoutDefaults(
@@ -408,7 +388,10 @@ export const ConfigPatchSchema = z
       }).shape
     )
   )
+  // The stored effort and rightPanelTab hide a default in a pipe, and accept values only
+  // old files hold: the window gets the plain schemas.
   .extend({ effort: EffortSchema, rightPanelTab: RightPanelTabSchema })
+  // Not `.partial()`: an explicit `undefined` would be spread and parse back as the default.
   .exactPartial()
 
 export type ConfigPatch = z.infer<typeof ConfigPatchSchema>

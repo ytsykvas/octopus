@@ -18,11 +18,7 @@ describe('a patch built from a schema with defaults', () => {
     expect(withoutDefaults({ port }).port).toBe(port)
   })
 
-  /*
-   * The limit a caller has to know about: a default followed by a transform is
-   * a pipe, and the default inside it still fires. `ConfigPatchSchema` names
-   * its two such fields with their plain schemas.
-   */
+  // The limit `ConfigPatchSchema` works around by re-declaring such fields plainly.
   it('does not reach a default inside a pipe', () => {
     const tab = z
       .enum(['diff', 'files'])

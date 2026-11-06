@@ -56,11 +56,8 @@ export type StandingPermission = z.infer<typeof StandingPermissionSchema>
  * for the same reason: `**` at the start would otherwise be "every path", which is the
  * width the narrow rule exists to avoid.
  *
- * A `..` segment, in the path or in the rule, covers nothing either. The path
- * is compared as the agent sent it, and `/w/docs/../../Users/me/.zshrc` used
- * to pass `/w/docs/**`. Refused rather than resolved: resolving needs the
- * working directory for a relative path, and would still be a guess about a
- * string the tool reads raw, where a refusal costs one click and grants nothing.
+ * A `..` in the path or the rule covers nothing: paths are compared as sent, never resolved,
+ * and a `..` after a wildcard never reaches the literal prefix.
  */
 export function covers(permission: StandingPermission, toolName: string, input: unknown): boolean {
   if (permission.toolName !== toolName) return false
@@ -172,12 +169,7 @@ function withSlash(prefix: string): string {
   return prefix.endsWith('/') ? prefix : `${prefix}/`
 }
 
-/**
- * Whether a path walks up with a `..` segment.
- *
- * By segment, not by substring: `notes..md` is a name, not a step up. A `.`
- * needs no check — it never leaves the place a prefix names.
- */
+/** By segment, not substring: `notes..md` is a name. A `.` never leaves the prefix. */
 function climbs(path: string): boolean {
   return path.split('/').some((segment) => segment === '..')
 }

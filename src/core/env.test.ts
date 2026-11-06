@@ -226,14 +226,8 @@ describe('applyEnvOverrides', () => {
     expect(leftovers).toEqual([])
   })
 
-  /*
-   * A repository can commit `.env.tmp` as a link to anywhere. The temporary
-   * file used to sit at exactly that name, so the block — credentials and all —
-   * went wherever the link pointed, and the link was renamed over `.env`.
-   */
   it('writes nothing through a .env.tmp the repository committed as a link', async () => {
-    const outside = await mkdtemp(join(tmpdir(), 'octopus-outside-'))
-    const target = join(outside, 'target')
+    const target = join(root, 'target')
     await writeFile(target, 'KEEP', 'utf8')
     await symlink(target, join(workspace, '.env.tmp'))
     given('A=1\n')
@@ -244,7 +238,6 @@ describe('applyEnvOverrides', () => {
     expect((await lstat(join(workspace, '.env'))).isSymbolicLink()).toBe(false)
     await expect(envFile()).resolves.toContain('A=1')
     expect((await lstat(join(workspace, '.env.tmp'))).isSymbolicLink()).toBe(true)
-    await rm(outside, { recursive: true, force: true })
   })
 
   it('closes the file it empties, too', async () => {

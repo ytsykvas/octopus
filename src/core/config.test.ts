@@ -23,15 +23,8 @@ import { InvalidFileError } from './persist.js'
 const UUID = '00000000-0000-4000-8000-000000000000'
 const NOW = new Date('2026-08-07T12:00:00.000Z')
 
-/**
- * One value for every setting the window sends through `config:update`.
- *
- * `satisfies Required<ConfigPatch>` is the point: a setting added to
- * `ConfigSchema` fails to compile here until it is listed, so the patch cannot
- * quietly refuse something the window was built to send. The senders are the
- * Settings window and `App.tsx` (panel widths, tabs, the status bar, the clone
- * folder).
- */
+// `satisfies Required<ConfigPatch>`: a setting added to `ConfigSchema` fails to compile here
+// until it is listed, so the patch cannot quietly refuse what the window sends.
 const SENT_BY_THE_WINDOW = {
   theme: 'dark',
   language: 'uk',
