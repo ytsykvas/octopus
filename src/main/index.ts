@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
@@ -25,7 +26,13 @@ import { applyLoginShellPath } from './loginPath.js'
 import { canvasColor, resolveTheme } from './theme.js'
 import { TerminalManager } from './terminals.js'
 import { focusExisting } from './windows.js'
+import { guardNavigation } from './navigation.js'
 import { quitAfter } from './quit.js'
+
+const rendererFile = join(import.meta.dirname, '../renderer/index.html')
+const devServer = process.env.ELECTRON_RENDERER_URL
+/** The one document a window may show — what it loads, and what `guardNavigation` compares against. */
+const appUrl = devServer ?? pathToFileURL(rendererFile).href
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
 
@@ -45,7 +52,11 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      // Electron's default, written out: with it on, a file or link dropped
+      // anywhere but the composer would replace the application with that
+      // page, preload and `window.octopus` included.
+      navigateOnDragDrop: false
     }
   })
 
@@ -66,11 +77,7 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
     return { action: 'deny' }
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void window.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    void window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
-  }
+  void window.loadURL(appUrl)
 
   return window
 }
@@ -281,6 +288,11 @@ async function start(): Promise<void> {
 if (dataRootOverride() !== null) {
   app.setPath('userData', join(rootDir(), 'electron'))
 }
+
+// Every WebContents, so a window added later is covered without remembering to.
+app.on('web-contents-created', (_event, contents) => {
+  guardNavigation(contents, appUrl)
+})
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()

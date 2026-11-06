@@ -194,9 +194,10 @@ copying a cell out of a spreadsheet puts a picture on the clipboard beside the
 text, and the text is what was meant.
 
 The **drop target is the whole box**, not the field. A textarea two lines tall
-is a worse target than the frame around it, and a drop that lands a pixel
-outside would do the browser's own thing — navigate the window to the file. The
-frame says so while something is over it, and keeps saying so as the pointer
+is a worse target than the frame around it. A drop that misses it comes to
+nothing: the window is made with `navigateOnDragDrop` off, Electron's default,
+so a file dropped beside the composer is never opened in place of the
+application. The frame says so while something is over it, and keeps saying so as the pointer
 crosses the attic: `dragleave` fires for the parent when a child is entered, so
 the naive version flickers.
 
