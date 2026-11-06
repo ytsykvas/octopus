@@ -5614,9 +5614,9 @@ describe('the agent chat', () => {
     }
   }
 
-  /** A session that ends without ever saying anything. */
-  async function* silence(): AsyncGenerator<SDKMessage> {
-    await Promise.resolve()
+  /** A session that stays up saying nothing: a stream that ends is a process gone. */
+  async function* quiet(): AsyncGenerator<SDKMessage> {
+    await new Promise<void>(() => undefined)
     yield* []
   }
 
@@ -6001,9 +6001,8 @@ describe('the agent chat', () => {
         expect(service.listChats(chat.workspaceId)[0]?.status).toBe('error')
       })
 
-      await service.setChatAutoCompact(chat.id, 400_000)
-      expect(agents).toHaveLength(2)
       await service.sendToChat(chat.id, 'something else')
+      expect(agents).toHaveLength(2)
       agents[1]?.emit(initMessage)
       agents[1]?.emit(resultMessage)
       await service.closeChats()
@@ -6553,6 +6552,16 @@ describe('the agent chat', () => {
       })
     })
 
+    it('keeps the agents of a session whose process died, and lets the session go', async () => {
+      const { service } = await withAgentAway()
+      agent().finish(new Error('exited with code 1'))
+
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+      expect(service.listTasks()[0]?.tasks[0]?.status).toBe('stopped')
+    })
+
     it('forgets the agents of a conversation that is closed', async () => {
       const { service, workspaceId, chatId } = await withAgentAway()
       await service.createChat(workspaceId)
@@ -6859,9 +6868,155 @@ describe('the agent chat', () => {
    * morning held its process all day. At rest long enough it is let go, and
    * the next message starts one again from the same id, as a restart does.
    */
-  describe('a session at rest', () => {
-    const SOON = { idleReleaseMs: 150, idleSweepMs: 20, readingFreshMs: 10_000 }
+  const SOON = { idleReleaseMs: 150, idleSweepMs: 20, readingFreshMs: 10_000 }
 
+  describe('a session whose process died', () => {
+    const RESET = {
+      type: 'conversation_reset',
+      new_conversation_id: 'conv-2',
+      session_id: 'sess-1'
+    } as unknown as SDKMessage
+
+    async function died(
+      first = 'work',
+      before: readonly SDKMessage[] = [],
+      extra: ServiceOptions = {}
+    ): Promise<{
+      service: OctopusService
+      workspaceId: string
+      chatId: string
+      events: ChatEvent[]
+    }> {
+      const { service, workspaceId, events } = await withWorkspace(extra)
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, first)
+      agent().emit(initMessage)
+      for (const message of before) agent().emit(message)
+      agent().finish(new Error('claude exited with code 1'))
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('error')
+      })
+      return { service, workspaceId, chatId: chat.id, events }
+    }
+
+    it('starts a new session for the next message, resuming the conversation', async () => {
+      const { service, workspaceId, chatId } = await died()
+
+      await service.sendToChat(chatId, 'again')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+
+      expect(agents).toHaveLength(2)
+      expect(agents[1]?.options().resume).toBe('sess-1')
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+    })
+
+    it('lets go of the dead process at once', async () => {
+      await died()
+
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+    })
+
+    it('is let go even when its dead process will not close', async () => {
+      const base = fakeQuery()
+      const { service, chatId, events } = await died('work', [], {
+        query: (...args) =>
+          Object.assign(base(...args), {
+            close: () => {
+              throw new Error('the process would not die')
+            }
+          })
+      })
+
+      await service.sendToChat(chatId, 'again')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      expect(agents).toHaveLength(2)
+      expect(events.filter(({ event }) => event.type === 'error')).toEqual([
+        expect.objectContaining({ event: { type: 'error', message: 'claude exited with code 1' } })
+      ])
+    })
+
+    it('forgets what the dead process held, so the next session can come to rest', async () => {
+      const { service, workspaceId, chatId } = await died(
+        'work',
+        [
+          lifecycle('held', 'queued'),
+          toolCallMessage('c-1', 'Edit', {
+            file_path: 'notes.txt',
+            old_string: 'a',
+            new_string: 'b'
+          })
+        ],
+        SOON
+      )
+
+      await service.sendToChat(chatId, 'again')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      await vi.waitFor(() => {
+        expect(agents[1]?.closed()).toBe(1)
+      })
+    })
+
+    it('forgets a /clear the dead process never answered', async () => {
+      const { service, chatId, events } = await died('/clear')
+
+      await service.sendToChat(chatId, 'again')
+      agents[1]?.emit(RESET)
+
+      await vi.waitFor(() => {
+        expect(events.map(({ event }) => event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: false
+        })
+      })
+    })
+
+    it('forgets a cleared turn the dead process never closed', async () => {
+      const { service, chatId } = await died('/clear', [RESET])
+
+      await service.sendToChat(chatId, 'again')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chatId)
+        expect(
+          history.map((entry) => (entry.role === 'agent' ? entry.event.type : entry.role))
+        ).toContain('result')
+      })
+    })
+
+    it('says no "done" for a turn whose process died before it was said', async () => {
+      const { service, workspaceId, events } = await withWorkspace({ finishedAfterMs: 200 })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      agent().finish(new Error('claude exited with code 1'))
+      await new Promise((resolve) => setTimeout(resolve, 400))
+
+      expect(events.filter(({ event }) => event.type === 'finished')).toEqual([])
+    })
+  })
+
+  describe('a session at rest', () => {
     async function resting(): Promise<{
       service: OctopusService
       workspaceId: string
@@ -12776,7 +12931,7 @@ describe('the agent chat', () => {
       await initRepo(repo)
 
       const stubborn: QueryFn = () =>
-        Object.assign(silence(), {
+        Object.assign(quiet(), {
           interrupt: () => Promise.resolve(undefined),
           setPermissionMode: () => Promise.resolve(),
           applyFlagSettings: () => Promise.resolve(),

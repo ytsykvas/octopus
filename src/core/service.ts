@@ -4145,6 +4145,24 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       : null
   }
 
+  function forgetProcess(chatId: string): void {
+    sessions.delete(chatId)
+    compaction.delete(chatId)
+    startedEnv.delete(chatId)
+    lastActivity.delete(chatId)
+  }
+
+  // What a turn leaves behind when its process goes: queued messages, a promised push,
+  // open edits, a /clear unanswered and a "done" not yet said.
+  function forgetTurnInFlight(chatId: string): void {
+    heldMessages.delete(chatId)
+    publishAfterTurn.delete(chatId)
+    abandonEdits(chatId)
+    clearRequests.delete(chatId)
+    clearedTurns.delete(chatId)
+    stillWorking(chatId)
+  }
+
   /**
    * Lets a conversation's session go, keeping the conversation.
    *
@@ -4154,11 +4172,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * and `handleEvent` takes nothing from one that is no longer registered.
    */
   async function releaseSession(chatId: string, session: AgentSession): Promise<void> {
-    sessions.delete(chatId)
-    compaction.delete(chatId)
-    startedEnv.delete(chatId)
-    lastActivity.delete(chatId)
+    forgetProcess(chatId)
     await session.close().catch(() => undefined)
+  }
+
+  // At once, before any await: the next message must find no session to send into. The
+  // tasks' rows and the last context reading stay, as they do for an idle release.
+  function releaseDeadSession(chat: Chat, session: AgentSession): void {
+    forgetProcess(chat.id)
+    forgetTurnInFlight(chat.id)
+    background(
+      chat,
+      session.close().catch(() => undefined)
+    )
   }
 
   /** Lets go of every session that has been at rest for `idleReleaseMs`. */
@@ -4184,32 +4210,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
   async function closeOneChat(chat: Chat): Promise<void> {
     const session = sessions.get(chat.id)
-    sessions.delete(chat.id)
-    compaction.delete(chat.id)
-    startedEnv.delete(chat.id)
-    lastActivity.delete(chat.id)
+    forgetProcess(chat.id)
     lastUsage.delete(chat.id)
-    // Its queue goes with its process, and so does a push promised for a turn
-    // it will now never finish — the next session's turns were asked nothing.
-    heldMessages.delete(chat.id)
-    publishAfterTurn.delete(chat.id)
+    forgetTurnInFlight(chat.id)
 
-    // A session that ends mid-tool leaves an edit nobody will ever answer
-    // for, and a question nobody will ever answer at all. Both go with it,
-    // and only this chat's, since the maps are the whole service's.
+    // A session that ends mid-tool leaves a question nobody will ever answer.
     abandonPermissions(chat.id)
     abandonElicitations(chat.id)
-    abandonEdits(chat.id)
 
-    // A `/clear` the session never got round to answering, and a clearing
-    // turn whose result never came. Both belong to a chat that is going, so
-    // neither is left in a set for the rest of the run.
-    clearRequests.delete(chat.id)
-    clearedTurns.delete(chat.id)
-
-    // Its agents go with its process, and a "done" nobody will see now.
+    // Its agents go with its process.
     registry.forget(chat.id)
-    stillWorking(chat.id)
 
     // Best effort: a session that fails to close must not stop the workspace
     // from being removed, nor the tab from closing.
@@ -5404,6 +5414,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // Re-read rather than closed over: `chat` is a snapshot, and the
           // session id written after the first turn would not be in it.
           handleEvent(findChat(state, chat.id) ?? chat, event)
+        },
+        // Only a death reaches this: every path that unregisters a session closes it first,
+        // and a closed one never calls it. Never synchronous, so `session` is assigned.
+        onEnd: () => {
+          releaseDeadSession(chat, session)
         },
         askPermission: (ask) => askPermission(chat, ask),
         // The snapshot, as `askPermission` above takes it: this reads only the

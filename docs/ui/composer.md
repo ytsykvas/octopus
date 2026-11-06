@@ -333,6 +333,8 @@ in the log.
 process exited with code N"; the row says instead that it was stopped from
 outside (a code above 128 is a signal) or stopped with an error and its code,
 that a message carries on, and keeps the SDK's line under it in small print.
+The promise holds: the session whose process died is let go at once
+(`releaseDeadSession`), so the next message starts one again from the same id.
 Read from the text by `exitCodeOf`, so logs written before it read the same.
 
 **The agent's task list is pinned above the field while it has work left.** A

@@ -3359,6 +3359,8 @@ describe('the agent chat', () => {
             uuid: 'frame',
             session_id: 'sess-1'
           } as unknown as SDKMessage
+          // Held open, as a live session's stream is: one that ends is a process gone.
+          await new Promise<never>(() => undefined)
         }
 
         return Object.assign(stream(), {

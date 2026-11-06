@@ -89,6 +89,7 @@ function fakeAgent(
     refuseCommand?: (command: string) => string | null
     /** Runs after each event is collected; one that throws is how a broken window looks. */
     onEvent?: (event: AgentEvent) => void
+    onEnd?: (ending: { readonly failed: boolean }) => void
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -235,7 +236,8 @@ function fakeAgent(
       askElicitation: (ask) =>
         hooks.askElicitation?.(ask) ?? Promise.resolve({ action: 'decline' } as const),
       ...(hooks.skillsInFiles && { skillsInFiles: hooks.skillsInFiles }),
-      ...(hooks.refuseCommand && { refuseCommand: hooks.refuseCommand })
+      ...(hooks.refuseCommand && { refuseCommand: hooks.refuseCommand }),
+      ...(hooks.onEnd && { onEnd: hooks.onEnd })
     }
   )
 
@@ -280,6 +282,21 @@ async function* silence(): AsyncGenerator<SDKMessage> {
 
 /** Lets the microtask queue drain, so pushed messages reach the handler. */
 const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+/** The rejections nobody handled while `run` ran. */
+async function unhandledDuring(run: () => Promise<void>): Promise<unknown[]> {
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown): void => {
+    unhandled.push(reason)
+  }
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    await run()
+  } finally {
+    process.off('unhandledRejection', onUnhandled)
+  }
+  return unhandled
+}
 
 function assistant(content: unknown[]): SDKMessage {
   return {
@@ -1811,34 +1828,85 @@ describe('a session', () => {
   })
 
   it('leaves no rejection behind when every listener throws', async () => {
-    const unhandled: unknown[] = []
-    const onUnhandled = (reason: unknown): void => {
-      unhandled.push(reason)
-    }
-    process.on('unhandledRejection', onUnhandled)
-    try {
-      const { agent, events } = fakeAgent(
-        {},
-        {
-          onEvent: () => {
-            throw new Error('window gone')
-          }
+    const { agent, events } = fakeAgent(
+      {},
+      {
+        onEvent: () => {
+          throw new Error('window gone')
         }
-      )
+      }
+    )
 
+    const unhandled = await unhandledDuring(async () => {
       agent.emit(assistant([{ type: 'text', text: 'lost' }]))
       agent.finish(new Error('claude exited with code 1'))
       await settle()
+    })
 
-      expect(events).toEqual([
-        { type: 'text', text: 'lost', uuid: 'u-1' },
-        { type: 'message_skipped', reason: 'window gone' },
-        { type: 'error', message: 'claude exited with code 1' }
-      ])
-      expect(unhandled).toEqual([])
-    } finally {
-      process.off('unhandledRejection', onUnhandled)
-    }
+    expect(events).toEqual([
+      { type: 'text', text: 'lost', uuid: 'u-1' },
+      { type: 'message_skipped', reason: 'window gone' },
+      { type: 'error', message: 'claude exited with code 1' }
+    ])
+    expect(unhandled).toEqual([])
+  })
+
+  it('says the stream has ended when the process dies, after the error', async () => {
+    const heard: string[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        onEvent: (event) => heard.push(event.type),
+        onEnd: ({ failed }) => heard.push(`end, failed: ${String(failed)}`)
+      }
+    )
+
+    agent.finish(new Error('claude exited with code 1'))
+    await settle()
+
+    expect(heard).toEqual(['error', 'end, failed: true'])
+  })
+
+  it('says the stream has ended when it simply stops', async () => {
+    const ends: boolean[] = []
+    const { agent } = fakeAgent({}, { onEnd: ({ failed }) => ends.push(failed) })
+
+    agent.finish()
+    await settle()
+
+    expect(ends).toEqual([false])
+  })
+
+  it.each([
+    ['failing', new Error('Claude Code process exited with code 143')],
+    ['simply stopping', undefined]
+  ])('says nothing of an end it caused, %s', async (_, failure) => {
+    const ends: boolean[] = []
+    const { agent } = fakeAgent({}, { onEnd: ({ failed }) => ends.push(failed) })
+
+    await agent.session.close()
+    agent.finish(failure)
+    await settle()
+
+    expect(ends).toEqual([])
+  })
+
+  it('outlives an end listener that throws', async () => {
+    const { agent } = fakeAgent(
+      {},
+      {
+        onEnd: () => {
+          throw new Error('window gone')
+        }
+      }
+    )
+
+    const unhandled = await unhandledDuring(async () => {
+      agent.finish()
+      await settle()
+    })
+
+    expect(unhandled).toEqual([])
   })
 
   it('changes the model of a running session', async () => {

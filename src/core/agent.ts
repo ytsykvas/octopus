@@ -298,6 +298,8 @@ export interface SessionHooks {
    * account probe works on no branch.
    */
   readonly refuseCommand?: (command: string) => string | null
+  /** The stream ended and nobody closed the session: its process is gone. */
+  readonly onEnd?: (ending: { readonly failed: boolean }) => void
 }
 
 /** What an MCP server wants from the user, once the form has been read. */
@@ -1240,6 +1242,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   // own. Waiting for it there would make closing depend on a stream ending,
   // and a stream that does not would hang removing a workspace.
   void (async () => {
+    let failed = false
     try {
       // Runs to the end of the stream, and must keep doing so. Leaving this
       // loop early — after a `result`, say, which looks like the end of the
@@ -1257,7 +1260,14 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // a session started again for a new compaction window showed "exited
       // with code 143" above an answer from its successor.
       if (closing.signal.aborted) return
+      failed = true
       deliverOrDrop({ type: 'error', message: describeError(error) })
+    }
+    if (closing.signal.aborted) return
+    try {
+      hooks.onEnd?.({ failed })
+    } catch {
+      // As with an event: nobody is left to tell.
     }
   })()
 
