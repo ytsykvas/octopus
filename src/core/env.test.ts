@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -222,7 +222,22 @@ describe('applyEnvOverrides', () => {
     given('A=1\n')
     await applyEnvOverrides(stored, values())
 
-    await expect(stat(join(workspace, '.env.tmp'))).rejects.toThrow()
+    const leftovers = (await readdir(workspace)).filter((entry) => entry.endsWith('.tmp'))
+    expect(leftovers).toEqual([])
+  })
+
+  it('writes nothing through a .env.tmp the repository committed as a link', async () => {
+    const target = join(root, 'target')
+    await writeFile(target, 'KEEP', 'utf8')
+    await symlink(target, join(workspace, '.env.tmp'))
+    given('A=1\n')
+
+    await applyEnvOverrides(stored, values())
+
+    await expect(readFile(target, 'utf8')).resolves.toBe('KEEP')
+    expect((await lstat(join(workspace, '.env'))).isSymbolicLink()).toBe(false)
+    await expect(envFile()).resolves.toContain('A=1')
+    expect((await lstat(join(workspace, '.env.tmp'))).isSymbolicLink()).toBe(true)
   })
 
   it('closes the file it empties, too', async () => {

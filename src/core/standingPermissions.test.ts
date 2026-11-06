@@ -122,12 +122,49 @@ describe('whether a standing answer covers a call', () => {
     expect(covers(rule, 'Edit', { file_path: '/w/docsy/ui.md' })).toBe(false)
   })
 
+  // Refused even where it would land inside (`a/../b.md`): the path is never resolved.
+  it('covers nothing that climbs out of the place with ..', () => {
+    const docs = narrow('Edit', '/w/docs/**')
+
+    expect(covers(docs, 'Edit', { file_path: '/w/docs/../../Users/me/.zshrc' })).toBe(false)
+    expect(covers(docs, 'Edit', { file_path: '/w/docs/a/../b.md' })).toBe(false)
+    expect(covers(narrow('Edit', '/w/README.md'), 'Edit', { file_path: '/w/README.md/..' })).toBe(
+      false
+    )
+  })
+
+  // A `..` after a wildcard never reaches the literal prefix, so the rule is checked whole;
+  // the second case goes red if a rule is ever resolved (`/w/docs/../**` is `/w/**`).
+  it('covers nothing for a rule that itself climbs', () => {
+    expect(covers(narrow('Edit', '/w/docs/**/../..'), 'Edit', { file_path: '/w/docs/a.ts' })).toBe(
+      false
+    )
+    expect(covers(narrow('Edit', '/w/docs/../**'), 'Edit', { file_path: '/w/a.ts' })).toBe(false)
+  })
+
+  it('still covers a name that merely contains two dots', () => {
+    const docs = narrow('Edit', '/w/docs/**')
+
+    expect(covers(docs, 'Edit', { file_path: '/w/docs/notes..md' })).toBe(true)
+    expect(covers(docs, 'Edit', { file_path: '/w/docs/..hidden/a.md' })).toBe(true)
+  })
+
+  it('still answers for the whole tool wherever the path goes', () => {
+    expect(covers(whole('Edit'), 'Edit', { file_path: '/w/../etc/x' })).toBe(true)
+  })
+
   it('asks the whole list', () => {
     const list = [whole('Read'), narrow('Edit', '/w/docs/**')]
 
     expect(allowedStanding(list, 'Edit', { file_path: '/w/docs/ui.md' })).toBe(true)
     expect(allowedStanding(list, 'Edit', { file_path: '/w/src/a.ts' })).toBe(false)
     expect(allowedStanding([], 'Read', { file_path: '/w/a.ts' })).toBe(false)
+  })
+
+  it('asks the whole list about a path that climbs', () => {
+    const list = [narrow('Edit', '/w/docs/**')]
+
+    expect(allowedStanding(list, 'Edit', { file_path: '/w/docs/../x' })).toBe(false)
   })
 })
 

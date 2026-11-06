@@ -10,7 +10,7 @@
 import type { OpenDialogOptions, WebContents } from 'electron'
 import { z } from 'zod'
 
-import { type Config, ConfigEditSchema, type ConfigPatch } from '../core/config.js'
+import { type Config, ConfigEditSchema, ConfigPatchSchema } from '../core/config.js'
 import { isTaskFrame } from '../core/events.js'
 import {
   type AccountKind,
@@ -263,8 +263,10 @@ export function registerIpc(
 
   host.handle('config:get', () => attempt(() => service.getConfig()))
 
-  host.handle('config:update', (_event, patch: ConfigPatch) =>
-    attempt(() => writeConfig(host, () => service.updateConfig(patch)))
+  // Validated: the patch is spread over the config, so a list, an identity
+  // field or a key nobody knows would otherwise land as sent.
+  host.handle('config:update', (_event, patch: unknown) =>
+    attempt(() => writeConfig(host, () => service.updateConfig(ConfigPatchSchema.parse(patch))))
   )
 
   // Validated: the key, the id and the rule end up in the config file, and an

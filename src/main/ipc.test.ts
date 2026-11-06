@@ -813,6 +813,39 @@ describe('validation at the boundary', () => {
     const result = await invoke('terminal:create', { command: ['ls'] })
     expect(result).toMatchObject({ ok: false })
   })
+
+  it('refuses a config patch that grants itself a standing permission', async () => {
+    const result = await invoke('config:update', { alwaysAllowedTools: ['Bash'] })
+
+    expect(result).toMatchObject({ ok: false })
+    expect(service.getConfig().alwaysAllowedTools).toEqual([])
+  })
+
+  it('refuses a config patch that rewrites the device id', async () => {
+    const before = service.getConfig().deviceId
+
+    const result = await invoke('config:update', {
+      deviceId: '00000000-0000-4000-8000-000000000000'
+    })
+
+    expect(result).toMatchObject({ ok: false })
+    expect(service.getConfig().deviceId).toBe(before)
+  })
+
+  // A default fires for a key left out, so one setting's patch could reset the rest.
+  it('leaves the settings a config patch does not carry where they were', async () => {
+    await invoke('config:update', { effort: 'max' })
+    await invoke('config:update', { rightPanelTab: 'files' })
+    await invoke('config:update', { rightPanelWidth: 500 })
+
+    await invoke('config:update', { theme: 'dark' })
+
+    const config = service.getConfig()
+    expect(config.effort).toBe('max')
+    expect(config.rightPanelTab).toBe('files')
+    expect(config.rightPanelWidth).toBe(500)
+    expect(config.theme).toBe('dark')
+  })
 })
 
 describe('failures come back as results', () => {

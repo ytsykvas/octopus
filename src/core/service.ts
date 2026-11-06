@@ -2260,10 +2260,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * State writes, run one after another.
    *
    * `writeJsonFile` writes to one fixed temporary path and renames it, so two
-   * saves in flight at once race for that file: the first rename wins and the
-   * second fails with ENOENT. Agent events arrive from a callback nobody
-   * awaits, so a status change from the agent and one the user asked for
-   * genuinely can land together.
+   * saves in flight at once race for that file: one clears or renames the
+   * other's, and the loser fails with ENOENT or EEXIST. Agent events arrive
+   * from a callback nobody awaits, so a status change from the agent and one
+   * the user asked for genuinely can land together.
    */
   const stateWrites = oneAtATime()
 

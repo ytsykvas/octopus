@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   type Config,
+  type ConfigPatch,
+  ConfigPatchSchema,
   ConfigSchema,
   ConfigEditSchema,
   createDefaultConfig,
@@ -20,6 +22,31 @@ import { InvalidFileError } from './persist.js'
 
 const UUID = '00000000-0000-4000-8000-000000000000'
 const NOW = new Date('2026-08-07T12:00:00.000Z')
+
+// `satisfies Required<ConfigPatch>`: a setting added to `ConfigSchema` fails to compile here
+// until it is listed, so the patch cannot quietly refuse what the window sends.
+const SENT_BY_THE_WINDOW = {
+  theme: 'dark',
+  language: 'uk',
+  notificationSound: false,
+  notificationSoundId: 'bell',
+  branchPrefix: 'ytsykvas',
+  cloneDirectory: '/tmp/clones',
+  settingSources: 'project',
+  agentProgressSummaries: false,
+  workingMode: 'acceptEdits',
+  planExecutionMode: 'acceptEdits',
+  effort: 'max',
+  model: 'opus',
+  planModel: null,
+  opusPlan: true,
+  rightPanelOpen: false,
+  rightPanelTab: 'files',
+  rightPanelWidth: 500,
+  sidebarWidth: 300,
+  diffView: 'split',
+  statusBarOpen: false
+} satisfies Required<ConfigPatch>
 
 let dir: string
 let file: string
@@ -555,5 +582,40 @@ describe('editing a list in the config', () => {
     expect(
       ConfigEditSchema.safeParse({ kind: 'skillDefault', key: '', enabled: true }).success
     ).toBe(false)
+  })
+})
+
+describe('a patch from the window', () => {
+  // Catches any defaulted field, the next one added included.
+  it('carries nothing that was not sent', () => {
+    expect(ConfigPatchSchema.parse({})).toEqual({})
+  })
+
+  it('carries exactly what was sent', () => {
+    expect(ConfigPatchSchema.parse({ theme: 'dark' })).toEqual({ theme: 'dark' })
+    expect(ConfigPatchSchema.parse({ effort: 'max' })).toEqual({ effort: 'max' })
+    expect(ConfigPatchSchema.parse({ rightPanelTab: 'files', rightPanelOpen: true })).toEqual({
+      rightPanelTab: 'files',
+      rightPanelOpen: true
+    })
+  })
+
+  it.each([
+    ['a standing permission', { alwaysAllowedTools: ['Bash'] }],
+    ['the skills off by default', { disabledSkillDefaults: [] }],
+    ['the dismissed tips', { dismissedTips: [] }],
+    ['the device id', { deviceId: UUID }],
+    ['the install time', { installedAt: '2026-01-01T00:00:00Z' }],
+    ['the version', { version: 2 }],
+    ['a key the config does not have', { unknownKey: 1 }],
+    ['a tab only an old config may still name', { rightPanelTab: 'build' }],
+    ['an effort only an old config may still hold', { effort: null }],
+    ['a setting sent empty rather than left out', { theme: undefined }]
+  ])('refuses %s', (_what, patch) => {
+    expect(ConfigPatchSchema.safeParse(patch).success).toBe(false)
+  })
+
+  it.each(Object.entries(SENT_BY_THE_WINDOW))('takes %s as the window sends it', (key, value) => {
+    expect(ConfigPatchSchema.parse({ [key]: value })).toEqual({ [key]: value })
   })
 })

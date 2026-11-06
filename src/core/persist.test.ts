@@ -1,8 +1,21 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  type FileHandle,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
 import { z } from 'zod'
 
 import {
@@ -31,8 +44,23 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await rm(dir, { recursive: true, force: true })
 })
+
+async function temporaries(): Promise<string[]> {
+  return (await readdir(dir)).filter((entry) => entry.endsWith('.tmp'))
+}
+
+// `FileHandle` is not exported as a value, so its prototype is reachable only through an
+// instance: a probe opened and removed before the code under test runs.
+async function spyOnSync(): Promise<MockInstance<FileHandle['sync']>> {
+  const probe = await open(join(dir, 'probe'), 'w')
+  const prototype: unknown = Object.getPrototypeOf(probe)
+  await probe.close()
+  await rm(join(dir, 'probe'))
+  return vi.spyOn(prototype as FileHandle, 'sync')
+}
 
 describe('describeError', () => {
   it('takes the message from a real error', () => {
@@ -119,9 +147,48 @@ describe('writeJsonFile', () => {
     await writeJsonFile(file, Schema, FALLBACK)
     await expect(readFile(file, 'utf8')).resolves.toMatch(/\n$/)
   })
+
+  // A directory at the target lets the write succeed and the rename fail.
+  it('takes its temporary file with it when the rename fails', async () => {
+    await mkdir(file)
+    await writeFile(join(file, 'inside'), 'x', 'utf8')
+
+    await expect(writeJsonFile(file, Schema, FALLBACK)).rejects.toThrow()
+    expect(await temporaries()).toEqual([])
+  })
+
+  it('does not follow a link left at its temporary path', async () => {
+    const outside = join(dir, 'outside.json')
+    await writeFile(outside, 'KEEP', 'utf8')
+    await symlink(outside, `${file}.tmp`)
+
+    await writeJsonFile(file, Schema, { name: 'lviv', count: 7 })
+
+    await expect(readFile(outside, 'utf8')).resolves.toBe('KEEP')
+    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({ name: 'lviv', count: 7 })
+  })
+
+  it('syncs the contents before it renames', async () => {
+    const sync = await spyOnSync()
+
+    await writeJsonFile(file, Schema, FALLBACK)
+
+    expect(sync).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('writeTextFile', () => {
+  let umask: number
+
+  // Pinned: the mode tests prove nothing under umask 000 and fail under 027.
+  beforeEach(() => {
+    umask = process.umask(0o022)
+  })
+
+  afterEach(() => {
+    process.umask(umask)
+  })
+
   /** The mode of a path, as the three digits anybody reads. */
   async function modeOf(path: string): Promise<number> {
     return (await stat(path)).mode & 0o777
@@ -163,6 +230,15 @@ describe('writeTextFile', () => {
     await expect(modeOf(path)).resolves.toBe(0o600)
   })
 
+  // The mode handed to `open(2)` loses whatever the umask clears; the one set
+  // on the descriptor afterwards does not.
+  it('gives the mode in full, whatever the umask would clear', async () => {
+    const path = join(dir, 'shared.txt')
+    await writeTextFile(path, 'A=1\n', 0o666)
+
+    await expect(modeOf(path)).resolves.toBe(0o666)
+  })
+
   it('leaves the mode alone when none is asked for', async () => {
     const path = join(dir, 'notes.txt')
     await writeFile(path, 'first\n', { encoding: 'utf8', mode: 0o644 })
@@ -176,11 +252,11 @@ describe('writeTextFile', () => {
     const path = join(dir, '.env')
     await writeTextFile(path, 'A=1\n')
 
-    await expect(readFile(`${path}.tmp`, 'utf8')).rejects.toThrow()
+    expect(await temporaries()).toEqual([])
   })
 
   /*
-   * These land in a git worktree, where a leftover `.env.tmp` is an untracked
+   * These land in a git worktree, where a leftover temporary file is an untracked
    * file somebody has to explain. A directory at the target is the honest way
    * to fail after the temporary file exists: the write succeeds, the rename
    * cannot.
@@ -191,7 +267,7 @@ describe('writeTextFile', () => {
     await writeFile(join(path, 'inside'), 'x', 'utf8')
 
     await expect(writeTextFile(path, 'A=1\n')).rejects.toThrow()
-    await expect(stat(`${path}.tmp`)).rejects.toThrow()
+    expect(await temporaries()).toEqual([])
   })
 
   // The guarantee the module claims: the old version or the new one, never a
@@ -210,6 +286,68 @@ describe('writeTextFile', () => {
       // Or the directory could not be cleaned up after the test.
       await chmod(closed, 0o700)
     }
+  })
+
+  it('does not follow a link planted at the temporary path', async () => {
+    const outside = join(dir, 'outside.txt')
+    await writeFile(outside, 'KEEP', { encoding: 'utf8', mode: 0o644 })
+    const path = join(dir, '.env')
+    await symlink(outside, `${path}.tmp`)
+
+    await writeTextFile(path, 'A=1\n', 0o600)
+
+    await expect(readFile(outside, 'utf8')).resolves.toBe('KEEP')
+    await expect(modeOf(outside)).resolves.toBe(0o644)
+    expect((await lstat(path)).isSymbolicLink()).toBe(false)
+    await expect(readFile(path, 'utf8')).resolves.toBe('A=1\n')
+  })
+
+  it('refuses rather than writes through a link at the exact temporary name', async () => {
+    const outside = join(dir, 'outside.txt')
+    await writeFile(outside, 'KEEP', 'utf8')
+    const path = join(dir, '.env')
+    await symlink(outside, `${path}.fixed.tmp`)
+
+    await expect(writeTextFile(path, 'A=1\n', 0o600, () => 'fixed')).rejects.toMatchObject({
+      code: 'EEXIST'
+    })
+
+    await expect(readFile(outside, 'utf8')).resolves.toBe('KEEP')
+    expect((await lstat(`${path}.fixed.tmp`)).isSymbolicLink()).toBe(true)
+  })
+
+  it('syncs the contents before it renames', async () => {
+    const sync = await spyOnSync()
+
+    await writeTextFile(join(dir, '.env'), 'A=1\n')
+
+    expect(sync).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the old file when the contents cannot be synced', async () => {
+    const path = join(dir, '.env')
+    await writeFile(path, 'old\n', 'utf8')
+    const sync = await spyOnSync()
+    sync.mockRejectedValueOnce(new Error('EIO'))
+
+    await expect(writeTextFile(path, 'new\n')).rejects.toThrow('EIO')
+
+    await expect(readFile(path, 'utf8')).resolves.toBe('old\n')
+    expect(await temporaries()).toEqual([])
+  })
+
+  it('reports the failure rather than the cleanup that failed after it', async () => {
+    const path = join(dir, '.env')
+    const temp = `${path}.fixed.tmp`
+    const sync = await spyOnSync()
+    // A directory where the temporary file was makes the cleanup `rm` throw too.
+    sync.mockImplementationOnce(async () => {
+      await rm(temp)
+      await mkdir(temp)
+      throw new Error('EIO')
+    })
+
+    await expect(writeTextFile(path, 'A=1\n', undefined, () => 'fixed')).rejects.toThrow('EIO')
   })
 })
 

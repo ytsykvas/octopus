@@ -16,12 +16,14 @@ import { StandingPermissionSchema, withoutStanding } from './standingPermissions
 import {
   DEFAULT_EFFORT,
   type Effort,
+  EffortSchema,
   EXIT_PLAN_MODE,
   PlanExecutionModeSchema,
   StoredEffortSchema,
   type WorkingMode,
   WorkingModeSchema
 } from './chats.js'
+import { withoutDefaults } from './patchSchema.js'
 import { configFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 import { ASK_USER_QUESTION } from './questions.js'
@@ -373,6 +375,27 @@ export const ConfigSchema = z.object({
 
 export type Config = z.infer<typeof ConfigSchema>
 
+export const ConfigPatchSchema = z
+  .strictObject(
+    withoutDefaults(
+      ConfigSchema.omit({
+        version: true,
+        deviceId: true,
+        installedAt: true,
+        alwaysAllowedTools: true,
+        disabledSkillDefaults: true,
+        dismissedTips: true
+      }).shape
+    )
+  )
+  // The stored effort and rightPanelTab hide a default in a pipe, and accept values only
+  // old files hold: the window gets the plain schemas.
+  .extend({ effort: EffortSchema, rightPanelTab: RightPanelTabSchema })
+  // Not `.partial()`: an explicit `undefined` would be spread and parse back as the default.
+  .exactPartial()
+
+export type ConfigPatch = z.infer<typeof ConfigPatchSchema>
+
 /**
  * One change to a list in the config, as the window asks for it.
  *
@@ -393,16 +416,6 @@ export const ConfigEditSchema = z.discriminatedUnion('kind', [
 export type ConfigEdit = z.infer<typeof ConfigEditSchema>
 
 /** The part of the config an edit changes, worked out from the config as it stands. */
-/**
- * What the window may change by sending the new value: every setting except the
- * lists, which change one switch at a time through `ConfigEdit`. A list sent
- * whole is a snapshot of the window's copy, and two switches inside one round
- * trip wrote the first back out.
- */
-export type ConfigPatch = Partial<
-  Omit<Config, 'disabledSkillDefaults' | 'dismissedTips' | 'alwaysAllowedTools'>
->
-
 export function editedConfig(config: Config, edit: ConfigEdit): Partial<Config> {
   switch (edit.kind) {
     case 'skillDefault':

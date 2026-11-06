@@ -169,7 +169,10 @@ nothing into the app has everything to lose and an empty block. What gates them
 is that a commit is about to happen.
 
 The file is **replaced, not rewritten in place** — written beside itself and
-renamed over, which is atomic on POSIX. A dev server reads its `.env` at boot and
+renamed over, which is atomic on POSIX. The sibling is `.env.<random>.tmp`,
+created with `O_EXCL`: a repository that commits `.env.tmp` as a link to
+somewhere else redirects nothing, and the link is left as the repository had
+it. A dev server reads its `.env` at boot and
 `run.sh` starts moments after the block was written; truncating in place leaves a
 window in which a variable silently has no value, and nothing reports that as an
 error. The rename also carries the mode with it, which is how `0600` reaches a

@@ -34,6 +34,13 @@ was approved before anything was drawn: no dialog, no record that planning had
 ended, and the toggle still lit over an agent editing files. It went unnoticed
 for a day. `NEVER_STANDING` in `config.ts` is what strips it.
 
+The window cannot write it. `config:update` parses its patch with
+`ConfigPatchSchema`, which leaves out all three lists and `version`, `deviceId`
+and `installedAt`: a window drawing agent output could otherwise grant itself
+`Bash` for good in one call. The lists change through `config:edit`, one
+operation at a time, and only the core adds a standing answer — when the user
+presses "Always allow".
+
 **An entry is a rule, not a tool name.** It used to be the name alone, so
 answering "always" about one file under `.claude/` granted every `Edit` in every
 workspace from then on — an approval an order of magnitude wider than the
@@ -50,8 +57,11 @@ and a matcher that reads one loosely grants more than the person answering
 agreed to — the failure this replaces. So only a wildcard opening a path segment
 is read: `/w/docs/**` says "under `/w/docs`" and nothing else has to be
 understood. `/w/src/comp*.ts` is not read at all, because truncating it to its
-parent would grant the whole of `/w/src`. A call the rule cannot decide is one
-the user is asked about again, which costs a click and grants nothing.
+parent would grant the whole of `/w/src`. A path with a `..` segment is never
+covered, and a rule that contains one covers nothing: an agent walked out of
+`/w/docs/**` that way, because the path is compared as sent rather than
+resolved. A call the rule cannot decide is one the user is asked about again,
+which costs a click and grants nothing.
 
 The list is **not** passed to the SDK. It was, alongside the read-only tools,
 and that made it unrevokable: a name the SDK holds is approved before

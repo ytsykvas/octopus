@@ -9,7 +9,8 @@
  * which is atomic on POSIX.
  */
 
-import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import type { z } from 'zod'
@@ -98,44 +99,48 @@ export async function readJsonFile<T>(
   return result.data
 }
 
-/**
- * Writes a text file atomically, and with the mode it is asked for.
- *
- * The mode is set with `chmod` rather than left to `writeFile`'s option, which
- * is the whole reason this exists. Node passes that option to `open(2)`, where
- * it is **ignored unless the call creates the file** — so appending credentials
- * to a file that was copied in from somewhere else left it as permissive as the
- * copy was. Renaming the temporary file over the target carries the mode with
- * it, whatever the target had before.
- *
- * The temporary file is a sibling of the target because `rename` is only atomic
- * within a filesystem, and across some it fails outright.
- *
- * A failed write takes its temporary file with it. That matters here more than
- * for JSON: these land in a git worktree, where a leftover `.env.tmp` is an
- * untracked file somebody has to explain.
- */
-export async function writeTextFile(
+function randomSuffix(): string {
+  return randomBytes(6).toString('hex')
+}
+
+async function replaceThrough(
+  tempPath: string,
   filePath: string,
   contents: string,
   mode?: number
 ): Promise<void> {
-  const tempPath = `${filePath}.tmp`
-
-  await mkdir(dirname(filePath), { recursive: true })
-
+  // `wx` (O_EXCL) never follows a link planted at the name. Outside the try: when `open`
+  // fails, EEXIST included, the path is not ours to remove.
+  const handle = await open(tempPath, 'wx', mode)
   try {
-    // The mode twice, and both are needed. On the write it is what stops the
-    // contents existing at the default mode even for the length of the write;
-    // `chmod` is what applies it to a temporary file left behind by an earlier
-    // failure, which `open(2)` would not.
-    await writeFile(tempPath, contents, mode === undefined ? 'utf8' : { encoding: 'utf8', mode })
-    if (mode !== undefined) await chmod(tempPath, mode)
+    try {
+      await handle.writeFile(contents, 'utf8')
+      // A mode asked for goes through fchmod: the one given to open(2) is cut by the umask.
+      if (mode !== undefined) await handle.chmod(mode)
+      // macOS fsync(2) without F_FULLFSYNC does not flush the drive cache: accepted.
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
     await rename(tempPath, filePath)
   } catch (error) {
-    await rm(tempPath, { force: true })
+    // Settled, not awaited bare: a cleanup that throws would replace the error reported.
+    await Promise.allSettled([rm(tempPath, { force: true })])
     throw error
   }
+}
+
+// Atomic, with the mode asked for: `open(2)` ignores a mode unless it creates the file.
+// `<target>.<random>.tmp` keeps the prefix `.env*` ignores, and is random because a
+// repository can commit a link at any fixed name. `suffix` lets a test pick it.
+export async function writeTextFile(
+  filePath: string,
+  contents: string,
+  mode?: number,
+  suffix: () => string = randomSuffix
+): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true })
+  await replaceThrough(`${filePath}.${suffix()}.tmp`, filePath, contents, mode)
 }
 
 /**
@@ -159,6 +164,8 @@ export async function writeJsonFile<T>(
   }
 
   await mkdir(dirname(filePath), { recursive: true })
-  await writeFile(tempPath, `${JSON.stringify(result.data, null, 2)}\n`, 'utf8')
-  await rename(tempPath, filePath)
+  // Fixed path, as callers serialise on it: this clears only a crash leftover or a planted
+  // link, and `rm` removes a link itself, never its target.
+  await rm(tempPath, { force: true })
+  await replaceThrough(tempPath, filePath, `${JSON.stringify(result.data, null, 2)}\n`)
 }

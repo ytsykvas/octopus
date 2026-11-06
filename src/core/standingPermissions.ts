@@ -55,17 +55,22 @@ export type StandingPermission = z.infer<typeof StandingPermissionSchema>
  * An empty prefix — a rule that begins with a wildcard — matches nothing here
  * for the same reason: `**` at the start would otherwise be "every path", which is the
  * width the narrow rule exists to avoid.
+ *
+ * A `..` in the path or the rule covers nothing: paths are compared as sent, never resolved,
+ * and a `..` after a wildcard never reaches the literal prefix.
  */
 export function covers(permission: StandingPermission, toolName: string, input: unknown): boolean {
   if (permission.toolName !== toolName) return false
   if (permission.ruleContent === null) return true
+  if (climbs(permission.ruleContent)) return false
 
   const prefix = literalPrefix(permission.ruleContent)
   if (prefix === null) return false
 
   const path = pathOf(input)
+  if (path === null || climbs(path)) return false
 
-  return path !== null && (path === prefix || path.startsWith(withSlash(prefix)))
+  return path === prefix || path.startsWith(withSlash(prefix))
 }
 
 /** Whether any of them does. */
@@ -162,6 +167,11 @@ function literalPrefix(rule: string): string | null {
 /** A trailing separator, so a prefix matches a directory and not a name. */
 function withSlash(prefix: string): string {
   return prefix.endsWith('/') ? prefix : `${prefix}/`
+}
+
+/** By segment, not substring: `notes..md` is a name. A `.` never leaves the prefix. */
+function climbs(path: string): boolean {
+  return path.split('/').some((segment) => segment === '..')
 }
 
 /**
