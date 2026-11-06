@@ -119,7 +119,8 @@ one at all — and a control that lands somewhere else because a server came up 
 one people stop aiming at.
 
 The browser control is a **link**, not a button: `setWindowOpenHandler` in
-main already hands a `_blank` target to the system browser, so it needs no
+main already hands a `_blank` target to the system browser — a web page only,
+as `isExternalUrl` decides, which `http://localhost:<port>` is — so it needs no
 channel of its own, and a link is what a reader expects to be able to copy. It
 names the port — every workspace serves on one of its own, and which one is the
 fact worth carrying.

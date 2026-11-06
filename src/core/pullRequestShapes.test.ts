@@ -324,6 +324,32 @@ describe('the check rollup', () => {
     expect(context?.url).toBeNull()
   })
 
+  /* A status's link is written by whichever integration posted it, and a click
+     on the check's icon reaches `shell.openExternal`: a `file:` link there would
+     start a script from the clone. The check itself is kept, only unlinked. */
+  it('drops a link to anything but a web page from a status, and keeps the status', () => {
+    const [check] = checksOf({
+      statusCheckRollup: [{ ...CONTEXT, targetUrl: 'file:///x.command' }]
+    })
+
+    expect(check).toMatchObject({ name: 'buildkite/rails', state: 'passed', url: null })
+  })
+
+  it('drops a link to anything but a web page from a job', () => {
+    const [check] = checksOf({ statusCheckRollup: [{ ...PASSED, detailsUrl: 'smb://h/s' }] })
+
+    expect(check?.url).toBeNull()
+    expect(check?.workflow).toBe('rails-new-docker')
+  })
+
+  it('keeps a plain-http link, which is how a CI server on an intranet writes one', () => {
+    const [check] = checksOf({
+      statusCheckRollup: [{ ...CONTEXT, targetUrl: 'http://ci.internal/1' }]
+    })
+
+    expect(check?.url).toBe('http://ci.internal/1')
+  })
+
   /* Verified against `github/gitignore`, whose pull requests have no CI at all:
      the field comes back as an empty array. Null is accepted too, because
      nothing in GraphQL's schema promises otherwise. */

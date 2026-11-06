@@ -53,7 +53,10 @@ that switches it on. The window says so above the tabs and links to the
 setting, rather than letting every switch look broken.
 
 A homepage is linked only when it is `https:` — a marketplace writes it, and
-`shell.openExternal` will start any scheme the system knows. A plugin's tile is
+`shell.openExternal` will start any scheme the system knows. Main refuses every
+scheme but `http(s)` as well (`openInBrowser` in `main/externalLinks.ts`); this
+filter stays the first and stricter layer, so a plain-`http` homepage is not
+offered as a link at all. A plugin's tile is
 its initials on a colour that follows from its id (`colorFor`), built as a
 project tab is, so it reads as one of the family.
 
