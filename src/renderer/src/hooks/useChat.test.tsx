@@ -1202,6 +1202,24 @@ describe('questions from the agents a turn sent off', () => {
   })
 })
 
+describe('a frame the core could not handle', () => {
+  it('neither ends the turn nor takes the question away', async () => {
+    givenChat()
+    const { result } = renderHook(() =>
+      useChat(chat(), 'planner/anna', 'running', describeFailure, noted)
+    )
+    await waitFor(() => {
+      expect(result.current.busy).toBe(true)
+    })
+    emitAgentEvent({ type: 'permission_request', requestId: 'r-1', toolName: 'Bash', input: {} })
+
+    emitAgentEvent({ type: 'message_skipped', reason: 'unreadable' })
+
+    expect(result.current.busy).toBe(true)
+    expect(result.current.pending?.requestId).toBe('r-1')
+  })
+})
+
 /*
  * With the turn over and its agents still at work, the conversation is
  * `running` and the main agent is not: a Stop there would stop nothing — the

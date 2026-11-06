@@ -8,6 +8,7 @@ import {
   FolderGit2,
   FoldVertical,
   Map,
+  MessageSquareOff,
   Play,
   Repeat,
   ShieldAlert,
@@ -626,6 +627,9 @@ function AgentRow({
 
     case 'error':
       return <ErrorRow message={event.message} />
+
+    case 'message_skipped':
+      return <SkippedRow reason={event.reason} />
 
     // Only the reset nobody asked for is drawn. The one the user asked for
     // takes the whole log with it, so there is nothing left for it to sit in.
@@ -1506,6 +1510,21 @@ function ErrorRow({ message }: { message: string }): React.JSX.Element {
           <p className="text-ink-faint mt-1 font-mono text-[11px]">{shown(message)}</p>
         </>
       )}
+    </div>
+  )
+}
+
+// Quiet rather than red: one frame was lost and the conversation went on.
+function SkippedRow({ reason }: { readonly reason: string }): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="text-ink-faint border-line border-t pt-2 text-[11px]">
+      <p className="flex items-center gap-2">
+        <MessageSquareOff aria-hidden size={12} />
+        {t('chat.messageSkipped')}
+      </p>
+      <p className="mt-1 pl-5 font-mono">{shown(reason)}</p>
     </div>
   )
 }

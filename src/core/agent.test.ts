@@ -87,6 +87,8 @@ function fakeAgent(
     /** What the session's settings files say about skills; left out, it reads none. */
     skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
     refuseCommand?: (command: string) => string | null
+    /** Runs after each event is collected; one that throws is how a broken window looks. */
+    onEvent?: (event: AgentEvent) => void
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -224,7 +226,10 @@ function fakeAgent(
 
         return conversation
       },
-      onEvent: (event) => events.push(event),
+      onEvent: (event) => {
+        events.push(event)
+        hooks.onEvent?.(event)
+      },
       askPermission: (ask) =>
         hooks.askPermission?.(ask) ?? Promise.resolve({ allow: true } as const),
       askElicitation: (ask) =>
@@ -1412,6 +1417,30 @@ describe('mapping SDK messages', () => {
     ])
   })
 
+  it('reads no token counts from a result whose usage it cannot read', () => {
+    const message = {
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      total_cost_usd: 0,
+      duration_ms: 5,
+      usage: { input_tokens: 2 },
+      session_id: 's-1'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'result',
+        ok: true,
+        costUsd: 0,
+        durationMs: 5,
+        inputTokens: null,
+        outputTokens: null,
+        terminalReason: null
+      }
+    ])
+  })
+
   // Older CLIs do not send one, and the field is optional in the SDK's types.
   it('accepts a result that does not say why it ended', () => {
     const message = {
@@ -1710,6 +1739,106 @@ describe('a session', () => {
     await settle()
 
     expect(events).toEqual([])
+  })
+
+  it('keeps reading after a result it cannot take the usage from', async () => {
+    const { agent, events } = fakeAgent()
+
+    agent.emit({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      duration_ms: 1,
+      total_cost_usd: 0,
+      session_id: 's-1'
+    } as unknown as SDKMessage)
+    agent.emit(assistant([{ type: 'text', text: 'still here' }]))
+    await settle()
+
+    expect(events).toEqual([
+      {
+        type: 'result',
+        ok: true,
+        costUsd: 0,
+        durationMs: 1,
+        inputTokens: null,
+        outputTokens: null,
+        terminalReason: null
+      },
+      { type: 'text', text: 'still here', uuid: 'u-1' }
+    ])
+  })
+
+  it('skips a message it cannot map, says so, and reads on', async () => {
+    const { agent, events } = fakeAgent()
+
+    agent.emit({
+      type: 'rate_limit_event',
+      uuid: 'r-1',
+      session_id: 's-1'
+    } as unknown as SDKMessage)
+    agent.emit(assistant([{ type: 'text', text: 'still here' }]))
+    await settle()
+
+    expect(events).toEqual([
+      { type: 'message_skipped', reason: "Cannot read properties of undefined (reading 'status')" },
+      { type: 'text', text: 'still here', uuid: 'u-1' }
+    ])
+  })
+
+  it('loses only the event a listener throws on, and keeps the session', async () => {
+    let calls = 0
+    const { agent, events } = fakeAgent(
+      {},
+      {
+        onEvent: () => {
+          calls += 1
+          if (calls === 1) throw new Error('window gone')
+        }
+      }
+    )
+
+    agent.emit(assistant([{ type: 'text', text: 'first' }]))
+    agent.emit(assistant([{ type: 'text', text: 'second' }]))
+    await settle()
+
+    expect(events).toEqual([
+      { type: 'text', text: 'first', uuid: 'u-1' },
+      { type: 'message_skipped', reason: 'window gone' },
+      { type: 'text', text: 'second', uuid: 'u-1' }
+    ])
+    await expect(agent.session.contextUsage()).resolves.toMatchObject({ percentage: 2 })
+  })
+
+  it('leaves no rejection behind when every listener throws', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const { agent, events } = fakeAgent(
+        {},
+        {
+          onEvent: () => {
+            throw new Error('window gone')
+          }
+        }
+      )
+
+      agent.emit(assistant([{ type: 'text', text: 'lost' }]))
+      agent.finish(new Error('claude exited with code 1'))
+      await settle()
+
+      expect(events).toEqual([
+        { type: 'text', text: 'lost', uuid: 'u-1' },
+        { type: 'message_skipped', reason: 'window gone' },
+        { type: 'error', message: 'claude exited with code 1' }
+      ])
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 
   it('changes the model of a running session', async () => {

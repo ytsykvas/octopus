@@ -2865,7 +2865,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const pluginWrite = oneAtATime()
 
   function emit(event: ChatEvent): void {
-    for (const listener of listeners) listener(event)
+    for (const listener of listeners) {
+      try {
+        listener(event)
+      } catch {
+        // A window failing to take it is its own trouble: the event is recorded and applied.
+      }
+    }
   }
 
   /**

@@ -961,6 +961,8 @@ export const de: Translation = {
       'Claude Code wurde von außen beendet – vom System oder einem anderen Programm. Schick eine Nachricht, um weiterzumachen; der Chat bleibt erhalten.',
     processFailed:
       'Claude Code wurde mit einem Fehler beendet (Code {{code}}). Schick eine Nachricht, um es erneut zu versuchen; der Chat bleibt erhalten.',
+    messageSkipped:
+      'Eine Nachricht von Claude Code konnte nicht verarbeitet werden und wurde übersprungen. Der Chat geht weiter.',
     compactedBy:
       'Der Agent hat alles oben zusammengefasst, um Platz zu schaffen – aus {{before}} wurden {{after}} (−{{saved}}%)',
     compactSummaryTitle: 'Was der Agent behalten hat',

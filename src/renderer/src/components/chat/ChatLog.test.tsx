@@ -1357,6 +1357,25 @@ describe('what the log shows', () => {
     expect(screen.getByText(/Claude Code stopped with an error \(code 1\)/)).toBeInTheDocument()
   })
 
+  it('says a frame was skipped, quietly, with the reason under it', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'message_skipped',
+          reason: "Cannot read properties of undefined (reading 'status')"
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText(
+        'One message from Claude Code could not be handled and was skipped. The conversation goes on.'
+      )
+    ).toBeVisible()
+    expect(screen.getByText("Cannot read properties of undefined (reading 'status')")).toBeVisible()
+    expect(screen.queryByText(/Claude Code stopped/)).not.toBeInTheDocument()
+  })
+
   // The session id is bookkeeping; a row for it would say nothing to anyone.
   it('draws nothing for events that are not part of the conversation', () => {
     renderLog({

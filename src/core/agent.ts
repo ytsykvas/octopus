@@ -454,6 +454,18 @@ function windowsIn(result: { readonly modelUsage?: unknown }): [string, number][
   return Object.entries(parsed.data).map(([model, usage]) => [model, usage.contextWindow])
 }
 
+/** Parsed for the same reason: a result without its usage must still close its turn. */
+const ResultUsageSchema = z.looseObject({
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  cache_read_input_tokens: z.number(),
+  cache_creation_input_tokens: z.number()
+})
+
+function skippedBy(error: unknown): AgentEvent {
+  return { type: 'message_skipped', reason: describeError(error) }
+}
+
 /**
  * Control methods the CLI on the other end may not have.
  *
@@ -1164,6 +1176,22 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   let heldSkills: ReadonlySet<string> = NO_SKILLS
   let announced = false
 
+  const deliverOrDrop = (event: AgentEvent): void => {
+    try {
+      hooks.onEvent(event)
+    } catch {
+      // Nobody is left to tell, and the loop below has to live.
+    }
+  }
+
+  const deliver = (event: AgentEvent): void => {
+    try {
+      hooks.onEvent(event)
+    } catch (error) {
+      deliverOrDrop(skippedBy(error))
+    }
+  }
+
   /*
    * The two lists the composer suggests from, announced by the session itself
    * once its first `init` has said which commands are skills.
@@ -1177,16 +1205,34 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   const announceLists = (): void => {
     conversation.supportedCommands().then(
       (commands) => {
-        hooks.onEvent({ type: 'commands_changed', commands: toAgentCommands(commands, heldSkills) })
+        deliver({ type: 'commands_changed', commands: toAgentCommands(commands, heldSkills) })
       },
       () => undefined
     )
     conversation.supportedAgents().then(
       (agents) => {
-        hooks.onEvent({ type: 'agents_changed', agents: toAgentEntries(agents) })
+        deliver({ type: 'agents_changed', agents: toAgentEntries(agents) })
       },
       () => undefined
     )
+  }
+
+  const eventsOf = (message: SDKMessage): AgentEvent[] => {
+    try {
+      if (message.type === 'result') {
+        for (const [model, window] of windowsIn(message)) modelWindows.set(model, window)
+      }
+      if (message.type === 'system' && message.subtype === 'init') {
+        heldSkills = new Set(message.skills)
+        if (!announced) {
+          announced = true
+          announceLists()
+        }
+      }
+      return mapMessage(message, heldSkills)
+    } catch (error) {
+      return [skippedBy(error)]
+    }
   }
 
   // Started and never awaited. `close` is what actually ends the session —
@@ -1202,17 +1248,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // ready for writing": no model change, no context reading, no usage.
       // Measured by walking into it while probing the usage calls.
       for await (const message of conversation) {
-        if (message.type === 'result') {
-          for (const [model, window] of windowsIn(message)) modelWindows.set(model, window)
-        }
-        if (message.type === 'system' && message.subtype === 'init') {
-          heldSkills = new Set(message.skills)
-          if (!announced) {
-            announced = true
-            announceLists()
-          }
-        }
-        for (const event of mapMessage(message, heldSkills)) hooks.onEvent(event)
+        for (const event of eventsOf(message)) deliver(event)
       }
     } catch (error) {
       // The SDK throws for a failed spawn, a lost subscription or an aborted
@@ -1221,7 +1257,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // a session started again for a new compaction window showed "exited
       // with code 143" above an answer from its successor.
       if (closing.signal.aborted) return
-      hooks.onEvent({ type: 'error', message: describeError(error) })
+      deliverOrDrop({ type: 'error', message: describeError(error) })
     }
   })()
 
@@ -1536,7 +1572,8 @@ export function mapMessage(
     case 'stream_event':
       return fromStreamEvent(message)
 
-    case 'result':
+    case 'result': {
+      const usage = ResultUsageSchema.safeParse(message.usage)
       return [
         {
           type: 'result',
@@ -1547,11 +1584,12 @@ export function mapMessage(
           costUsd: message.total_cost_usd,
           durationMs: message.duration_ms,
           // `usage`, unlike `total_cost_usd` and `modelUsage`, is per-turn.
-          inputTokens: promptTokens(message.usage),
-          outputTokens: message.usage.output_tokens,
+          inputTokens: usage.success ? promptTokens(usage.data) : null,
+          outputTokens: usage.success ? usage.data.output_tokens : null,
           terminalReason: message.terminal_reason ?? null
         }
       ]
+    }
 
     case 'rate_limit_event':
       return [

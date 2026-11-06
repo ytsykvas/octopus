@@ -9282,6 +9282,27 @@ describe('the agent chat', () => {
       })
     })
 
+    it('hands every listener the event when one of them throws', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      service.onAgentEvent(() => {
+        throw new Error('window gone')
+      })
+      const seen: ChatEvent[] = []
+      service.onAgentEvent((event) => seen.push(event))
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      expect(seen.map(({ event }) => event.type)).toEqual(
+        expect.arrayContaining(['session_started', 'result'])
+      )
+    })
+
     it('stops the current turn without ending the session', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)

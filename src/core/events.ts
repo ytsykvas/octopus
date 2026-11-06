@@ -754,6 +754,9 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     fallback: z.enum(['default', 'acceptEdits'])
   }),
 
+  /** A frame lost to a mapping or a listener that threw; the session read on. Never fatal. */
+  z.object({ type: z.literal('message_skipped'), reason: z.string() }),
+
   z.object({ type: z.literal('error'), message: z.string() })
 ])
 

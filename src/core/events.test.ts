@@ -118,6 +118,10 @@ describe('what gets stored', () => {
     expect(isEphemeral({ type: 'message_queue', messageId: 'm-1', state: 'queued' })).toBe(true)
   })
 
+  it('keeps a skipped frame, so a reopened log still says one was missed', () => {
+    expect(isEphemeral({ type: 'message_skipped', reason: 'unreadable' })).toBe(false)
+  })
+
   it('treats completed blocks and everything else as worth keeping', () => {
     const kept: AgentEvent[] = [
       { type: 'text', text: 'Looking at auth.rb' },
