@@ -55,17 +55,25 @@ export type StandingPermission = z.infer<typeof StandingPermissionSchema>
  * An empty prefix — a rule that begins with a wildcard — matches nothing here
  * for the same reason: `**` at the start would otherwise be "every path", which is the
  * width the narrow rule exists to avoid.
+ *
+ * A `..` segment, in the path or in the rule, covers nothing either. The path
+ * is compared as the agent sent it, and `/w/docs/../../Users/me/.zshrc` used
+ * to pass `/w/docs/**`. Refused rather than resolved: resolving needs the
+ * working directory for a relative path, and would still be a guess about a
+ * string the tool reads raw, where a refusal costs one click and grants nothing.
  */
 export function covers(permission: StandingPermission, toolName: string, input: unknown): boolean {
   if (permission.toolName !== toolName) return false
   if (permission.ruleContent === null) return true
+  if (climbs(permission.ruleContent)) return false
 
   const prefix = literalPrefix(permission.ruleContent)
   if (prefix === null) return false
 
   const path = pathOf(input)
+  if (path === null || climbs(path)) return false
 
-  return path !== null && (path === prefix || path.startsWith(withSlash(prefix)))
+  return path === prefix || path.startsWith(withSlash(prefix))
 }
 
 /** Whether any of them does. */
@@ -162,6 +170,16 @@ function literalPrefix(rule: string): string | null {
 /** A trailing separator, so a prefix matches a directory and not a name. */
 function withSlash(prefix: string): string {
   return prefix.endsWith('/') ? prefix : `${prefix}/`
+}
+
+/**
+ * Whether a path walks up with a `..` segment.
+ *
+ * By segment, not by substring: `notes..md` is a name, not a step up. A `.`
+ * needs no check — it never leaves the place a prefix names.
+ */
+function climbs(path: string): boolean {
+  return path.split('/').some((segment) => segment === '..')
 }
 
 /**

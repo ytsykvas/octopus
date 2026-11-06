@@ -50,8 +50,11 @@ and a matcher that reads one loosely grants more than the person answering
 agreed to — the failure this replaces. So only a wildcard opening a path segment
 is read: `/w/docs/**` says "under `/w/docs`" and nothing else has to be
 understood. `/w/src/comp*.ts` is not read at all, because truncating it to its
-parent would grant the whole of `/w/src`. A call the rule cannot decide is one
-the user is asked about again, which costs a click and grants nothing.
+parent would grant the whole of `/w/src`. A path with a `..` segment is never
+covered, and a rule that contains one covers nothing: an agent walked out of
+`/w/docs/**` that way, because the path is compared as sent rather than
+resolved. A call the rule cannot decide is one the user is asked about again,
+which costs a click and grants nothing.
 
 The list is **not** passed to the SDK. It was, alongside the read-only tools,
 and that made it unrevokable: a name the SDK holds is approved before

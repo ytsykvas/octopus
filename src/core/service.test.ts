@@ -9809,6 +9809,24 @@ describe('the agent chat', () => {
       await asked
     })
 
+    /* The rule is read against the path as the agent sent it, so a `..` that
+       walks out of the granted place is asked about rather than waved through. */
+    it('asks about a path that climbs out of the place it was granted', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      await service.updateConfig({
+        alwaysAllowedTools: [{ toolName: 'Edit', ruleContent: '/w/docs/**' }]
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const asked = agent().ask('Edit', { file_path: '/w/docs/../../etc/hosts' })
+      const requestId = await waitForRequest(events)
+
+      // Answered rather than left hanging, as in the test above.
+      await service.answerPermission(requestId, 'deny')
+      await expect(asked).resolves.toMatchObject({ behavior: 'deny' })
+    })
+
     /* A suggestion that is not an allow-rule, or is about another tool, is not
        an answer to this question — so the fallback stands and the whole tool is
        granted, which is what the user pressed. */
