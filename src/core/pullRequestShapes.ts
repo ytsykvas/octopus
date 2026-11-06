@@ -16,6 +16,7 @@
 
 import { z } from 'zod'
 
+import { isExternalUrl } from './externalUrls.js'
 import type { Workspace } from './store.js'
 
 /**
@@ -166,6 +167,12 @@ function link(value: string | null | undefined): string | null {
   return value === undefined || value === null || value === '' ? null : value
 }
 
+/** A link a third party wrote, kept only when it is a web page: a click on it reaches `shell.openExternal`. */
+function webLink(value: string | null | undefined): string | null {
+  const url = link(value)
+  return url !== null && isExternalUrl(url) ? url : null
+}
+
 /**
  * The state of one entry in the rollup.
  *
@@ -183,7 +190,7 @@ function checkRun(entry: z.infer<typeof CheckRunSchema>): PullRequestCheck {
           // mark for a word we merely have no colour for is a lie about the code.
           (CONCLUSIONS[entry.conclusion] ?? 'skipped')
         : 'pending',
-    url: link(entry.detailsUrl),
+    url: webLink(entry.detailsUrl),
     startedAt: moment(entry.startedAt),
     completedAt: moment(entry.completedAt),
     runId: runOf(entry.detailsUrl)
@@ -197,7 +204,7 @@ function statusContext(entry: z.infer<typeof StatusContextSchema>): PullRequestC
     // of what it is called.
     workflow: null,
     state: CONTEXT_STATES[entry.state] ?? 'pending',
-    url: link(entry.targetUrl),
+    url: webLink(entry.targetUrl),
     startedAt: moment(entry.startedAt),
     // Never sent for this half of the union. A status is a point, not a span.
     completedAt: null,

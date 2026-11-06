@@ -210,6 +210,12 @@ won, and a failure read as a red cross and `1m4s`. The duration is drawn first
 so the words line up in a column against the link rather than each starting
 wherever the number happened to end.
 
+**A check links out only to a web page.** Its link is written by whichever
+integration posted it, and a click reaches `shell.openExternal`, which would
+start a `file:` link to a script in the clone. So `pullRequestShapes.ts` keeps
+it only when `isExternalUrl` passes it, and a check with any other link is drawn
+with no icon rather than dropped: its state is still true.
+
 **Add to chat** puts a remark from the review into the composer rather than
 sending it. The reader has a question about it, and the question is the point.
 It rides the same strip as a note written on the diff, though the two are

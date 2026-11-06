@@ -26,6 +26,7 @@ import { applyLoginShellPath } from './loginPath.js'
 import { canvasColor, resolveTheme } from './theme.js'
 import { TerminalManager } from './terminals.js'
 import { focusExisting } from './windows.js'
+import { openInBrowser } from './externalLinks.js'
 import { guardNavigation } from './navigation.js'
 import { quitAfter } from './quit.js'
 
@@ -69,12 +70,6 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
   // Fires on the first load too, where there is nothing to end.
   window.webContents.on('did-start-loading', () => {
     void terminals.disposeFor(window.webContents)
-  })
-
-  // External links open in the browser, not inside the application.
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
-    return { action: 'deny' }
   })
 
   void window.loadURL(appUrl)
@@ -289,9 +284,11 @@ if (dataRootOverride() !== null) {
   app.setPath('userData', join(rootDir(), 'electron'))
 }
 
-// Every WebContents, so a window added later is covered without remembering to.
+// Every WebContents, so a window added later is covered without remembering to:
+// neither a navigation nor a window it opens may leave the application's document.
 app.on('web-contents-created', (_event, contents) => {
   guardNavigation(contents, appUrl)
+  contents.setWindowOpenHandler(openInBrowser((url) => shell.openExternal(url)))
 })
 
 if (!app.requestSingleInstanceLock()) {

@@ -103,6 +103,18 @@ the window never navigates in the first place: `navigateOnDragDrop` is off
 visible decision), and a drop then starts no navigation at all — checked by
 hand, with the renderer's own drop handlers out of the way.
 
+`externalLinks.ts` answers the other way out of the document: a
+`target="_blank"` link or `window.open`. `openInBrowser` always refuses the
+window — one opened inside the application would get the preload — and hands
+the URL to `shell.openExternal` only when `core/externalUrls.ts` calls it a web
+page: `http:` or `https:`, with no credentials in it. `openExternal` itself
+starts any scheme macOS knows, and a check's link is written by whichever
+integration posted the status, so a `file:` link to a script in the clone would
+run. Plain `http:` passes for any host because a CI server on an intranet links
+over it; the schemes that start programs are what is refused. It is attached in
+`web-contents-created` beside `guardNavigation`, and a rejection from
+`openExternal` is swallowed, since nothing waits on it.
+
 `terminals.ts` is the one part of `main/` that owns something rather than
 forwarding it: pseudo-terminals are process resources bound to a window, which
 is why they cannot live in the core. Ending one is the whole of what it knows
