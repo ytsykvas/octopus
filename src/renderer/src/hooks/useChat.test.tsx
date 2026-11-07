@@ -1218,6 +1218,22 @@ describe('a frame the core could not handle', () => {
     expect(result.current.busy).toBe(true)
     expect(result.current.pending?.requestId).toBe('r-1')
   })
+
+  it('is kept in the log without wiping the answer being written', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({ type: 'text_delta', text: 'Look' })
+    emitAgentEvent({ type: 'message_skipped', reason: 'unreadable' })
+
+    await waitFor(() => {
+      expect(result.current.stream.read().text).toBe('Look')
+    })
+    expect(result.current.entries).toHaveLength(1)
+  })
 })
 
 /*

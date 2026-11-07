@@ -12848,13 +12848,7 @@ describe('the agent chat', () => {
       await expect(service.chatHistory(chat.id)).resolves.toEqual([])
     })
 
-    /*
-     * The mirror of the test above, and the ordinary path rather than the
-     * exotic one: the pane pre-ticks the branch checkbox and only forces when
-     * the worktree is dirty, so a clean workspace whose commits are not merged
-     * refuses every time. Cancelling must cost nothing — the refusal has to
-     * happen before the sessions close and before the cleanup runs.
-     */
+    // Cancelling must cost nothing: the refusal comes before the sessions close and the cleanup.
     it('keeps the conversation and runs no cleanup when the removal is refused', async () => {
       const { refuses } = await unmergedWithChat()
 

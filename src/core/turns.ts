@@ -46,7 +46,8 @@ export function turnStartedAt(entries: readonly ChatEntry[]): string | null {
 function isMainTurnEntry(entry: ChatEntry): boolean {
   if (entry.role !== 'agent') return true
   const { event } = entry
-  if (isTaskBoundary(event)) return false
+  // A skipped frame names no owner, and mid-turn the start is already set.
+  if (isTaskBoundary(event) || event.type === 'message_skipped') return false
   if (event.type === 'permission_request') return event.taskId === undefined
   return !('parentToolUseId' in event) || event.parentToolUseId === undefined
 }

@@ -87,9 +87,9 @@ function fakeAgent(
     /** What the session's settings files say about skills; left out, it reads none. */
     skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
     refuseCommand?: (command: string) => string | null
-    /** Runs after each event is collected; one that throws is how a broken window looks. */
+    /** Runs after the event is collected, so one it throws on is still in `events`. */
     onEvent?: (event: AgentEvent) => void
-    onEnd?: (ending: { readonly failed: boolean }) => void
+    onEnd?: () => void
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -283,7 +283,6 @@ async function* silence(): AsyncGenerator<SDKMessage> {
 /** Lets the microtask queue drain, so pushed messages reach the handler. */
 const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
 
-/** The rejections nobody handled while `run` ran. */
 async function unhandledDuring(run: () => Promise<void>): Promise<unknown[]> {
   const unhandled: unknown[] = []
   const onUnhandled = (reason: unknown): void => {
@@ -1857,38 +1856,38 @@ describe('a session', () => {
       {},
       {
         onEvent: (event) => heard.push(event.type),
-        onEnd: ({ failed }) => heard.push(`end, failed: ${String(failed)}`)
+        onEnd: () => heard.push('end')
       }
     )
 
     agent.finish(new Error('claude exited with code 1'))
     await settle()
 
-    expect(heard).toEqual(['error', 'end, failed: true'])
+    expect(heard).toEqual(['error', 'end'])
   })
 
   it('says the stream has ended when it simply stops', async () => {
-    const ends: boolean[] = []
-    const { agent } = fakeAgent({}, { onEnd: ({ failed }) => ends.push(failed) })
+    let ends = 0
+    const { agent } = fakeAgent({}, { onEnd: () => (ends += 1) })
 
     agent.finish()
     await settle()
 
-    expect(ends).toEqual([false])
+    expect(ends).toBe(1)
   })
 
   it.each([
     ['failing', new Error('Claude Code process exited with code 143')],
     ['simply stopping', undefined]
   ])('says nothing of an end it caused, %s', async (_, failure) => {
-    const ends: boolean[] = []
-    const { agent } = fakeAgent({}, { onEnd: ({ failed }) => ends.push(failed) })
+    let ends = 0
+    const { agent } = fakeAgent({}, { onEnd: () => (ends += 1) })
 
     await agent.session.close()
     agent.finish(failure)
     await settle()
 
-    expect(ends).toEqual([])
+    expect(ends).toBe(0)
   })
 
   it('outlives an end listener that throws', async () => {
@@ -3089,6 +3088,26 @@ describe('the lists a session announces', () => {
         ]
       }
     ])
+  })
+
+  it('loses only the list a listener throws on, and leaves no rejection behind', async () => {
+    const { agent, events } = fakeAgent(
+      {},
+      {
+        commands: [{ name: 'review', description: 'Review it', argumentHint: '' }],
+        onEvent: (event) => {
+          if (event.type === 'commands_changed') throw new Error('window gone')
+        }
+      }
+    )
+
+    const unhandled = await unhandledDuring(async () => {
+      agent.emit(init([]))
+      await settle()
+    })
+
+    expect(events).toContainEqual({ type: 'message_skipped', reason: 'window gone' })
+    expect(unhandled).toEqual([])
   })
 
   // Only what the `@` list shows: the model an agent runs on is its own

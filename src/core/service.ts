@@ -2869,7 +2869,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       try {
         listener(event)
       } catch {
-        // A window failing to take it is its own trouble: the event is recorded and applied.
+        // One listener failing must not cost the others the event.
       }
     }
   }
@@ -4152,8 +4152,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     lastActivity.delete(chatId)
   }
 
-  // What a turn leaves behind when its process goes: queued messages, a promised push,
-  // open edits, a /clear unanswered and a "done" not yet said.
   function forgetTurnInFlight(chatId: string): void {
     heldMessages.delete(chatId)
     publishAfterTurn.delete(chatId)
@@ -4218,7 +4216,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     abandonPermissions(chat.id)
     abandonElicitations(chat.id)
 
-    // Its agents go with its process.
     registry.forget(chat.id)
 
     // Best effort: a session that fails to close must not stop the workspace
@@ -5415,7 +5412,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           // session id written after the first turn would not be in it.
           handleEvent(findChat(state, chat.id) ?? chat, event)
         },
-        // Only a death reaches this: every path that unregisters a session closes it first,
+        // Only a death reaches this: whatever unregisters a session closes it in the same tick,
         // and a closed one never calls it. Never synchronous, so `session` is assigned.
         onEnd: () => {
           releaseDeadSession(chat, session)
@@ -6594,8 +6591,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           }
         }
 
-        // Refuses before anything is destroyed, dirty or clean: a refusal after the chats close
-        // and the cleanup runs would cost the history of a workspace that then lives on.
+        // First, dirty or clean: ensureRemovable says why nothing may be destroyed before it.
         await ensureRemovable(workspace, execs, removal)
 
         // Captured before the chats are closed, because the records go with the

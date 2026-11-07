@@ -55,6 +55,15 @@ describe('when the turn under way began', () => {
     )
   })
 
+  it('is not a frame skipped after the turn closed', () => {
+    const skipped = agent({ type: 'message_skipped', reason: 'window gone' }, '09:02')
+
+    expect(turnStartedAt([user('one', '09:00'), footer, skipped])).toBeNull()
+    expect(turnStartedAt([user('one', '09:00'), footer, skipped, user('two', '09:05')])).toBe(
+      '09:05'
+    )
+  })
+
   // Its steps and its questions land there too, at any moment.
   it('is not a step or a question of an agent at work after the turn closed', () => {
     const inner = agent(

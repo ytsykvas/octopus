@@ -209,10 +209,12 @@ window was lost the other way: the restart emptied the set first.
 Both sets are also emptied with the chat when its workspace is removed, which is
 bookkeeping rather than a guard. Neither can strand a flag that matters: a
 `/clear` whose result never arrives means the session stopped answering, and
-every session dropped goes through one of two doors that empty both
+every session dropped mid-work goes through one of two doors that empty both
 (`forgetTurnInFlight`) — `closeOneChat` for a tab closed, a workspace removed, a
 rewind or a new compaction window, and `releaseDeadSession` for a session whose
-process died. No stale flag is left for the next session's turn to swallow.
+process died. The idle release empties neither and need not: `atRest` lets no
+session go while a `/clear` is pending or a turn is open. No stale flag is left
+for the next session's turn to swallow.
 
 A session also goes when its conversation has been **at rest for ten minutes**
 (`IDLE_RELEASE_MS`, swept once a minute): a CLI process of a hundred megabytes
@@ -226,10 +228,10 @@ the same id, as a restart does. A session whose process died does not wait the
 ten minutes. Its stream ending without a `close` calls `onEnd`, and
 `releaseDeadSession` lets it go at once, with what the process took with it —
 its queue, a promised push, open edits, a pending `/clear` — while the tasks'
-rows and the last context reading stay. "At rest" is `atRest`: idle or errored, no turn
-open, no agent live, no question waiting, nothing held in the CLI's queue, no
-edit announced and unfinished, no `/clear`, rewind or push pending, no session
-on its way up, and the account not being read. Rest is measured from the last
+rows and the last context reading stay. "At rest" is `atRest`: idle or errored,
+no turn open, no agent live, no question waiting, nothing held in the CLI's
+queue, no edit announced and unfinished, no `/clear`, rewind or push pending, no
+session on its way up, and the account not being read. Rest is measured from the last
 event heard or the last time the session was asked for.
 
 The log has the matching rule, because the transcripts written before this did

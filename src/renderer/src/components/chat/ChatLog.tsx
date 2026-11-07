@@ -1460,7 +1460,7 @@ function AutoFellBackRow({
 }
 
 /**
- * What the refusal and denial lines are made of.
+ * What the refusal, denial and skipped-frame lines are made of.
  *
  * Shared because the lines differ in one sentence and one glyph, and the markup
  * under them is load-bearing — the explanation is a second paragraph, so this
@@ -1474,7 +1474,7 @@ function RefusalRow({
 }: {
   readonly icon: React.ReactNode
   readonly said: string
-  /** The model's own prose, drawn as given: display only, never parsed. */
+  /** Someone else's prose, drawn as given: display only, never parsed. */
   readonly explanation: string | null
 }): React.JSX.Element {
   return (
@@ -1514,17 +1514,14 @@ function ErrorRow({ message }: { message: string }): React.JSX.Element {
   )
 }
 
-// Quiet rather than red: one frame was lost and the conversation went on.
 function SkippedRow({ reason }: { readonly reason: string }): React.JSX.Element {
   const { t } = useTranslation()
 
   return (
-    <div className="text-ink-faint border-line border-t pt-2 text-[11px]">
-      <p className="flex items-center gap-2">
-        <MessageSquareOff aria-hidden size={12} />
-        {t('chat.messageSkipped')}
-      </p>
-      <p className="mt-1 pl-5 font-mono">{shown(reason)}</p>
-    </div>
+    <RefusalRow
+      icon={<MessageSquareOff aria-hidden size={12} />}
+      said={t('chat.messageSkipped')}
+      explanation={reason}
+    />
   )
 }

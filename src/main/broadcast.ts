@@ -41,7 +41,7 @@ function toEach(targets: readonly PushTarget[], push: (target: PushTarget) => vo
     try {
       if (!target.webContents.isDestroyed()) push(target)
     } catch {
-      // A window closing mid-send has nobody left to tell; the others still get their copy.
+      // Inside the try: reading webContents off a destroyed window throws, not send.
     }
   }
 }

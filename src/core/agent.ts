@@ -299,7 +299,7 @@ export interface SessionHooks {
    */
   readonly refuseCommand?: (command: string) => string | null
   /** The stream ended and nobody closed the session: its process is gone. */
-  readonly onEnd?: (ending: { readonly failed: boolean }) => void
+  readonly onEnd?: () => void
 }
 
 /** What an MCP server wants from the user, once the form has been read. */
@@ -1182,7 +1182,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     try {
       hooks.onEvent(event)
     } catch {
-      // Nobody is left to tell, and the loop below has to live.
+      // The listener is what failed: a throw here would end the loop or reject unhandled.
     }
   }
 
@@ -1242,7 +1242,6 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   // own. Waiting for it there would make closing depend on a stream ending,
   // and a stream that does not would hang removing a workspace.
   void (async () => {
-    let failed = false
     try {
       // Runs to the end of the stream, and must keep doing so. Leaving this
       // loop early — after a `result`, say, which looks like the end of the
@@ -1260,12 +1259,11 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // a session started again for a new compaction window showed "exited
       // with code 143" above an answer from its successor.
       if (closing.signal.aborted) return
-      failed = true
       deliverOrDrop({ type: 'error', message: describeError(error) })
     }
     if (closing.signal.aborted) return
     try {
-      hooks.onEnd?.({ failed })
+      hooks.onEnd?.()
     } catch {
       // As with an event: nobody is left to tell.
     }

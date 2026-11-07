@@ -461,11 +461,10 @@ export function useChat(
         return
       }
 
-      // Anything else means the block being streamed has finished, and its
-      // complete form is in the event now arriving — except a background task
-      // starting or ending, which is said by the CLI between the main agent's
-      // words and would otherwise wipe the sentence being typed out.
-      if (!isTaskBoundary(event)) discardStreaming()
+      // Anything else means the streamed block has finished, its full form arriving now — except
+      // a task starting or ending, said between the main agent's words, and a skipped frame:
+      // neither ends a block, and either would wipe the sentence being typed out.
+      if (!isTaskBoundary(event) && event.type !== 'message_skipped') discardStreaming()
       setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
 
       // The core gave up auto mode on its own. This line is the only word of

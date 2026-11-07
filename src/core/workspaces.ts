@@ -631,7 +631,7 @@ function blockedBy(branch: string, blocker: string): WorkspaceError {
 export interface RemoveOptions {
   /** Discard uncommitted work. Commits are never lost to it: the merged check still runs. */
   readonly force?: boolean
-  /** Also delete the branch; one holding commits found nowhere else is refused. */
+  /** Also delete the branch; with baseBranch, one holding commits found nowhere else is refused. */
   readonly deleteBranch?: boolean
   /** What "merged" is measured against; only removing a project omits it, losing unmerged work. */
   readonly baseBranch?: string
@@ -755,8 +755,8 @@ export async function discardWorkspace(
   await discardWorktree(exec.repository, workspace.path, options.force ?? false)
 
   if (options.deleteBranch === true) {
-    // -D is safe here: ensureRemovable showed the branch merged, or the caller left out
-    // baseBranch (removing a project) and so agreed to lose it.
+    // -D is safe here: ensureRemovable found every commit kept elsewhere, or the caller left
+    // out baseBranch (removing a project) and so agreed to lose them.
     await deleteBranch(exec.repository, workspace.branch, true)
   }
 }
