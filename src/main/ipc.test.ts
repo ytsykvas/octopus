@@ -1986,6 +1986,26 @@ describe('workspaces of a real project', () => {
     await expect(readFile(join(workspace.path, 'draft.txt'), 'utf8')).resolves.toBe('draft\n')
   })
 
+  it('drops unmerged commits when the window asks for it after the second question', async () => {
+    service = await useService({
+      makeGh: () => () => Promise.reject(new Error('gh: not logged in'))
+    })
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: workspace.path })
+
+    await expect(
+      invoke('workspaces:remove', workspace.id, {
+        force: true,
+        deleteBranch: true,
+        dropUnmerged: true
+      })
+    ).resolves.toMatchObject({ ok: true })
+    await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
+  })
+
   /*
    * `force` decides whether uncommitted work is thrown away, and a truthy
    * string passed for it did exactly that. The service's own options also
@@ -1995,6 +2015,7 @@ describe('workspaces of a real project', () => {
   it.each([
     ['a force that is not a boolean', { force: 'yes' }],
     ['a base branch from the window', { baseBranch: 'main' }],
+    ['a drop that is not a boolean', { dropUnmerged: 'yes' }],
     ['no options object at all', 'force']
   ])('refuses a removal with %s, before anything goes', async (_, options) => {
     const projectId = await addProject()

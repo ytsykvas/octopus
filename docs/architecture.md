@@ -192,6 +192,7 @@ Removing a workspace, end to end:
 ```
 WorkspaceRow (click)
   → useWorkspaces.remove          asks for confirmation, handles the failure,
+                                  asks again before dropping unmerged commits,
                                   says when the cleanup script failed or did not run
   → window.octopus.workspaces.remove   preload: names the channel
   → ipcMain 'workspaces:remove'   main/ipc.ts: validates, calls attempt()

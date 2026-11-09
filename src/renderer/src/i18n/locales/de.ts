@@ -132,6 +132,11 @@ export const de: Translation = {
     removeBranch: 'Auch den Branch {{branch}} löschen',
     removeConfirm: 'Entfernen',
     removeCancel: 'Abbrechen',
+    dropUnmergedTitle: 'Nicht zusammengeführte Commits löschen?',
+    dropUnmergedMessage: '{{branch}} hat Commits, die in keinem anderen Branch sind.',
+    dropUnmergedDetail:
+      'Wird der Branch gelöscht, sind sie endgültig verloren. Um sie zu behalten, abbrechen und den Workspace ohne Häkchen beim Branch entfernen.',
+    dropUnmergedConfirm: 'Trotzdem löschen',
     cleanupFailed:
       'Der Workspace ist entfernt, aber sein Aufräumskript ist fehlgeschlagen – was es zurücknehmen sollte, etwa eine Datenbank, ist womöglich noch da. Ausgabe: {{detail}}',
     cleanupUnapproved:

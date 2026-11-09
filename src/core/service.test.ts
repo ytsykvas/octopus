@@ -71,7 +71,7 @@ import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
 import { listWorktrees } from './worktree.js'
 import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
-import { type RemoveOptions, WorkspaceError } from './workspaces.js'
+import { type RemovalRequest, WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
 
@@ -12991,7 +12991,9 @@ describe('the agent chat', () => {
 
     async function unmergedWithChat(): Promise<{
       path: string
-      refuses: (options: RemoveOptions) => Promise<void>
+      branch: string
+      refuses: (options: RemovalRequest) => Promise<void>
+      removes: (options: RemovalRequest) => Promise<string>
     }> {
       const repo = join(dir, 'planner')
       await initRepo(repo)
@@ -13018,7 +13020,7 @@ describe('the agent chat', () => {
       await run('git', ['add', '.'], { cwd: workspace.path })
       await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: workspace.path })
 
-      const refuses = async (options: RemoveOptions): Promise<void> => {
+      const refuses = async (options: RemovalRequest): Promise<void> => {
         await expect(service.removeWorkspaceById(workspace.id, options)).rejects.toMatchObject({
           code: 'branchUnmerged'
         })
@@ -13029,7 +13031,14 @@ describe('the agent chat', () => {
         await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
       }
 
-      return { path: workspace.path, refuses }
+      const removes = async (options: RemovalRequest): Promise<string> => {
+        await service.removeWorkspaceById(workspace.id, options)
+        await expect(service.listWorkspaces(project.id)).resolves.toEqual([])
+        const { stdout } = await run('git', ['branch', '--list', workspace.branch], { cwd: repo })
+        return stdout
+      }
+
+      return { path: workspace.path, branch: workspace.branch, refuses, removes }
     }
 
     // The worktree is about to stop existing, and a live agent would keep a
@@ -13050,6 +13059,18 @@ describe('the agent chat', () => {
       const { refuses } = await unmergedWithChat()
 
       await refuses({ deleteBranch: true })
+    })
+
+    it('drops an unmerged branch when the user said drop it', async () => {
+      const { removes } = await unmergedWithChat()
+
+      expect(await removes({ deleteBranch: true, dropUnmerged: true })).toBe('')
+    })
+
+    it('keeps the branch when told to drop unmerged commits but not to delete it', async () => {
+      const { branch, removes } = await unmergedWithChat()
+
+      expect(await removes({ dropUnmerged: true })).toContain(branch)
     })
 
     it('refuses a dirty workspace with unmerged commits even when forced', async () => {

@@ -1476,34 +1476,64 @@ describe('useWorkspaces', () => {
       expect(result.current.flat).toEqual([anna])
     })
 
-    it('explains an unmerged branch when a dirty workspace is refused', async () => {
+    const unmerged = {
+      ok: false as const,
+      error: 'ytsykvas/anna has commits that are not in main.',
+      code: 'branchUnmerged',
+      params: { name: 'anna', branch: 'ytsykvas/anna' }
+    }
+
+    it('asks again before dropping unmerged commits, and drops them when told to', async () => {
       workspacesPerProject({ planner: [anna] })
       vi.mocked(window.octopus.workspaces.hasChanges).mockResolvedValue({ ok: true, value: true })
-      vi.mocked(window.octopus.workspaces.remove).mockResolvedValue({
-        ok: false,
-        error: 'ytsykvas/anna has commits that are not in main.',
-        code: 'branchUnmerged',
-        params: { name: 'anna', branch: 'ytsykvas/anna' }
-      })
+      vi.mocked(window.octopus.workspaces.remove)
+        .mockResolvedValueOnce(unmerged)
+        .mockResolvedValueOnce({ ok: true, value: { status: 'done' } })
+      const confirm = vi
+        .fn<Confirm>()
+        .mockResolvedValueOnce({ confirmed: true, checked: true })
+        .mockResolvedValueOnce({ confirmed: true, checked: false })
       const onError = vi.fn<OnError>()
       const projects = [planner]
 
-      const { result } = renderHook(() =>
-        useWorkspaces(projects, acceptsAndDeletesBranch(), onError)
-      )
+      const { result } = renderHook(() => useWorkspaces(projects, confirm, onError))
       await waitFor(() => {
         expect(result.current.flat).toEqual([anna])
       })
 
       await act(() => result.current.remove('planner/anna'))
 
-      expect(window.octopus.workspaces.remove).toHaveBeenCalledWith('planner/anna', {
-        force: true,
-        deleteBranch: true
+      expect(vi.mocked(window.octopus.workspaces.remove).mock.calls).toEqual([
+        ['planner/anna', { force: true, deleteBranch: true }],
+        ['planner/anna', { force: true, deleteBranch: true, dropUnmerged: true }]
+      ])
+      expect(confirm.mock.calls[1]?.[0]).toMatchObject({
+        destructive: true,
+        message: 'ytsykvas/anna has commits that are in no other branch.'
       })
-      expect(onError).toHaveBeenCalledWith(
-        'ytsykvas/anna has commits that are not in the base branch. Remove it with the branch checkbox cleared, or merge it first.'
-      )
+      expect(onError.mock.calls).toEqual([[null]])
+    })
+
+    it('keeps the workspace when the second question is declined', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.hasChanges).mockResolvedValue({ ok: true, value: true })
+      vi.mocked(window.octopus.workspaces.remove).mockResolvedValueOnce(unmerged)
+      const confirm = vi
+        .fn<Confirm>()
+        .mockResolvedValueOnce({ confirmed: true, checked: true })
+        .mockResolvedValueOnce({ confirmed: false, checked: false })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, confirm, onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.remove('planner/anna'))
+
+      expect(window.octopus.workspaces.remove).toHaveBeenCalledTimes(1)
+      expect(onError.mock.calls).toEqual([[null]])
       expect(result.current.flat).toEqual([anna])
     })
 

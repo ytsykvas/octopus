@@ -132,6 +132,11 @@ export const uk: Translation = {
     removeBranch: 'Видалити також гілку {{branch}}',
     removeConfirm: 'Видалити',
     removeCancel: 'Скасувати',
+    dropUnmergedTitle: 'Видалити незлиті коміти?',
+    dropUnmergedMessage: '{{branch}} має коміти, яких немає в жодній іншій гілці.',
+    dropUnmergedDetail:
+      'Якщо видалити гілку, вони зникнуть назавжди. Щоб зберегти їх, скасуйте й видаліть воркспейс зі знятою галочкою гілки.',
+    dropUnmergedConfirm: 'Видалити попри це',
     cleanupFailed:
       'Воркспейс видалено, але скрипт прибирання завершився з помилкою, тож те, що він мав прибрати (наприклад, база даних), могло лишитися. Його вивід: {{detail}}',
     cleanupUnapproved:

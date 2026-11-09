@@ -186,11 +186,14 @@ Removal is the same rule read backwards. `removeWorkspaceById` asks
 `ensureRemovable` before it closes a single session, because everything after
 that line destroys something a refusal cannot give back — and the refusal is
 the ordinary path, not a rare one: the pane pre-ticks the delete-branch box, so
-a workspace whose commits are not merged refuses every time, dirty or clean.
-`force` throws away uncommitted work, never committed work: the merged check runs
-whether it is set or not. Only removing a project deletes an unmerged branch —
-it passes no `baseBranch`, so the check is skipped, and its dialog has already
-said every branch goes. The split between `ensureRemovable` and
+a workspace whose commits are not merged is refused every time, dirty or clean,
+and the window then asks once more rather than failing. `force` throws away
+uncommitted work, never committed work: the merged check runs whether it is set
+or not. Two removals delete an unmerged branch, both by passing no
+`baseBranch`, so the check is skipped: removing a project, whose dialog has
+already said every branch goes, and a workspace removal sent with
+`dropUnmerged` after that second question — told the branch holds commits found
+nowhere else, the user said delete it anyway. The split between `ensureRemovable` and
 `discardWorkspace` exists so that a caller with work of its own to do in
 between cannot accidentally ask twice; asking twice is worse than it sounds,
 because the cleanup script runs in the worktree and a script that writes there

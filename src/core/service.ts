@@ -426,7 +426,8 @@ import {
   type CreatedWorkspace,
   type KindDetour,
   type WorkspaceView,
-  type RemoveOptions
+  type RemoveOptions,
+  type RemovalRequest
 } from './workspaces.js'
 
 /**
@@ -1406,7 +1407,7 @@ export interface OctopusService {
   /** Answers the detour the branch took round one named after its kind, or null. */
   renameWorkspaceById(workspaceId: string, name: string): Promise<KindDetour | null>
   /** Answers what became of the cleanup script, which nothing lets stop the removal. */
-  removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<CleanupOutcome>
+  removeWorkspaceById(workspaceId: string, options?: RemovalRequest): Promise<CleanupOutcome>
   /** Whether a workspace holds work that removal would discard. */
   workspaceHasChanges(workspaceId: string): Promise<boolean>
   /**
@@ -6567,37 +6568,44 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           repository: makeExec(project.repoPath),
           workspace: makeExec(workspace.path)
         }
-        const removal = {
-          ...options,
-          // The base branch travels with the request so "is this merged" can be
-          // answered before the worktree is destroyed rather than after.
-          baseBranch: baseRef,
-          /*
-           * What git cannot see.
-           *
-           * A squash or a rebase merge rewrites the commits, so none of them is
-           * an ancestor of the base afterwards and git reports the branch as
-           * unmerged — including when it was this app's own merge button that
-           * landed it. GitHub knows better, and is asked only after git has
-           * said no.
-           *
-           * A failure here is not a failure to remove: gh may be missing or
-           * signed out, and then the git answer is the only one there is.
-           */
-          mergedRemotely: async (): Promise<boolean> => {
-            try {
-              const view = await readPullRequest(
-                workspace,
-                baseRef,
-                makeGh(workspace.path),
-                makeExec(workspace.path)
-              )
-              return view.request?.state === 'merged'
-            } catch {
-              return false
-            }
-          }
+        const choices: RemoveOptions = {
+          force: options?.force ?? false,
+          deleteBranch: options?.deleteBranch ?? false
         }
+        const removal: RemoveOptions =
+          options?.dropUnmerged === true
+            ? choices
+            : {
+                ...choices,
+                // The base branch travels with the request so "is this merged" can be
+                // answered before the worktree is destroyed rather than after.
+                baseBranch: baseRef,
+                /*
+                 * What git cannot see.
+                 *
+                 * A squash or a rebase merge rewrites the commits, so none of them is
+                 * an ancestor of the base afterwards and git reports the branch as
+                 * unmerged — including when it was this app's own merge button that
+                 * landed it. GitHub knows better, and is asked only after git has
+                 * said no.
+                 *
+                 * A failure here is not a failure to remove: gh may be missing or
+                 * signed out, and then the git answer is the only one there is.
+                 */
+                mergedRemotely: async (): Promise<boolean> => {
+                  try {
+                    const view = await readPullRequest(
+                      workspace,
+                      baseRef,
+                      makeGh(workspace.path),
+                      makeExec(workspace.path)
+                    )
+                    return view.request?.state === 'merged'
+                  } catch {
+                    return false
+                  }
+                }
+              }
 
         // First, dirty or clean: ensureRemovable says why nothing may be destroyed before it.
         await ensureRemovable(workspace, execs, removal)

@@ -650,7 +650,7 @@ export interface RemoveOptions {
 }
 
 /**
- * What the window may ask of a removal: the two choices its dialog offers.
+ * What the window may ask of a removal: the choices its dialogs offer.
  *
  * Strict, and narrower than `RemoveOptions`. `force` decides whether
  * uncommitted work is thrown away, so only a boolean will do; the base branch
@@ -658,7 +658,9 @@ export interface RemoveOptions {
  */
 export const RemovalRequestSchema = z.strictObject({
   force: z.boolean().default(false),
-  deleteBranch: z.boolean().default(false)
+  deleteBranch: z.boolean().default(false),
+  /** Sent only after the user was told the branch's commits are nowhere else. */
+  dropUnmerged: z.boolean().default(false)
 })
 /** As the window sends it: either choice may be left out, and reads as no. */
 export type RemovalRequest = z.input<typeof RemovalRequestSchema>
@@ -756,7 +758,7 @@ export async function discardWorkspace(
 
   if (options.deleteBranch === true) {
     // -D is safe here: ensureRemovable found every commit kept elsewhere, or the caller left
-    // out baseBranch (removing a project) and so agreed to lose them.
+    // out baseBranch — a project removal, or a user who said drop them — and so agreed to it.
     await deleteBranch(exec.repository, workspace.branch, true)
   }
 }
