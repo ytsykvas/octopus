@@ -43,7 +43,7 @@ import { shown } from '../diff/shown.js'
 import { NOTHING_STREAMING, type StreamStore, streamOf } from '../../hooks/useStreaming.js'
 import { sameMap, sameSet, useSameValue } from '../../hooks/useSameValue.js'
 import { DaySeparator } from './DayChip.js'
-import { exitCodeOf, formatClock, formatFullTime, formatTokens, savedShare } from './format.js'
+import { formatClock, formatFullTime, formatTokens, processEndOf, savedShare } from './format.js'
 import { Markdown } from './Markdown.js'
 import { BLOCK_PART, DAY_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
@@ -1494,8 +1494,8 @@ function RefusalRow({
 const ERROR_BOX =
   'bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2'
 
-/* A death by exit code is worded with the SDK's line kept under it, to search for. An
-   `endedQuietly` has no SDK line — its message is core's own — so the words stand alone. */
+/* A death the SDK names — an exit code or a signal — is worded, its line kept under it to search
+   for. An `endedQuietly` has no SDK line — its message is core's own — so the words stand alone. */
 function ErrorRow({ event }: { event: Extract<AgentEvent, { type: 'error' }> }): React.JSX.Element {
   const { t } = useTranslation()
   if (event.code === 'endedQuietly') {
@@ -1506,14 +1506,18 @@ function ErrorRow({ event }: { event: Extract<AgentEvent, { type: 'error' }> }):
     )
   }
 
-  const code = exitCodeOf(event.message)
+  const end = processEndOf(event.message)
   return (
     <div className={ERROR_BOX}>
-      {code === null ? (
+      {end === null ? (
         <p>{shown(event.message)}</p>
       ) : (
         <>
-          <p>{code > 128 ? t('chat.processStopped') : t('chat.processFailed', { code })}</p>
+          <p>
+            {end.kind === 'stopped'
+              ? t('chat.processStopped')
+              : t('chat.processFailed', { code: end.code })}
+          </p>
           <p className="text-ink-faint mt-1 font-mono text-[11px]">{shown(event.message)}</p>
         </>
       )}

@@ -6,18 +6,18 @@
  * difference between 47,912 and 48,000.
  */
 
-/**
- * The exit code in a failure the SDK reported for the agent's process, or
- * null for any other failure.
- *
- * Read from the text because that is all the SDK gives — an `Error` whose
- * message is "Claude Code process exited with code 143" — and because the
- * chat logs already written hold only that text, so a code taken any later
- * would leave every old failure as raw as it was.
- */
-export function exitCodeOf(message: string): number | null {
+/** How the agent's process ended: stopped from outside, or failed with its own exit code. */
+export type ProcessEnd =
+  { readonly kind: 'stopped' } | { readonly kind: 'failed'; readonly code: number }
+
+// Read from the SDK's text, the only thing it gives. A signal stops it from outside, and so does
+// an exit code past 128, which is a signal's.
+export function processEndOf(message: string): ProcessEnd | null {
+  if (/process terminated by signal \w+/.test(message)) return { kind: 'stopped' }
   const found = /process exited with code (\d+)/.exec(message)
-  return found ? Number(found[1]) : null
+  if (!found) return null
+  const code = Number(found[1])
+  return code > 128 ? { kind: 'stopped' } : { kind: 'failed', code }
 }
 
 /** A token count, shortened: `860`, `1.2k`, `48k`. */

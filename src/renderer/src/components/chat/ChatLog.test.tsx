@@ -1394,6 +1394,20 @@ describe('what the log shows', () => {
     ).toBeVisible()
     expect(screen.queryByText('Claude Code ended without a result or an error')).toBeNull()
   })
+  it('says a process killed by a signal was stopped from outside, with its line under it', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'error', message: 'Claude Code process terminated by signal SIGKILL' })
+      ]
+    })
+
+    expect(
+      screen.getByText(
+        'Claude Code was stopped from outside — by the system or another program. Send a message to carry on; the conversation is kept.'
+      )
+    ).toBeVisible()
+    expect(screen.getByText('Claude Code process terminated by signal SIGKILL')).toBeVisible()
+  })
 
   // The session id is bookkeeping; a row for it would say nothing to anyone.
   it('draws nothing for events that are not part of the conversation', () => {
