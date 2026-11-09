@@ -66,12 +66,14 @@ bug against the real data root; point the copy at a temporary one as above.
 ## Where swallowed errors go
 
 Some failures are caught on purpose, so that one cannot take the rest down: a
-window's listener that throws, a message the agent stream cannot map, the
-end-of-stream hook. Each goes, stack and all, to `main.log` in
-`app.getPath('logs')` — `~/Library/Logs/Octopus/` for the built app,
-`~/Library/Logs/octopus/` for a dev copy — and to the terminal `npm run dev`
-runs in. The file is cut to its last megabyte, from a whole line, when the app
-starts. A window destroyed mid-broadcast is not logged: it is a window closing,
+listener that throws on an agent event (the service's own, or main's that pushes
+it to the windows), a message the agent stream cannot map, the end-of-stream
+hook. Each goes, stack and all, to `main.log` in `app.getPath('logs')` and to
+the terminal `npm run dev` runs in. That is `~/Library/Logs/octopus/` for the
+built app and for every dev copy alike — Electron names the folder after the
+package, and `$OCTOPUS_DATA_DIR` does not move it — so lines from copies running
+side by side share one file. It is cut to its last megabyte, from a whole line,
+when a copy starts. A window destroyed mid-broadcast is not logged: it is a window closing,
 the only thing measured to throw there, and not a fault.
 
 ## Native modules and the Electron binary

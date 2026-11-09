@@ -3,10 +3,7 @@ import { dirname } from 'node:path'
 
 const KEEP_BYTES = 1024 * 1024
 
-/**
- * Where errors swallowed on purpose go. Synchronous and never throwing: it runs inside the
- * catches that keep a session alive. Cut to its last megabyte when opened.
- */
+/** Where errors swallowed on purpose go. Runs inside catches: synchronous, and never throws. */
 export function diagnosticLog(
   file: string,
   echo: (line: string) => void = (line) => {
@@ -16,10 +13,10 @@ export function diagnosticLog(
 ): (error: unknown) => void {
   trim(file)
   return (error) => {
-    const told = error instanceof Error ? (error.stack ?? error.message) : String(error)
-    const line = `${now()} ${told}`
-    echo(line)
     try {
+      const told = error instanceof Error ? (error.stack ?? error.message) : String(error)
+      const line = `${now()} ${told}`
+      echo(line)
       mkdirSync(dirname(file), { recursive: true })
       appendFileSync(file, `${line}\n`)
     } catch {

@@ -106,6 +106,32 @@ describe('the diagnostic log', () => {
     expect(echoed).toEqual(['T lost'])
   })
 
+  it('outlives a thrown value that cannot be put into words', () => {
+    const log = diagnosticLog(
+      join(dir, 'main.log'),
+      () => undefined,
+      () => 'T'
+    )
+
+    expect(() => {
+      log(Object.create(null))
+    }).not.toThrow()
+  })
+
+  it('outlives an echo that throws', () => {
+    const log = diagnosticLog(
+      join(dir, 'main.log'),
+      () => {
+        throw new Error('stderr gone')
+      },
+      () => 'T'
+    )
+
+    expect(() => {
+      log('lost')
+    }).not.toThrow()
+  })
+
   it('echoes to the console and stamps the time by default', () => {
     const console_ = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
