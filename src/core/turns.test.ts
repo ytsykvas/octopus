@@ -39,6 +39,12 @@ describe('when the turn under way began', () => {
     expect(turnStartedAt([user('one', '09:00'), failed, user('two', '09:05')])).toBe('09:05')
   })
 
+  it('goes on through a background failure the session outlived', () => {
+    const reported = agent({ type: 'error', message: 'disk full', code: 'background' }, '09:01')
+
+    expect(turnStartedAt([user('one', '09:00'), reported, step('09:02')])).toBe('09:00')
+  })
+
   // An agent the turn sent off records its start and end after the turn's
   // result, while no turn is running: counting from one would start a clock
   // for work the main agent is not doing.

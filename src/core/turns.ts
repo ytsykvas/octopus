@@ -15,16 +15,13 @@
 import { isTaskBoundary } from './events.js'
 import type { ChatEntry } from './transcript.js'
 
-/**
- * The start after one more entry: the first of the main agent's own entries
- * since the last turn closed.
- *
- * A `result` or an `error` closes the turn, so nothing is under way until
- * something else is said.
- */
+// The main agent's first entry since the turn closed. An `error` closes the turn as a `result`
+// does, unless it is a `background` one: the session outlived that.
 export function nextTurnStart(start: string | null, entry: ChatEntry): string | null {
   const closes =
-    entry.role === 'agent' && (entry.event.type === 'result' || entry.event.type === 'error')
+    entry.role === 'agent' &&
+    (entry.event.type === 'result' ||
+      (entry.event.type === 'error' && entry.event.code !== 'background'))
   if (closes) return null
   return start ?? (isMainTurnEntry(entry) ? entry.at : null)
 }

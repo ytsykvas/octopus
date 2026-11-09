@@ -388,9 +388,10 @@ The other half of the same rule: the entry is removed where the answer is
 write that failed left the agent blocked on a question nothing could ask again —
 the window had dropped its copy, and `pendingPermissions` had none.
 
-Only the session's own stream reaches `handleEvent`; a background write that
-failed is reported straight to the listeners by `report`. That is what makes the
-`error` case safe to withdraw on.
+Only the session's own stream reaches `handleEvent`, and the `endedQuietly`
+error `onEnd` puts in for a process already gone; a background write that failed
+is reported straight to the listeners by `report`, coded `background`. That is
+what makes the `error` case safe to withdraw on.
 
 ## What a stopped turn was holding goes with it
 

@@ -8943,7 +8943,9 @@ describe('the agent chat', () => {
       release([OPUS])
 
       await vi.waitFor(() => {
-        expect(events.some((entry) => entry.event.type === 'error')).toBe(true)
+        expect(events.map(({ event }) => event)).toContainEqual(
+          expect.objectContaining({ type: 'error', code: 'background' })
+        )
       })
     })
 

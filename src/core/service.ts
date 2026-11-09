@@ -3043,7 +3043,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     emit({
       chatId: chat.id,
       workspaceId: chat.workspaceId,
-      event: { type: 'error', message: describeError(error) }
+      event: { type: 'error', message: describeError(error), code: 'background' }
     })
   }
 

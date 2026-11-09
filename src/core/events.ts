@@ -760,8 +760,8 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('error'),
     message: z.string(),
-    /** Set when core ends the turn, not the SDK: the window words it from the code. */
-    code: z.enum(['endedQuietly']).optional()
+    /** Core's own: `endedQuietly` closed the turn; `background` failed as the session went on. */
+    code: z.enum(['endedQuietly', 'background']).optional()
   })
 ])
 
