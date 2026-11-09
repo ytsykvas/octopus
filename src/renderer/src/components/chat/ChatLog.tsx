@@ -1491,16 +1491,13 @@ function RefusalRow({
   )
 }
 
-const ERROR_BOX =
-  'bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2'
-
 /* A death the SDK names — an exit code or a signal — is worded, its line kept under it to search
    for. An `endedQuietly` has no SDK line — its message is core's own — so the words stand alone. */
 function ErrorRow({ event }: { event: Extract<AgentEvent, { type: 'error' }> }): React.JSX.Element {
   const { t } = useTranslation()
   if (event.code === 'endedQuietly') {
     return (
-      <div className={ERROR_BOX}>
+      <div className="error-box">
         <p>{t('chat.processEnded')}</p>
       </div>
     )
@@ -1508,7 +1505,7 @@ function ErrorRow({ event }: { event: Extract<AgentEvent, { type: 'error' }> }):
 
   const end = processEndOf(event.message)
   return (
-    <div className={ERROR_BOX}>
+    <div className="error-box">
       {end === null ? (
         <p>{shown(event.message)}</p>
       ) : (

@@ -927,9 +927,7 @@ export function ChatSession({
           message being written, so it sits where that message is. */}
           {(chat.error ?? notice) !== null && (
             <div className="mx-auto w-full max-w-6xl px-6 pt-2">
-              <p className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-                {chat.error ?? notice}
-              </p>
+              <p className="error-box">{chat.error ?? notice}</p>
             </div>
           )}
 

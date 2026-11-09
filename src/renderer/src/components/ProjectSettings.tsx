@@ -515,11 +515,7 @@ export function ProjectSettings({
         />
 
         <div className="min-w-0 flex-1 space-y-6 overflow-auto p-6">
-          {error !== null && (
-            <div className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-              {error}
-            </div>
-          )}
+          {error !== null && <div className="error-box">{error}</div>}
 
           {section === 'general' && (
             <>
