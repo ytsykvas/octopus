@@ -7289,8 +7289,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        */
       if (config.opusPlan && chat.planMode && !opusPlanSettled.has(session)) {
         opusPlanSettled.add(session)
-        await session.setModel(OPUS_PLAN_ALIAS)
-        onOpusPlan.add(session)
+        try {
+          await session.setModel(OPUS_PLAN_ALIAS)
+          onOpusPlan.add(session)
+        } catch (error) {
+          // Refused by a session let go meanwhile: the message goes on below, to the next one.
+          if (!(await wasLetGo(session))) throw error
+        }
       }
 
       /*

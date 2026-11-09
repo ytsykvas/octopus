@@ -5425,6 +5425,7 @@ describe('the agent chat', () => {
   let skillReload: () => Promise<unknown>
   /** What the session answers when its flags are set. */
   let flagsAnswer: () => Promise<void>
+  let modelAnswer: () => Promise<void>
   let pluginReload: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
   /** Null is a CLI with no side-question call at all. */
@@ -5586,7 +5587,7 @@ describe('the agent chat', () => {
         setModel: (model: string | undefined) => {
           requestedModels.push(model)
           timeline.push(`model:${String(model)}`)
-          return Promise.resolve()
+          return modelAnswer()
         },
         supportedModels: () => offered(),
         supportedCommands: () => offeredCommands(),
@@ -5724,6 +5725,7 @@ describe('the agent chat', () => {
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
     skillReload = () => Promise.resolve({ skills: [] })
     flagsAnswer = () => Promise.resolve()
+    modelAnswer = () => Promise.resolve()
     pluginReload = () =>
       Promise.resolve({ commands: [], agents: [], plugins: [], mcpServers: [], error_count: 0 })
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
@@ -7211,6 +7213,42 @@ describe('the agent chat', () => {
       await vi.waitFor(() => {
         expect(agents[1]?.sent).toEqual(['again'])
       })
+    })
+
+    it('sends a message whose plan model was on its way as the process died', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ opusPlan: true })
+      const chat = await service.openChat(workspaceId)
+      let refuse: (error: Error) => void = () => undefined
+      modelAnswer = () =>
+        new Promise<void>((_, reject) => {
+          refuse = reject
+        })
+      const sent = service.sendToChat(chat.id, 'plan it')
+      await vi.waitFor(() => {
+        expect(agent().requestedModels()).toEqual(['opusplan'])
+      })
+
+      modelAnswer = () => Promise.resolve()
+      refuse(new Error('Query closed before response received'))
+      setTimeout(() => {
+        agents[0]?.finish(new Error('claude exited with code 1'))
+      }, 20)
+      await sent
+
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['plan it'])
+      })
+    })
+
+    it('lets a plan model a live session refuses go up', async () => {
+      const { service, workspaceId } = await withWorkspace({ letGoGraceMs: 5 })
+      await service.updateConfig({ opusPlan: true })
+      const chat = await service.openChat(workspaceId)
+      modelAnswer = () => Promise.reject(new Error('unknown model'))
+
+      await expect(service.sendToChat(chat.id, 'plan it')).rejects.toThrow('unknown model')
+      expect(agents[0]?.sent).toEqual([])
     })
 
     it('keeps auto mode when the process dies under its mode switch', async () => {
