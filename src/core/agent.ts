@@ -327,6 +327,8 @@ export interface AgentSession {
    * rewound to.
    */
   send: (text: string, messageId?: UUID) => void
+  /** Settles once the stream is over and `onEnd`, if it was called, has returned. */
+  readonly ended: Promise<void>
   /**
    * What putting the files back to a message would do — or does, without
    * `dryRun`. Needs the checkpointing the session was started with.
@@ -1244,11 +1246,9 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     }
   }
 
-  // Started and never awaited. `close` is what actually ends the session —
-  // it kills the process the SDK spawned, and the loop then falls out on its
-  // own. Waiting for it there would make closing depend on a stream ending,
-  // and a stream that does not would hang removing a workspace.
-  void (async () => {
+  // Never awaited by `close`, which ends the session by killing the process: waiting on the
+  // stream there would let one that never ends hang removing a workspace.
+  const ended = (async (): Promise<void> => {
     try {
       // Runs to the end of the stream, and must keep doing so. Leaving this
       // loop early — after a `result`, say, which looks like the end of the
@@ -1280,6 +1280,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     send(text, messageId) {
       input.push(userMessage(text, messageId))
     },
+
+    ended,
 
     async rewindFiles(messageId, dryRun) {
       const result = await conversation.rewindFiles(messageId, { dryRun })

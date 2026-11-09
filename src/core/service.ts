@@ -478,6 +478,10 @@ const IDLE_RELEASE_MS = 10 * 60_000
 /** How often the sessions are looked over for ones at rest that long. */
 const IDLE_SWEEP_MS = 60_000
 
+// The SDK refuses a dying process's requests first and ends its stream once the process has
+// exited, so a refusal waits this long for that end before it counts as one.
+const LET_GO_GRACE_MS = 500
+
 /**
  * The events that mean the model itself spoke — what a session's headers are
  * refreshed by. Deltas count: they are the response in progress.
@@ -586,6 +590,8 @@ export interface ServiceOptions {
   /** How long a session may rest before it is let go; see `IDLE_RELEASE_MS`. */
   readonly idleReleaseMs?: number
   readonly idleSweepMs?: number
+  /** How long a refusal waits for its session's end; see `LET_GO_GRACE_MS`. */
+  readonly letGoGraceMs?: number
   /** How young a kept account reading answers the timer with no session running; the release's own length by default. */
   readonly readingFreshMs?: number
   /**
@@ -1917,6 +1923,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const finishedAfterMs = options.finishedAfterMs ?? FINISHED_AFTER_MS
   const idleReleaseMs = options.idleReleaseMs ?? IDLE_RELEASE_MS
   const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
+  const letGoGraceMs = options.letGoGraceMs ?? LET_GO_GRACE_MS
   const readingFreshMs = options.readingFreshMs ?? idleReleaseMs
   /** A "done" waiting out `FINISHED_AFTER_MS`, per conversation. */
   const finishing = new Map<string, ReturnType<typeof setTimeout>>()
@@ -2083,6 +2090,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * back over what was just picked.
    */
   const opusPlanSettled = new WeakSet<AgentSession>()
+  // Let go with its chat still open: a send that still holds one starts the next.
+  const letGo = new WeakSet<AgentSession>()
   /**
    * Sessions whose plan model has been decided but not sent, with the model
    * and effort they are actually running on.
@@ -3865,6 +3874,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     try {
       await session.setPermissionMode(sessionMode(requireChat(chatId)))
     } catch (error) {
+      if (await wasLetGo(session)) return
       // Only while the record still says auto: a choice made since is newer
       // than the one being refused.
       await commit((current) =>
@@ -3892,15 +3902,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * own and a refusal of it is a fault, which goes up as before.
    */
   async function assertMode(chatId: string, session: AgentSession): Promise<void> {
-    // What was asked for, held across the wait: the user may have moved on by
-    // the time a refusal arrives, and a refusal of auto mode is never a fault
-    // to report — at worst it is one nobody wants any more.
+    // Held across the wait: the user may have moved on by the time a refusal arrives.
     const wanted = sessionMode(requireChat(chatId))
     try {
       await session.setPermissionMode(wanted)
     } catch (error) {
-      // A session let go under the switch refused nothing: the next one takes the mode.
-      if (wanted !== 'auto' || letGo.has(session)) throw error
+      // A session let go under the switch refused nothing: the next one starts in the mode.
+      if (await wasLetGo(session)) return
+      if (wanted !== 'auto') throw error
       await fallBackFromAuto(chatId, describeError(error))
       await session.setPermissionMode(sessionMode(requireChat(chatId)))
     }
@@ -4139,9 +4148,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       : null
   }
 
-  // Let go with its chat still open: a send that still holds one starts the next.
-  const letGo = new WeakSet<AgentSession>()
-
   function forgetProcess(chatId: string): void {
     sessions.delete(chatId)
     compaction.delete(chatId)
@@ -4170,6 +4176,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     letGo.add(session)
     forgetProcess(chatId)
     await session.close().catch(() => undefined)
+  }
+
+  async function wasLetGo(session: AgentSession): Promise<boolean> {
+    if (!letGo.has(session)) {
+      await Promise.race([
+        session.ended,
+        new Promise<void>((resolve) => setTimeout(resolve, letGoGraceMs).unref())
+      ])
+    }
+    return letGo.has(session)
   }
 
   // At once, before any await: the next message must find no session to send into. The
@@ -7260,11 +7276,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           await running.setEffort(effortInForce(chat))
         } catch (error) {
           // A request into a session let go meanwhile fails; the message goes on below.
-          if (!letGo.has(running)) throw error
+          if (!(await wasLetGo(running))) throw error
         }
       }
 
-      const session = running ?? (await sessionFor(chat, workspace))
+      const session = running && !letGo.has(running) ? running : await sessionFor(chat, workspace)
 
       /*
        * The `opusPlan` preset: the first message of a session sent while

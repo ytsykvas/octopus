@@ -1892,6 +1892,25 @@ describe('a session', () => {
     expect(ends).toBe(0)
   })
 
+  it('settles its end only once the end listener has returned', async () => {
+    const heard: string[] = []
+    const { agent } = fakeAgent({}, { onEnd: () => heard.push('end') })
+
+    agent.finish(new Error('claude exited with code 1'))
+    await agent.session.ended
+
+    expect(heard).toEqual(['end'])
+  })
+
+  it('settles its end when it was closed', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.close()
+    agent.finish()
+
+    await expect(agent.session.ended).resolves.toBeUndefined()
+  })
+
   it('outlives an end listener that throws', async () => {
     const { agent } = fakeAgent(
       {},

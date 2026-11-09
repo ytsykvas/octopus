@@ -7062,16 +7062,18 @@ describe('the agent chat', () => {
       expect(events.filter(({ event }) => event.type === 'error')).toEqual([])
     })
 
-    // Held at its mode switch, and let go with a refusal, as the SDK answers a request
-    // whose process will never answer it now.
+    // A test chat starts in plan mode: leave it first, or assertMode asks for plan, not auto.
     async function heldSend(
       extra: ServiceOptions = {},
-      mode?: WorkingMode
+      mode?: WorkingMode,
+      act: (service: OctopusService, chatId: string) => Promise<unknown> = (service, chatId) =>
+        service.sendToChat(chatId, 'again')
     ): Promise<{
       service: OctopusService
       workspaceId: string
-      sent: Promise<string | null>
+      sent: Promise<unknown>
       release: () => void
+      dies: () => void
     }> {
       const { service, workspaceId } = await withWorkspace(extra)
       const chat = await service.openChat(workspaceId)
@@ -7093,29 +7095,35 @@ describe('the agent chat', () => {
           refuse = reject
         })
       }
-      const sent = service.sendToChat(chat.id, 'again')
+      const sent = act(service, chat.id)
       await vi.waitFor(() => {
         expect(asked).toBe(true)
       })
+      const first = agent()
+      const release = (): void => {
+        modeAnswer = () => Promise.resolve()
+        refuse(new Error('Query closed before response received'))
+      }
       return {
         service,
         workspaceId,
         sent,
-        release: () => {
-          modeAnswer = () => Promise.resolve()
-          refuse(new Error('Query closed before response received'))
+        release,
+        // The SDK's order: the pending request is refused first, and the stream ends only once
+        // the process has gone, a moment later.
+        dies: () => {
+          release()
+          setTimeout(() => {
+            first.finish(new Error('claude exited with code 1'))
+          }, 20)
         }
       }
     }
 
     it('sends a message that waited through the death into the next session', async () => {
-      const { sent, release } = await heldSend()
-      agent().finish(new Error('claude exited with code 1'))
-      await vi.waitFor(() => {
-        expect(agents[0]?.closed()).toBe(1)
-      })
+      const { sent, dies } = await heldSend()
 
-      release()
+      dies()
       await sent
 
       expect(agents).toHaveLength(2)
@@ -7126,7 +7134,9 @@ describe('the agent chat', () => {
     })
 
     it('sends a message that waited through an idle release into the next session', async () => {
-      const { sent, release } = await heldSend({ ...SOON, idleReleaseMs: 300 })
+      let clock = '2026-11-09T10:00:00.000Z'
+      const { sent, release } = await heldSend({ ...SOON, idleReleaseMs: 60_000, now: () => clock })
+      clock = '2026-11-09T10:01:01.000Z'
       await vi.waitFor(() => {
         expect(agents[0]?.closed()).toBe(1)
       })
@@ -7141,19 +7151,95 @@ describe('the agent chat', () => {
     })
 
     it('keeps auto mode when the process dies under its mode switch', async () => {
-      const { service, workspaceId, sent, release } = await heldSend({}, 'auto')
-      agent().finish(new Error('claude exited with code 1'))
-      await vi.waitFor(() => {
-        expect(agents[0]?.closed()).toBe(1)
-      })
+      const { service, workspaceId, sent, dies } = await heldSend({}, 'auto')
 
-      release()
+      dies()
       await sent
 
       expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
       await vi.waitFor(() => {
         expect(agents[1]?.sent).toEqual(['again'])
       })
+    })
+
+    it('takes a refusal whose session outlives the grace as a refusal', async () => {
+      const { sent, dies } = await heldSend({ letGoGraceMs: 5 })
+
+      dies()
+
+      await expect(sent).rejects.toThrow('Query closed before response received')
+    })
+
+    it('sends a message whose effort was on its way as the process died', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      let refuse: (error: Error) => void = () => undefined
+      flagsAnswer = () =>
+        new Promise<void>((_, reject) => {
+          refuse = reject
+        })
+      const before = agent().flagSettings().length
+      const sent = service.sendToChat(chat.id, 'again')
+      await vi.waitFor(() => {
+        expect(agent().flagSettings()).toHaveLength(before + 1)
+      })
+
+      flagsAnswer = () => Promise.resolve()
+      refuse(new Error('Query closed before response received'))
+      setTimeout(() => {
+        agents[0]?.finish(new Error('claude exited with code 1'))
+      }, 20)
+      await sent
+
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
+    it('asks the next session for a /usage that waited through the death', async () => {
+      const { sent, dies } = await heldSend({}, undefined, (service, chatId) =>
+        service.sendToChat(chatId, '/usage')
+      )
+
+      const asked = agents[0]?.usageAsked()
+
+      dies()
+      await sent
+
+      expect(agents[0]?.usageAsked()).toBe(asked)
+      expect(agents[1]?.usageAsked()).toBe(1)
+    })
+
+    it('takes auto mode, chosen as the process died, as chosen', async () => {
+      const { service, workspaceId, sent, dies } = await heldSend(
+        {},
+        'default',
+        (service, chatId) => service.setChatWorkingMode(chatId, 'auto')
+      )
+
+      dies()
+
+      await expect(sent).resolves.toBeUndefined()
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
+    })
+
+    it('takes another mode, chosen as the process died, as chosen', async () => {
+      const { service, workspaceId, sent, dies } = await heldSend(
+        {},
+        'default',
+        (service, chatId) => service.setChatWorkingMode(chatId, 'acceptEdits')
+      )
+
+      dies()
+
+      await expect(sent).resolves.toBeUndefined()
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
     })
   })
 
