@@ -7332,9 +7332,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // Before the check below rather than inside the send: nothing may wait
       // between deciding this is the clear and sending it.
+      const { aside } = requireChat(chatId)
       const prompted = await withAside(chatId, text)
       // Let go during the awaits above — dead or rested — the session would swallow it.
-      const target = letGo.has(session) ? await sessionFor(requireChat(chatId), workspace) : session
+      const target = letGo.has(session)
+        ? await sessionFor(requireChat(chatId), workspace).catch(async (error: unknown) => {
+            // Not sent after all: the exchange withAside took goes back for the next message.
+            await commit((current) => updateChat(current, chatId, { aside }))
+            throw error
+          })
+        : session
 
       /*
        * Whether this message is the one that throws the conversation away.

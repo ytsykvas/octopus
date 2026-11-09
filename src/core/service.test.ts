@@ -15500,6 +15500,44 @@ describe('the agent chat', () => {
         }
       }
 
+      it('keeps the exchange when the session after a dead one cannot start', async () => {
+        let broken = false
+        const working = fakeQuery()
+        const service = await createService({
+          ...paths(dir),
+          query: (params) => {
+            if (broken) throw new Error('spawn failed')
+            return working(params)
+          },
+          forkSession: () => Promise.resolve({ sessionId: 'sess-forked' })
+        })
+        const { workspaceId, chatId } = await started(service)
+        await service.updateConfig({ opusPlan: true })
+        const forked = await service.forkChat(chatId, aside)
+        await service.setChatPlanMode(forked.id, true)
+        let refuse: (error: Error) => void = () => undefined
+        modelAnswer = () =>
+          new Promise<void>((_, reject) => {
+            refuse = reject
+          })
+        const sent = service.sendToChat(forked.id, 'go on')
+        await vi.waitFor(() => {
+          expect(agents[1]?.requestedModels()).toEqual(['opusplan'])
+        })
+
+        broken = true
+        modelAnswer = () => Promise.resolve()
+        refuse(new Error('Query closed before response received'))
+        setTimeout(() => {
+          agents[1]?.finish(new Error('claude exited with code 1'))
+        }, 20)
+
+        await expect(sent).rejects.toThrow('spawn failed')
+        expect(service.listChats(workspaceId).find((chat) => chat.id === forked.id)?.aside).toEqual(
+          aside
+        )
+      })
+
       it('is named after the question and remembers the exchange', async () => {
         const { record } = await forkedOff()
 
