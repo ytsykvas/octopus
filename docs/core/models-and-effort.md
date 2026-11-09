@@ -232,14 +232,14 @@ rows and the last context reading stay. If anything was under way — a turn or 
 agent — `onEnd` first puts an `error` with the code `endedQuietly` through
 `handleEvent`, while the session is still registered, so the turn closes, the
 questions are withdrawn and the agents' rows stop; an idle exit says nothing. A
-message whose send was still on its way when its session was let go — dead or
-rested — goes into the next one (`letGo`), and a mode chosen meanwhile is kept
-for it: a control request the old process refuses on its way out is no fault,
-and an auto mode it refuses is not given up. The SDK refuses a dying process's
-requests before its stream ends, so a refusal first waits up to
-`LET_GO_GRACE_MS` for the session's `ended` (`wasLetGo`); only one still
-unexplained after that counts as a refusal. A tab closed after that refuses the
-send as closed.
+message whose send was still on its way when its session was let go — dead,
+rested or restarted for a new window — goes into the next one (`letGo`), and a
+mode chosen meanwhile is kept for it: a control request the old process refuses
+on its way out is no fault, and an auto mode it refuses is not given up. The SDK
+refuses a dying process's requests before its stream ends, so a refusal first
+waits up to `LET_GO_GRACE_MS` for the session's `ended` (`wasLetGo`); only one
+still unexplained after that counts as a refusal. A tab closed after that
+refuses the send as closed.
 "At rest" is `atRest`: idle or errored, no turn open, no agent live, no question
 waiting, nothing held in the CLI's queue, no edit announced and unfinished, no
 `/clear`, rewind or push pending, no session on its way up, and the account not

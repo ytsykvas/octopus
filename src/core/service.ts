@@ -4076,7 +4076,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function restartIfStale(chatId: string, recheck = false): Promise<void> {
     const chat = findChat(state, chatId)
     const started = compaction.get(chatId)
-    if (!chat || !started || !sessions.has(chatId)) return
+    const old = sessions.get(chatId)
+    if (!chat || !started || !old) return
     // Chosen again while a variable outranked it: it may have been taken out
     // since, and only a new session reads it again. The same when the last
     // reading strayed from the window it started with and no variable was
@@ -4093,6 +4094,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
 
+    // Its chat stays open: a send still held on the old session goes into the new one.
+    letGo.add(old)
     await closeOneChat(chat)
     // Remember the stray the old session read, so the new one reading it again
     // says no restart could help — whatever this one was started for, a fresh

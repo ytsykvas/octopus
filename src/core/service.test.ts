@@ -7178,6 +7178,22 @@ describe('the agent chat', () => {
       expect(agents[0]?.sent).toEqual(['work', 'again'])
     })
 
+    it('sends a message held through a restart for a new window into the new session', async () => {
+      const { service, workspaceId, sent, release } = await heldSend()
+      const chatId = service.listChats(workspaceId)[0]?.id ?? ''
+      // The new session must not wait on the answer the old one is held on.
+      modeAnswer = () => Promise.resolve()
+
+      await service.setChatAutoCompact(chatId, 400_000)
+      release()
+      await sent
+
+      expect(agents).toHaveLength(2)
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
     it('keeps auto mode when the process dies under its mode switch', async () => {
       const { service, workspaceId, sent, dies } = await heldSend({}, 'auto')
 
