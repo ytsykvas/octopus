@@ -5367,6 +5367,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     const env = sessionEnvFor(workspace.id)
 
+    // Re-read rather than closed over: `chat` is a snapshot, and the
+    // session id written after the first turn would not be in it.
+    const current = (): Chat => findChat(state, chat.id) ?? chat
+
     const session = startSession(
       {
         cwd: workspace.path,
@@ -5395,14 +5399,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         query: runQuery,
         onEvent: (event) => {
           if (cut !== null && event.type === 'result') settleCut(chat, cut)
-
-          // Re-read rather than closed over: `chat` is a snapshot, and the
-          // session id written after the first turn would not be in it.
-          handleEvent(findChat(state, chat.id) ?? chat, event)
+          handleEvent(current(), event)
         },
         // Only a death reaches this: whatever unregisters a session closes it in the same tick,
         // and a closed one never calls it. Never synchronous, so `session` is assigned.
         onEnd: () => {
+          // Before the release: the agents' rows stop only while the session is registered.
+          if (registry.turnOpen(chat.id) || liveCount(registry.tasks(chat.id)) > 0) {
+            handleEvent(current(), {
+              type: 'error',
+              message: 'Claude Code ended without a result or an error',
+              code: 'endedQuietly'
+            })
+          }
           releaseDeadSession(chat, session)
         },
         askPermission: (ask) => askPermission(chat, ask),

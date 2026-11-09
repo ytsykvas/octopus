@@ -1376,6 +1376,25 @@ describe('what the log shows', () => {
     expect(screen.queryByText(/Claude Code stopped/)).not.toBeInTheDocument()
   })
 
+  it('says in words that the process ended before its work did, with no raw line', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'error',
+          message: 'Claude Code ended without a result or an error',
+          code: 'endedQuietly'
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText(
+        'Claude Code ended before finishing its work. Send a message to carry on; the conversation is kept.'
+      )
+    ).toBeVisible()
+    expect(screen.queryByText('Claude Code ended without a result or an error')).toBeNull()
+  })
+
   // The session id is bookkeeping; a row for it would say nothing to anyone.
   it('draws nothing for events that are not part of the conversation', () => {
     renderLog({

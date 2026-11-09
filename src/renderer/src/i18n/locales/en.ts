@@ -1216,6 +1216,8 @@ export const en = {
       'Claude Code was stopped from outside — by the system or another program. Send a message to carry on; the conversation is kept.',
     processFailed:
       'Claude Code stopped with an error (code {{code}}). Send a message to try again; the conversation is kept.',
+    processEnded:
+      'Claude Code ended before finishing its work. Send a message to carry on; the conversation is kept.',
     messageSkipped:
       'One message from Claude Code could not be handled and was skipped. The conversation goes on.',
     compactedBy:

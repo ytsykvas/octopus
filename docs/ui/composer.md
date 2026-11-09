@@ -336,6 +336,9 @@ that a message carries on, and keeps the SDK's line under it in small print.
 The promise holds: the session whose process died is let go at once
 (`releaseDeadSession`), so the next message starts one again from the same id.
 Read from the text by `exitCodeOf`, so logs written before it read the same.
+A process that ended mid-work without a word gets its own sentence
+(`chat.processEnded`) and no raw line: the service closed that turn itself, with
+an `error` coded `endedQuietly`.
 
 **The agent's task list is pinned above the field while it has work left.** A
 long turn is mostly the agent working through a list it wrote for itself, and

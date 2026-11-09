@@ -228,11 +228,15 @@ the same id, as a restart does. A session whose process died does not wait the
 ten minutes. Its stream ending without a `close` calls `onEnd`, and
 `releaseDeadSession` lets it go at once, with what the process took with it —
 its queue, a promised push, open edits, a pending `/clear` — while the tasks'
-rows and the last context reading stay. "At rest" is `atRest`: idle or errored,
-no turn open, no agent live, no question waiting, nothing held in the CLI's
-queue, no edit announced and unfinished, no `/clear`, rewind or push pending, no
-session on its way up, and the account not being read. Rest is measured from the last
-event heard or the last time the session was asked for.
+rows and the last context reading stay. If anything was under way — a turn or an
+agent — it first puts an `error` with the code `endedQuietly` through
+`handleEvent`, while the session is still registered, so the turn closes, the
+questions are withdrawn and the agents' rows stop; an idle exit says nothing.
+"At rest" is `atRest`: idle or errored, no turn open, no agent live, no question
+waiting, nothing held in the CLI's queue, no edit announced and unfinished, no
+`/clear`, rewind or push pending, no session on its way up, and the account not
+being read. Rest is measured from the last event heard or the last time the
+session was asked for.
 
 The log has the matching rule, because the transcripts written before this did
 not get one: a footer at the head of the log closes no turn, so `buildBlocks`

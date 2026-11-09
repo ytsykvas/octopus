@@ -6562,6 +6562,15 @@ describe('the agent chat', () => {
       expect(service.listTasks()[0]?.tasks[0]?.status).toBe('stopped')
     })
 
+    it('ends every agent when the process ends quietly with only its agents at work', async () => {
+      const { service } = await withAgentAway()
+      agent().finish()
+
+      await vi.waitFor(() => {
+        expect(service.listTasks()[0]?.tasks[0]?.status).toBe('stopped')
+      })
+    })
+
     it('forgets the agents of a conversation that is closed', async () => {
       const { service, workspaceId, chatId } = await withAgentAway()
       await service.createChat(workspaceId)
@@ -7013,6 +7022,44 @@ describe('the agent chat', () => {
       await new Promise((resolve) => setTimeout(resolve, 400))
 
       expect(events.filter(({ event }) => event.type === 'finished')).toEqual([])
+    })
+
+    it('closes the turn of a process that ended quietly mid-turn, and says so', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+
+      agent().finish()
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('error')
+      })
+      expect(events.map(({ event }) => event)).toContainEqual({
+        type: 'error',
+        message: 'Claude Code ended without a result or an error',
+        code: 'endedQuietly'
+      })
+      expect(agents[0]?.closed()).toBe(1)
+    })
+
+    it('says nothing of a process that ended quietly with nothing under way', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      agent().finish()
+
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      expect(events.filter(({ event }) => event.type === 'error')).toEqual([])
     })
   })
 
@@ -11105,6 +11152,24 @@ describe('the agent chat', () => {
       })
     })
 
+    it('withdraws it when the process ends quietly with the question open', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const decision = agent().ask('Edit')
+      await waitForRequest(events)
+
+      agent().finish()
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
+      expect(service.pendingPermissions(chat.id)).toEqual([])
+      await vi.waitFor(async () => {
+        const [workspace] = await service.listWorkspaces('planner')
+        expect(workspace?.status).toBe('error')
+      })
+    })
+
     /*
      * An answer is also a write, and a write can fail. The question used to be
      * taken out of the map before the write was attempted, so a config file
@@ -13443,7 +13508,12 @@ describe('the agent chat', () => {
       )
       expect(workspaces.filter((event) => event.status === 'idle')).toEqual([])
 
-      firstAgent?.finish()
+      firstAgent?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId).find((chat) => chat.id === first)?.status).toBe(
+          'idle'
+        )
+      })
     })
 
     // The workspace's own value only changes when the aggregate does, or every

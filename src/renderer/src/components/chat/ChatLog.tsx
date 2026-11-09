@@ -626,7 +626,7 @@ function AgentRow({
       return <UsageCard report={event.report} />
 
     case 'error':
-      return <ErrorRow message={event.message} />
+      return <ErrorRow event={event} />
 
     case 'message_skipped':
       return <SkippedRow reason={event.reason} />
@@ -1491,23 +1491,33 @@ function RefusalRow({
   )
 }
 
+const ERROR_BOX =
+  'bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2'
+
 /*
  * A process that died is said in words, with the SDK's own line kept under
  * them: "exited with code 143" is exact and means nothing to the person reading
  * it, and the words alone would leave nothing to search for.
  */
-function ErrorRow({ message }: { message: string }): React.JSX.Element {
+function ErrorRow({ event }: { event: Extract<AgentEvent, { type: 'error' }> }): React.JSX.Element {
   const { t } = useTranslation()
-  const code = exitCodeOf(message)
+  if (event.code === 'endedQuietly') {
+    return (
+      <div className={ERROR_BOX}>
+        <p>{t('chat.processEnded')}</p>
+      </div>
+    )
+  }
 
+  const code = exitCodeOf(event.message)
   return (
-    <div className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
+    <div className={ERROR_BOX}>
       {code === null ? (
-        <p>{shown(message)}</p>
+        <p>{shown(event.message)}</p>
       ) : (
         <>
           <p>{code > 128 ? t('chat.processStopped') : t('chat.processFailed', { code })}</p>
-          <p className="text-ink-faint mt-1 font-mono text-[11px]">{shown(message)}</p>
+          <p className="text-ink-faint mt-1 font-mono text-[11px]">{shown(event.message)}</p>
         </>
       )}
     </div>

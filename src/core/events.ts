@@ -757,7 +757,12 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   /** A frame lost to a mapping or a listener that threw; the session read on. Never fatal. */
   z.object({ type: z.literal('message_skipped'), reason: z.string() }),
 
-  z.object({ type: z.literal('error'), message: z.string() })
+  z.object({
+    type: z.literal('error'),
+    message: z.string(),
+    /** Set when core ends the turn, not the SDK: the window words it from the code. */
+    code: z.enum(['endedQuietly']).optional()
+  })
 ])
 
 export type AgentEvent = Readonly<z.infer<typeof AgentEventSchema>>

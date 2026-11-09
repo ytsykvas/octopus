@@ -333,8 +333,8 @@ feature. Not leaving it unwritten either: the chat would stay
 "come and answer this" mark against a question nobody can answer any more.
 
 Self-correcting rather than a second thing to remember — the turn always ends in
-a `result`, which writes `idle` or `error`, and `settleStatuses` clears a
-`running` left by a crash.
+a `result` or an `error`, which write `idle` or `error`, and `settleStatuses`
+clears a `running` left by a crash.
 
 **Back to `running` only when nothing else is asked** (`carryOn`). An MCP
 server's form sets `waiting_permission` as a permission does, and two tool calls
@@ -351,7 +351,8 @@ result, that is a turn of its own starting.
 `canUseTool` blocks the agent on a promise, so an open permission request is a
 turn held open. Every way a turn can end withdraws the chat's questions:
 stopping it, the session closing with its workspace, and the `result` or `error`
-that ends it on its own. `abandonPermissions` resolves each as a refusal and
+that ends it on its own — including the `error` the service puts in itself when
+the process ends quietly mid-work (`endedQuietly`). `abandonPermissions` resolves each as a refusal and
 drops it — resolving rather than dropping, because the promise is what holds the
 tool call, and a refusal is the only answer that cannot start work nobody
 approved. It carries `ABANDONED` rather than `DENIED`: the agent reads a
