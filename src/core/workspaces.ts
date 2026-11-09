@@ -633,7 +633,7 @@ export interface RemoveOptions {
   readonly force?: boolean
   /** Also delete the branch; with baseBranch, one holding commits found nowhere else is refused. */
   readonly deleteBranch?: boolean
-  /** What "merged" is measured against; only removing a project omits it, losing unmerged work. */
+  /** What "merged" is held to; left out (a project, `dropUnmerged`), unmerged work goes. */
   readonly baseBranch?: string
   /**
    * A second opinion on "merged", asked only when git says no.
@@ -662,7 +662,7 @@ export const RemovalRequestSchema = z.strictObject({
   /** Sent only after the user was told the branch's commits are nowhere else. */
   dropUnmerged: z.boolean().default(false)
 })
-/** As the window sends it: either choice may be left out, and reads as no. */
+/** As the window sends it: any field may be left out, and reads as no. */
 export type RemovalRequest = z.input<typeof RemovalRequestSchema>
 
 /** A new name as it arrives; trimming and the clash checks are `renameWorkspace`'s. */
