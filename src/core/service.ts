@@ -2139,7 +2139,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const registry = createTaskRegistry({
     asking: askingTasks,
     onSnapshot: (event) => {
-      for (const listener of taskListeners) listener(event)
+      for (const listener of taskListeners) {
+        try {
+          listener(event)
+        } catch (error) {
+          // As in `emit`: one listener failing must not cost the others, or the caller, the list.
+          onDiagnostic(error)
+        }
+      }
     }
   })
   /**

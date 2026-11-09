@@ -6571,6 +6571,25 @@ describe('the agent chat', () => {
       })
     })
 
+    it('lets a dead process go when a listener to the agents throws', async () => {
+      const thrown = new Error('window gone')
+      const diagnosed: unknown[] = []
+      const heard: unknown[] = []
+      const { service } = await withAgentAway({ onDiagnostic: (error) => diagnosed.push(error) })
+      service.onTasks(() => {
+        throw thrown
+      })
+      service.onTasks((event) => heard.push(event))
+
+      agent().finish()
+
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+      expect(heard).not.toHaveLength(0)
+      expect(diagnosed).toContain(thrown)
+    })
+
     it('forgets the agents of a conversation that is closed', async () => {
       const { service, workspaceId, chatId } = await withAgentAway()
       await service.createChat(workspaceId)
