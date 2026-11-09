@@ -3522,12 +3522,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       background(chat, setChatStatus(chat.id, 'error'))
     }
 
-    // A turn that has ended cannot answer for a tool it never ran. Only the
-    // session's own stream reaches here — a background write that failed is
-    // reported straight to the listeners by `report` — so this cannot withdraw
-    // a question a live turn is still waiting on. An agent's question outlives
-    // the turn that launched the agent; it goes when the agent does, or with
-    // the session.
+    // A turn that has ended cannot answer for a tool it never ran. Only the session's stream, or
+    // onEnd's `endedQuietly` for a dead one, reaches here — `report` emits past it. An agent's
+    // question outlives the turn that launched the agent; it goes with the agent or the session.
     if (event.type === 'result' || event.type === 'error') {
       abandonPermissions(chat.id, event.type === 'result' ? 'turn' : 'all')
       abandonElicitations(chat.id)

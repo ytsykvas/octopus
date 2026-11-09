@@ -288,7 +288,6 @@ describe('the turn under way', () => {
     expect(screen.getByRole('timer')).toHaveTextContent('Claude 1 · 5m 0s')
   })
 
-  // A stopped conversation shows no count, whatever start a stale view still carries.
   it('says nothing for a conversation that has stopped, whatever start it holds', () => {
     const anna = workspaceView('anna', {
       chats: [chat({ status: 'error', turnStartedAt: '2026-10-20T09:00:00.000Z' })]

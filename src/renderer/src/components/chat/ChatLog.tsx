@@ -1494,11 +1494,8 @@ function RefusalRow({
 const ERROR_BOX =
   'bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2'
 
-/*
- * A process that died is said in words, with the SDK's own line kept under
- * them: "exited with code 143" is exact and means nothing to the person reading
- * it, and the words alone would leave nothing to search for.
- */
+/* A death by exit code is worded with the SDK's line kept under it, to search for. An
+   `endedQuietly` has no SDK line — its message is core's own — so the words stand alone. */
 function ErrorRow({ event }: { event: Extract<AgentEvent, { type: 'error' }> }): React.JSX.Element {
   const { t } = useTranslation()
   if (event.code === 'endedQuietly') {
