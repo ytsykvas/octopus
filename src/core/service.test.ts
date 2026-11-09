@@ -40,7 +40,7 @@ import {
   type QueryFn,
   READ_ONLY_TOOLS
 } from './agent.js'
-import { type Chat, MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
+import { type Chat, MAX_CLOSED_CHATS_PER_WORKSPACE, type WorkingMode } from './chats.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
@@ -7060,6 +7060,100 @@ describe('the agent chat', () => {
       })
       expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
       expect(events.filter(({ event }) => event.type === 'error')).toEqual([])
+    })
+
+    // Held at its mode switch, and let go with a refusal, as the SDK answers a request
+    // whose process will never answer it now.
+    async function heldSend(
+      extra: ServiceOptions = {},
+      mode?: WorkingMode
+    ): Promise<{
+      service: OctopusService
+      workspaceId: string
+      sent: Promise<string | null>
+      release: () => void
+    }> {
+      const { service, workspaceId } = await withWorkspace(extra)
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      if (mode) {
+        await service.setChatPlanMode(chat.id, false)
+        await service.setChatWorkingMode(chat.id, mode)
+      }
+      let refuse: (error: Error) => void = () => undefined
+      let asked = false
+      modeAnswer = () => {
+        asked = true
+        return new Promise<void>((_, reject) => {
+          refuse = reject
+        })
+      }
+      const sent = service.sendToChat(chat.id, 'again')
+      await vi.waitFor(() => {
+        expect(asked).toBe(true)
+      })
+      return {
+        service,
+        workspaceId,
+        sent,
+        release: () => {
+          modeAnswer = () => Promise.resolve()
+          refuse(new Error('Query closed before response received'))
+        }
+      }
+    }
+
+    it('sends a message that waited through the death into the next session', async () => {
+      const { sent, release } = await heldSend()
+      agent().finish(new Error('claude exited with code 1'))
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+
+      release()
+      await sent
+
+      expect(agents).toHaveLength(2)
+      expect(agents[1]?.options().resume).toBe('sess-1')
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
+    it('sends a message that waited through an idle release into the next session', async () => {
+      const { sent, release } = await heldSend({ ...SOON, idleReleaseMs: 300 })
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+
+      release()
+      await sent
+
+      expect(agents).toHaveLength(2)
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
+    it('keeps auto mode when the process dies under its mode switch', async () => {
+      const { service, workspaceId, sent, release } = await heldSend({}, 'auto')
+      agent().finish(new Error('claude exited with code 1'))
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+
+      release()
+      await sent
+
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
     })
   })
 

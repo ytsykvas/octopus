@@ -3894,7 +3894,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     try {
       await session.setPermissionMode(wanted)
     } catch (error) {
-      if (wanted !== 'auto') throw error
+      // A session let go under the switch refused nothing: the next one takes the mode.
+      if (wanted !== 'auto' || letGo.has(session)) throw error
       await fallBackFromAuto(chatId, describeError(error))
       await session.setPermissionMode(sessionMode(requireChat(chatId)))
     }
@@ -4133,6 +4134,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       : null
   }
 
+  // Let go with its chat still open: a send that still holds one starts the next.
+  const letGo = new WeakSet<AgentSession>()
+
   function forgetProcess(chatId: string): void {
     sessions.delete(chatId)
     compaction.delete(chatId)
@@ -4158,6 +4162,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * and `handleEvent` takes nothing from one that is no longer registered.
    */
   async function releaseSession(chatId: string, session: AgentSession): Promise<void> {
+    letGo.add(session)
     forgetProcess(chatId)
     await session.close().catch(() => undefined)
   }
@@ -4165,6 +4170,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   // At once, before any await: the next message must find no session to send into. The
   // tasks' rows and the last context reading stay, as they do for an idle release.
   function releaseDeadSession(chat: Chat, session: AgentSession): void {
+    letGo.add(session)
     forgetProcess(chat.id)
     forgetTurnInFlight(chat.id)
     background(
@@ -7233,11 +7239,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const running = sessions.get(chatId)
       if (running) {
-        // The plan model the mode change held back, before the message it was
-        // held for. Nothing when none is held, so the model stays unasserted.
-        await settleJob(chatId, inForce(requireChat(chatId)))
-        await assertMode(chatId, running)
-        await running.setEffort(effortInForce(chat))
+        try {
+          // The plan model the mode change held back, before the message it was
+          // held for. Nothing when none is held, so the model stays unasserted.
+          await settleJob(chatId, inForce(requireChat(chatId)))
+          await assertMode(chatId, running)
+          await running.setEffort(effortInForce(chat))
+        } catch (error) {
+          // A request into a session let go meanwhile fails; the message goes on below.
+          if (!letGo.has(running)) throw error
+        }
       }
 
       const session = running ?? (await sessionFor(chat, workspace))
@@ -7291,6 +7302,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Before the check below rather than inside the send: nothing may wait
       // between deciding this is the clear and sending it.
       const prompted = await withAside(chatId, text)
+      // Let go during the awaits above — dead or rested — the session would swallow it.
+      const target = letGo.has(session) ? await sessionFor(requireChat(chatId), workspace) : session
 
       /*
        * Whether this message is the one that throws the conversation away.
@@ -7310,15 +7323,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * also restarted the session for a new window was the opposite: the
        * restart emptied the set, and the clear asked for was never honoured.
        */
-      if (sessions.get(chatId) === session && isClearCommand(text, chat.knownCommands)) {
+      if (sessions.get(chatId) === target && isClearCommand(text, chat.knownCommands)) {
         clearRequests.add(chatId)
       }
-      session.send(prompted, messageId)
+      target.send(prompted, messageId)
       // A typed `/model opusplan` puts the session on the alias too, and the
       // window mirrors it into the record (`ChatSession`).
       if (opusPlanSplit(text, chat.knownCommands, state.knownModels) !== null) {
-        onOpusPlan.add(session)
-        opusPlanSettled.add(session)
+        onOpusPlan.add(target)
+        opusPlanSettled.add(target)
       }
       if (pushTo !== null) publishAfterTurn.set(chatId, pushTo)
 

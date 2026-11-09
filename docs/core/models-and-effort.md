@@ -231,7 +231,11 @@ its queue, a promised push, open edits, a pending `/clear` — while the tasks'
 rows and the last context reading stay. If anything was under way — a turn or an
 agent — it first puts an `error` with the code `endedQuietly` through
 `handleEvent`, while the session is still registered, so the turn closes, the
-questions are withdrawn and the agents' rows stop; an idle exit says nothing.
+questions are withdrawn and the agents' rows stop; an idle exit says nothing. A
+message whose send was still on its way when its session was let go — dead or
+rested — goes into the next one (`letGo`): a control request the old process
+refuses on its way out is no fault, and an auto mode it refuses is not given up.
+A tab closed after that refuses the send as closed.
 "At rest" is `atRest`: idle or errored, no turn open, no agent live, no question
 waiting, nothing held in the CLI's queue, no edit announced and unfinished, no
 `/clear`, rewind or push pending, no session on its way up, and the account not
