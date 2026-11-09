@@ -8193,6 +8193,29 @@ describe('the agent chat', () => {
      * probe — it exists to read a gauge — so a question from one could only
      * ever be waited on for ever.
      */
+    it('hands what a probe could not map to onDiagnostic', async () => {
+      const diagnosed: unknown[] = []
+      const { service, workspaceId } = await withWorkspace({
+        onDiagnostic: (error) => diagnosed.push(error)
+      })
+      await service.openChat(workspaceId)
+
+      const reading = service.refreshSubscriptionUsage()
+      await vi.waitFor(() => {
+        expect(agents).toHaveLength(1)
+      })
+      agents[0]?.emit({
+        type: 'rate_limit_event',
+        uuid: 'r-1',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+      await reading
+
+      await vi.waitFor(() => {
+        expect(diagnosed).toEqual([expect.any(TypeError)])
+      })
+    })
+
     it('turns down a question a probe is asked, rather than holding it open', async () => {
       const { service, workspaceId } = await withWorkspace()
       await service.openChat(workspaceId)

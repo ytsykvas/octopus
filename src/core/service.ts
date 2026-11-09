@@ -5295,7 +5295,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         askPermission: () => Promise.resolve({ allow: false, message: DENIED }),
         // Nothing draws for this session — it exists to run one command — so a
         // question from it could only ever be waited on for ever.
-        askElicitation: () => Promise.resolve({ action: 'decline' as const })
+        askElicitation: () => Promise.resolve({ action: 'decline' as const }),
+        onDiagnostic
       }
     )
   }
