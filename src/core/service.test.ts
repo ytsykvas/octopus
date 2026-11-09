@@ -7073,6 +7073,7 @@ describe('the agent chat', () => {
       workspaceId: string
       sent: Promise<unknown>
       release: () => void
+      answer: () => void
       dies: () => void
     }> {
       const { service, workspaceId } = await withWorkspace(extra)
@@ -7088,10 +7089,12 @@ describe('the agent chat', () => {
         await service.setChatWorkingMode(chat.id, mode)
       }
       let refuse: (error: Error) => void = () => undefined
+      let accept: () => void = () => undefined
       let asked = false
       modeAnswer = () => {
         asked = true
-        return new Promise<void>((_, reject) => {
+        return new Promise<void>((resolve, reject) => {
+          accept = resolve
           refuse = reject
         })
       }
@@ -7109,6 +7112,10 @@ describe('the agent chat', () => {
         workspaceId,
         sent,
         release,
+        answer: () => {
+          modeAnswer = () => Promise.resolve()
+          accept()
+        },
         // The SDK's order: the pending request is refused first, and the stream ends only once
         // the process has gone, a moment later.
         dies: () => {
@@ -7148,6 +7155,27 @@ describe('the agent chat', () => {
       await vi.waitFor(() => {
         expect(agents[1]?.sent).toEqual(['again'])
       })
+    })
+
+    it('rests from a send, not from the last word, while the send is on its way', async () => {
+      let clock = '2026-11-09T10:00:00.000Z'
+      const { sent, answer } = await heldSend(
+        { ...SOON, idleReleaseMs: 60_000, now: () => clock },
+        undefined,
+        (service, chatId) => {
+          clock = '2026-11-09T10:00:59.000Z'
+          return service.sendToChat(chatId, 'again')
+        }
+      )
+      clock = '2026-11-09T10:01:30.000Z'
+
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(agents[0]?.closed()).toBe(0)
+
+      answer()
+      await sent
+      expect(agents).toHaveLength(1)
+      expect(agents[0]?.sent).toEqual(['work', 'again'])
     })
 
     it('keeps auto mode when the process dies under its mode switch', async () => {

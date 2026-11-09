@@ -244,7 +244,7 @@ send as closed.
 waiting, nothing held in the CLI's queue, no edit announced and unfinished, no
 `/clear`, rewind or push pending, no session on its way up, and the account not
 being read. Rest is measured from the last event heard or the last time the
-session was asked for.
+session was asked for — a message sent into it included.
 
 The log has the matching rule, because the transcripts written before this did
 not get one: a footer at the head of the log closes no turn, so `buildBlocks`

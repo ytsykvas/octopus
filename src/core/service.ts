@@ -7254,6 +7254,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const running = sessions.get(chatId)
       if (running) {
+        lastActivity.set(chatId, Date.parse(now()))
         try {
           // The plan model the mode change held back, before the message it was
           // held for. Nothing when none is held, so the model stays unasserted.
