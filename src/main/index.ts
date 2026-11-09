@@ -6,6 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'e
 import { describeError } from '../core/persist.js'
 import { claimDataRoot } from '../core/dataLock.js'
 import { dataRootOverride, rootDir } from '../core/paths.js'
+import { diagnosticLog } from '../core/diagnostics.js'
 import { createService, type OctopusService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
 import {
@@ -178,7 +179,9 @@ async function start(): Promise<void> {
   let service: OctopusService
 
   try {
-    service = await createService()
+    service = await createService({
+      onDiagnostic: diagnosticLog(join(app.getPath('logs'), 'main.log'))
+    })
   } catch (error) {
     dialog.showErrorBox('octopus could not start', describeError(error))
     app.quit()

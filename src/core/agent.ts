@@ -300,6 +300,8 @@ export interface SessionHooks {
   readonly refuseCommand?: (command: string) => string | null
   /** The stream ended and nobody closed the session: its process is gone. */
   readonly onEnd?: () => void
+  /** Errors swallowed so the session lives on. Must not throw. */
+  readonly onDiagnostic?: (error: unknown) => void
 }
 
 /** What an MCP server wants from the user, once the form has been read. */
@@ -1178,11 +1180,14 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   let heldSkills: ReadonlySet<string> = NO_SKILLS
   let announced = false
 
+  const diagnose = hooks.onDiagnostic ?? ((): void => undefined)
+
   const deliverOrDrop = (event: AgentEvent): void => {
     try {
       hooks.onEvent(event)
-    } catch {
+    } catch (error) {
       // The listener is what failed: a throw here would end the loop or reject unhandled.
+      diagnose(error)
     }
   }
 
@@ -1190,6 +1195,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     try {
       hooks.onEvent(event)
     } catch (error) {
+      diagnose(error)
       deliverOrDrop(skippedBy(error))
     }
   }
@@ -1233,6 +1239,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       }
       return mapMessage(message, heldSkills)
     } catch (error) {
+      diagnose(error)
       return [skippedBy(error)]
     }
   }
@@ -1264,8 +1271,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     if (closing.signal.aborted) return
     try {
       hooks.onEnd?.()
-    } catch {
-      // As with an event: nobody is left to tell.
+    } catch (error) {
+      diagnose(error)
     }
   })()
 

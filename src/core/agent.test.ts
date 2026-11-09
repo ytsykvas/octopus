@@ -90,6 +90,7 @@ function fakeAgent(
     /** Runs after the event is collected, so one it throws on is still in `events`. */
     onEvent?: (event: AgentEvent) => void
     onEnd?: () => void
+    onDiagnostic?: (error: unknown) => void
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -237,7 +238,8 @@ function fakeAgent(
         hooks.askElicitation?.(ask) ?? Promise.resolve({ action: 'decline' } as const),
       ...(hooks.skillsInFiles && { skillsInFiles: hooks.skillsInFiles }),
       ...(hooks.refuseCommand && { refuseCommand: hooks.refuseCommand }),
-      ...(hooks.onEnd && { onEnd: hooks.onEnd })
+      ...(hooks.onEnd && { onEnd: hooks.onEnd }),
+      ...(hooks.onDiagnostic && { onDiagnostic: hooks.onDiagnostic })
     }
   )
 
@@ -1906,6 +1908,83 @@ describe('a session', () => {
     })
 
     expect(unhandled).toEqual([])
+  })
+
+  describe('a failure it swallows', () => {
+    it('goes to the diagnostic hook when a listener throws', async () => {
+      const thrown = new Error('window gone')
+      const diagnosed: unknown[] = []
+      const { agent } = fakeAgent(
+        {},
+        {
+          onEvent: (event) => {
+            if (event.type === 'text') throw thrown
+          },
+          onDiagnostic: (error) => diagnosed.push(error)
+        }
+      )
+
+      agent.emit(assistant([{ type: 'text', text: 'lost' }]))
+      await settle()
+
+      expect(diagnosed).toEqual([thrown])
+    })
+
+    it('goes to the diagnostic hook every time when every listener throws', async () => {
+      const diagnosed: unknown[] = []
+      const { agent } = fakeAgent(
+        {},
+        {
+          onEvent: () => {
+            throw new Error('window gone')
+          },
+          onDiagnostic: (error) => diagnosed.push(error)
+        }
+      )
+
+      agent.emit(assistant([{ type: 'text', text: 'lost' }]))
+      agent.finish(new Error('claude exited with code 1'))
+      await settle()
+
+      expect(diagnosed.map((error) => (error as Error).message)).toEqual([
+        'window gone',
+        'window gone',
+        'window gone'
+      ])
+    })
+
+    it('goes to the diagnostic hook when a message cannot be mapped', async () => {
+      const diagnosed: unknown[] = []
+      const { agent } = fakeAgent({}, { onDiagnostic: (error) => diagnosed.push(error) })
+
+      agent.emit({
+        type: 'rate_limit_event',
+        uuid: 'r-1',
+        session_id: 's-1'
+      } as unknown as SDKMessage)
+      await settle()
+
+      expect(diagnosed).toEqual([expect.any(TypeError)])
+    })
+
+    it('goes to the diagnostic hook when the end listener throws', async () => {
+      const thrown = new Error('window gone')
+      const diagnosed: unknown[] = []
+      const { agent } = fakeAgent(
+        {},
+        {
+          onEnd: () => {
+            throw thrown
+          },
+          onDiagnostic: (error) => diagnosed.push(error)
+        }
+      )
+
+      agent.finish()
+      await settle()
+
+      expect(diagnosed).toEqual([thrown])
+    })
   })
 
   it('changes the model of a running session', async () => {

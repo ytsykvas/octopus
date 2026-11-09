@@ -9599,6 +9599,44 @@ describe('the agent chat', () => {
       )
     })
 
+    it("hands a listener's failure to onDiagnostic", async () => {
+      const thrown = new Error('window gone')
+      const diagnosed: unknown[] = []
+      const { service, workspaceId } = await withWorkspace({
+        onDiagnostic: (error) => diagnosed.push(error)
+      })
+      service.onAgentEvent(({ event }) => {
+        if (event.type === 'text') throw thrown
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      agent().emit(textMessage('done'))
+
+      await vi.waitFor(() => {
+        expect(diagnosed).toEqual([thrown])
+      })
+    })
+
+    it('hands what a session could not map to onDiagnostic', async () => {
+      const diagnosed: unknown[] = []
+      const { service, workspaceId } = await withWorkspace({
+        onDiagnostic: (error) => diagnosed.push(error)
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      agent().emit({
+        type: 'rate_limit_event',
+        uuid: 'r-1',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+
+      await vi.waitFor(() => {
+        expect(diagnosed).toEqual([expect.any(TypeError)])
+      })
+    })
+
     it('stops the current turn without ending the session', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)

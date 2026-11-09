@@ -650,6 +650,8 @@ export interface ServiceOptions {
     cwd: string,
     sources: readonly SettingSourceName[]
   ) => Promise<ReadonlyMap<string, SkillVisibility>>
+  /** Errors swallowed so one failure cannot take the rest down. Must not throw. */
+  readonly onDiagnostic?: (error: unknown) => void
 }
 
 /**
@@ -1924,6 +1926,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const runDeleteSession = options.deleteSession ?? defaultDeleteSession
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
+  const onDiagnostic = options.onDiagnostic ?? ((): void => undefined)
 
   let state: State = await loadState(statePath)
 
@@ -2868,8 +2871,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     for (const listener of listeners) {
       try {
         listener(event)
-      } catch {
+      } catch (error) {
         // One listener failing must not cost the others the event.
+        onDiagnostic(error)
       }
     }
   }
@@ -5420,6 +5424,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           }
           releaseDeadSession(chat, session)
         },
+        onDiagnostic,
         askPermission: (ask) => askPermission(chat, ask),
         // The snapshot, as `askPermission` above takes it: this reads only the
         // chat's id and its workspace, and neither of those changes.
