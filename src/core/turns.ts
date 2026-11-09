@@ -19,11 +19,13 @@ import type { ChatEntry } from './transcript.js'
  * The start after one more entry: the first of the main agent's own entries
  * since the last turn closed.
  *
- * A `result` closes the turn, so nothing is under way until something else is
- * said.
+ * A `result` or an `error` closes the turn, so nothing is under way until
+ * something else is said.
  */
 export function nextTurnStart(start: string | null, entry: ChatEntry): string | null {
-  if (entry.role === 'agent' && entry.event.type === 'result') return null
+  const closes =
+    entry.role === 'agent' && (entry.event.type === 'result' || entry.event.type === 'error')
+  if (closes) return null
   return start ?? (isMainTurnEntry(entry) ? entry.at : null)
 }
 

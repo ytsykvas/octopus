@@ -32,6 +32,13 @@ describe('when the turn under way began', () => {
     expect(turnStartedAt(entries)).toBe('09:05')
   })
 
+  it('starts afresh after a turn that failed', () => {
+    const failed = agent({ type: 'error', message: 'claude exited with code 1' }, '09:01')
+
+    expect(turnStartedAt([user('one', '09:00'), failed])).toBeNull()
+    expect(turnStartedAt([user('one', '09:00'), failed, user('two', '09:05')])).toBe('09:05')
+  })
+
   // An agent the turn sent off records its start and end after the turn's
   // result, while no turn is running: counting from one would start a clock
   // for work the main agent is not doing.
