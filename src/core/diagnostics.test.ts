@@ -91,6 +91,23 @@ describe('the diagnostic log', () => {
     await expect(readFile(file, 'utf8')).resolves.toBe('old\n')
   })
 
+  it('cuts the log again once it has grown to twice what it keeps', async () => {
+    const file = join(dir, 'main.log')
+    const log = diagnosticLog(
+      file,
+      () => undefined,
+      () => 'T',
+      100
+    )
+
+    for (let index = 0; index < 30; index++) log(`line ${String(index)}`)
+
+    const kept = await readFile(file, 'utf8')
+    expect(kept.length).toBeLessThanOrEqual(200)
+    expect(kept).toMatch(/^T line \d+\n/)
+    expect(kept.endsWith('T line 29\n')).toBe(true)
+  })
+
   it('outlives a log it cannot write, and still echoes', async () => {
     const file = join(dir, 'taken')
     await mkdir(file)
