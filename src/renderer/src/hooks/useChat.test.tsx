@@ -1236,6 +1236,42 @@ describe('a frame the core could not handle', () => {
   })
 })
 
+describe('a background failure the session outlived', () => {
+  const FAILED: AgentEvent = { type: 'error', message: 'disk full', code: 'background' }
+
+  it('neither ends the turn nor takes the question away', async () => {
+    givenChat()
+    const { result } = renderHook(() =>
+      useChat(chat(), 'planner/anna', 'running', describeFailure, noted)
+    )
+    await waitFor(() => {
+      expect(result.current.busy).toBe(true)
+    })
+    emitAgentEvent({ type: 'permission_request', requestId: 'r-1', toolName: 'Bash', input: {} })
+
+    emitAgentEvent(FAILED)
+
+    expect(result.current.busy).toBe(true)
+    expect(result.current.pending?.requestId).toBe('r-1')
+  })
+
+  it('is kept in the log without wiping the answer being written', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent({ type: 'text_delta', text: 'Look' })
+    emitAgentEvent(FAILED)
+
+    await waitFor(() => {
+      expect(result.current.stream.read().text).toBe('Look')
+    })
+    expect(result.current.entries).toHaveLength(1)
+  })
+})
+
 /*
  * With the turn over and its agents still at work, the conversation is
  * `running` and the main agent is not: a Stop there would stop nothing — the

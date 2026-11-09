@@ -393,7 +393,9 @@ the window had dropped its copy, and `pendingPermissions` had none.
 Only the session's own stream reaches `handleEvent`, and the `endedQuietly`
 error `onEnd` puts in for a process already gone; a background write that failed
 is reported straight to the listeners by `report`, coded `background`. That is
-what makes the `error` case safe to withdraw on.
+what makes the `error` case safe to withdraw on. The window takes that code the
+same way: the turn goes on there too, with its cards, its busy state and the
+words being streamed.
 
 ## What a stopped turn was holding goes with it
 
