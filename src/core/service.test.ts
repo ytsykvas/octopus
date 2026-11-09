@@ -13103,6 +13103,7 @@ describe('the agent chat', () => {
     async function unmergedWithChat(): Promise<{
       path: string
       branch: string
+      remove: (options: RemovalRequest) => Promise<unknown>
       refuses: (options: RemovalRequest) => Promise<void>
       removes: (options: RemovalRequest) => Promise<string>
     }> {
@@ -13149,7 +13150,13 @@ describe('the agent chat', () => {
         return stdout
       }
 
-      return { path: workspace.path, branch: workspace.branch, refuses, removes }
+      return {
+        path: workspace.path,
+        branch: workspace.branch,
+        remove: (options) => service.removeWorkspaceById(workspace.id, options),
+        refuses,
+        removes
+      }
     }
 
     // The worktree is about to stop existing, and a live agent would keep a
@@ -13191,6 +13198,23 @@ describe('the agent chat', () => {
       await refuses({ deleteBranch: true, force: true })
 
       await expect(readFile(join(path, 'draft.txt'), 'utf8')).resolves.toBe('draft\n')
+    })
+
+    it('keeps uncommitted work when told to drop unmerged commits but not forced', async () => {
+      const { path, remove } = await unmergedWithChat()
+      await writeFile(join(path, 'draft.txt'), 'draft\n', 'utf8')
+
+      await expect(remove({ deleteBranch: true, dropUnmerged: true })).rejects.toMatchObject({
+        code: 'uncommittedChanges'
+      })
+      await expect(readFile(join(path, 'draft.txt'), 'utf8')).resolves.toBe('draft\n')
+    })
+
+    it('drops a dirty workspace with unmerged commits when forced and told to', async () => {
+      const { path, removes } = await unmergedWithChat()
+      await writeFile(join(path, 'draft.txt'), 'draft\n', 'utf8')
+
+      expect(await removes({ force: true, deleteBranch: true, dropUnmerged: true })).toBe('')
     })
 
     /*

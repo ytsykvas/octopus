@@ -1474,6 +1474,7 @@ describe('useWorkspaces', () => {
 
       expect(onError).toHaveBeenCalledWith('That workspace is no longer there.')
       expect(result.current.flat).toEqual([anna])
+      expect(window.octopus.workspaces.remove).toHaveBeenCalledTimes(1)
     })
 
     const unmerged = {
@@ -1534,6 +1535,25 @@ describe('useWorkspaces', () => {
 
       expect(window.octopus.workspaces.remove).toHaveBeenCalledTimes(1)
       expect(onError.mock.calls).toEqual([[null]])
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    it('reports a drop that failed and keeps the workspace in the list', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.remove)
+        .mockResolvedValueOnce(unmerged)
+        .mockResolvedValueOnce({ ok: false, error: 'worktree is gone', code: 'worktreeMissing' })
+      const onError = vi.fn<OnError>()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.remove('planner/anna'))
+
+      expect(onError).toHaveBeenLastCalledWith('That workspace is no longer there.')
       expect(result.current.flat).toEqual([anna])
     })
 
