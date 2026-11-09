@@ -4103,18 +4103,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   }
 
   /**
-   * Ends a chat's session, and leaves its history where it is.
-   *
-   * The record goes with its workspace at the caller's commit; what needs
-   * doing here is the child process, which a record removal would not touch.
-   *
-   * The transcript is deliberately not among it. Everything above is memory
-   * and a process — losing them costs a session that was ending anyway — while
-   * the transcript is the only copy of what was said, and this runs before the
-   * steps that can still fail. `discardHistories` takes it, after the record
-   * has gone.
-   */
-  /**
    * Whether nothing at all is going on in a conversation.
    *
    * Everything that makes its session worth keeping: a turn open, an agent

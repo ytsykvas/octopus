@@ -176,9 +176,11 @@ after the commit and swallowing their own failure, for the reason
 
 The sequence a closing conversation goes through — abandon its questions and its
 edits in flight, drop its `clearRequests` and `clearedTurns`, close the session —
-lives in `closeOneChat`, and `closeChatsOf` is a loop over it. Written out twice
-it would drift, which is what `removeProjectById` did before its own cascade was
-factored out.
+lives in `closeOneChat`, and `closeChatsOf` is a loop over it. The record is not
+its business — it goes with its workspace at the caller's commit; what needs
+doing there is the child process, which removing a record would not touch.
+Written out twice it would drift, which is what `removeProjectById` did before
+its own cascade was factored out.
 
 The transcript is **not** among them, and the omission is deliberate. Everything
 `closeOneChat` does is memory and a child process, and it runs early — before
