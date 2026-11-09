@@ -15,15 +15,14 @@
 import { isTaskBoundary } from './events.js'
 import type { ChatEntry } from './transcript.js'
 
-/**
- * The start after one more entry: the first of the main agent's own entries
- * since the last turn closed.
- *
- * A `result` closes the turn, so nothing is under way until something else is
- * said.
- */
+// The main agent's first entry since the turn closed. An `error` closes the turn as a `result`
+// does, unless it is a `background` one: the session outlived that.
 export function nextTurnStart(start: string | null, entry: ChatEntry): string | null {
-  if (entry.role === 'agent' && entry.event.type === 'result') return null
+  const closes =
+    entry.role === 'agent' &&
+    (entry.event.type === 'result' ||
+      (entry.event.type === 'error' && entry.event.code !== 'background'))
+  if (closes) return null
   return start ?? (isMainTurnEntry(entry) ? entry.at : null)
 }
 
@@ -46,7 +45,8 @@ export function turnStartedAt(entries: readonly ChatEntry[]): string | null {
 function isMainTurnEntry(entry: ChatEntry): boolean {
   if (entry.role !== 'agent') return true
   const { event } = entry
-  if (isTaskBoundary(event)) return false
+  // A skipped frame names no owner, and mid-turn the start is already set.
+  if (isTaskBoundary(event) || event.type === 'message_skipped') return false
   if (event.type === 'permission_request') return event.taskId === undefined
   return !('parentToolUseId' in event) || event.parentToolUseId === undefined
 }

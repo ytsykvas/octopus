@@ -64,6 +64,15 @@ the bridge carries and the interface draws.
 Without the boundary every SDK upgrade would be a UI change. With it, a new
 message kind maps to nothing until somebody decides what it should look like.
 
+A frame that cannot be handled costs that frame, not the session. The loop in
+`startSession` maps each message on its own, and a mapping that throws — or a
+listener that throws on one event — becomes a `message_skipped` event: kept in
+the transcript, drawn as a quiet line, changing no status, starting no turn
+clock and leaving the answer being streamed in place. The error itself, stack
+and all, goes to the diagnostic log (`onDiagnostic`,
+[development.md](development.md)). Then the loop reads on, because leaving it
+closes the transport under the session.
+
 `query` is a **parameter**, not an import, in the same spirit as `GitExec`: the
 whole chat — a message sent, events mapped, a permission answered, a session
 closed — is exercised without a child process or a network call. `query()` is
@@ -183,6 +192,7 @@ Removing a workspace, end to end:
 ```
 WorkspaceRow (click)
   → useWorkspaces.remove          asks for confirmation, handles the failure,
+                                  asks again before dropping unmerged commits,
                                   says when the cleanup script failed or did not run
   → window.octopus.workspaces.remove   preload: names the channel
   → ipcMain 'workspaces:remove'   main/ipc.ts: validates, calls attempt()

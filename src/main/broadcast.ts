@@ -29,12 +29,27 @@ import { canvasColor } from './theme.js'
  * a test needs no framework. A real `BrowserWindow` satisfies it as it stands.
  */
 export interface PushTarget {
-  readonly webContents: { readonly send: (channel: string, payload?: unknown) => void }
+  readonly webContents: {
+    readonly send: (channel: string, payload?: unknown) => void
+    readonly isDestroyed: () => boolean
+  }
   readonly setBackgroundColor: (color: string) => void
 }
 
+function toEach(targets: readonly PushTarget[], push: (target: PushTarget) => void): void {
+  for (const target of targets) {
+    try {
+      if (!target.webContents.isDestroyed()) push(target)
+    } catch {
+      // Inside the try: reading webContents off a destroyed window throws, not send.
+    }
+  }
+}
+
 function pushAll(targets: readonly PushTarget[], channel: string, payload: unknown): void {
-  for (const target of targets) target.webContents.send(channel, payload)
+  toEach(targets, (target) => {
+    target.webContents.send(channel, payload)
+  })
 }
 
 /**
@@ -45,10 +60,10 @@ function pushAll(targets: readonly PushTarget[], channel: string, payload: unkno
  * white on every switch.
  */
 export function pushTheme(targets: readonly PushTarget[], theme: ThemeName): void {
-  for (const target of targets) {
+  toEach(targets, (target) => {
     target.setBackgroundColor(canvasColor(theme))
     target.webContents.send('theme:changed', theme)
-  }
+  })
 }
 
 export function pushChatEvent(targets: readonly PushTarget[], event: unknown): void {
@@ -120,5 +135,9 @@ export function pushConfig(targets: readonly PushTarget[], config: unknown): voi
  * open Settings for.
  */
 export function pushSettingsOpen(target: PushTarget | null): void {
-  target?.webContents.send('settings:open')
+  if (target !== null) {
+    toEach([target], (focused) => {
+      focused.webContents.send('settings:open')
+    })
+  }
 }

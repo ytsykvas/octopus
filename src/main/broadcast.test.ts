@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  type PushTarget,
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
@@ -15,10 +16,13 @@ import {
 } from './broadcast.js'
 
 /** Stands in for a window, the way `terminals.test.ts` stands in for its WebContents. */
-function target(): {
+function target({ gone = false } = {}): {
   sent: [string, unknown][]
   colours: string[]
-  webContents: { send: (channel: string, payload?: unknown) => void }
+  webContents: {
+    send: (channel: string, payload?: unknown) => void
+    isDestroyed: () => boolean
+  }
   setBackgroundColor: (color: string) => void
 } {
   const state = {
@@ -27,7 +31,8 @@ function target(): {
     webContents: {
       send(channel: string, payload?: unknown) {
         state.sent.push([channel, payload])
-      }
+      },
+      isDestroyed: () => gone
     },
     setBackgroundColor(color: string) {
       state.colours.push(color)
@@ -35,6 +40,16 @@ function target(): {
   }
 
   return state
+}
+
+// A destroyed BrowserWindow throws on reading .webContents; its send never throws.
+function destroyed(): PushTarget {
+  return {
+    get webContents(): PushTarget['webContents'] {
+      throw new Error('Object has been destroyed')
+    },
+    setBackgroundColor: () => undefined
+  }
 }
 
 /*
@@ -182,5 +197,47 @@ describe('what the main process pushes, and on which channel', () => {
     expect(() => {
       pushChatEvent([], { chatId: 'chat-1' })
     }).not.toThrow()
+  })
+})
+
+describe('a window that cannot take a push', () => {
+  const event = { chatId: 'chat-1' }
+
+  it('skips a window that is gone', () => {
+    const gone = target({ gone: true })
+    const open = target()
+
+    pushChatEvent([gone, open], event)
+    pushTheme([gone, open], 'dark')
+
+    expect(gone.sent).toEqual([])
+    expect(gone.colours).toEqual([])
+    expect(open.sent).toEqual([
+      ['chats:event', event],
+      ['theme:changed', 'dark']
+    ])
+  })
+
+  it('does not let a destroyed window cost the others their copy', () => {
+    const open = target()
+
+    expect(() => {
+      pushChatEvent([destroyed(), open], event)
+      pushTheme([destroyed(), open], 'dark')
+    }).not.toThrow()
+    expect(open.sent).toEqual([
+      ['chats:event', event],
+      ['theme:changed', 'dark']
+    ])
+  })
+
+  it('opens settings nowhere when the focused window is gone or destroyed', () => {
+    const gone = target({ gone: true })
+
+    expect(() => {
+      pushSettingsOpen(gone)
+      pushSettingsOpen(destroyed())
+    }).not.toThrow()
+    expect(gone.sent).toEqual([])
   })
 })

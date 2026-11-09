@@ -1076,11 +1076,7 @@ export function App(): React.JSX.Element {
         </div>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          {error !== null && (
-            <div className="bg-danger-bg text-danger border-danger/25 m-6 mb-0 rounded-[var(--radius-control)] border px-3 py-2">
-              {error}
-            </div>
-          )}
+          {error !== null && <div className="error-box m-6 mb-0">{error}</div>}
 
           {/* The chat needs the full height of the pane — a padded, scrolling
               wrapper around it would give it two scrollbars, one of which

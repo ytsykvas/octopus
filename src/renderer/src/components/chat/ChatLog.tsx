@@ -8,6 +8,7 @@ import {
   FolderGit2,
   FoldVertical,
   Map,
+  MessageSquareOff,
   Play,
   Repeat,
   ShieldAlert,
@@ -42,7 +43,7 @@ import { shown } from '../diff/shown.js'
 import { NOTHING_STREAMING, type StreamStore, streamOf } from '../../hooks/useStreaming.js'
 import { sameMap, sameSet, useSameValue } from '../../hooks/useSameValue.js'
 import { DaySeparator } from './DayChip.js'
-import { exitCodeOf, formatClock, formatFullTime, formatTokens, savedShare } from './format.js'
+import { formatClock, formatFullTime, formatTokens, processEndOf, savedShare } from './format.js'
 import { Markdown } from './Markdown.js'
 import { BLOCK_PART, DAY_PART, toThreadMessages } from './threadMessages.js'
 import { ElicitationCard } from './ElicitationCard.js'
@@ -625,7 +626,10 @@ function AgentRow({
       return <UsageCard report={event.report} />
 
     case 'error':
-      return <ErrorRow message={event.message} />
+      return <ErrorRow event={event} />
+
+    case 'message_skipped':
+      return <SkippedRow reason={event.reason} />
 
     // Only the reset nobody asked for is drawn. The one the user asked for
     // takes the whole log with it, so there is nothing left for it to sit in.
@@ -1456,7 +1460,7 @@ function AutoFellBackRow({
 }
 
 /**
- * What the refusal and denial lines are made of.
+ * What the refusal, denial and skipped-frame lines are made of.
  *
  * Shared because the lines differ in one sentence and one glyph, and the markup
  * under them is load-bearing — the explanation is a second paragraph, so this
@@ -1470,7 +1474,7 @@ function RefusalRow({
 }: {
   readonly icon: React.ReactNode
   readonly said: string
-  /** The model's own prose, drawn as given: display only, never parsed. */
+  /** Someone else's prose, drawn as given: display only, never parsed. */
   readonly explanation: string | null
 }): React.JSX.Element {
   return (
@@ -1487,25 +1491,45 @@ function RefusalRow({
   )
 }
 
-/*
- * A process that died is said in words, with the SDK's own line kept under
- * them: "exited with code 143" is exact and means nothing to the person reading
- * it, and the words alone would leave nothing to search for.
- */
-function ErrorRow({ message }: { message: string }): React.JSX.Element {
+/* A death the SDK names — an exit code or a signal — is worded, its line kept under it to search
+   for. An `endedQuietly` has no SDK line — its message is core's own — so the words stand alone. */
+function ErrorRow({ event }: { event: Extract<AgentEvent, { type: 'error' }> }): React.JSX.Element {
   const { t } = useTranslation()
-  const code = exitCodeOf(message)
+  if (event.code === 'endedQuietly') {
+    return (
+      <div className="error-box">
+        <p>{t('chat.processEnded')}</p>
+      </div>
+    )
+  }
 
+  const end = processEndOf(event.message)
   return (
-    <div className="bg-danger-bg text-danger border-danger/25 rounded-[var(--radius-control)] border px-3 py-2">
-      {code === null ? (
-        <p>{shown(message)}</p>
+    <div className="error-box">
+      {end === null ? (
+        <p>{shown(event.message)}</p>
       ) : (
         <>
-          <p>{code > 128 ? t('chat.processStopped') : t('chat.processFailed', { code })}</p>
-          <p className="text-ink-faint mt-1 font-mono text-[11px]">{shown(message)}</p>
+          <p>
+            {end.kind === 'stopped'
+              ? t('chat.processStopped')
+              : t('chat.processFailed', { code: end.code })}
+          </p>
+          <p className="text-ink-faint mt-1 font-mono text-[11px]">{shown(event.message)}</p>
         </>
       )}
     </div>
+  )
+}
+
+function SkippedRow({ reason }: { readonly reason: string }): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <RefusalRow
+      icon={<MessageSquareOff aria-hidden size={12} />}
+      said={t('chat.messageSkipped')}
+      explanation={reason}
+    />
   )
 }

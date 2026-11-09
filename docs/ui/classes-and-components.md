@@ -2,9 +2,10 @@
 
 ## Ready-made classes
 
-`.panel` · `.row` / `.row-selected` · `.input` · `.choice` / `.choice-danger` ·
-`.section-label` · `.focus-ring` · `.titlebar-drag` · `.project-tinted` ·
-`.project-tinted-top` · `.bubble-sent` · `.tab-selected` / `.tab-idle`
+`.panel` · `.row` / `.row-selected` · `.input` · `.error-box` · `.choice` /
+`.choice-danger` · `.section-label` · `.focus-ring` · `.titlebar-drag` ·
+`.project-tinted` · `.project-tinted-top` · `.bubble-sent` · `.tab-selected` /
+`.tab-idle`
 
 **`.choice` goes on every checkbox and radio**, and being absent from this list
 is why three of the six were left painted by the platform for months. Without

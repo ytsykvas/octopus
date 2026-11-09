@@ -176,9 +176,12 @@ after the commit and swallowing their own failure, for the reason
 
 The sequence a closing conversation goes through — abandon its questions and its
 edits in flight, drop its `clearRequests` and `clearedTurns`, close the session —
-lives in `closeOneChat`, and `closeChatsOf` is a loop over it. Written out twice
-it would drift, which is what `removeProjectById` did before its own cascade was
-factored out.
+lives in `closeOneChat`, and `closeChatsOf` is a loop over it. The record is not
+its business — the caller commits what becomes of it (removed with its
+workspace, marked closed, given a new point to resume from); what needs doing
+here is the child process, which no write to the record would touch.
+Written out twice it would drift, which is what `removeProjectById` did before
+its own cascade was factored out.
 
 The transcript is **not** among them, and the omission is deliberate. Everything
 `closeOneChat` does is memory and a child process, and it runs early — before
@@ -298,9 +301,11 @@ CLI's and undocumented, and nothing here writes it. The exchange goes to the end
 of our transcript (the question without a `uuid`, since the agent has no point
 to rewind to), the new record carries it as `aside`, and the tab is named
 `btw: <question>`. The first message that reaches the agent as a prompt has the
-exchange put in front of it (`formatAside`), and `aside` is cleared. A command
-is sent as typed, because text in front would stop it being one: `/clear` drops
-the exchange, and any other listed command leaves it for the next message.
+exchange put in front of it (`formatAside`), and `aside` is cleared. A message
+that is not sent after all — the session after a dead one failing to start —
+puts it back. A command is sent as typed, because text in front would stop it
+being one: `/clear` drops the exchange, and any other listed command leaves it
+for the next message.
 
 ## What the renderer holds is what the core last said
 
@@ -331,8 +336,8 @@ feature. Not leaving it unwritten either: the chat would stay
 "come and answer this" mark against a question nobody can answer any more.
 
 Self-correcting rather than a second thing to remember — the turn always ends in
-a `result`, which writes `idle` or `error`, and `settleStatuses` clears a
-`running` left by a crash.
+a `result` or an `error`, which write `idle` or `error`, and `settleStatuses`
+clears a `running` left by a crash.
 
 **Back to `running` only when nothing else is asked** (`carryOn`). An MCP
 server's form sets `waiting_permission` as a permission does, and two tool calls
@@ -349,11 +354,13 @@ result, that is a turn of its own starting.
 `canUseTool` blocks the agent on a promise, so an open permission request is a
 turn held open. Every way a turn can end withdraws the chat's questions:
 stopping it, the session closing with its workspace, and the `result` or `error`
-that ends it on its own. `abandonPermissions` resolves each as a refusal and
-drops it — resolving rather than dropping, because the promise is what holds the
-tool call, and a refusal is the only answer that cannot start work nobody
-approved. It carries `ABANDONED` rather than `DENIED`: the agent reads a
-refusal's message as instruction, and nobody declined anything.
+that ends it on its own — including the `error` the service puts in itself when
+the process ends quietly mid-work (`endedQuietly`). `abandonPermissions`
+resolves each as a refusal and drops it — resolving rather than dropping,
+because the promise is what holds the tool call, and a refusal is the only
+answer that cannot start work nobody approved. It carries `ABANDONED` rather
+than `DENIED`: the agent reads a refusal's message as instruction, and nobody
+declined anything.
 
 Only an answer used to remove one, which let the map outlive the sessions in it.
 That was invisible until `pendingPermissions` began handing the first entry it
@@ -385,9 +392,12 @@ The other half of the same rule: the entry is removed where the answer is
 write that failed left the agent blocked on a question nothing could ask again —
 the window had dropped its copy, and `pendingPermissions` had none.
 
-Only the session's own stream reaches `handleEvent`; a background write that
-failed is reported straight to the listeners by `report`. That is what makes the
-`error` case safe to withdraw on.
+Only the session's own stream reaches `handleEvent`, and the `endedQuietly`
+error `onEnd` puts in for a process already gone; a background write that failed
+is reported straight to the listeners by `report`, coded `background`. That is
+what makes the `error` case safe to withdraw on. The window takes that code the
+same way: the turn goes on there too, with its cards, its busy state and the
+words being streamed.
 
 ## What a stopped turn was holding goes with it
 

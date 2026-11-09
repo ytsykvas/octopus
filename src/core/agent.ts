@@ -298,6 +298,10 @@ export interface SessionHooks {
    * account probe works on no branch.
    */
   readonly refuseCommand?: (command: string) => string | null
+  /** The stream ended and nobody closed the session: its process is gone. */
+  readonly onEnd?: () => void
+  /** Errors swallowed so the session lives on. Must not throw. */
+  readonly onDiagnostic?: (error: unknown) => void
 }
 
 /** What an MCP server wants from the user, once the form has been read. */
@@ -323,6 +327,8 @@ export interface AgentSession {
    * rewound to.
    */
   send: (text: string, messageId?: UUID) => void
+  /** Settles once the stream is over and `onEnd`, if it was called, has returned. */
+  readonly ended: Promise<void>
   /**
    * What putting the files back to a message would do — or does, without
    * `dryRun`. Needs the checkpointing the session was started with.
@@ -452,6 +458,18 @@ function windowsIn(result: { readonly modelUsage?: unknown }): [string, number][
   if (!parsed.success) return []
 
   return Object.entries(parsed.data).map(([model, usage]) => [model, usage.contextWindow])
+}
+
+/** Parsed for the same reason: a result without its usage must still close its turn. */
+const ResultUsageSchema = z.looseObject({
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  cache_read_input_tokens: z.number(),
+  cache_creation_input_tokens: z.number()
+})
+
+function skippedBy(error: unknown): AgentEvent {
+  return { type: 'message_skipped', reason: describeError(error) }
 }
 
 /**
@@ -1164,6 +1182,26 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   let heldSkills: ReadonlySet<string> = NO_SKILLS
   let announced = false
 
+  const diagnose = hooks.onDiagnostic ?? ((): void => undefined)
+
+  const deliverOrDrop = (event: AgentEvent): void => {
+    try {
+      hooks.onEvent(event)
+    } catch (error) {
+      // The listener is what failed: a throw here would end the loop or reject unhandled.
+      diagnose(error)
+    }
+  }
+
+  const deliver = (event: AgentEvent): void => {
+    try {
+      hooks.onEvent(event)
+    } catch (error) {
+      diagnose(error)
+      deliverOrDrop(skippedBy(error))
+    }
+  }
+
   /*
    * The two lists the composer suggests from, announced by the session itself
    * once its first `init` has said which commands are skills.
@@ -1177,23 +1215,40 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
   const announceLists = (): void => {
     conversation.supportedCommands().then(
       (commands) => {
-        hooks.onEvent({ type: 'commands_changed', commands: toAgentCommands(commands, heldSkills) })
+        deliver({ type: 'commands_changed', commands: toAgentCommands(commands, heldSkills) })
       },
       () => undefined
     )
     conversation.supportedAgents().then(
       (agents) => {
-        hooks.onEvent({ type: 'agents_changed', agents: toAgentEntries(agents) })
+        deliver({ type: 'agents_changed', agents: toAgentEntries(agents) })
       },
       () => undefined
     )
   }
 
-  // Started and never awaited. `close` is what actually ends the session —
-  // it kills the process the SDK spawned, and the loop then falls out on its
-  // own. Waiting for it there would make closing depend on a stream ending,
-  // and a stream that does not would hang removing a workspace.
-  void (async () => {
+  const eventsOf = (message: SDKMessage): AgentEvent[] => {
+    try {
+      if (message.type === 'result') {
+        for (const [model, window] of windowsIn(message)) modelWindows.set(model, window)
+      }
+      if (message.type === 'system' && message.subtype === 'init') {
+        heldSkills = new Set(message.skills)
+        if (!announced) {
+          announced = true
+          announceLists()
+        }
+      }
+      return mapMessage(message, heldSkills)
+    } catch (error) {
+      diagnose(error)
+      return [skippedBy(error)]
+    }
+  }
+
+  // Never awaited by `close`, which ends the session by killing the process: waiting on the
+  // stream there would let one that never ends hang removing a workspace.
+  const ended = (async (): Promise<void> => {
     try {
       // Runs to the end of the stream, and must keep doing so. Leaving this
       // loop early — after a `result`, say, which looks like the end of the
@@ -1202,17 +1257,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // ready for writing": no model change, no context reading, no usage.
       // Measured by walking into it while probing the usage calls.
       for await (const message of conversation) {
-        if (message.type === 'result') {
-          for (const [model, window] of windowsIn(message)) modelWindows.set(model, window)
-        }
-        if (message.type === 'system' && message.subtype === 'init') {
-          heldSkills = new Set(message.skills)
-          if (!announced) {
-            announced = true
-            announceLists()
-          }
-        }
-        for (const event of mapMessage(message, heldSkills)) hooks.onEvent(event)
+        for (const event of eventsOf(message)) deliver(event)
       }
     } catch (error) {
       // The SDK throws for a failed spawn, a lost subscription or an aborted
@@ -1221,7 +1266,13 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       // a session started again for a new compaction window showed "exited
       // with code 143" above an answer from its successor.
       if (closing.signal.aborted) return
-      hooks.onEvent({ type: 'error', message: describeError(error) })
+      deliverOrDrop({ type: 'error', message: describeError(error) })
+    }
+    if (closing.signal.aborted) return
+    try {
+      hooks.onEnd?.()
+    } catch (error) {
+      diagnose(error)
     }
   })()
 
@@ -1229,6 +1280,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
     send(text, messageId) {
       input.push(userMessage(text, messageId))
     },
+
+    ended,
 
     async rewindFiles(messageId, dryRun) {
       const result = await conversation.rewindFiles(messageId, { dryRun })
@@ -1536,7 +1589,8 @@ export function mapMessage(
     case 'stream_event':
       return fromStreamEvent(message)
 
-    case 'result':
+    case 'result': {
+      const usage = ResultUsageSchema.safeParse(message.usage)
       return [
         {
           type: 'result',
@@ -1547,11 +1601,12 @@ export function mapMessage(
           costUsd: message.total_cost_usd,
           durationMs: message.duration_ms,
           // `usage`, unlike `total_cost_usd` and `modelUsage`, is per-turn.
-          inputTokens: promptTokens(message.usage),
-          outputTokens: message.usage.output_tokens,
+          inputTokens: usage.success ? promptTokens(usage.data) : null,
+          outputTokens: usage.success ? usage.data.output_tokens : null,
           terminalReason: message.terminal_reason ?? null
         }
       ]
+    }
 
     case 'rate_limit_event':
       return [

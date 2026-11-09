@@ -87,6 +87,10 @@ function fakeAgent(
     /** What the session's settings files say about skills; left out, it reads none. */
     skillsInFiles?: () => Promise<ReadonlyMap<string, SkillVisibility>>
     refuseCommand?: (command: string) => string | null
+    /** Runs after the event is collected, so one it throws on is still in `events`. */
+    onEvent?: (event: AgentEvent) => void
+    onEnd?: () => void
+    onDiagnostic?: (error: unknown) => void
   } = {}
 ): { agent: FakeQuery; events: AgentEvent[] } {
   const queued: SDKMessage[] = []
@@ -224,13 +228,18 @@ function fakeAgent(
 
         return conversation
       },
-      onEvent: (event) => events.push(event),
+      onEvent: (event) => {
+        events.push(event)
+        hooks.onEvent?.(event)
+      },
       askPermission: (ask) =>
         hooks.askPermission?.(ask) ?? Promise.resolve({ allow: true } as const),
       askElicitation: (ask) =>
         hooks.askElicitation?.(ask) ?? Promise.resolve({ action: 'decline' } as const),
       ...(hooks.skillsInFiles && { skillsInFiles: hooks.skillsInFiles }),
-      ...(hooks.refuseCommand && { refuseCommand: hooks.refuseCommand })
+      ...(hooks.refuseCommand && { refuseCommand: hooks.refuseCommand }),
+      ...(hooks.onEnd && { onEnd: hooks.onEnd }),
+      ...(hooks.onDiagnostic && { onDiagnostic: hooks.onDiagnostic })
     }
   )
 
@@ -275,6 +284,20 @@ async function* silence(): AsyncGenerator<SDKMessage> {
 
 /** Lets the microtask queue drain, so pushed messages reach the handler. */
 const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+async function unhandledDuring(run: () => Promise<void>): Promise<unknown[]> {
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown): void => {
+    unhandled.push(reason)
+  }
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    await run()
+  } finally {
+    process.off('unhandledRejection', onUnhandled)
+  }
+  return unhandled
+}
 
 function assistant(content: unknown[]): SDKMessage {
   return {
@@ -1412,6 +1435,30 @@ describe('mapping SDK messages', () => {
     ])
   })
 
+  it('reads no token counts from a result whose usage it cannot read', () => {
+    const message = {
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      total_cost_usd: 0,
+      duration_ms: 5,
+      usage: { input_tokens: 2 },
+      session_id: 's-1'
+    } as unknown as SDKMessage
+
+    expect(mapMessage(message)).toEqual([
+      {
+        type: 'result',
+        ok: true,
+        costUsd: 0,
+        durationMs: 5,
+        inputTokens: null,
+        outputTokens: null,
+        terminalReason: null
+      }
+    ])
+  })
+
   // Older CLIs do not send one, and the field is optional in the SDK's types.
   it('accepts a result that does not say why it ended', () => {
     const message = {
@@ -1710,6 +1757,253 @@ describe('a session', () => {
     await settle()
 
     expect(events).toEqual([])
+  })
+
+  it('keeps reading after a result it cannot take the usage from', async () => {
+    const { agent, events } = fakeAgent()
+
+    agent.emit({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      duration_ms: 1,
+      total_cost_usd: 0,
+      session_id: 's-1'
+    } as unknown as SDKMessage)
+    agent.emit(assistant([{ type: 'text', text: 'still here' }]))
+    await settle()
+
+    expect(events).toEqual([
+      {
+        type: 'result',
+        ok: true,
+        costUsd: 0,
+        durationMs: 1,
+        inputTokens: null,
+        outputTokens: null,
+        terminalReason: null
+      },
+      { type: 'text', text: 'still here', uuid: 'u-1' }
+    ])
+  })
+
+  it('skips a message it cannot map, says so, and reads on', async () => {
+    const { agent, events } = fakeAgent()
+
+    agent.emit({
+      type: 'rate_limit_event',
+      uuid: 'r-1',
+      session_id: 's-1'
+    } as unknown as SDKMessage)
+    agent.emit(assistant([{ type: 'text', text: 'still here' }]))
+    await settle()
+
+    expect(events).toEqual([
+      { type: 'message_skipped', reason: "Cannot read properties of undefined (reading 'status')" },
+      { type: 'text', text: 'still here', uuid: 'u-1' }
+    ])
+  })
+
+  it('loses only the event a listener throws on, and keeps the session', async () => {
+    let calls = 0
+    const { agent, events } = fakeAgent(
+      {},
+      {
+        onEvent: () => {
+          calls += 1
+          if (calls === 1) throw new Error('window gone')
+        }
+      }
+    )
+
+    agent.emit(assistant([{ type: 'text', text: 'first' }]))
+    agent.emit(assistant([{ type: 'text', text: 'second' }]))
+    await settle()
+
+    expect(events).toEqual([
+      { type: 'text', text: 'first', uuid: 'u-1' },
+      { type: 'message_skipped', reason: 'window gone' },
+      { type: 'text', text: 'second', uuid: 'u-1' }
+    ])
+    await expect(agent.session.contextUsage()).resolves.toMatchObject({ percentage: 2 })
+  })
+
+  it('leaves no rejection behind when every listener throws', async () => {
+    const { agent, events } = fakeAgent(
+      {},
+      {
+        onEvent: () => {
+          throw new Error('window gone')
+        }
+      }
+    )
+
+    const unhandled = await unhandledDuring(async () => {
+      agent.emit(assistant([{ type: 'text', text: 'lost' }]))
+      agent.finish(new Error('claude exited with code 1'))
+      await settle()
+    })
+
+    expect(events).toEqual([
+      { type: 'text', text: 'lost', uuid: 'u-1' },
+      { type: 'message_skipped', reason: 'window gone' },
+      { type: 'error', message: 'claude exited with code 1' }
+    ])
+    expect(unhandled).toEqual([])
+  })
+
+  it('says the stream has ended when the process dies, after the error', async () => {
+    const heard: string[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        onEvent: (event) => heard.push(event.type),
+        onEnd: () => heard.push('end')
+      }
+    )
+
+    agent.finish(new Error('claude exited with code 1'))
+    await settle()
+
+    expect(heard).toEqual(['error', 'end'])
+  })
+
+  it('says the stream has ended when it simply stops', async () => {
+    let ends = 0
+    const { agent } = fakeAgent({}, { onEnd: () => (ends += 1) })
+
+    agent.finish()
+    await settle()
+
+    expect(ends).toBe(1)
+  })
+
+  it.each([
+    ['failing', new Error('Claude Code process exited with code 143')],
+    ['simply stopping', undefined]
+  ])('says nothing of an end it caused, %s', async (_, failure) => {
+    let ends = 0
+    const { agent } = fakeAgent({}, { onEnd: () => (ends += 1) })
+
+    await agent.session.close()
+    agent.finish(failure)
+    await settle()
+
+    expect(ends).toBe(0)
+  })
+
+  it('settles its end only once the end listener has returned', async () => {
+    const heard: string[] = []
+    const { agent } = fakeAgent({}, { onEnd: () => heard.push('end') })
+
+    agent.finish(new Error('claude exited with code 1'))
+    await agent.session.ended
+
+    expect(heard).toEqual(['end'])
+  })
+
+  it('settles its end when it was closed', async () => {
+    const { agent } = fakeAgent()
+
+    await agent.session.close()
+    agent.finish()
+
+    await expect(agent.session.ended).resolves.toBeUndefined()
+  })
+
+  it('outlives an end listener that throws', async () => {
+    const { agent } = fakeAgent(
+      {},
+      {
+        onEnd: () => {
+          throw new Error('window gone')
+        }
+      }
+    )
+
+    const unhandled = await unhandledDuring(async () => {
+      agent.finish()
+      await settle()
+    })
+
+    expect(unhandled).toEqual([])
+  })
+
+  describe('a failure it swallows', () => {
+    it('goes to the diagnostic hook when a listener throws', async () => {
+      const thrown = new Error('window gone')
+      const diagnosed: unknown[] = []
+      const { agent } = fakeAgent(
+        {},
+        {
+          onEvent: (event) => {
+            if (event.type === 'text') throw thrown
+          },
+          onDiagnostic: (error) => diagnosed.push(error)
+        }
+      )
+
+      agent.emit(assistant([{ type: 'text', text: 'lost' }]))
+      await settle()
+
+      expect(diagnosed).toEqual([thrown])
+    })
+
+    it('goes to the diagnostic hook every time when every listener throws', async () => {
+      const diagnosed: unknown[] = []
+      const { agent } = fakeAgent(
+        {},
+        {
+          onEvent: () => {
+            throw new Error('window gone')
+          },
+          onDiagnostic: (error) => diagnosed.push(error)
+        }
+      )
+
+      agent.emit(assistant([{ type: 'text', text: 'lost' }]))
+      agent.finish(new Error('claude exited with code 1'))
+      await settle()
+
+      expect(diagnosed.map((error) => (error as Error).message)).toEqual([
+        'window gone',
+        'window gone',
+        'window gone'
+      ])
+    })
+
+    it('goes to the diagnostic hook when a message cannot be mapped', async () => {
+      const diagnosed: unknown[] = []
+      const { agent } = fakeAgent({}, { onDiagnostic: (error) => diagnosed.push(error) })
+
+      agent.emit({
+        type: 'rate_limit_event',
+        uuid: 'r-1',
+        session_id: 's-1'
+      } as unknown as SDKMessage)
+      await settle()
+
+      expect(diagnosed).toEqual([expect.any(TypeError)])
+    })
+
+    it('goes to the diagnostic hook when the end listener throws', async () => {
+      const thrown = new Error('window gone')
+      const diagnosed: unknown[] = []
+      const { agent } = fakeAgent(
+        {},
+        {
+          onEnd: () => {
+            throw thrown
+          },
+          onDiagnostic: (error) => diagnosed.push(error)
+        }
+      )
+
+      agent.finish()
+      await settle()
+
+      expect(diagnosed).toEqual([thrown])
+    })
   })
 
   it('changes the model of a running session', async () => {
@@ -2892,6 +3186,26 @@ describe('the lists a session announces', () => {
         ]
       }
     ])
+  })
+
+  it('loses only the list a listener throws on, and leaves no rejection behind', async () => {
+    const { agent, events } = fakeAgent(
+      {},
+      {
+        commands: [{ name: 'review', description: 'Review it', argumentHint: '' }],
+        onEvent: (event) => {
+          if (event.type === 'commands_changed') throw new Error('window gone')
+        }
+      }
+    )
+
+    const unhandled = await unhandledDuring(async () => {
+      agent.emit(init([]))
+      await settle()
+    })
+
+    expect(events).toContainEqual({ type: 'message_skipped', reason: 'window gone' })
+    expect(unhandled).toEqual([])
   })
 
   // Only what the `@` list shows: the model an agent runs on is its own

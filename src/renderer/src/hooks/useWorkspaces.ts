@@ -450,10 +450,24 @@ export function useWorkspaces(
       if (!answer.confirmed) return
 
       onError(null)
-      const result = await window.octopus.workspaces.remove(workspaceId, {
-        force: hasChanges,
-        deleteBranch: answer.checked
-      })
+      const choices = { force: hasChanges, deleteBranch: answer.checked }
+      let result = await window.octopus.workspaces.remove(workspaceId, choices)
+
+      if (!result.ok && result.code === 'branchUnmerged') {
+        const anyway = await confirm({
+          title: t('workspaces.dropUnmergedTitle'),
+          message: t('workspaces.dropUnmergedMessage', { branch: workspace.branch }),
+          detail: t('workspaces.dropUnmergedDetail'),
+          confirmLabel: t('workspaces.dropUnmergedConfirm'),
+          cancelLabel: t('workspaces.removeCancel'),
+          destructive: true
+        })
+        if (!anyway.confirmed) return
+        result = await window.octopus.workspaces.remove(workspaceId, {
+          ...choices,
+          dropUnmerged: true
+        })
+      }
 
       if (!result.ok) {
         onError(describeFailure(result))

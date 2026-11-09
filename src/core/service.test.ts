@@ -40,7 +40,7 @@ import {
   type QueryFn,
   READ_ONLY_TOOLS
 } from './agent.js'
-import { type Chat, MAX_CLOSED_CHATS_PER_WORKSPACE } from './chats.js'
+import { type Chat, MAX_CLOSED_CHATS_PER_WORKSPACE, type WorkingMode } from './chats.js'
 import type { RemoteRepository } from './github.js'
 import { type GitOptions, gitIn } from './git.js'
 import { WORKSPACE_NAMES } from './names.js'
@@ -71,7 +71,7 @@ import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
 import { listWorktrees } from './worktree.js'
 import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
-import { WorkspaceError } from './workspaces.js'
+import { type RemovalRequest, WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
 
@@ -664,6 +664,7 @@ describe('workspaces', () => {
     service: OctopusService
     projectId: string
     workspaceId: string
+    branch: string
     events: string[]
     stray: string[]
     pushedWith: (GitOptions | undefined)[]
@@ -741,6 +742,7 @@ describe('workspaces', () => {
       service,
       projectId: project.id,
       workspaceId: workspace.id,
+      branch: workspace.branch,
       events,
       stray,
       pushedWith,
@@ -822,7 +824,9 @@ describe('workspaces', () => {
   // Removal deletes the branch by the name it reads: read mid-move, it would
   // miss the moved branch and leave it behind.
   it('lines a removal up behind a move', async () => {
-    const { service, workspaceId, events, stray, holding, release } = await lined('move')
+    const { service, workspaceId, branch, events, stray, holding, release } = await lined('move')
+    // Merged so the merged check lets the removal through; what is under test is the order.
+    await run('git', ['merge', '-q', '--ff-only', branch], { cwd: join(dir, 'planner') })
 
     const rekinded = service.setWorkspaceKind(workspaceId, 'bug')
     await holding
@@ -861,8 +865,10 @@ describe('workspaces', () => {
 
   // Its own removal went first and took the record: nothing is left to remove.
   it('passes over a workspace whose own removal went before its project', async () => {
-    const { service, projectId, workspaceId, events, stray, holding, release } =
+    const { service, projectId, workspaceId, branch, events, stray, holding, release } =
       await lined('remove')
+    // Merged so the merged check lets the removal through; what is under test is the order.
+    await run('git', ['merge', '-q', '--ff-only', branch], { cwd: join(dir, 'planner') })
 
     const gone = service.removeWorkspaceById(workspaceId, { deleteBranch: true, force: true })
     await holding
@@ -5419,6 +5425,7 @@ describe('the agent chat', () => {
   let skillReload: () => Promise<unknown>
   /** What the session answers when its flags are set. */
   let flagsAnswer: () => Promise<void>
+  let modelAnswer: () => Promise<void>
   let pluginReload: () => Promise<unknown>
   let usageAnswer: () => Promise<unknown>
   /** Null is a CLI with no side-question call at all. */
@@ -5580,7 +5587,7 @@ describe('the agent chat', () => {
         setModel: (model: string | undefined) => {
           requestedModels.push(model)
           timeline.push(`model:${String(model)}`)
-          return Promise.resolve()
+          return modelAnswer()
         },
         supportedModels: () => offered(),
         supportedCommands: () => offeredCommands(),
@@ -5608,9 +5615,9 @@ describe('the agent chat', () => {
     }
   }
 
-  /** A session that ends without ever saying anything. */
-  async function* silence(): AsyncGenerator<SDKMessage> {
-    await Promise.resolve()
+  /** A session that stays up saying nothing: a stream that ends is a process gone. */
+  async function* quiet(): AsyncGenerator<SDKMessage> {
+    await new Promise<void>(() => undefined)
     yield* []
   }
 
@@ -5718,6 +5725,7 @@ describe('the agent chat', () => {
     contextAnswer = () => Promise.resolve(CONTEXT_RESPONSE)
     skillReload = () => Promise.resolve({ skills: [] })
     flagsAnswer = () => Promise.resolve()
+    modelAnswer = () => Promise.resolve()
     pluginReload = () =>
       Promise.resolve({ commands: [], agents: [], plugins: [], mcpServers: [], error_count: 0 })
     usageAnswer = () => Promise.resolve(USAGE_RESPONSE)
@@ -5995,9 +6003,8 @@ describe('the agent chat', () => {
         expect(service.listChats(chat.workspaceId)[0]?.status).toBe('error')
       })
 
-      await service.setChatAutoCompact(chat.id, 400_000)
-      expect(agents).toHaveLength(2)
       await service.sendToChat(chat.id, 'something else')
+      expect(agents).toHaveLength(2)
       agents[1]?.emit(initMessage)
       agents[1]?.emit(resultMessage)
       await service.closeChats()
@@ -6547,6 +6554,44 @@ describe('the agent chat', () => {
       })
     })
 
+    it('keeps the agents of a session whose process died, and lets the session go', async () => {
+      const { service } = await withAgentAway()
+      agent().finish(new Error('exited with code 1'))
+
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+      expect(service.listTasks()[0]?.tasks[0]?.status).toBe('stopped')
+    })
+
+    it('ends every agent when the process ends quietly with only its agents at work', async () => {
+      const { service } = await withAgentAway()
+      agent().finish()
+
+      await vi.waitFor(() => {
+        expect(service.listTasks()[0]?.tasks[0]?.status).toBe('stopped')
+      })
+    })
+
+    it('lets a dead process go when a listener to the agents throws', async () => {
+      const thrown = new Error('window gone')
+      const diagnosed: unknown[] = []
+      const heard: unknown[] = []
+      const { service } = await withAgentAway({ onDiagnostic: (error) => diagnosed.push(error) })
+      service.onTasks(() => {
+        throw thrown
+      })
+      service.onTasks((event) => heard.push(event))
+
+      agent().finish()
+
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+      expect(heard).not.toHaveLength(0)
+      expect(diagnosed).toContain(thrown)
+    })
+
     it('forgets the agents of a conversation that is closed', async () => {
       const { service, workspaceId, chatId } = await withAgentAway()
       await service.createChat(workspaceId)
@@ -6853,9 +6898,453 @@ describe('the agent chat', () => {
    * morning held its process all day. At rest long enough it is let go, and
    * the next message starts one again from the same id, as a restart does.
    */
-  describe('a session at rest', () => {
-    const SOON = { idleReleaseMs: 150, idleSweepMs: 20, readingFreshMs: 10_000 }
+  const SOON = { idleReleaseMs: 150, idleSweepMs: 20, readingFreshMs: 10_000 }
 
+  describe('a session whose process died', () => {
+    const RESET = {
+      type: 'conversation_reset',
+      new_conversation_id: 'conv-2',
+      session_id: 'sess-1'
+    } as unknown as SDKMessage
+
+    async function died(
+      first = 'work',
+      before: readonly SDKMessage[] = [],
+      extra: ServiceOptions = {}
+    ): Promise<{
+      service: OctopusService
+      workspaceId: string
+      chatId: string
+      events: ChatEvent[]
+    }> {
+      const { service, workspaceId, events } = await withWorkspace(extra)
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, first)
+      agent().emit(initMessage)
+      for (const message of before) agent().emit(message)
+      agent().finish(new Error('claude exited with code 1'))
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('error')
+      })
+      return { service, workspaceId, chatId: chat.id, events }
+    }
+
+    it('starts a new session for the next message, resuming the conversation', async () => {
+      const { service, workspaceId, chatId } = await died()
+
+      await service.sendToChat(chatId, 'again')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+
+      expect(agents).toHaveLength(2)
+      expect(agents[1]?.options().resume).toBe('sess-1')
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+    })
+
+    it('lets go of the dead process at once', async () => {
+      await died()
+
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+    })
+
+    it('is let go even when its dead process will not close', async () => {
+      const base = fakeQuery()
+      const { service, chatId, events } = await died('work', [], {
+        query: (...args) =>
+          Object.assign(base(...args), {
+            close: () => {
+              throw new Error('the process would not die')
+            }
+          })
+      })
+
+      await service.sendToChat(chatId, 'again')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      expect(agents).toHaveLength(2)
+      expect(events.filter(({ event }) => event.type === 'error')).toEqual([
+        expect.objectContaining({ event: { type: 'error', message: 'claude exited with code 1' } })
+      ])
+    })
+
+    it('forgets what the dead process held, so the next session can come to rest', async () => {
+      const { service, workspaceId, chatId } = await died(
+        'work',
+        [
+          lifecycle('held', 'queued'),
+          toolCallMessage('c-1', 'Edit', {
+            file_path: 'notes.txt',
+            old_string: 'a',
+            new_string: 'b'
+          })
+        ],
+        SOON
+      )
+
+      await service.sendToChat(chatId, 'again')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      await vi.waitFor(() => {
+        expect(agents[1]?.closed()).toBe(1)
+      })
+    })
+
+    it('forgets a /clear the dead process never answered', async () => {
+      const { service, chatId, events } = await died('/clear')
+
+      await service.sendToChat(chatId, 'again')
+      agents[1]?.emit(RESET)
+
+      await vi.waitFor(() => {
+        expect(events.map(({ event }) => event)).toContainEqual({
+          type: 'conversation_reset',
+          cleared: false
+        })
+      })
+    })
+
+    it('forgets a cleared turn the dead process never closed', async () => {
+      const { service, chatId } = await died('/clear', [RESET])
+
+      await service.sendToChat(chatId, 'again')
+      agents[1]?.emit(initMessage)
+      agents[1]?.emit(resultMessage)
+
+      await vi.waitFor(async () => {
+        const history = await service.chatHistory(chatId)
+        expect(
+          history.map((entry) => (entry.role === 'agent' ? entry.event.type : entry.role))
+        ).toContain('result')
+      })
+    })
+
+    it('says no "done" for a turn whose process died before it was said', async () => {
+      const { service, workspaceId, events } = await withWorkspace({ finishedAfterMs: 200 })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      agent().finish(new Error('claude exited with code 1'))
+      await new Promise((resolve) => setTimeout(resolve, 400))
+
+      expect(events.filter(({ event }) => event.type === 'finished')).toEqual([])
+    })
+
+    it('closes the turn of a process that ended quietly mid-turn, and says so', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+
+      agent().finish()
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('error')
+      })
+      expect(events.map(({ event }) => event)).toContainEqual({
+        type: 'error',
+        message: 'Claude Code ended without a result or an error',
+        code: 'endedQuietly'
+      })
+      expect(agents[0]?.closed()).toBe(1)
+    })
+
+    it('says nothing of a process that ended quietly with nothing under way', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
+      agent().finish()
+
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      expect(events.filter(({ event }) => event.type === 'error')).toEqual([])
+    })
+
+    // A test chat starts in plan mode: leave it first, or assertMode asks for plan, not auto.
+    async function heldSend(
+      extra: ServiceOptions = {},
+      mode?: WorkingMode,
+      act: (service: OctopusService, chatId: string) => Promise<unknown> = (service, chatId) =>
+        service.sendToChat(chatId, 'again')
+    ): Promise<{
+      service: OctopusService
+      workspaceId: string
+      sent: Promise<unknown>
+      release: () => void
+      answer: () => void
+      dies: () => void
+    }> {
+      const { service, workspaceId } = await withWorkspace(extra)
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      if (mode) {
+        await service.setChatPlanMode(chat.id, false)
+        await service.setChatWorkingMode(chat.id, mode)
+      }
+      let refuse: (error: Error) => void = () => undefined
+      let accept: () => void = () => undefined
+      let asked = false
+      modeAnswer = () => {
+        asked = true
+        return new Promise<void>((resolve, reject) => {
+          accept = resolve
+          refuse = reject
+        })
+      }
+      const sent = act(service, chat.id)
+      await vi.waitFor(() => {
+        expect(asked).toBe(true)
+      })
+      const first = agent()
+      const release = (): void => {
+        modeAnswer = () => Promise.resolve()
+        refuse(new Error('Query closed before response received'))
+      }
+      return {
+        service,
+        workspaceId,
+        sent,
+        release,
+        answer: () => {
+          modeAnswer = () => Promise.resolve()
+          accept()
+        },
+        // The SDK's order: the pending request is refused first, and the stream ends only once
+        // the process has gone, a moment later.
+        dies: () => {
+          release()
+          setTimeout(() => {
+            first.finish(new Error('claude exited with code 1'))
+          }, 20)
+        }
+      }
+    }
+
+    it('sends a message that waited through the death into the next session', async () => {
+      const { sent, dies } = await heldSend()
+
+      dies()
+      await sent
+
+      expect(agents).toHaveLength(2)
+      expect(agents[1]?.options().resume).toBe('sess-1')
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
+    it('sends a message that waited through an idle release into the next session', async () => {
+      let clock = '2026-11-09T10:00:00.000Z'
+      const { sent, release } = await heldSend({ ...SOON, idleReleaseMs: 60_000, now: () => clock })
+      clock = '2026-11-09T10:01:01.000Z'
+      await vi.waitFor(() => {
+        expect(agents[0]?.closed()).toBe(1)
+      })
+
+      release()
+      await sent
+
+      expect(agents).toHaveLength(2)
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
+    it('rests from a send, not from the last word, while the send is on its way', async () => {
+      let clock = '2026-11-09T10:00:00.000Z'
+      const { sent, answer } = await heldSend(
+        { ...SOON, idleReleaseMs: 60_000, now: () => clock },
+        undefined,
+        (service, chatId) => {
+          clock = '2026-11-09T10:00:59.000Z'
+          return service.sendToChat(chatId, 'again')
+        }
+      )
+      clock = '2026-11-09T10:01:30.000Z'
+
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(agents[0]?.closed()).toBe(0)
+
+      answer()
+      await sent
+      expect(agents).toHaveLength(1)
+      expect(agents[0]?.sent).toEqual(['work', 'again'])
+    })
+
+    it('sends a message held through a restart for a new window into the new session', async () => {
+      const { service, workspaceId, sent, release } = await heldSend()
+      const chatId = service.listChats(workspaceId)[0]?.id ?? ''
+      // The new session must not wait on the answer the old one is held on.
+      modeAnswer = () => Promise.resolve()
+
+      await service.setChatAutoCompact(chatId, 400_000)
+      release()
+      await sent
+
+      expect(agents).toHaveLength(2)
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
+    it('sends a message whose plan model was on its way as the process died', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      await service.updateConfig({ opusPlan: true })
+      const chat = await service.openChat(workspaceId)
+      let refuse: (error: Error) => void = () => undefined
+      modelAnswer = () =>
+        new Promise<void>((_, reject) => {
+          refuse = reject
+        })
+      const sent = service.sendToChat(chat.id, 'plan it')
+      await vi.waitFor(() => {
+        expect(agent().requestedModels()).toEqual(['opusplan'])
+      })
+
+      modelAnswer = () => Promise.resolve()
+      refuse(new Error('Query closed before response received'))
+      setTimeout(() => {
+        agents[0]?.finish(new Error('claude exited with code 1'))
+      }, 20)
+      await sent
+
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['plan it'])
+      })
+    })
+
+    it('lets a plan model a live session refuses go up', async () => {
+      const { service, workspaceId } = await withWorkspace({ letGoGraceMs: 5 })
+      await service.updateConfig({ opusPlan: true })
+      const chat = await service.openChat(workspaceId)
+      modelAnswer = () => Promise.reject(new Error('unknown model'))
+
+      await expect(service.sendToChat(chat.id, 'plan it')).rejects.toThrow('unknown model')
+      expect(agents[0]?.sent).toEqual([])
+    })
+
+    it('keeps auto mode when the process dies under its mode switch', async () => {
+      const { service, workspaceId, sent, dies } = await heldSend({}, 'auto')
+
+      dies()
+      await sent
+
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
+    it('takes a refusal whose session outlives the grace as a refusal', async () => {
+      const { sent, dies } = await heldSend({ letGoGraceMs: 5 })
+
+      dies()
+
+      await expect(sent).rejects.toThrow('Query closed before response received')
+    })
+
+    it('sends a message whose effort was on its way as the process died', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      let refuse: (error: Error) => void = () => undefined
+      flagsAnswer = () =>
+        new Promise<void>((_, reject) => {
+          refuse = reject
+        })
+      const before = agent().flagSettings().length
+      const sent = service.sendToChat(chat.id, 'again')
+      await vi.waitFor(() => {
+        expect(agent().flagSettings()).toHaveLength(before + 1)
+      })
+
+      flagsAnswer = () => Promise.resolve()
+      refuse(new Error('Query closed before response received'))
+      setTimeout(() => {
+        agents[0]?.finish(new Error('claude exited with code 1'))
+      }, 20)
+      await sent
+
+      await vi.waitFor(() => {
+        expect(agents[1]?.sent).toEqual(['again'])
+      })
+    })
+
+    it('asks the next session for a /usage that waited through the death', async () => {
+      const { sent, dies } = await heldSend({}, undefined, (service, chatId) =>
+        service.sendToChat(chatId, '/usage')
+      )
+
+      const asked = agents[0]?.usageAsked()
+
+      dies()
+      await sent
+
+      expect(agents[0]?.usageAsked()).toBe(asked)
+      expect(agents[1]?.usageAsked()).toBe(1)
+    })
+
+    it('takes auto mode, chosen as the process died, as chosen', async () => {
+      const { service, workspaceId, sent, dies } = await heldSend(
+        {},
+        'default',
+        (service, chatId) => service.setChatWorkingMode(chatId, 'auto')
+      )
+
+      dies()
+
+      await expect(sent).resolves.toBeUndefined()
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('auto')
+    })
+
+    it('takes another mode, chosen as the process died, as chosen', async () => {
+      const { service, workspaceId, sent, dies } = await heldSend(
+        {},
+        'default',
+        (service, chatId) => service.setChatWorkingMode(chatId, 'acceptEdits')
+      )
+
+      dies()
+
+      await expect(sent).resolves.toBeUndefined()
+      expect(service.listChats(workspaceId)[0]?.workingMode).toBe('acceptEdits')
+    })
+  })
+
+  describe('a session at rest', () => {
     async function resting(): Promise<{
       service: OctopusService
       workspaceId: string
@@ -7805,6 +8294,29 @@ describe('the agent chat', () => {
      * probe — it exists to read a gauge — so a question from one could only
      * ever be waited on for ever.
      */
+    it('hands what a probe could not map to onDiagnostic', async () => {
+      const diagnosed: unknown[] = []
+      const { service, workspaceId } = await withWorkspace({
+        onDiagnostic: (error) => diagnosed.push(error)
+      })
+      await service.openChat(workspaceId)
+
+      const reading = service.refreshSubscriptionUsage()
+      await vi.waitFor(() => {
+        expect(agents).toHaveLength(1)
+      })
+      agents[0]?.emit({
+        type: 'rate_limit_event',
+        uuid: 'r-1',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+      await reading
+
+      await vi.waitFor(() => {
+        expect(diagnosed).toEqual([expect.any(TypeError)])
+      })
+    })
+
     it('turns down a question a probe is asked, rather than holding it open', async () => {
       const { service, workspaceId } = await withWorkspace()
       await service.openChat(workspaceId)
@@ -8555,7 +9067,9 @@ describe('the agent chat', () => {
       release([OPUS])
 
       await vi.waitFor(() => {
-        expect(events.some((entry) => entry.event.type === 'error')).toBe(true)
+        expect(events.map(({ event }) => event)).toContainEqual(
+          expect.objectContaining({ type: 'error', code: 'background' })
+        )
       })
     })
 
@@ -9273,6 +9787,65 @@ describe('the agent chat', () => {
       expect(events.at(-1)?.event).toEqual({
         type: 'error',
         message: 'claude exited with code 1'
+      })
+    })
+
+    it('hands every listener the event when one of them throws', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      service.onAgentEvent(() => {
+        throw new Error('window gone')
+      })
+      const seen: ChatEvent[] = []
+      service.onAgentEvent((event) => seen.push(event))
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+      expect(seen.map(({ event }) => event.type)).toEqual(
+        expect.arrayContaining(['session_started', 'result'])
+      )
+    })
+
+    it("hands a listener's failure to onDiagnostic", async () => {
+      const thrown = new Error('window gone')
+      const diagnosed: unknown[] = []
+      const { service, workspaceId } = await withWorkspace({
+        onDiagnostic: (error) => diagnosed.push(error)
+      })
+      service.onAgentEvent(({ event }) => {
+        if (event.type === 'text') throw thrown
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      agent().emit(textMessage('done'))
+
+      await vi.waitFor(() => {
+        expect(diagnosed).toEqual([thrown])
+      })
+    })
+
+    it('hands what a session could not map to onDiagnostic', async () => {
+      const diagnosed: unknown[] = []
+      const { service, workspaceId } = await withWorkspace({
+        onDiagnostic: (error) => diagnosed.push(error)
+      })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      agent().emit({
+        type: 'rate_limit_event',
+        uuid: 'r-1',
+        session_id: 'sess-1'
+      } as unknown as SDKMessage)
+
+      await vi.waitFor(() => {
+        expect(diagnosed).toEqual([expect.any(TypeError)])
       })
     })
 
@@ -10917,6 +11490,24 @@ describe('the agent chat', () => {
       await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
       expect(service.pendingPermissions(chat.id)).toEqual([])
 
+      await vi.waitFor(async () => {
+        const [workspace] = await service.listWorkspaces('planner')
+        expect(workspace?.status).toBe('error')
+      })
+    })
+
+    it('withdraws it when the process ends quietly with the question open', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'edit it')
+
+      const decision = agent().ask('Edit')
+      await waitForRequest(events)
+
+      agent().finish()
+
+      await expect(decision).resolves.toMatchObject({ behavior: 'deny' })
+      expect(service.pendingPermissions(chat.id)).toEqual([])
       await vi.waitFor(async () => {
         const [workspace] = await service.listWorkspaces('planner')
         expect(workspace?.status).toBe('error')
@@ -12610,27 +13201,13 @@ describe('the agent chat', () => {
       expect(seen).toEqual([])
     })
 
-    // The worktree is about to stop existing, and a live agent would keep a
-    // child process pointed at a path that is no longer there.
-    it('closes the session and discards the history when the workspace goes', async () => {
-      const { service, workspaceId } = await withWorkspace()
-      const chat = await service.openChat(workspaceId)
-      await service.sendToChat(chat.id, 'work')
-
-      await service.removeWorkspaceById(workspaceId, { force: true })
-
-      expect(agent().closed()).toBe(1)
-      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
-    })
-
-    /*
-     * The mirror of the test above, and the ordinary path rather than the
-     * exotic one: the pane pre-ticks the branch checkbox and only forces when
-     * the worktree is dirty, so a clean workspace whose commits are not merged
-     * refuses every time. Cancelling must cost nothing — the refusal has to
-     * happen before the sessions close and before the cleanup runs.
-     */
-    it('keeps the conversation and runs no cleanup when the removal is refused', async () => {
+    async function unmergedWithChat(): Promise<{
+      path: string
+      branch: string
+      remove: (options: RemovalRequest) => Promise<unknown>
+      refuses: (options: RemovalRequest) => Promise<void>
+      removes: (options: RemovalRequest) => Promise<string>
+    }> {
       const repo = join(dir, 'planner')
       await initRepo(repo)
 
@@ -12656,14 +13233,89 @@ describe('the agent chat', () => {
       await run('git', ['add', '.'], { cwd: workspace.path })
       await run('git', ['commit', '-q', '-m', 'never merged'], { cwd: workspace.path })
 
-      await expect(
-        service.removeWorkspaceById(workspace.id, { deleteBranch: true })
-      ).rejects.toMatchObject({ code: 'branchUnmerged' })
+      const refuses = async (options: RemovalRequest): Promise<void> => {
+        await expect(service.removeWorkspaceById(workspace.id, options)).rejects.toMatchObject({
+          code: 'branchUnmerged'
+        })
 
-      await expect(service.chatHistory(chat.id)).resolves.toHaveLength(1)
-      expect(agent().closed()).toBe(0)
-      await expect(access(marker)).rejects.toThrow()
-      await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
+        await expect(service.chatHistory(chat.id)).resolves.toHaveLength(1)
+        expect(agent().closed()).toBe(0)
+        await expect(access(marker)).rejects.toThrow()
+        await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
+      }
+
+      const removes = async (options: RemovalRequest): Promise<string> => {
+        await service.removeWorkspaceById(workspace.id, options)
+        await expect(service.listWorkspaces(project.id)).resolves.toEqual([])
+        const { stdout } = await run('git', ['branch', '--list', workspace.branch], { cwd: repo })
+        return stdout
+      }
+
+      return {
+        path: workspace.path,
+        branch: workspace.branch,
+        remove: (options) => service.removeWorkspaceById(workspace.id, options),
+        refuses,
+        removes
+      }
+    }
+
+    // The worktree is about to stop existing, and a live agent would keep a
+    // child process pointed at a path that is no longer there.
+    it('closes the session and discards the history when the workspace goes', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+
+      await service.removeWorkspaceById(workspaceId, { force: true })
+
+      expect(agent().closed()).toBe(1)
+      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+    })
+
+    // Cancelling must cost nothing: the refusal comes before the sessions close and the cleanup.
+    it('keeps the conversation and runs no cleanup when the removal is refused', async () => {
+      const { refuses } = await unmergedWithChat()
+
+      await refuses({ deleteBranch: true })
+    })
+
+    it('drops an unmerged branch when the user said drop it', async () => {
+      const { removes } = await unmergedWithChat()
+
+      expect(await removes({ deleteBranch: true, dropUnmerged: true })).toBe('')
+    })
+
+    it('keeps the branch when told to drop unmerged commits but not to delete it', async () => {
+      const { branch, removes } = await unmergedWithChat()
+
+      expect(await removes({ dropUnmerged: true })).toContain(branch)
+    })
+
+    it('refuses a dirty workspace with unmerged commits even when forced', async () => {
+      const { path, refuses } = await unmergedWithChat()
+      await writeFile(join(path, 'draft.txt'), 'draft\n', 'utf8')
+
+      await refuses({ deleteBranch: true, force: true })
+
+      await expect(readFile(join(path, 'draft.txt'), 'utf8')).resolves.toBe('draft\n')
+    })
+
+    it('keeps uncommitted work when told to drop unmerged commits but not forced', async () => {
+      const { path, remove } = await unmergedWithChat()
+      await writeFile(join(path, 'draft.txt'), 'draft\n', 'utf8')
+
+      await expect(remove({ deleteBranch: true, dropUnmerged: true })).rejects.toMatchObject({
+        code: 'uncommittedChanges'
+      })
+      await expect(readFile(join(path, 'draft.txt'), 'utf8')).resolves.toBe('draft\n')
+    })
+
+    it('drops a dirty workspace with unmerged commits when forced and told to', async () => {
+      const { path, removes } = await unmergedWithChat()
+      await writeFile(join(path, 'draft.txt'), 'draft\n', 'utf8')
+
+      expect(await removes({ force: true, deleteBranch: true, dropUnmerged: true })).toBe('')
     })
 
     /*
@@ -12727,7 +13379,7 @@ describe('the agent chat', () => {
       await initRepo(repo)
 
       const stubborn: QueryFn = () =>
-        Object.assign(silence(), {
+        Object.assign(quiet(), {
           interrupt: () => Promise.resolve(undefined),
           setPermissionMode: () => Promise.resolve(),
           applyFlagSettings: () => Promise.resolve(),
@@ -13245,7 +13897,12 @@ describe('the agent chat', () => {
       )
       expect(workspaces.filter((event) => event.status === 'idle')).toEqual([])
 
-      firstAgent?.finish()
+      firstAgent?.emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId).find((chat) => chat.id === first)?.status).toBe(
+          'idle'
+        )
+      })
     })
 
     // The workspace's own value only changes when the aggregate does, or every
@@ -14842,6 +15499,44 @@ describe('the agent chat', () => {
           record: () => service.listChats(workspaceId).find((chat) => chat.id === forked.id)
         }
       }
+
+      it('keeps the exchange when the session after a dead one cannot start', async () => {
+        let broken = false
+        const working = fakeQuery()
+        const service = await createService({
+          ...paths(dir),
+          query: (params) => {
+            if (broken) throw new Error('spawn failed')
+            return working(params)
+          },
+          forkSession: () => Promise.resolve({ sessionId: 'sess-forked' })
+        })
+        const { workspaceId, chatId } = await started(service)
+        await service.updateConfig({ opusPlan: true })
+        const forked = await service.forkChat(chatId, aside)
+        await service.setChatPlanMode(forked.id, true)
+        let refuse: (error: Error) => void = () => undefined
+        modelAnswer = () =>
+          new Promise<void>((_, reject) => {
+            refuse = reject
+          })
+        const sent = service.sendToChat(forked.id, 'go on')
+        await vi.waitFor(() => {
+          expect(agents[1]?.requestedModels()).toEqual(['opusplan'])
+        })
+
+        broken = true
+        modelAnswer = () => Promise.resolve()
+        refuse(new Error('Query closed before response received'))
+        setTimeout(() => {
+          agents[1]?.finish(new Error('claude exited with code 1'))
+        }, 20)
+
+        await expect(sent).rejects.toThrow('spawn failed')
+        expect(service.listChats(workspaceId).find((chat) => chat.id === forked.id)?.aside).toEqual(
+          aside
+        )
+      })
 
       it('is named after the question and remembers the exchange', async () => {
         const { record } = await forkedOff()

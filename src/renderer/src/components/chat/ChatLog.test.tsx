@@ -1357,6 +1357,58 @@ describe('what the log shows', () => {
     expect(screen.getByText(/Claude Code stopped with an error \(code 1\)/)).toBeInTheDocument()
   })
 
+  it('says a frame was skipped, quietly, with the reason under it', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'message_skipped',
+          reason: "Cannot read properties of undefined (reading 'status')"
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText(
+        'One message from Claude Code could not be handled and was skipped. The conversation goes on.'
+      )
+    ).toBeVisible()
+    expect(screen.getByText("Cannot read properties of undefined (reading 'status')")).toBeVisible()
+    expect(screen.queryByText(/Claude Code stopped/)).not.toBeInTheDocument()
+  })
+
+  it('says in words that the process ended before its work did, with no raw line', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'error',
+          message: 'Claude Code ended without a result or an error',
+          code: 'endedQuietly'
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText(
+        'Claude Code ended before finishing its work. Send a message to carry on; the conversation is kept.'
+      )
+    ).toBeVisible()
+    expect(screen.queryByText('Claude Code ended without a result or an error')).toBeNull()
+  })
+  it('says a process killed by a signal was stopped from outside, with its line under it', () => {
+    renderLog({
+      entries: [
+        fromAgent({ type: 'error', message: 'Claude Code process terminated by signal SIGKILL' })
+      ]
+    })
+
+    expect(
+      screen.getByText(
+        'Claude Code was stopped from outside — by the system or another program. Send a message to carry on; the conversation is kept.'
+      )
+    ).toBeVisible()
+    expect(screen.getByText('Claude Code process terminated by signal SIGKILL')).toBeVisible()
+  })
+
   // The session id is bookkeeping; a row for it would say nothing to anyone.
   it('draws nothing for events that are not part of the conversation', () => {
     renderLog({

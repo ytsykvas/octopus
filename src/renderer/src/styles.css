@@ -261,6 +261,15 @@
     background-color: var(--canvas);
   }
 
+  /* The box a failure is said in. One rule: five copies of the same utilities had begun to drift. */
+  .error-box {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid color-mix(in oklab, var(--danger) 25%, transparent);
+    border-radius: var(--radius-control);
+    background-color: var(--danger-bg);
+    color: var(--danger);
+  }
+
   /* Surface carrying a project's colour as a wash rather than a fill: the
      workspace list is read for long stretches, and a saturated ground behind
      it tires the eye. `--project-color` is set inline by the component. */

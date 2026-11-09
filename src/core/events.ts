@@ -754,7 +754,15 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     fallback: z.enum(['default', 'acceptEdits'])
   }),
 
-  z.object({ type: z.literal('error'), message: z.string() })
+  /** A frame lost to a mapping or a listener that threw; the session read on. Never fatal. */
+  z.object({ type: z.literal('message_skipped'), reason: z.string() }),
+
+  z.object({
+    type: z.literal('error'),
+    message: z.string(),
+    /** Core's own: `endedQuietly` closed the turn; `background` failed as the session went on. */
+    code: z.enum(['endedQuietly', 'background']).optional()
+  })
 ])
 
 export type AgentEvent = Readonly<z.infer<typeof AgentEventSchema>>

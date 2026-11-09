@@ -426,7 +426,8 @@ import {
   type CreatedWorkspace,
   type KindDetour,
   type WorkspaceView,
-  type RemoveOptions
+  type RemoveOptions,
+  type RemovalRequest
 } from './workspaces.js'
 
 /**
@@ -476,6 +477,10 @@ const IDLE_RELEASE_MS = 10 * 60_000
 
 /** How often the sessions are looked over for ones at rest that long. */
 const IDLE_SWEEP_MS = 60_000
+
+// The SDK refuses a dying process's requests first and ends its stream once the process has
+// exited, so a refusal waits this long for that end before it counts as one.
+const LET_GO_GRACE_MS = 500
 
 /**
  * The events that mean the model itself spoke — what a session's headers are
@@ -585,6 +590,8 @@ export interface ServiceOptions {
   /** How long a session may rest before it is let go; see `IDLE_RELEASE_MS`. */
   readonly idleReleaseMs?: number
   readonly idleSweepMs?: number
+  /** How long a refusal waits for its session's end; see `LET_GO_GRACE_MS`. */
+  readonly letGoGraceMs?: number
   /** How young a kept account reading answers the timer with no session running; the release's own length by default. */
   readonly readingFreshMs?: number
   /**
@@ -650,6 +657,8 @@ export interface ServiceOptions {
     cwd: string,
     sources: readonly SettingSourceName[]
   ) => Promise<ReadonlyMap<string, SkillVisibility>>
+  /** Errors swallowed so one failure cannot take the rest down. Must not throw. */
+  readonly onDiagnostic?: (error: unknown) => void
 }
 
 /**
@@ -1404,7 +1413,7 @@ export interface OctopusService {
   /** Answers the detour the branch took round one named after its kind, or null. */
   renameWorkspaceById(workspaceId: string, name: string): Promise<KindDetour | null>
   /** Answers what became of the cleanup script, which nothing lets stop the removal. */
-  removeWorkspaceById(workspaceId: string, options?: RemoveOptions): Promise<CleanupOutcome>
+  removeWorkspaceById(workspaceId: string, options?: RemovalRequest): Promise<CleanupOutcome>
   /** Whether a workspace holds work that removal would discard. */
   workspaceHasChanges(workspaceId: string): Promise<boolean>
   /**
@@ -1914,6 +1923,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const finishedAfterMs = options.finishedAfterMs ?? FINISHED_AFTER_MS
   const idleReleaseMs = options.idleReleaseMs ?? IDLE_RELEASE_MS
   const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
+  const letGoGraceMs = options.letGoGraceMs ?? LET_GO_GRACE_MS
   const readingFreshMs = options.readingFreshMs ?? idleReleaseMs
   /** A "done" waiting out `FINISHED_AFTER_MS`, per conversation. */
   const finishing = new Map<string, ReturnType<typeof setTimeout>>()
@@ -1924,6 +1934,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const runDeleteSession = options.deleteSession ?? defaultDeleteSession
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
+  const onDiagnostic = options.onDiagnostic ?? ((): void => undefined)
 
   let state: State = await loadState(statePath)
 
@@ -2079,6 +2090,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * back over what was just picked.
    */
   const opusPlanSettled = new WeakSet<AgentSession>()
+  // Let go with its chat still open: a send that still holds one starts the next.
+  const letGo = new WeakSet<AgentSession>()
   /**
    * Sessions whose plan model has been decided but not sent, with the model
    * and effort they are actually running on.
@@ -2126,7 +2139,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const registry = createTaskRegistry({
     asking: askingTasks,
     onSnapshot: (event) => {
-      for (const listener of taskListeners) listener(event)
+      for (const listener of taskListeners) {
+        try {
+          listener(event)
+        } catch (error) {
+          // As in `emit`: one listener failing must not cost the others, or the caller, the list.
+          onDiagnostic(error)
+        }
+      }
     }
   })
   /**
@@ -2865,7 +2885,14 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const pluginWrite = oneAtATime()
 
   function emit(event: ChatEvent): void {
-    for (const listener of listeners) listener(event)
+    for (const listener of listeners) {
+      try {
+        listener(event)
+      } catch (error) {
+        // One listener failing must not cost the others the event.
+        onDiagnostic(error)
+      }
+    }
   }
 
   /**
@@ -3023,7 +3050,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     emit({
       chatId: chat.id,
       workspaceId: chat.workspaceId,
-      event: { type: 'error', message: describeError(error) }
+      event: { type: 'error', message: describeError(error), code: 'background' }
     })
   }
 
@@ -3502,12 +3529,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       background(chat, setChatStatus(chat.id, 'error'))
     }
 
-    // A turn that has ended cannot answer for a tool it never ran. Only the
-    // session's own stream reaches here — a background write that failed is
-    // reported straight to the listeners by `report` — so this cannot withdraw
-    // a question a live turn is still waiting on. An agent's question outlives
-    // the turn that launched the agent; it goes when the agent does, or with
-    // the session.
+    // A turn that has ended cannot answer for a tool it never ran. Only the session's stream, or
+    // onEnd's `endedQuietly` for a dead one, reaches here — `report` emits past it. An agent's
+    // question outlives the turn that launched the agent; it goes with the agent or the session.
     if (event.type === 'result' || event.type === 'error') {
       abandonPermissions(chat.id, event.type === 'result' ? 'turn' : 'all')
       abandonElicitations(chat.id)
@@ -3854,6 +3878,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     try {
       await session.setPermissionMode(sessionMode(requireChat(chatId)))
     } catch (error) {
+      if (await wasLetGo(session)) return
       // Only while the record still says auto: a choice made since is newer
       // than the one being refused.
       await commit((current) =>
@@ -3881,13 +3906,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * own and a refusal of it is a fault, which goes up as before.
    */
   async function assertMode(chatId: string, session: AgentSession): Promise<void> {
-    // What was asked for, held across the wait: the user may have moved on by
-    // the time a refusal arrives, and a refusal of auto mode is never a fault
-    // to report — at worst it is one nobody wants any more.
+    // Held across the wait: the user may have moved on by the time a refusal arrives.
     const wanted = sessionMode(requireChat(chatId))
     try {
       await session.setPermissionMode(wanted)
     } catch (error) {
+      // A session let go under the switch refused nothing: the next one starts in the mode.
+      if (await wasLetGo(session)) return
       if (wanted !== 'auto') throw error
       await fallBackFromAuto(chatId, describeError(error))
       await session.setPermissionMode(sessionMode(requireChat(chatId)))
@@ -4058,7 +4083,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function restartIfStale(chatId: string, recheck = false): Promise<void> {
     const chat = findChat(state, chatId)
     const started = compaction.get(chatId)
-    if (!chat || !started || !sessions.has(chatId)) return
+    const old = sessions.get(chatId)
+    if (!chat || !started || !old) return
     // Chosen again while a variable outranked it: it may have been taken out
     // since, and only a new session reads it again. The same when the last
     // reading strayed from the window it started with and no variable was
@@ -4075,6 +4101,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
     if (chat.status === 'running' || chat.status === 'waiting_permission') return
 
+    // Its chat stays open: a send still held on the old session goes into the new one.
+    letGo.add(old)
     await closeOneChat(chat)
     // Remember the stray the old session read, so the new one reading it again
     // says no restart could help — whatever this one was started for, a fresh
@@ -4096,18 +4124,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
-  /**
-   * Ends a chat's session, and leaves its history where it is.
-   *
-   * The record goes with its workspace at the caller's commit; what needs
-   * doing here is the child process, which a record removal would not touch.
-   *
-   * The transcript is deliberately not among it. Everything above is memory
-   * and a process — losing them costs a session that was ending anyway — while
-   * the transcript is the only copy of what was said, and this runs before the
-   * steps that can still fail. `discardHistories` takes it, after the record
-   * has gone.
-   */
   /**
    * Whether nothing at all is going on in a conversation.
    *
@@ -4139,6 +4155,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       : null
   }
 
+  function forgetProcess(chatId: string): void {
+    sessions.delete(chatId)
+    compaction.delete(chatId)
+    startedEnv.delete(chatId)
+    lastActivity.delete(chatId)
+  }
+
+  function forgetTurnInFlight(chatId: string): void {
+    heldMessages.delete(chatId)
+    publishAfterTurn.delete(chatId)
+    abandonEdits(chatId)
+    clearRequests.delete(chatId)
+    clearedTurns.delete(chatId)
+    stillWorking(chatId)
+  }
+
   /**
    * Lets a conversation's session go, keeping the conversation.
    *
@@ -4148,11 +4180,31 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * and `handleEvent` takes nothing from one that is no longer registered.
    */
   async function releaseSession(chatId: string, session: AgentSession): Promise<void> {
-    sessions.delete(chatId)
-    compaction.delete(chatId)
-    startedEnv.delete(chatId)
-    lastActivity.delete(chatId)
+    letGo.add(session)
+    forgetProcess(chatId)
     await session.close().catch(() => undefined)
+  }
+
+  async function wasLetGo(session: AgentSession): Promise<boolean> {
+    if (!letGo.has(session)) {
+      await Promise.race([
+        session.ended,
+        new Promise<void>((resolve) => setTimeout(resolve, letGoGraceMs).unref())
+      ])
+    }
+    return letGo.has(session)
+  }
+
+  // At once, before any await: the next message must find no session to send into. The
+  // tasks' rows and the last context reading stay, as they do for an idle release.
+  function releaseDeadSession(chat: Chat, session: AgentSession): void {
+    letGo.add(session)
+    forgetProcess(chat.id)
+    forgetTurnInFlight(chat.id)
+    background(
+      chat,
+      session.close().catch(() => undefined)
+    )
   }
 
   /** Lets go of every session that has been at rest for `idleReleaseMs`. */
@@ -4178,32 +4230,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
   async function closeOneChat(chat: Chat): Promise<void> {
     const session = sessions.get(chat.id)
-    sessions.delete(chat.id)
-    compaction.delete(chat.id)
-    startedEnv.delete(chat.id)
-    lastActivity.delete(chat.id)
+    forgetProcess(chat.id)
     lastUsage.delete(chat.id)
-    // Its queue goes with its process, and so does a push promised for a turn
-    // it will now never finish — the next session's turns were asked nothing.
-    heldMessages.delete(chat.id)
-    publishAfterTurn.delete(chat.id)
+    forgetTurnInFlight(chat.id)
 
-    // A session that ends mid-tool leaves an edit nobody will ever answer
-    // for, and a question nobody will ever answer at all. Both go with it,
-    // and only this chat's, since the maps are the whole service's.
+    // A session that ends mid-tool leaves a question nobody will ever answer.
     abandonPermissions(chat.id)
     abandonElicitations(chat.id)
-    abandonEdits(chat.id)
 
-    // A `/clear` the session never got round to answering, and a clearing
-    // turn whose result never came. Both belong to a chat that is going, so
-    // neither is left in a set for the rest of the run.
-    clearRequests.delete(chat.id)
-    clearedTurns.delete(chat.id)
-
-    // Its agents go with its process, and a "done" nobody will see now.
     registry.forget(chat.id)
-    stillWorking(chat.id)
 
     // Best effort: a session that fails to close must not stop the workspace
     // from being removed, nor the tab from closing.
@@ -5267,7 +5302,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         askPermission: () => Promise.resolve({ allow: false, message: DENIED }),
         // Nothing draws for this session — it exists to run one command — so a
         // question from it could only ever be waited on for ever.
-        askElicitation: () => Promise.resolve({ action: 'decline' as const })
+        askElicitation: () => Promise.resolve({ action: 'decline' as const }),
+        onDiagnostic
       }
     )
   }
@@ -5366,6 +5402,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     const env = sessionEnvFor(workspace.id)
 
+    // Re-read rather than closed over: `chat` is a snapshot, and the
+    // session id written after the first turn would not be in it.
+    const current = (): Chat => findChat(state, chat.id) ?? chat
+
     const session = startSession(
       {
         cwd: workspace.path,
@@ -5394,11 +5434,22 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         query: runQuery,
         onEvent: (event) => {
           if (cut !== null && event.type === 'result') settleCut(chat, cut)
-
-          // Re-read rather than closed over: `chat` is a snapshot, and the
-          // session id written after the first turn would not be in it.
-          handleEvent(findChat(state, chat.id) ?? chat, event)
+          handleEvent(current(), event)
         },
+        // Only a death reaches this: whatever unregisters a session closes it in the same tick,
+        // and a closed one never calls it. Never synchronous, so `session` is assigned.
+        onEnd: () => {
+          // Before the release: the agents' rows stop only while the session is registered.
+          if (registry.turnOpen(chat.id) || liveCount(registry.tasks(chat.id)) > 0) {
+            handleEvent(current(), {
+              type: 'error',
+              message: 'Claude Code ended without a result or an error',
+              code: 'endedQuietly'
+            })
+          }
+          releaseDeadSession(chat, session)
+        },
+        onDiagnostic,
         askPermission: (ask) => askPermission(chat, ask),
         // The snapshot, as `askPermission` above takes it: this reads only the
         // chat's id and its workspace, and neither of those changes.
@@ -6541,50 +6592,34 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           repository: makeExec(project.repoPath),
           workspace: makeExec(workspace.path)
         }
-        const removal = {
-          ...options,
-          // The base branch travels with the request so "is this merged" can be
-          // answered before the worktree is destroyed rather than after.
-          baseBranch: baseRef,
-          /*
-           * What git cannot see.
-           *
-           * A squash or a rebase merge rewrites the commits, so none of them is
-           * an ancestor of the base afterwards and git reports the branch as
-           * unmerged — including when it was this app's own merge button that
-           * landed it. GitHub knows better, and is asked only after git has
-           * said no.
-           *
-           * A failure here is not a failure to remove: gh may be missing or
-           * signed out, and then the git answer is the only one there is.
-           */
-          mergedRemotely: async (): Promise<boolean> => {
-            try {
-              const view = await readPullRequest(
-                workspace,
-                baseRef,
-                makeGh(workspace.path),
-                makeExec(workspace.path)
-              )
-              return view.request?.state === 'merged'
-            } catch {
-              return false
-            }
+        const choices: RemoveOptions = {
+          force: options?.force ?? false,
+          deleteBranch: options?.deleteBranch ?? false
+        }
+        // git calls a squash- or rebase-merged branch unmerged, even one this app's merge button
+        // landed. GitHub is asked only after git says no; a gh missing or signed out leaves
+        // git's answer standing.
+        const mergedRemotely = async (): Promise<boolean> => {
+          try {
+            const view = await readPullRequest(
+              workspace,
+              baseRef,
+              makeGh(workspace.path),
+              makeExec(workspace.path)
+            )
+            return view.request?.state === 'merged'
+          } catch {
+            return false
           }
         }
+        // The base branch travels with the request so "is this merged" can be
+        // answered before the worktree is destroyed rather than after.
+        const removal: RemoveOptions =
+          options?.dropUnmerged === true
+            ? choices
+            : { ...choices, baseBranch: baseRef, mergedRemotely }
 
-        /*
-         * Everything below this line destroys something, so the refusal comes
-         * first.
-         *
-         * The pane pre-ticks the delete-branch box and only forces when the
-         * worktree is dirty, so a clean workspace whose commits are not merged
-         * refuses on the ordinary path rather than a rare one. Asked afterwards,
-         * the answer arrived with the conversations already deleted and the
-         * cleanup script already run, against a workspace that then went on
-         * living — which is the opposite of what docs/core/workspaces-and-git.md promises about an
-         * operation that fails.
-         */
+        // First, dirty or clean: ensureRemovable says why nothing may be destroyed before it.
         await ensureRemovable(workspace, execs, removal)
 
         // Captured before the chats are closed, because the records go with the
@@ -7229,14 +7264,20 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       const running = sessions.get(chatId)
       if (running) {
-        // The plan model the mode change held back, before the message it was
-        // held for. Nothing when none is held, so the model stays unasserted.
-        await settleJob(chatId, inForce(requireChat(chatId)))
-        await assertMode(chatId, running)
-        await running.setEffort(effortInForce(chat))
+        lastActivity.set(chatId, Date.parse(now()))
+        try {
+          // The plan model the mode change held back, before the message it was
+          // held for. Nothing when none is held, so the model stays unasserted.
+          await settleJob(chatId, inForce(requireChat(chatId)))
+          await assertMode(chatId, running)
+          await running.setEffort(effortInForce(chat))
+        } catch (error) {
+          // A request into a session let go meanwhile fails; the message goes on below.
+          if (!(await wasLetGo(running))) throw error
+        }
       }
 
-      const session = running ?? (await sessionFor(chat, workspace))
+      const session = running && !letGo.has(running) ? running : await sessionFor(chat, workspace)
 
       /*
        * The `opusPlan` preset: the first message of a session sent while
@@ -7248,8 +7289,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        */
       if (config.opusPlan && chat.planMode && !opusPlanSettled.has(session)) {
         opusPlanSettled.add(session)
-        await session.setModel(OPUS_PLAN_ALIAS)
-        onOpusPlan.add(session)
+        try {
+          await session.setModel(OPUS_PLAN_ALIAS)
+          onOpusPlan.add(session)
+        } catch (error) {
+          // Refused by a session let go meanwhile: the message goes on below, to the next one.
+          if (!(await wasLetGo(session))) throw error
+        }
       }
 
       /*
@@ -7286,7 +7332,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
       // Before the check below rather than inside the send: nothing may wait
       // between deciding this is the clear and sending it.
+      const { aside } = requireChat(chatId)
       const prompted = await withAside(chatId, text)
+      // Let go during the awaits above — dead or rested — the session would swallow it.
+      const target = letGo.has(session)
+        ? await sessionFor(requireChat(chatId), workspace).catch(async (error: unknown) => {
+            // Not sent after all: the exchange withAside took goes back for the next message.
+            await commit((current) => updateChat(current, chatId, { aside }))
+            throw error
+          })
+        : session
 
       /*
        * Whether this message is the one that throws the conversation away.
@@ -7306,15 +7361,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * also restarted the session for a new window was the opposite: the
        * restart emptied the set, and the clear asked for was never honoured.
        */
-      if (sessions.get(chatId) === session && isClearCommand(text, chat.knownCommands)) {
+      if (sessions.get(chatId) === target && isClearCommand(text, chat.knownCommands)) {
         clearRequests.add(chatId)
       }
-      session.send(prompted, messageId)
+      target.send(prompted, messageId)
       // A typed `/model opusplan` puts the session on the alias too, and the
       // window mirrors it into the record (`ChatSession`).
       if (opusPlanSplit(text, chat.knownCommands, state.knownModels) !== null) {
-        onOpusPlan.add(session)
-        opusPlanSettled.add(session)
+        onOpusPlan.add(target)
+        opusPlanSettled.add(target)
       }
       if (pushTo !== null) publishAfterTurn.set(chatId, pushTo)
 

@@ -461,11 +461,11 @@ export function useChat(
         return
       }
 
-      // Anything else means the block being streamed has finished, and its
-      // complete form is in the event now arriving — except a background task
-      // starting or ending, which is said by the CLI between the main agent's
-      // words and would otherwise wipe the sentence being typed out.
-      if (!isTaskBoundary(event)) discardStreaming()
+      // Anything else ends the streamed block — except a task starting or ending, a skipped frame
+      // and a background failure: none of them is the main agent's, and each would wipe its words.
+      const outlived = event.type === 'error' && event.code === 'background'
+      if (!isTaskBoundary(event) && event.type !== 'message_skipped' && !outlived)
+        discardStreaming()
       setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
 
       // The core gave up auto mode on its own. This line is the only word of
@@ -505,7 +505,7 @@ export function useChat(
         setRequests((current) => without(current, event.requestId))
       }
 
-      if (event.type === 'result' || event.type === 'error') {
+      if (event.type === 'result' || (event.type === 'error' && !outlived)) {
         setBusy(false)
         // The core's rule: a turn's end refuses the turn's own questions and
         // leaves its agents' open; a failed session takes every one with it.

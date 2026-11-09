@@ -330,10 +330,15 @@ a session closed on purpose says nothing of it, so the restart leaves no error
 in the log.
 
 **A process that died is said in words.** The SDK's failure is "Claude Code
-process exited with code N"; the row says instead that it was stopped from
-outside (a code above 128 is a signal) or stopped with an error and its code,
-that a message carries on, and keeps the SDK's line under it in small print.
-Read from the text by `exitCodeOf`, so logs written before it read the same.
+process exited with code N", or "… terminated by signal SIGKILL"; the row says
+instead that it was stopped from outside (a signal, or a code above 128, which
+is one) or stopped with an error and its code, that a message carries on, and
+keeps the SDK's line under it in small print. The promise holds: the session
+whose process died is let go at once (`releaseDeadSession`), so the next message
+starts one again from the same id. Read from the text by `processEndOf`, so logs
+written before it read the same. A process that ended mid-work without a word
+gets its own sentence (`chat.processEnded`) and no raw line: the service closed
+that turn itself, with an `error` coded `endedQuietly`.
 
 **The agent's task list is pinned above the field while it has work left.** A
 long turn is mostly the agent working through a list it wrote for itself, and

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  exitCodeOf,
+  processEndOf,
   formatAge,
   formatClock,
   formatCountdown,
@@ -247,14 +247,31 @@ describe('the moment a window resets', () => {
   })
 })
 
-describe('exitCodeOf', () => {
+describe('processEndOf', () => {
   it('reads the code the SDK puts in a process failure', () => {
-    expect(exitCodeOf('Claude Code process exited with code 143')).toBe(143)
+    expect(processEndOf('Claude Code process exited with code 1')).toEqual({
+      kind: 'failed',
+      code: 1
+    })
+    expect(processEndOf('Claude Code process exited with code 128')).toEqual({
+      kind: 'failed',
+      code: 128
+    })
+  })
+
+  it('reads an exit code past 128 as stopped from outside', () => {
+    expect(processEndOf('Claude Code process exited with code 143')).toEqual({ kind: 'stopped' })
+  })
+
+  it('reads a process killed by a signal as stopped from outside', () => {
+    expect(processEndOf('Claude Code process terminated by signal SIGKILL')).toEqual({
+      kind: 'stopped'
+    })
   })
 
   it('finds none in any other failure', () => {
-    expect(exitCodeOf('ProcessTransport is not ready for writing')).toBeNull()
-    expect(exitCodeOf('claude exited with code 1')).toBeNull()
+    expect(processEndOf('ProcessTransport is not ready for writing')).toBeNull()
+    expect(processEndOf('claude exited with code 1')).toBeNull()
   })
 })
 

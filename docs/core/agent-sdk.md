@@ -151,6 +151,9 @@ against a real session rather than assumed:
   reported 2 beside 17,392 read from cache and 7,825 written to it, so
   `promptTokens` sums all three. The bare field would have understated the
   prompt by four orders of magnitude — a number that looks fine and is wrong.
+- `usage` itself is parsed (`ResultUsageSchema`) before it is summed: a result
+  without it, or missing a part, still closes its turn, with null token counts
+  rather than a sum that undercounts the prompt.
 
 The same session showed `utilization` absent from the event entirely, which is
 why the header is built to say nothing rather than to hold space for it.

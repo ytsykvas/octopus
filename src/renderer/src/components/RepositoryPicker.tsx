@@ -209,7 +209,7 @@ export function RepositoryPicker({
 
       <div className="p-3">
         {error !== null && (
-          <div className="bg-danger-bg text-danger border-danger/25 mb-3 flex items-center justify-between gap-3 rounded-[var(--radius-control)] border px-3 py-2">
+          <div className="error-box mb-3 flex items-center justify-between gap-3">
             <span>{error}</span>
 
             {/* Only for a failure signing in would actually fix. Offering it on

@@ -402,3 +402,8 @@ given: the SDK calls that field "unstable human prose — display only, never
 parse", so it is shown and nothing is read out of it. Absent more often than
 not, and an empty line under the sentence would read as prose that failed to
 load.
+
+**A frame the core could not handle gets a line too** (`SkippedRow`, built on
+the same `RefusalRow`), in the quiet register rather than the error's red: one
+message was lost and the conversation went on, so nothing about the turn has
+failed. The reason goes underneath, as given, for anyone who has to look it up.

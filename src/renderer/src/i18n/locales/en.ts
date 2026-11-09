@@ -158,6 +158,11 @@ export const en = {
     removeBranch: 'Delete the branch {{branch}} as well',
     removeConfirm: 'Remove',
     removeCancel: 'Cancel',
+    dropUnmergedTitle: 'Delete unmerged commits?',
+    dropUnmergedMessage: '{{branch}} has commits that are in no other branch.',
+    dropUnmergedDetail:
+      'Deleting the branch loses them for good. To keep them, cancel and remove the workspace with the branch checkbox cleared.',
+    dropUnmergedConfirm: 'Delete anyway',
     cleanupFailed:
       'The workspace is removed, but its cleanup script failed, so whatever it was meant to take back — a database, say — may still be there. It said: {{detail}}',
     cleanupUnapproved:
@@ -1216,6 +1221,10 @@ export const en = {
       'Claude Code was stopped from outside — by the system or another program. Send a message to carry on; the conversation is kept.',
     processFailed:
       'Claude Code stopped with an error (code {{code}}). Send a message to try again; the conversation is kept.',
+    processEnded:
+      'Claude Code ended before finishing its work. Send a message to carry on; the conversation is kept.',
+    messageSkipped:
+      'One message from Claude Code could not be handled and was skipped. The conversation goes on.',
     compactedBy:
       'The agent summarised everything above to make room \u2014 {{before}} became {{after}} (−{{saved}}%)',
     compactSummaryTitle: 'What the agent kept',

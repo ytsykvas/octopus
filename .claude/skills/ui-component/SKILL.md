@@ -75,6 +75,7 @@ over its own content.
 - `.project-tinted` / `.bubble-sent` / `.tab-selected` — where a project's
   colour turns into a surface;
 - `.input` — text field, and anything shaped like one;
+- `.error-box` — the box a failure is said in (danger ground, ink and edge);
 - `.choice` — **every** checkbox and radio, with `.choice-danger` for the tick
   inside a destructive confirmation. Not optional and not replaceable by
   `accent-color`: that colours the checked fill and leaves the empty box a

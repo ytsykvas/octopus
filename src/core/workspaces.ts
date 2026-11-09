@@ -629,17 +629,11 @@ function blockedBy(branch: string, blocker: string): WorkspaceError {
 }
 
 export interface RemoveOptions {
-  /** Discard uncommitted work. Only ever true after the user was told. */
+  /** Discard uncommitted work. Commits are never lost to it: the merged check still runs. */
   readonly force?: boolean
-  /** Also delete the branch, losing any commits that were never merged. */
+  /** Also delete the branch; with baseBranch, one holding commits found nowhere else is refused. */
   readonly deleteBranch?: boolean
-  /**
-   * The branch to measure "merged" against, when one is being deleted.
-   *
-   * Supplied so the check can happen before anything is destroyed. Without it
-   * the branch is deleted with `-D`, which is what removing a whole project
-   * does — there, the user has already agreed to lose the lot.
-   */
+  /** What "merged" is held to; left out (a project, `dropUnmerged`), unmerged work goes. */
   readonly baseBranch?: string
   /**
    * A second opinion on "merged", asked only when git says no.
@@ -656,7 +650,7 @@ export interface RemoveOptions {
 }
 
 /**
- * What the window may ask of a removal: the two choices its dialog offers.
+ * What the window may ask of a removal: the choices its dialogs offer.
  *
  * Strict, and narrower than `RemoveOptions`. `force` decides whether
  * uncommitted work is thrown away, so only a boolean will do; the base branch
@@ -664,9 +658,11 @@ export interface RemoveOptions {
  */
 export const RemovalRequestSchema = z.strictObject({
   force: z.boolean().default(false),
-  deleteBranch: z.boolean().default(false)
+  deleteBranch: z.boolean().default(false),
+  /** Sent only after the user was told the branch's commits are nowhere else. */
+  dropUnmerged: z.boolean().default(false)
 })
-/** As the window sends it: either choice may be left out, and reads as no. */
+/** As the window sends it: any field may be left out, and reads as no. */
 export type RemovalRequest = z.input<typeof RemovalRequestSchema>
 
 /** A new name as it arrives; trimming and the clash checks are `renameWorkspace`'s. */
@@ -717,7 +713,7 @@ export async function ensureRemovable(
   // unmerged branch, and refusing after the worktree is gone leaves the caller
   // with half an operation: the directory deleted, the branch still there, and
   // an error about the branch.
-  if (options.deleteBranch === true && !force && options.baseBranch !== undefined) {
+  if (options.deleteBranch === true && options.baseBranch !== undefined) {
     /*
      * Three questions, cheapest first, and none of them is "is it merged".
      *
@@ -761,8 +757,8 @@ export async function discardWorkspace(
   await discardWorktree(exec.repository, workspace.path, options.force ?? false)
 
   if (options.deleteBranch === true) {
-    // Forced by this point: either the caller asked for force, or the branch
-    // was shown to be merged above. Anything else has already thrown.
+    // -D is safe here: ensureRemovable found every commit kept elsewhere, or the caller left
+    // out baseBranch — a project removal, or a user who said drop them — and so agreed to it.
     await deleteBranch(exec.repository, workspace.branch, true)
   }
 }
