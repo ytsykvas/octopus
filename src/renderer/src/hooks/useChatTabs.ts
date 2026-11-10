@@ -183,6 +183,13 @@ function keepKeys(
   })
 }
 
+function stripOf(
+  strips: ReadonlyMap<string, readonly ChatTab[]>,
+  workspaceId: string | null
+): readonly ChatTab[] {
+  return (workspaceId === null ? undefined : strips.get(workspaceId)) ?? VIRGIN
+}
+
 function rememberFirst(
   owners: Map<string, string>,
   workspaceId: string,
@@ -207,6 +214,7 @@ export function useChatTabs(
   const describeFailure = useErrorMessage()
 
   const [tabs, setTabs] = useState<readonly ChatTab[]>(VIRGIN)
+  const [strips, setStrips] = useState<ReadonlyMap<string, readonly ChatTab[]>>(new Map())
   const [history, setHistory] = useState<readonly ClosedChat[]>([])
   const [shownWorkspaceId, setShownWorkspaceId] = useState(workspaceId)
 
@@ -239,6 +247,7 @@ export function useChatTabs(
   }, [tabs])
 
   const firstChatByWorkspace = useRef(new Map<string, string>())
+  const bindCount = useRef(0)
 
   /*
    * The two callbacks out, held rather than depended on.
@@ -262,7 +271,7 @@ export function useChatTabs(
   // tabs for a frame.
   if (workspaceId !== shownWorkspaceId) {
     setShownWorkspaceId(workspaceId)
-    setTabs(VIRGIN)
+    setTabs(stripOf(strips, workspaceId))
     // The previous workspace's closed conversations would be offered here, and
     // reopening one would fail against a workspace it does not belong to.
     setHistory([])
@@ -278,8 +287,17 @@ export function useChatTabs(
    * would put git to work on every workspace of the project to learn something
    * this hook has just been told.
    */
+  const keep = useCallback((id: string, next: readonly ChatTab[]) => {
+    rememberFirst(firstChatByWorkspace.current, id, next)
+    latestTabs.current = next
+    setTabs(next)
+    setStrips((current) => new Map(current).set(id, next))
+    publish.current(id, next)
+  }, [])
+
   const load = useCallback(
     async (id: string, abandoned: () => boolean) => {
+      const before = bindCount.current
       const found = await window.octopus.chats.list(id)
       if (abandoned()) return
 
@@ -288,36 +306,21 @@ export function useChatTabs(
         return
       }
 
-      /*
-       * An empty answer over a strip that already knows a record is a stale
-       * read, not an empty workspace.
-       *
-       * The list is asked for the moment a workspace opens, and the first
-       * message can be sent before the answer arrives — the pane creates the
-       * record and says so through `bind`, and this read, which started before
-       * any of that, would put the strip back to a workspace nobody had spoken
-       * to and take the message with it. Nothing else empties the list: closing
-       * refuses the last conversation, and removing the workspace moves the
-       * selection elsewhere.
-       */
-      if (found.value.length === 0 && latestTabs.current.some((tab) => tab.id !== null)) return
+      // Empty because it was read before the first message bound its record: applying
+      // it would take that tab back to untouched, mid-turn.
+      if (found.value.length === 0 && bindCount.current !== before) return
 
-      // No chat yet is otherwise the ordinary state of a fresh workspace rather
-      // than a failure: the record is created by the first message.
-      // Past the guard above, an empty list is a workspace without conversations:
-      // one made anew under a removed workspace's id must not inherit its owner.
+      // Otherwise empty is a workspace with no conversations, perhaps one made anew
+      // under a removed one's id, which must inherit neither its owner nor its strip.
       if (found.value.length === 0) firstChatByWorkspace.current.delete(id)
-      const next =
+      keep(
+        id,
         found.value.length === 0
           ? VIRGIN
           : keepKeys(found.value, latestTabs.current, firstChatByWorkspace.current.get(id))
-      rememberFirst(firstChatByWorkspace.current, id, next)
-
-      latestTabs.current = next
-      setTabs(next)
-      publish.current(id, next)
+      )
     },
-    [describeFailure]
+    [describeFailure, keep]
   )
 
   useEffect(() => {
@@ -381,16 +384,13 @@ export function useChatTabs(
       // The pane that asked may belong to a workspace left before its record came.
       if (id !== chat.workspaceId) return
 
-      const next = latestTabs.current.map((tab) =>
-        tab.key === key ? { ...tabOf(chat), key } : tab
+      bindCount.current += 1
+      keep(
+        id,
+        latestTabs.current.map((tab) => (tab.key === key ? { ...tabOf(chat), key } : tab))
       )
-      rememberFirst(firstChatByWorkspace.current, id, next)
-
-      latestTabs.current = next
-      setTabs(next)
-      publish.current(id, next)
     },
-    [shown]
+    [shown, keep]
   )
 
   const select = useCallback(

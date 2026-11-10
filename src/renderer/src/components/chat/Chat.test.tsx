@@ -559,7 +559,9 @@ describe('a note sent from the file viewer', () => {
   describe('left for the first conversation, which is then closed', () => {
     let anna: ReturnType<typeof chat>[] = []
 
-    async function closeTheFirstWithANote(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+    async function noteTheFirstAndCloseIt(
+      user: ReturnType<typeof userEvent.setup>
+    ): Promise<ReturnType<typeof render>['rerender']> {
       anna = [chat(), chat({ id: 'chat-2' })]
       vi.mocked(octopus().chats.list).mockImplementation((workspaceId) =>
         Promise.resolve({ ok: true, value: workspaceId === WORKSPACE.id ? anna : [] })
@@ -577,6 +579,11 @@ describe('a note sent from the file viewer', () => {
       await waitFor(() => {
         expect(screen.queryByText('Claude 2')).toBeNull()
       })
+      return rerender
+    }
+
+    async function closeTheFirstWithANote(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      const rerender = await noteTheFirstAndCloseIt(user)
       rerender(<Pane workspace={workspaceView('bob')} />)
       await waitFor(() => {
         expect(octopus().chats.list).toHaveBeenCalledWith('planner/bob')
@@ -591,6 +598,21 @@ describe('a note sent from the file viewer', () => {
 
       expect(screen.getByRole('button', { name: /^Claude 1: [^,]*$/ })).toBeVisible()
       await user.type(screen.getByRole('textbox'), 'look{Enter}')
+      await waitFor(() => {
+        expect(octopus().chats.send).toHaveBeenCalledWith('chat-2', 'look')
+      })
+    })
+
+    it('is not sent with a message written before the list is read again', async () => {
+      const user = userEvent.setup()
+      const rerender = await noteTheFirstAndCloseIt(user)
+      vi.mocked(octopus().chats.list).mockReturnValue(new Promise(() => undefined))
+      vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: chat({ id: 'chat-2' }) })
+
+      rerender(<Pane workspace={workspaceView('bob')} />)
+      rerender(<Pane />)
+      await user.type(screen.getByRole('textbox'), 'look{Enter}')
+
       await waitFor(() => {
         expect(octopus().chats.send).toHaveBeenCalledWith('chat-2', 'look')
       })

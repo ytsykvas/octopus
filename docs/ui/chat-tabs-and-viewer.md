@@ -113,21 +113,27 @@ claim the untouched tab's key. Once the owner is closed, the strip rebuilt on
 the next visit gives the others their own ids, so none of them inherits what was
 filed under `first`; reopening it from the history gives it `first` back, with
 everything filed there. Closing clears none of it, because the history brings
-the conversation back. An empty list does clear the owner: past the stale-read
-guard it means the workspace has no conversations, which is what one made anew
-under a removed workspace's id looks like. `bind` takes only a record of the
-workspace on screen — the pane that asked may belong to one left before its
-record came. One conversation answers to two names, so `select` and `selectIn`
-take a chat id as well as a key — the toast's Show and reopening hand over an
-id. A new store held per tab keys itself the same way and needs nothing more.
+the conversation back. `bind` takes only a record of the workspace on screen —
+the pane that asked may belong to one left before its record came. One
+conversation answers to two names, so `select` and `selectIn` take a chat id as
+well as a key — the toast's Show and reopening hand over an id. A new store held
+per tab keys itself the same way and needs nothing more.
 
-One gap is left, for the moment after coming back to a workspace whose first
-conversation was closed and before its list answers: the untouched tab is drawn
-under `first`, so it shows that conversation's draft and counts its notes. A
-message sent in that moment goes to the conversation `chats.open` answers with,
-carrying those notes; if the list answers first, the pane is also remounted
-mid-send and the closed conversation's draft is replaced by the sent text.
-`docs/tasks/first-tab-shown-before-the-list-answers.md` holds the evidence.
+**A workspace comes back as it was left.** The hook keeps the last strip of each
+workspace it has drawn and shows it at once on a return, then reads the list
+again and rebuilds from it. Drawing the untouched tab instead, as it once did,
+put the pane keyed `first` on screen until the list answered — and in a
+workspace whose first conversation had been closed, that pane showed its draft,
+counted its notes and sent them with whatever was typed there to the
+conversation `chats.open` answered with. An empty answer is the one that needs
+care. A read asked for as the workspace opened can come back empty after the
+first message has already bound its record, and applying it would take the tab
+back to untouched mid-turn; so `load` drops an empty answer when a `bind` has
+happened since it asked. Any other empty answer is a workspace with no
+conversations — closing refuses the last one — which is what a workspace made
+anew under a removed one's id looks like: it is drawn untouched and loses the
+owner of `first`, so its own first conversation can claim the key. Until that
+answer, the strip shown is the removed workspace's.
 
 **Files open beside the conversations**, in the same strip after a 1px rule:
 underlined like them, because they are the same kind of thing — what the centre
@@ -223,8 +229,8 @@ where the diff's and the review's are per workspace and taken by whichever
 composer sends first. They have to be: a note sent to the second conversation
 must not leave with the first one's message. Held by tab key like the drafts,
 under the rules of the paragraph on tab keys above: a conversation closed and
-reopened finds its notes where they were left, and outside the gap named there
-none of them leaves with the message of the one beside it. The message carries
+reopened finds its notes where they were left, and none of them leaves with the
+message of the one beside it. The message carries
 them after the diff's with no heading of their own: the path, its lines and the
 quoted code already say what they are.
 

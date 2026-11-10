@@ -144,6 +144,20 @@ describe('the conversations a workspace already has', () => {
     })
   })
 
+  it('comes back as it was left while its list is read again', async () => {
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    vi.mocked(octopus().chats.list).mockReturnValue(new Promise(() => undefined))
+    rerender({ id: 'planner/bob' })
+    rerender({ id: WORKSPACE })
+
+    expect(result.current.tabs.map((tab) => tab.key)).toEqual(['first', 'chat-2'])
+  })
+
   it('starts again when the workspace changes', async () => {
     givenChats([chat(), chat({ id: 'chat-2' })])
     const { result, rerender } = open()
