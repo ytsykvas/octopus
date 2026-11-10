@@ -486,7 +486,7 @@ describe('a note sent from the file viewer', () => {
     await noteTo(user, 'Claude 2')
   }
 
-  async function noteTo(user: ReturnType<typeof userEvent.setup>, target: string): Promise<void> {
+  async function noteTo(user: ReturnType<typeof userEvent.setup>, tabName: string): Promise<void> {
     await user.click(screen.getByRole('button', { name: 'tree: a.ts' }))
     const node = await waitFor(() => {
       const text = document.querySelector('pre.diff-code')?.firstChild
@@ -501,7 +501,7 @@ describe('a note sent from the file viewer', () => {
       window.getSelection()?.addRange(range)
       document.dispatchEvent(new Event('selectionchange'))
     })
-    await user.click(screen.getByRole('button', { name: `Add to ${target}` }))
+    await user.click(screen.getByRole('button', { name: `Add to ${tabName}` }))
     await user.type(screen.getByRole('textbox'), 'why two?')
     await user.click(screen.getByRole('button', { name: 'Add' }))
   }
@@ -557,15 +557,16 @@ describe('a note sent from the file viewer', () => {
   })
 
   describe('left for the first conversation, which is then closed', () => {
-    let anna: ReturnType<typeof chat>[] = []
+    function givenAnna(chats: readonly ReturnType<typeof chat>[]): void {
+      vi.mocked(octopus().chats.list).mockImplementation((workspaceId) =>
+        Promise.resolve({ ok: true, value: workspaceId === WORKSPACE.id ? [...chats] : [] })
+      )
+    }
 
     async function noteTheFirstAndCloseIt(
       user: ReturnType<typeof userEvent.setup>
     ): Promise<ReturnType<typeof render>['rerender']> {
-      anna = [chat(), chat({ id: 'chat-2' })]
-      vi.mocked(octopus().chats.list).mockImplementation((workspaceId) =>
-        Promise.resolve({ ok: true, value: workspaceId === WORKSPACE.id ? anna : [] })
-      )
+      givenAnna([chat(), chat({ id: 'chat-2' })])
       const { rerender } = render(<Pane />)
       await waitFor(() => {
         expect(screen.getAllByText('Start the conversation')).toHaveLength(2)
@@ -573,7 +574,7 @@ describe('a note sent from the file viewer', () => {
       await noteTo(user, 'Claude 1')
       await user.click(screen.getByRole('button', { name: 'Close a.ts' }))
 
-      anna = [chat({ id: 'chat-2' })]
+      givenAnna([chat({ id: 'chat-2' })])
       await user.click(screen.getByRole('button', { name: 'Claude 1' }))
       await user.click(screen.getByRole('menuitem', { name: 'Close conversation' }))
       await waitFor(() => {
@@ -629,7 +630,7 @@ describe('a note sent from the file viewer', () => {
         ]
       })
       vi.mocked(octopus().chats.reopen).mockResolvedValue({ ok: true, value: chat() })
-      anna = [chat({ id: 'chat-2' }), chat()]
+      givenAnna([chat({ id: 'chat-2' }), chat()])
       await user.click(screen.getByRole('button', { name: 'Closed conversations' }))
       await user.click(await screen.findByRole('menuitem', { name: /fix the login bug/ }))
 

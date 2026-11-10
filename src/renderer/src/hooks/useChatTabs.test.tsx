@@ -458,44 +458,57 @@ describe('the key a tab keeps', () => {
 })
 
 describe('the key a closed first conversation leaves behind', () => {
-  async function closeTheFirstAndComeBack(): Promise<ReturnType<typeof open>> {
-    givenChats([chat(), chat({ id: 'chat-2' })])
-    const opened = open()
+  function givenListed(chats: readonly Chat[]): void {
+    vi.mocked(octopus().chats.list).mockImplementation((workspaceId) =>
+      Promise.resolve({ ok: true, value: workspaceId === WORKSPACE ? [...chats] : [] })
+    )
+  }
+
+  async function leaveAndComeBack(
+    rerender: ReturnType<typeof open>['rerender'],
+    onChats: NonNullable<Options['onChats']>
+  ): Promise<void> {
+    for (const id of ['planner/bob', WORKSPACE]) {
+      vi.mocked(onChats).mockClear()
+      rerender({ id })
+      await waitFor(() => {
+        expect(onChats).toHaveBeenCalledWith(id, expect.anything())
+      })
+    }
+  }
+
+  async function closeTheFirstAndComeBack(): Promise<ReturnType<typeof open>['result']> {
+    givenListed([chat(), chat({ id: 'chat-2' })])
+    const onChats = vi.fn()
+    const { result, rerender } = open({ onChats })
     await waitFor(() => {
-      expect(opened.result.current.tabs.map((tab) => tab.key)).toEqual(['first', 'chat-2'])
+      expect(result.current.tabs.map((tab) => tab.key)).toEqual(['first', 'chat-2'])
     })
 
-    givenChats([chat({ id: 'chat-2' })])
+    givenListed([chat({ id: 'chat-2' })])
     await act(async () => {
-      await opened.result.current.close('chat-1')
+      await result.current.close('chat-1')
     })
-    opened.rerender({ id: 'planner/bob' })
-    await waitFor(() => {
-      expect(opened.result.current.tabs[0]?.id).toBe('chat-2')
-    })
-    opened.rerender({ id: WORKSPACE })
-    await waitFor(() => {
-      expect(opened.result.current.tabs[0]?.id).toBe('chat-2')
-    })
-    return opened
+    await leaveAndComeBack(rerender, onChats)
+    return result
   }
 
   async function reopenTheFirst(result: ReturnType<typeof open>['result']): Promise<void> {
     vi.mocked(octopus().chats.reopen).mockResolvedValue({ ok: true, value: chat() })
-    givenChats([chat({ id: 'chat-2' }), chat()])
+    givenListed([chat({ id: 'chat-2' }), chat()])
     await act(async () => {
       await result.current.reopen('chat-1')
     })
   }
 
   it('is not handed to another conversation when the workspace is opened again', async () => {
-    const { result } = await closeTheFirstAndComeBack()
+    const result = await closeTheFirstAndComeBack()
 
     expect(result.current.tabs.map((tab) => tab.key)).toEqual(['chat-2'])
   })
 
   it('gives the first conversation its key back when it is reopened', async () => {
-    const { result } = await closeTheFirstAndComeBack()
+    const result = await closeTheFirstAndComeBack()
 
     await reopenTheFirst(result)
 
@@ -504,7 +517,7 @@ describe('the key a closed first conversation leaves behind', () => {
   })
 
   it('selects a conversation by its id when its key is first', async () => {
-    const { result } = await closeTheFirstAndComeBack()
+    const result = await closeTheFirstAndComeBack()
     await reopenTheFirst(result)
     act(() => {
       result.current.select('chat-2')
@@ -519,7 +532,8 @@ describe('the key a closed first conversation leaves behind', () => {
   })
 
   it('is claimed again in a workspace made anew under a removed one’s name', async () => {
-    const { result, rerender } = open()
+    const onChats = vi.fn()
+    const { result, rerender } = open({ onChats })
     await waitFor(() => {
       expect(octopus().chats.list).toHaveBeenCalled()
     })
@@ -527,11 +541,7 @@ describe('the key a closed first conversation leaves behind', () => {
       result.current.bind('first', chat())
     })
 
-    rerender({ id: 'planner/bob' })
-    rerender({ id: WORKSPACE })
-    await act(async () => {
-      await Promise.resolve()
-    })
+    await leaveAndComeBack(rerender, onChats)
     vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: chat({ id: 'chat-5' }) })
     vi.mocked(octopus().chats.create).mockImplementation(() => {
       givenChats([chat({ id: 'chat-5' }), chat({ id: 'chat-6' })])
@@ -545,7 +555,8 @@ describe('the key a closed first conversation leaves behind', () => {
   })
 
   it('stays with the conversation it was bound to when that one is closed elsewhere', async () => {
-    const { result, rerender } = open()
+    const onChats = vi.fn()
+    const { result, rerender } = open({ onChats })
     await waitFor(() => {
       expect(octopus().chats.list).toHaveBeenCalled()
     })
@@ -553,15 +564,8 @@ describe('the key a closed first conversation leaves behind', () => {
       result.current.bind('first', chat())
     })
 
-    givenChats([chat({ id: 'chat-2' })])
-    rerender({ id: 'planner/bob' })
-    await waitFor(() => {
-      expect(result.current.tabs[0]?.id).toBe('chat-2')
-    })
-    rerender({ id: WORKSPACE })
-    await waitFor(() => {
-      expect(result.current.tabs[0]?.id).toBe('chat-2')
-    })
+    givenListed([chat({ id: 'chat-2' })])
+    await leaveAndComeBack(rerender, onChats)
 
     expect(result.current.tabs.map((tab) => tab.key)).toEqual(['chat-2'])
   })

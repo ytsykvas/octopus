@@ -2416,11 +2416,11 @@ describe('App', () => {
     expect(await screen.findByRole('textbox')).toHaveValue('drop the old migration')
   })
 
-  describe('a draft left in the first conversation, which is then closed', () => {
+  describe('the first conversation, closed with a draft in it', () => {
     const first = chat({ id: 'c-1', workspaceId: 'planner/anna' })
     const second = chat({ id: 'c-2', workspaceId: 'planner/anna' })
 
-    async function closeTheFirstWithADraft(): Promise<void> {
+    async function closeTheFirstWithADraft(): Promise<ReturnType<typeof userEvent.setup>> {
       givenTwoProjects()
       givenChats([first, second])
       const user = await openApp()
@@ -2445,17 +2445,10 @@ describe('App', () => {
       await screen.findByRole('button', { name: 'Claude 1' })
       await user.click(screen.getByText('anna'))
       await screen.findByRole('button', { name: 'Claude 1' })
+      return user
     }
 
-    it('is kept out of the one beside it', async () => {
-      await closeTheFirstWithADraft()
-
-      expect(screen.getByRole('textbox')).toHaveValue('')
-    })
-
-    it('is there again when the first is brought back with ⌘⇧T', async () => {
-      await closeTheFirstWithADraft()
-
+    async function bringTheFirstBack(): Promise<void> {
       vi.mocked(window.octopus.chats.closed).mockResolvedValue({
         ok: true,
         value: [{ chat: first, closedAt: '2026-08-20T10:00:00.000Z', preview: 'drop it' }]
@@ -2463,6 +2456,42 @@ describe('App', () => {
       vi.mocked(window.octopus.chats.reopen).mockResolvedValue({ ok: true, value: first })
       givenChats([second, first])
       fireEvent.keyDown(window, { key: 'T', metaKey: true, shiftKey: true })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^Claude 2: / })).toHaveAttribute(
+          'aria-current',
+          'page'
+        )
+      })
+    }
+
+    it('keeps its draft out of the one beside it', async () => {
+      await closeTheFirstWithADraft()
+
+      expect(screen.getByRole('textbox')).toHaveValue('')
+    })
+
+    it('has its draft again when it is brought back with ⌘⇧T', async () => {
+      await closeTheFirstWithADraft()
+
+      await bringTheFirstBack()
+
+      expect(screen.getByRole('textbox')).toHaveValue('drop the old migration')
+    })
+
+    it('is what the toast’s Show opens once it is back behind another', async () => {
+      const user = await closeTheFirstWithADraft()
+      await bringTheFirstBack()
+      await user.click(
+        within(screen.getByRole('navigation', { name: 'Conversations' })).getByRole('button', {
+          name: /^Claude 1: /
+        })
+      )
+      await user.click(screen.getByText('bob'))
+
+      emitAgentEvent({ type: 'finished' }, 'c-1', 'planner/anna')
+      const toast = await screen.findByRole('region', { name: 'Finished' })
+      await user.click(within(toast).getByRole('button', { name: 'Show' }))
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /^Claude 2: / })).toHaveAttribute(
