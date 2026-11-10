@@ -183,6 +183,23 @@ function keepKeys(
   })
 }
 
+function answersTo(tab: ChatTab, keyOrId: string | undefined): boolean {
+  return tab.key === keyOrId || tab.id === keyOrId
+}
+
+function withoutGone(
+  active: ReadonlyMap<string, string>,
+  workspaceId: string,
+  tabs: readonly ChatTab[]
+): ReadonlyMap<string, string> {
+  const held = active.get(workspaceId)
+  if (held === undefined || tabs.some((tab) => answersTo(tab, held))) return active
+
+  const rest = new Map(active)
+  rest.delete(workspaceId)
+  return rest
+}
+
 function stripOf(
   strips: ReadonlyMap<string, readonly ChatTab[]>,
   workspaceId: string | null
@@ -313,12 +330,13 @@ export function useChatTabs(
       // Otherwise empty is a workspace with no conversations, perhaps one made anew
       // under a removed one's id, which must inherit neither its owner nor its strip.
       if (found.value.length === 0) firstChatByWorkspace.current.delete(id)
-      keep(
-        id,
+      const next =
         found.value.length === 0
           ? VIRGIN
           : keepKeys(found.value, latestTabs.current, firstChatByWorkspace.current.get(id))
-      )
+      keep(id, next)
+      // Held on, a tab that has gone would pull the view back to it when it returns.
+      setActiveByWorkspace((current) => withoutGone(current, id, next))
     },
     [describeFailure, keep]
   )
@@ -415,7 +433,7 @@ export function useChatTabs(
   //
   // The last fallback answers the type rather than a state: the strip always
   // holds at least one tab, since an empty list is drawn as the virgin one.
-  const onScreen = tabs.find((tab) => tab.key === remembered || tab.id === remembered) ?? tabs[0]
+  const onScreen = tabs.find((tab) => answersTo(tab, remembered)) ?? tabs[0]
   /* v8 ignore next */
   const activeKey = onScreen?.key ?? FIRST_TAB
 

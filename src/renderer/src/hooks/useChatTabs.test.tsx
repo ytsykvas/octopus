@@ -774,6 +774,30 @@ describe('which tab is showing', () => {
 
   // A strip with no current tab draws an empty pane, so a key nothing answers
   // to falls back to the first rather than to none.
+  it('stays put when the one it held comes back from another window', async () => {
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+    act(() => {
+      result.current.select('first')
+    })
+    givenChats([chat({ id: 'chat-2' })])
+    await act(async () => {
+      await result.current.close('chat-1')
+    })
+    expect(result.current.activeKey).toBe('chat-2')
+
+    givenChats([chat({ id: 'chat-2' }), chat()])
+    emitChatsChanged()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
   it('falls back to the first tab when the one it held has gone', async () => {
     givenChats([chat(), chat({ id: 'chat-2' })])
     const { result } = open()

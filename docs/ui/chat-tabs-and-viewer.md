@@ -133,7 +133,11 @@ happened since it asked. Any other empty answer is a workspace with no
 conversations — closing refuses the last one — which is what a workspace made
 anew under a removed one's id looks like: it is drawn untouched and loses the
 owner of `first`, so its own first conversation can claim the key. Until that
-answer, the strip shown is the removed workspace's.
+answer, the strip shown is the removed workspace's. The tab the workspace was
+left on comes back with it, remembered by key or chat id; one a fresh list no
+longer holds is forgotten rather than kept, because a conversation reopened in
+another window would otherwise pull the view back to itself under someone
+working in the tab that took its place.
 
 **Files open beside the conversations**, in the same strip after a 1px rule:
 underlined like them, because they are the same kind of thing — what the centre
