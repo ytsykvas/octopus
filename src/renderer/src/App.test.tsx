@@ -2416,6 +2416,64 @@ describe('App', () => {
     expect(await screen.findByRole('textbox')).toHaveValue('drop the old migration')
   })
 
+  describe('a draft left in the first conversation, which is then closed', () => {
+    const first = chat({ id: 'c-1', workspaceId: 'planner/anna' })
+    const second = chat({ id: 'c-2', workspaceId: 'planner/anna' })
+
+    async function closeTheFirstWithADraft(): Promise<void> {
+      givenTwoProjects()
+      givenChats([first, second])
+      const user = await openApp()
+      await user.click(await screen.findByRole('button', { name: 'PL' }))
+      await user.click(await screen.findByText('anna'))
+      await screen.findByRole('button', { name: 'Claude 2' })
+
+      await user.type(screen.getByRole('textbox'), 'drop the old migration')
+      await user.click(screen.getByText('bob'))
+      await screen.findByRole('button', { name: 'Claude 2' })
+      await user.click(screen.getByText('anna'))
+      await screen.findByRole('button', { name: 'Claude 2' })
+      expect(screen.getByRole('textbox')).toHaveValue('drop the old migration')
+
+      givenChats([second])
+      await user.click(screen.getByRole('button', { name: 'Claude 1' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Close conversation' }))
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Claude 2' })).not.toBeInTheDocument()
+      })
+      await user.click(screen.getByText('bob'))
+      await screen.findByRole('button', { name: 'Claude 1' })
+      await user.click(screen.getByText('anna'))
+      await screen.findByRole('button', { name: 'Claude 1' })
+    }
+
+    it('is kept out of the one beside it', async () => {
+      await closeTheFirstWithADraft()
+
+      expect(screen.getByRole('textbox')).toHaveValue('')
+    })
+
+    it('is there again when the first is brought back with ⌘⇧T', async () => {
+      await closeTheFirstWithADraft()
+
+      vi.mocked(window.octopus.chats.closed).mockResolvedValue({
+        ok: true,
+        value: [{ chat: first, closedAt: '2026-08-20T10:00:00.000Z', preview: 'drop it' }]
+      })
+      vi.mocked(window.octopus.chats.reopen).mockResolvedValue({ ok: true, value: first })
+      givenChats([second, first])
+      fireEvent.keyDown(window, { key: 'T', metaKey: true, shiftKey: true })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^Claude 2: / })).toHaveAttribute(
+          'aria-current',
+          'page'
+        )
+      })
+      expect(screen.getByRole('textbox')).toHaveValue('drop the old migration')
+    })
+  })
+
   it('offers no script for a workspace whose project has gone', async () => {
     givenTwoProjects()
     vi.mocked(window.octopus.projects.listRemote).mockResolvedValue({

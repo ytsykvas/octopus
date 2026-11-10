@@ -54,9 +54,9 @@ export interface ChatTab {
 export interface ChatTabsController {
   readonly tabs: readonly ChatTab[]
   readonly activeKey: string
-  readonly select: (key: string) => void
+  readonly select: (keyOrId: string) => void
   /** Chooses the tab a workspace opens on, before it is the one on screen. */
-  readonly selectIn: (workspaceId: string, key: string) => void
+  readonly selectIn: (workspaceId: string, keyOrId: string) => void
   /** Whether another conversation may be opened here; false at the cap. */
   readonly canCreate: boolean
   /**
@@ -131,7 +131,8 @@ export interface ForkedPlan {
   readonly message: string
 }
 
-/** The key the first tab carries before it has a record of its own. */
+// Drafts, notes and attached files are filed under it, so a conversation that
+// inherited it from a closed one would inherit those too.
 const FIRST_TAB = 'first'
 
 function tabOf(chat: Chat): ChatTab {
@@ -164,32 +165,31 @@ const VIRGIN: readonly ChatTab[] = [
   }
 ]
 
-/**
- * Rebuilds the strip from the core without moving any tab's key.
- *
- * A plain map would hand the first tab a new key the moment its record existed,
- * and remount a pane that is very likely mid-turn — writing the record is what
- * the first message does. So a tab that already knows its id keeps its key, and
- * the one that has none claims the record it has just become: the strip's first
- * tab is the workspace's first conversation, and `listChats` answers in the
- * order they were opened.
- */
-function keepKeys(chats: readonly Chat[], current: readonly ChatTab[]): ChatTab[] {
-  const claimed = new Set<string>()
+// Known tabs keep their keys, so a pane mid-turn is never remounted.
+function keepKeys(
+  chats: readonly Chat[],
+  current: readonly ChatTab[],
+  owner: string | undefined
+): ChatTab[] {
+  let claimable = owner === undefined && current.some((tab) => tab.id === null)
 
   return chats.map((chat) => {
     const known = current.find((tab) => tab.id === chat.id)
-    if (known) {
-      claimed.add(known.key)
-      return { ...tabOf(chat), key: known.key }
-    }
+    if (known) return { ...tabOf(chat), key: known.key }
+    if (chat.id !== owner && !claimable) return tabOf(chat)
 
-    const virgin = current.find((tab) => tab.id === null && !claimed.has(tab.key))
-    if (!virgin) return tabOf(chat)
-
-    claimed.add(virgin.key)
-    return { ...tabOf(chat), key: virgin.key }
+    claimable = false
+    return { ...tabOf(chat), key: FIRST_TAB }
   })
+}
+
+function rememberFirst(
+  owners: Map<string, string>,
+  workspaceId: string,
+  tabs: readonly ChatTab[]
+): void {
+  const owner = tabs.find((tab) => tab.key === FIRST_TAB)?.id
+  if (typeof owner === 'string') owners.set(workspaceId, owner)
 }
 
 /**
@@ -237,6 +237,8 @@ export function useChatTabs(
   useEffect(() => {
     latestTabs.current = tabs
   }, [tabs])
+
+  const firstChatByWorkspace = useRef(new Map<string, string>())
 
   /*
    * The two callbacks out, held rather than depended on.
@@ -302,7 +304,14 @@ export function useChatTabs(
 
       // No chat yet is otherwise the ordinary state of a fresh workspace rather
       // than a failure: the record is created by the first message.
-      const next = found.value.length === 0 ? VIRGIN : keepKeys(found.value, latestTabs.current)
+      // Past the guard above, an empty list is a workspace without conversations:
+      // one made anew under a removed workspace's id must not inherit its owner.
+      if (found.value.length === 0) firstChatByWorkspace.current.delete(id)
+      const next =
+        found.value.length === 0
+          ? VIRGIN
+          : keepKeys(found.value, latestTabs.current, firstChatByWorkspace.current.get(id))
+      rememberFirst(firstChatByWorkspace.current, id, next)
 
       latestTabs.current = next
       setTabs(next)
@@ -369,12 +378,13 @@ export function useChatTabs(
   const bind = useCallback(
     (key: string, chat: Chat) => {
       const id = shown.current
-      /* v8 ignore next */
-      if (id === null) return
+      // The pane that asked may belong to a workspace left before its record came.
+      if (id !== chat.workspaceId) return
 
       const next = latestTabs.current.map((tab) =>
         tab.key === key ? { ...tabOf(chat), key } : tab
       )
+      rememberFirst(firstChatByWorkspace.current, id, next)
 
       latestTabs.current = next
       setTabs(next)
@@ -384,18 +394,18 @@ export function useChatTabs(
   )
 
   const select = useCallback(
-    (key: string) => {
+    (keyOrId: string) => {
       const id = shown.current
       /* v8 ignore next */
       if (id === null) return
 
-      setActiveByWorkspace((current) => new Map(current).set(id, key))
+      setActiveByWorkspace((current) => new Map(current).set(id, keyOrId))
     },
     [shown]
   )
 
-  const selectIn = useCallback((workspaceId: string, key: string) => {
-    setActiveByWorkspace((current) => new Map(current).set(workspaceId, key))
+  const selectIn = useCallback((workspaceId: string, keyOrId: string) => {
+    setActiveByWorkspace((current) => new Map(current).set(workspaceId, keyOrId))
   }, [])
 
   const remembered = workspaceId === null ? undefined : activeByWorkspace.get(workspaceId)
@@ -405,8 +415,9 @@ export function useChatTabs(
   //
   // The last fallback answers the type rather than a state: the strip always
   // holds at least one tab, since an empty list is drawn as the virgin one.
-  /* v8 ignore next 2 */
-  const activeKey = tabs.find((tab) => tab.key === remembered)?.key ?? tabs[0]?.key ?? FIRST_TAB
+  const onScreen = tabs.find((tab) => tab.key === remembered || tab.id === remembered) ?? tabs[0]
+  /* v8 ignore next */
+  const activeKey = onScreen?.key ?? FIRST_TAB
 
   /**
    * Opens another conversation, materialising the first if it is still virtual.

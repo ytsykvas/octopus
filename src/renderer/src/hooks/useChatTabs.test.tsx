@@ -443,11 +443,156 @@ describe('the key a tab keeps', () => {
   })
 })
 
+describe('the key a closed first conversation leaves behind', () => {
+  async function closeTheFirstAndComeBack(): Promise<ReturnType<typeof open>> {
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    const opened = open()
+    await waitFor(() => {
+      expect(opened.result.current.tabs.map((tab) => tab.key)).toEqual(['first', 'chat-2'])
+    })
+
+    givenChats([chat({ id: 'chat-2' })])
+    await act(async () => {
+      await opened.result.current.close('chat-1')
+    })
+    opened.rerender({ id: 'planner/bob' })
+    await waitFor(() => {
+      expect(opened.result.current.tabs[0]?.id).toBe('chat-2')
+    })
+    opened.rerender({ id: WORKSPACE })
+    await waitFor(() => {
+      expect(opened.result.current.tabs[0]?.id).toBe('chat-2')
+    })
+    return opened
+  }
+
+  async function reopenTheFirst(result: ReturnType<typeof open>['result']): Promise<void> {
+    vi.mocked(octopus().chats.reopen).mockResolvedValue({ ok: true, value: chat() })
+    givenChats([chat({ id: 'chat-2' }), chat()])
+    await act(async () => {
+      await result.current.reopen('chat-1')
+    })
+  }
+
+  it('is not handed to another conversation when the workspace is opened again', async () => {
+    const { result } = await closeTheFirstAndComeBack()
+
+    expect(result.current.tabs.map((tab) => tab.key)).toEqual(['chat-2'])
+  })
+
+  it('gives the first conversation its key back when it is reopened', async () => {
+    const { result } = await closeTheFirstAndComeBack()
+
+    await reopenTheFirst(result)
+
+    expect(result.current.tabs.find((tab) => tab.id === 'chat-1')?.key).toBe('first')
+    expect(result.current.activeKey).toBe('first')
+  })
+
+  it('selects a conversation by its id when its key is first', async () => {
+    const { result } = await closeTheFirstAndComeBack()
+    await reopenTheFirst(result)
+    act(() => {
+      result.current.select('chat-2')
+    })
+    expect(result.current.activeKey).toBe('chat-2')
+
+    act(() => {
+      result.current.selectIn(WORKSPACE, 'chat-1')
+    })
+
+    expect(result.current.activeKey).toBe('first')
+  })
+
+  it('is claimed again in a workspace made anew under a removed one’s name', async () => {
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalled()
+    })
+    act(() => {
+      result.current.bind('first', chat())
+    })
+
+    rerender({ id: 'planner/bob' })
+    rerender({ id: WORKSPACE })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: chat({ id: 'chat-5' }) })
+    vi.mocked(octopus().chats.create).mockImplementation(() => {
+      givenChats([chat({ id: 'chat-5' }), chat({ id: 'chat-6' })])
+      return Promise.resolve({ ok: true, value: chat({ id: 'chat-6' }) })
+    })
+    await act(async () => {
+      await result.current.create()
+    })
+
+    expect(result.current.tabs.map((tab) => tab.key)).toEqual(['first', 'chat-6'])
+  })
+
+  it('stays with the conversation it was bound to when that one is closed elsewhere', async () => {
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalled()
+    })
+    act(() => {
+      result.current.bind('first', chat())
+    })
+
+    givenChats([chat({ id: 'chat-2' })])
+    rerender({ id: 'planner/bob' })
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-2')
+    })
+    rerender({ id: WORKSPACE })
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-2')
+    })
+
+    expect(result.current.tabs.map((tab) => tab.key)).toEqual(['chat-2'])
+  })
+
+  it('is held per workspace', async () => {
+    vi.mocked(octopus().chats.list).mockImplementation((workspaceId) =>
+      Promise.resolve({
+        ok: true,
+        value: [workspaceId === WORKSPACE ? chat() : chat({ id: 'chat-9', workspaceId })]
+      })
+    )
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-1')
+    })
+
+    rerender({ id: 'planner/bob' })
+
+    await waitFor(() => {
+      expect(result.current.tabs[0]?.id).toBe('chat-9')
+    })
+    expect(result.current.tabs.map((tab) => tab.key)).toEqual(['first'])
+  })
+})
+
 /*
  * A workspace can be left while any of these is in flight. Applying the answer
  * then would draw one workspace's conversations over another's.
  */
 describe('an answer that arrives after the workspace has been left', () => {
+  it('does not bind the tab of the workspace now shown', async () => {
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalled()
+    })
+    const { bind } = result.current
+
+    rerender({ id: 'planner/bob' })
+    act(() => {
+      bind('first', chat())
+    })
+
+    expect(result.current.tabs[0]?.id).toBeNull()
+  })
+
   it('drops a list read that outlives the pane', async () => {
     const onChats = vi.fn()
     const list = held<{ ok: true; value: Chat[] }>()
