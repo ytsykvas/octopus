@@ -483,6 +483,10 @@ describe('a note sent from the file viewer', () => {
 
   async function noteToSecond(user: ReturnType<typeof userEvent.setup>): Promise<void> {
     await openTwo()
+    await noteTo(user, 'Claude 2')
+  }
+
+  async function noteTo(user: ReturnType<typeof userEvent.setup>, tabName: string): Promise<void> {
     await user.click(screen.getByRole('button', { name: 'tree: a.ts' }))
     const node = await waitFor(() => {
       const text = document.querySelector('pre.diff-code')?.firstChild
@@ -497,7 +501,7 @@ describe('a note sent from the file viewer', () => {
       window.getSelection()?.addRange(range)
       document.dispatchEvent(new Event('selectionchange'))
     })
-    await user.click(screen.getByRole('button', { name: 'Add to Claude 2' }))
+    await user.click(screen.getByRole('button', { name: `Add to ${tabName}` }))
     await user.type(screen.getByRole('textbox'), 'why two?')
     await user.click(screen.getByRole('button', { name: 'Add' }))
   }
@@ -550,6 +554,97 @@ describe('a note sent from the file viewer', () => {
     )
 
     expect(screen.queryByText('a.ts:2')).not.toBeInTheDocument()
+  })
+
+  describe('left for the first conversation, which is then closed', () => {
+    function givenAnna(chats: readonly ReturnType<typeof chat>[]): void {
+      vi.mocked(octopus().chats.list).mockImplementation((workspaceId) =>
+        Promise.resolve({ ok: true, value: workspaceId === WORKSPACE.id ? [...chats] : [] })
+      )
+    }
+
+    async function noteTheFirstAndCloseIt(
+      user: ReturnType<typeof userEvent.setup>
+    ): Promise<ReturnType<typeof render>['rerender']> {
+      givenAnna([chat(), chat({ id: 'chat-2' })])
+      const { rerender } = render(<Pane />)
+      await waitFor(() => {
+        expect(screen.getAllByText('Start the conversation')).toHaveLength(2)
+      })
+      await noteTo(user, 'Claude 1')
+      await user.click(screen.getByRole('button', { name: 'Close a.ts' }))
+
+      givenAnna([chat({ id: 'chat-2' })])
+      await user.click(screen.getByRole('button', { name: 'Claude 1' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Close conversation' }))
+      await waitFor(() => {
+        expect(screen.queryByText('Claude 2')).toBeNull()
+      })
+      return rerender
+    }
+
+    async function closeTheFirstWithANote(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      const rerender = await noteTheFirstAndCloseIt(user)
+      rerender(<Pane workspace={workspaceView('bob')} />)
+      await waitFor(() => {
+        expect(octopus().chats.list).toHaveBeenCalledWith('planner/bob')
+      })
+      rerender(<Pane />)
+      await screen.findByRole('button', { name: 'Claude 1' })
+    }
+
+    it('is neither counted on nor sent with the one beside it', async () => {
+      const user = userEvent.setup()
+      await closeTheFirstWithANote(user)
+
+      expect(screen.getByRole('button', { name: /^Claude 1: [^,]*$/ })).toBeVisible()
+      await user.type(screen.getByRole('textbox'), 'look{Enter}')
+      await waitFor(() => {
+        expect(octopus().chats.send).toHaveBeenCalledWith('chat-2', 'look')
+      })
+    })
+
+    it('is not sent with a message written before the list is read again', async () => {
+      const user = userEvent.setup()
+      const rerender = await noteTheFirstAndCloseIt(user)
+      vi.mocked(octopus().chats.list).mockReturnValue(new Promise(() => undefined))
+      vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: chat({ id: 'chat-2' }) })
+
+      rerender(<Pane workspace={workspaceView('bob')} />)
+      rerender(<Pane />)
+      await user.type(screen.getByRole('textbox'), 'look{Enter}')
+
+      await waitFor(() => {
+        expect(octopus().chats.send).toHaveBeenCalledWith('chat-2', 'look')
+      })
+    })
+
+    it('comes back with it from the history', async () => {
+      const user = userEvent.setup()
+      await closeTheFirstWithANote(user)
+
+      vi.mocked(octopus().chats.closed).mockResolvedValue({
+        ok: true,
+        value: [
+          { chat: chat(), closedAt: '2026-08-20T10:00:00.000Z', preview: 'fix the login bug' }
+        ]
+      })
+      vi.mocked(octopus().chats.reopen).mockResolvedValue({ ok: true, value: chat() })
+      givenAnna([chat({ id: 'chat-2' }), chat()])
+      await user.click(screen.getByRole('button', { name: 'Closed conversations' }))
+      await user.click(await screen.findByRole('menuitem', { name: /fix the login bug/ }))
+
+      expect(
+        await screen.findByRole('button', { name: /^Claude 2: .*, 1 note waiting$/ })
+      ).toHaveAttribute('aria-current', 'page')
+      await user.type(screen.getByRole('textbox'), 'look{Enter}')
+      await waitFor(() => {
+        expect(octopus().chats.send).toHaveBeenCalledWith(
+          'chat-1',
+          'src/a.ts:2\n> two\nwhy two?\n\nlook'
+        )
+      })
+    })
   })
 })
 

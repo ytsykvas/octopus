@@ -183,9 +183,13 @@ The text is kept per workspace **and tab** rather than thrown away, in a map
 a half-written prompt, and a sentence typed for one conversation is not for the
 one beside it. Keyed by the tab's key rather than by its chat id — the id
 appears with the first message, and a draft filed under the old key would be
-lost at exactly that moment. The composer hands it up **once, on the way out** — a
-report per keystroke would put a `setState` in `App` under every key pressed,
-with the log re-rendering behind it.
+lost at exactly that moment. That makes the first conversation's key `first`,
+which stays with that one conversation while the window is open, so a draft
+left in a closed first conversation is there again when it is reopened and is
+never shown in the one beside it; the rules are in
+[the centre's tabs](chat-tabs-and-viewer.md). The composer hands it up **once,
+on the way out** — a report per keystroke would put a `setState` in `App` under
+every key pressed, with the log re-rendering behind it.
 
 **The stop button follows the conversation, not the pane.** `busy` is this
 pane's own events **or** the conversation's status, so a turn left running is

@@ -96,6 +96,49 @@ message. Twenty are kept per workspace; closing one more discards the oldest.
 Sending to a closed conversation is refused, for a window that has not heard it
 was closed would otherwise start a session no tab and no status shows.
 
+**A tab's key never moves, and `first` stays with one conversation.** What the
+window holds per tab — the drafts in `App`, `useCodeNotes`, `useAttachedFiles`
+— is filed under `${workspaceId}#${tab.key}`, and `ChatSession` is keyed by the
+same key; side questions and task lists are keyed by the chat id instead. A
+workspace nobody has spoken to shows one tab with no record, keyed `first`; the
+record is written by its first message, and a key that moved to the chat id at
+that point would remount the pane in the middle of the turn that created it,
+taking the message, the answer being streamed and the permission being waited
+on. So `useChatTabs` rebuilds the strip without moving a key (`keepKeys`): a tab
+whose id it already knows keeps its key, and every other conversation is keyed
+by its id — except that `first` belongs to one conversation per workspace for
+as long as the window is open. `load` and `bind` write that owner into
+`firstChatByWorkspace`, and only a workspace with no owner lets a conversation
+claim the untouched tab's key. Once the owner is closed, the strip rebuilt on
+the next visit gives the others their own ids, so none of them inherits what was
+filed under `first`; reopening it from the history gives it `first` back, with
+everything filed there. Closing clears none of it, because the history brings
+the conversation back. `bind` takes only a record of the workspace on screen —
+the pane that asked may belong to one left before its record came. One
+conversation answers to two names, so `select` and `selectIn` take a chat id as
+well as a key — the toast's Show and reopening hand over an id. A new store held
+per tab keys itself the same way and needs nothing more.
+
+**A workspace comes back as it was left.** The hook keeps the last strip of each
+workspace it has drawn and shows it at once on a return, then reads the list
+again and rebuilds from it. Drawing the untouched tab instead, as it once did,
+put the pane keyed `first` on screen until the list answered — and in a
+workspace whose first conversation had been closed, that pane showed its draft,
+counted its notes and sent them with whatever was typed there to the
+conversation `chats.open` answered with. An empty answer is the one that needs
+care. A read asked for as the workspace opened can come back empty after the
+first message has already bound its record, and applying it would take the tab
+back to untouched mid-turn; so `load` drops an empty answer when a `bind` has
+happened since it asked. Any other empty answer is a workspace with no
+conversations — closing refuses the last one — which is what a workspace made
+anew under a removed one's id looks like: it is drawn untouched and loses the
+owner of `first`, so its own first conversation can claim the key. Until that
+answer, the strip shown is the removed workspace's. The tab the workspace was
+left on comes back with it, remembered by key or chat id; one a fresh list no
+longer holds is forgotten rather than kept, because a conversation reopened in
+another window would otherwise pull the view back to itself under someone
+working in the tab that took its place.
+
 **Files open beside the conversations**, in the same strip after a 1px rule:
 underlined like them, because they are the same kind of thing — what the centre
 is showing — with the file's icon where a conversation has its dot. One click in
@@ -188,10 +231,12 @@ text.
 These notes are **per conversation** (`useCodeNotes`, keyed by the tab's key),
 where the diff's and the review's are per workspace and taken by whichever
 composer sends first. They have to be: a note sent to the second conversation
-must not leave with the first one's message. Held by tab key like the drafts, so
-a conversation closed and reopened from the history finds them where they were
-left. The message carries them after the diff's with no heading of their own:
-the path, its lines and the quoted code already say what they are.
+must not leave with the first one's message. Held by tab key like the drafts,
+under the rules of the paragraph on tab keys above: a conversation closed and
+reopened finds its notes where they were left, and none of them leaves with the
+message of the one beside it. The message carries
+them after the diff's with no heading of their own: the path, its lines and the
+quoted code already say what they are.
 
 **Every conversation stays mounted** while its workspace is open, hidden with a
 class the way the right pane hides its tabs — one that unmounted would lose its

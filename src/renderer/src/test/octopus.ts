@@ -413,7 +413,7 @@ export function octopus(): Api {
 function chatFixture(): Chat {
   return {
     id: 'chat-1',
-    workspaceId: 'planner/kyiv',
+    workspaceId: 'planner/anna',
     agent: 'claude',
     status: 'idle',
     interrupted: false,
