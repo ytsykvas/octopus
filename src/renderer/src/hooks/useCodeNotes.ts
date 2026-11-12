@@ -1,5 +1,13 @@
 import { useCallback, useState } from 'react'
 
+import {
+  type ForgetsWorkspaces,
+  slotOf,
+  type WorkspaceMatch,
+  withoutWorkspaces,
+  workspaceOfSlot
+} from './workspaceSlots.js'
+
 /**
  * A note on lines of a file as it stands, written in the viewer and aimed at
  * one conversation.
@@ -46,13 +54,13 @@ const NONE: readonly CodeNote[] = []
  * In memory only, like the diff's: a note points at lines that are about to
  * change, and one restored after a restart would point at whatever moved there.
  */
-export function useCodeNotes(workspaceId: string | null): CodeNoteController {
+export function useCodeNotes(workspaceId: string | null): CodeNoteController & ForgetsWorkspaces {
   const [byTab, setByTab] = useState<ReadonlyMap<string, readonly CodeNote[]>>(new Map())
 
   const update = useCallback(
     (tabKey: string, change: (notes: readonly CodeNote[]) => readonly CodeNote[]) => {
       if (workspaceId === null) return
-      const slot = `${workspaceId}#${tabKey}`
+      const slot = slotOf(workspaceId, tabKey)
 
       setByTab((current) => new Map(current).set(slot, change(current.get(slot) ?? NONE)))
     },
@@ -61,7 +69,7 @@ export function useCodeNotes(workspaceId: string | null): CodeNoteController {
 
   const pendingFor = useCallback(
     (tabKey: string) =>
-      (workspaceId === null ? undefined : byTab.get(`${workspaceId}#${tabKey}`)) ?? NONE,
+      (workspaceId === null ? undefined : byTab.get(slotOf(workspaceId, tabKey))) ?? NONE,
     [byTab, workspaceId]
   )
 
@@ -89,5 +97,9 @@ export function useCodeNotes(workspaceId: string | null): CodeNoteController {
     [update]
   )
 
-  return { pendingFor, add, remove, clear }
+  const forget = useCallback((gone: WorkspaceMatch) => {
+    setByTab((current) => withoutWorkspaces(current, gone, workspaceOfSlot))
+  }, [])
+
+  return { pendingFor, add, remove, clear, forget }
 }

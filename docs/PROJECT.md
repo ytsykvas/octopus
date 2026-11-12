@@ -137,7 +137,7 @@ The skills feature is the one place both halves need a sentence, because it look
 | ------------------ | ------------------------------------------------------ | ------------------------------------ | ------------------------------ |
 | **1. macOS**       | good; not native, higher memory, but hiddenInset helps | good; lighter bundle (WKWebView)     | best; fully native             |
 | **2. Claude Code** | **best**                                               | middling                             | good, but with risks           |
-| **3. Maintenance** | Electron 43, VS Code / Figma / Slack                   | active                               | Apple; not cross-platform      |
+| **3. Maintenance** | Electron 45, VS Code / Figma / Slack                   | active                               | Apple; not cross-platform      |
 | **4. UI**          | **widest**                                             | same, but WebKit instead of Chromium | narrower for custom interfaces |
 
 ### Why criterion 2 decided it
@@ -169,7 +169,7 @@ Versions below are **actually installed and verified** (`npm run check` and `ele
 
 | Package                        | Version      | Role                    |
 | ------------------------------ | ------------ | ----------------------- |
-| electron                       | 43.5.0       | shell                   |
+| electron                       | 45.3.1       | shell                   |
 | typescript                     | 5.9.3        | language                |
 | electron-vite                  | 6.0.0-beta.1 | build                   |
 | vite                           | 8.3.4        | bundler (Rolldown)      |
@@ -209,7 +209,7 @@ imported it either: every animation is CSS, so one rule in `styles.css` stops
 them all under Reduce motion — a JavaScript library would slip past it
 (`docs/ui/motion.md`).
 
-**Native modules.** Stage 1 started without them to avoid a build step, and that held until the embedded terminal arrived: `node-pty` is native. A `postinstall` script runs `electron-builder install-app-deps` — the same tool that packages the app, so the two cannot disagree — and `npm install` remains a single step. The binding is built through Node-API rather than against V8 directly, so it is not tied to Electron's ABI: the same binary loads under plain Node and under Electron.
+**Native modules.** Stage 1 started without them to avoid a build step, and that held until the embedded terminal arrived: `node-pty` is native. A `postinstall` script runs `electron-builder install-app-deps` — the same tool that packages the app, so the two cannot disagree — and `npm install` remains a single step. The binding is built through Node-API rather than against V8 directly, so it is not tied to Electron's ABI: the same binary loads under plain Node and under Electron. The rebuild still asks `node-abi` for the Electron version's ABI, and a `node-abi` older than that Electron major fails the `postinstall` — and with it `npm ci` — with "Could not detect abi". A move to a new major therefore takes a `node-abi` new enough to know it (`npm update node-abi`); Electron 45 needed 4.40. Electron 44 and later also need macOS 13, which `minimumSystemVersion` in `electron-builder.yml` states.
 
 **One override, and when to drop it.** `package.json` pins `@electron/get` to `^5.1.0`. `electron-builder` asks for `^3`, and version 3 drags in two chains with open advisories and nothing to upgrade to: `got` → `cacheable-request` → `http-cache-semantics` (GHSA-ch52-4w7c-c8xp, whose maintainer rejected the report, so no patched release exists or will), and `global-agent` → `roarr` → `sprintf-js` (GHSA-hp3w-g68c-fv3c, no patched release either). Version 5 is the one `electron` itself already installs; it downloads through `undici` and has neither chain, so the packages are not installed at all. The price is that 5 is an ES module that needs Node 22.12 or later to be `require`d — which CI and the maintainer's machine have, and the alternative `electron-builder` line that wants it (27.x) is still an alpha. Checked by an unsigned `npm run dist` and by a download into an empty cache, since a cached artifact skips the part that changed. Remove the override once `electron-builder` asks for `@electron/get` 5 itself.
 

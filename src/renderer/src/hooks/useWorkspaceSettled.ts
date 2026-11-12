@@ -1,6 +1,5 @@
-import { useEffect, useEffectEvent } from 'react'
-
 import { useTurnSettled } from './useTurnSettled.js'
+import { useWindowEvent } from './useWindowEvent.js'
 
 /**
  * Calls back when a workspace's files have probably changed: a turn of any of
@@ -22,19 +21,5 @@ export function useWorkspaceSettled(
   onSettled: () => void
 ): void {
   useTurnSettled(workspaceId, enabled, onSettled)
-
-  const focused = useEffectEvent(onSettled)
-
-  useEffect(() => {
-    if (workspaceId === null || !enabled) return
-
-    const listener = (): void => {
-      focused()
-    }
-    window.addEventListener('focus', listener)
-
-    return () => {
-      window.removeEventListener('focus', listener)
-    }
-  }, [workspaceId, enabled])
+  useWindowEvent('focus', onSettled, { active: workspaceId !== null && enabled })
 }

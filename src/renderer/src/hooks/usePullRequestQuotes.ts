@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react'
 
 import { commentKey, type PullRequestComment } from '@core/pullRequestShapes.js'
 
+import { type ForgetsWorkspaces, type WorkspaceMatch, withoutWorkspaces } from './workspaceSlots.js'
+
 /**
  * A remark from the review, waiting to go out with the next message.
  *
@@ -60,7 +62,9 @@ export function toQuote(comment: PullRequestComment, number: number): PullReques
  * for: it is context for a question being typed now, and a question nobody
  * finished asking is not one to restore three days later.
  */
-export function usePullRequestQuotes(workspaceId: string | null): PullRequestQuoteController {
+export function usePullRequestQuotes(
+  workspaceId: string | null
+): PullRequestQuoteController & ForgetsWorkspaces {
   const [byWorkspace, setByWorkspace] = useState<ReadonlyMap<string, readonly PullRequestQuote[]>>(
     new Map()
   )
@@ -100,10 +104,15 @@ export function usePullRequestQuotes(workspaceId: string | null): PullRequestQuo
     update(() => [])
   }, [update])
 
+  const forget = useCallback((gone: WorkspaceMatch) => {
+    setByWorkspace((current) => withoutWorkspaces(current, gone))
+  }, [])
+
   return {
     pending: (workspaceId === null ? undefined : byWorkspace.get(workspaceId)) ?? [],
     add,
     remove,
-    clear
+    clear,
+    forget
   }
 }

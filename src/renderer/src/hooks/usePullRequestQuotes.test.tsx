@@ -154,4 +154,26 @@ describe('the remarks waiting to be sent', () => {
 
     expect(result.current.pending).toEqual([])
   })
+
+  it('forgets a removed workspace and keeps the others', () => {
+    const { result, rerender } = renderHook(({ id }) => usePullRequestQuotes(id), {
+      initialProps: { id: ANNA }
+    })
+    act(() => {
+      result.current.add(quote())
+    })
+    rerender({ id: BOB })
+    act(() => {
+      result.current.add(quote({ key: 'inline:PRRC_2' }))
+    })
+    const held = result.current.pending
+
+    act(() => {
+      result.current.forget((id) => id === ANNA)
+    })
+
+    expect(result.current.pending).toBe(held)
+    rerender({ id: ANNA })
+    expect(result.current.pending).toEqual([])
+  })
 })

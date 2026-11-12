@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react'
 
+import { type ForgetsWorkspaces, type WorkspaceMatch, withoutWorkspaces } from './workspaceSlots.js'
+
 /**
  * A note against a passage of the diff, waiting to be sent.
  *
@@ -69,7 +71,9 @@ export function anchorKey(anchor: CommentAnchor): string {
  * ended up — the mistake `readChangeContext` avoids by recording context the
  * moment an edit lands rather than looking it up later.
  */
-export function useDiffComments(workspaceId: string | null): DiffCommentController {
+export function useDiffComments(
+  workspaceId: string | null
+): DiffCommentController & ForgetsWorkspaces {
   const [byWorkspace, setByWorkspace] = useState<ReadonlyMap<string, readonly DiffComment[]>>(
     new Map()
   )
@@ -108,10 +112,15 @@ export function useDiffComments(workspaceId: string | null): DiffCommentControll
     update(() => [])
   }, [update])
 
+  const forget = useCallback((gone: WorkspaceMatch) => {
+    setByWorkspace((current) => withoutWorkspaces(current, gone))
+  }, [])
+
   return {
     pending: (workspaceId === null ? undefined : byWorkspace.get(workspaceId)) ?? [],
     add,
     remove,
-    clear
+    clear,
+    forget
   }
 }

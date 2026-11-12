@@ -24,7 +24,7 @@ other and never conflict.
 ## Quick start
 
 You build it yourself — there are no downloads, and [that is deliberate](#why-there-are-no-downloads).
-You need macOS 11+ on Apple Silicon, Node.js 22+, git and a Claude Code login;
+You need macOS 13+ on Apple Silicon, Node.js 22+, git and a Claude Code login;
 [the details](#installing) are below.
 
 ```bash
@@ -151,7 +151,7 @@ them run, this one included.
 
 **What you need first:**
 
-- **macOS 11 or later, Apple Silicon**
+- **macOS 13 or later, Apple Silicon**
 - **Node.js 22+** and **git**
 - a **[Claude Code](https://claude.com/claude-code) login** — the agent runs on
   your authentication, and the app never handles credentials itself. The `claude`

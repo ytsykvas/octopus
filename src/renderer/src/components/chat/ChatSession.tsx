@@ -54,6 +54,7 @@ import { useRewindChoice } from '../../hooks/useRewindChoice.js'
 import { useSessionUsage } from '../../hooks/useSessionUsage.js'
 import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
 import { useSkills } from '../../hooks/useSkills.js'
+import { useWindowEvent } from '../../hooks/useWindowEvent.js'
 import { shortModel } from './agentFormat.js'
 import { AgentLogContext, type Agents, AgentsContext, createAgentsStore } from './agentTasks.js'
 import { ChatLog, StreamingContext } from './ChatLog.js'
@@ -206,10 +207,9 @@ export function ChatSession({
     }))
   }, [])
 
-  useEffect(() => {
-    if (!visible) return
-
-    const onKey = (event: KeyboardEvent): void => {
+  useWindowEvent(
+    'keydown',
+    (event) => {
       // A dialog owns the keyboard while it is open, as the window's own
       // shortcuts already treat it.
       if (document.querySelector('dialog[open]') !== null) return
@@ -219,13 +219,9 @@ export function ChatSession({
 
       event.preventDefault()
       toggleExpansion()
-    }
-
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [visible, toggleExpansion])
+    },
+    { active: visible }
+  )
 
   /*
    * The window's opener, kept where a steady handler can read it: the pane

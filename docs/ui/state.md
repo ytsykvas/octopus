@@ -36,7 +36,19 @@ duplicate, every entry the UI had already drawn.
 
 The split is not all-or-nothing: `useProjects.remove` asks and deletes, while
 `App` clears the selection afterwards — what points at a project is the window's
-business.
+business. So is what the window holds per workspace — drafts, review notes,
+quotes from a pull request, notes from the viewer, attached files, open files
+and the conversation strip — and workspace ids come back: a removed workspace's
+name returns to the pool, and a project added again gets its old slug. There is
+one window, so an id comes back only through `createWorkspace`, and that is
+where `App` calls `forgetWorkspaces` for it — the call that guarantees a clean
+start. `forgetWorkspaces` hands a `WorkspaceMatch` to each store's `forget`
+(`hooks/workspaceSlots.ts`). It also runs when `useWorkspaces.remove` or
+`useProjects.remove` answers `true`, so nothing is held for an id that is gone;
+that call cannot be the guarantee, because removing the open workspace unmounts
+its composer only afterwards, and the composer files its draft on the way out. A
+new store keyed by workspace returns `ForgetsWorkspaces` and gets a line in
+`forgetWorkspaces`.
 
 **A reply is claimed before its await, never after.** A hook that reads for the
 workspace on screen has to drop what comes back for one that has been left, and

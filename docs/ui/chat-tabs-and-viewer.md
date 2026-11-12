@@ -98,8 +98,9 @@ was closed would otherwise start a session no tab and no status shows.
 
 **A tab's key never moves, and `first` stays with one conversation.** What the
 window holds per tab — the drafts in `App`, `useCodeNotes`, `useAttachedFiles`
-— is filed under `${workspaceId}#${tab.key}`, and `ChatSession` is keyed by the
-same key; side questions and task lists are keyed by the chat id instead. A
+— is filed under `${workspaceId}#${tab.key}`, spelled once by `slotOf` in
+`hooks/workspaceSlots.ts`, and `ChatSession` is keyed by the same key; side
+questions and task lists are keyed by the chat id instead. A
 workspace nobody has spoken to shows one tab with no record, keyed `first`; the
 record is written by its first message, and a key that moved to the chat id at
 that point would remount the pane in the middle of the turn that created it,
@@ -133,11 +134,13 @@ happened since it asked. Any other empty answer is a workspace with no
 conversations — closing refuses the last one — which is what a workspace made
 anew under a removed one's id looks like: it is drawn untouched and loses the
 owner of `first`, so its own first conversation can claim the key. Until that
-answer, the strip shown is the removed workspace's. The tab the workspace was
-left on comes back with it, remembered by key or chat id; one a fresh list no
-longer holds is forgotten rather than kept, because a conversation reopened in
-another window would otherwise pull the view back to itself under someone
-working in the tab that took its place.
+answer the strip is the untouched one: `forget` has already dropped the removed
+workspace's strip, the tab it was left on and the owner of `first`, and draws
+the untouched strip at once when the removed workspace is still the selected
+one. The tab the workspace was left on comes back with it, remembered by key or
+chat id; one a fresh list no longer holds is forgotten rather than kept, because
+a conversation reopened in another window would otherwise pull the view back to
+itself under someone working in the tab that took its place.
 
 **Files open beside the conversations**, in the same strip after a 1px rule:
 underlined like them, because they are the same kind of thing — what the centre
@@ -162,7 +165,7 @@ remark or a prepared prompt from the pull request — since a note added behind 
 file lands where nobody can see it: wrappers in `App` rather than a call at each
 place. `⌘W` closes the file in front and is
 left alone otherwise. The files live in memory, per workspace, like which
-conversation was in front.
+conversation was in front, and are forgotten with the workspace.
 
 **The viewer is mounted only while its tab is in front**, unlike a conversation:
 there is nothing in it to lose by going, and coming forward is exactly when a

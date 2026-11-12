@@ -23,6 +23,7 @@ import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import type { ServerControls } from '../hooks/useServerControls.js'
 import { useEnvProfiles } from '../hooks/useEnvProfiles.js'
 import { useServingPort } from '../hooks/useServingPort.js'
+import { useWindowEvent } from '../hooks/useWindowEvent.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { Button } from './Button.js'
@@ -497,16 +498,9 @@ export function RightPanel({
 
   // The ceiling moves with the window: shrinking it must not leave the pane
   // covering the centre, and growing it should make the extra room available.
-  useEffect(() => {
-    const onResize = (): void => {
-      setWindowWidth(window.innerWidth)
-    }
-
-    window.addEventListener('resize', onResize)
-    return () => {
-      window.removeEventListener('resize', onResize)
-    }
-  }, [])
+  useWindowEvent('resize', () => {
+    setWindowWidth(window.innerWidth)
+  })
 
   // Re-measured on a language change, which is when the labels get longer —
   // and on unfolding, since a pane that started folded measured its tabs while

@@ -1,9 +1,9 @@
 import { act, renderHook, type RenderHookResult } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { type FileTabsController, useFileTabs } from './useFileTabs.js'
+import { useFileTabs } from './useFileTabs.js'
 
-type Hook = RenderHookResult<FileTabsController, { id: string | null }>
+type Hook = RenderHookResult<ReturnType<typeof useFileTabs>, { id: string | null }>
 
 function setup(workspaceId: string | null = 'planner/anna'): Hook {
   return renderHook(({ id }) => useFileTabs(id), { initialProps: { id: workspaceId } })
@@ -204,5 +204,25 @@ describe('the files open in the centre', () => {
     })
 
     expect(result.current.tabs).toEqual([])
+  })
+
+  it('forgets a removed workspace and keeps the others', () => {
+    const { result, rerender } = setup()
+    act(() => {
+      result.current.open('anna.ts')
+    })
+    rerender({ id: 'planner/bob' })
+    act(() => {
+      result.current.open('bob.ts')
+    })
+
+    act(() => {
+      result.current.forget((id) => id === 'planner/anna')
+    })
+
+    expect(result.current.tabs).toEqual([{ path: 'bob.ts', pinned: true }])
+    rerender({ id: 'planner/anna' })
+    expect(result.current.tabs).toEqual([])
+    expect(result.current.active).toBeNull()
   })
 })

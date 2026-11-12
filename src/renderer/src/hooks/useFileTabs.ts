@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
+import { type ForgetsWorkspaces, type WorkspaceMatch, withoutWorkspaces } from './workspaceSlots.js'
+
 /**
  * A file open in the centre.
  *
@@ -73,25 +75,28 @@ function closed(strip: Strip, path: string): Strip {
  * In memory only, like which conversation was in front: a restart opens on the
  * conversations, which is what the window is for. Kept per workspace so coming
  * back to one finds its files where they were. A removed workspace's entry is
- * simply never read again — ids are not reused.
+ * dropped through `forget`, since its id can come back.
  *
  * Held by `App` rather than the centre, because the right pane's tree opens
  * files into it and the keyboard closes them.
  */
-export function useFileTabs(workspaceId: string | null): FileTabsController {
-  const [strips, setStrips] = useState<Readonly<Record<string, Strip>>>({})
-  const strip = (workspaceId === null ? undefined : strips[workspaceId]) ?? EMPTY
+export function useFileTabs(workspaceId: string | null): FileTabsController & ForgetsWorkspaces {
+  const [strips, setStrips] = useState<ReadonlyMap<string, Strip>>(new Map())
+  const strip = (workspaceId === null ? undefined : strips.get(workspaceId)) ?? EMPTY
 
   const update = useCallback(
     (change: (strip: Strip) => Strip) => {
       if (workspaceId === null) return
-      setStrips((current) => ({
-        ...current,
-        [workspaceId]: change(current[workspaceId] ?? EMPTY)
-      }))
+      setStrips((current) =>
+        new Map(current).set(workspaceId, change(current.get(workspaceId) ?? EMPTY))
+      )
     },
     [workspaceId]
   )
+
+  const forget = useCallback((gone: WorkspaceMatch) => {
+    setStrips((current) => withoutWorkspaces(current, gone))
+  }, [])
 
   return useMemo(
     () => ({
@@ -114,8 +119,9 @@ export function useFileTabs(workspaceId: string | null): FileTabsController {
       },
       showChat: () => {
         update((current) => ({ ...current, active: null }))
-      }
+      },
+      forget
     }),
-    [strip, update]
+    [strip, update, forget]
   )
 }

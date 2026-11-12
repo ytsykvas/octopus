@@ -27,6 +27,11 @@ classes and components are listed in the `ui-component` skill.
   `useWorkspaces`). Git, files and processes live in `src/core/`.
 - **Errors from core carry a `code`**: render them through `useErrorMessage`,
   not `failure.error`.
+- **A listener on `window` that lives as long as a component goes through
+  `useWindowEvent`**, never `addEventListener` in a `useEffect`: a passive effect
+  leaves the previous render's listener in place until it runs, and a key
+  pressed in that gap acts on a screen no longer drawn. One held for a gesture
+  (`ResizeHandle`'s drag) is added and removed by that gesture.
 - **The `react-hooks` rules are strict:** no `setState` in an effect — derive
   during render or set in the handler — and no reading a ref during render.
 - **A floating panel is portalled into the body**, positioned against the

@@ -66,4 +66,26 @@ describe('the files each conversation will name', () => {
     expect(result.current.filesFor('first')).toEqual([])
     expect(result.current.filesFor('chat-2')).toEqual(['/w/a.ts'])
   })
+
+  it('forgets a removed workspace and keeps the others', () => {
+    const { result, rerender } = renderHook(({ id }) => useAttachedFiles(id), {
+      initialProps: { id: ANNA }
+    })
+    act(() => {
+      result.current.add('first', ['/w/a.ts'])
+    })
+    rerender({ id: BOB })
+    act(() => {
+      result.current.add('first', ['/w/b.ts'])
+    })
+    const held = result.current.filesFor('first')
+
+    act(() => {
+      result.current.forget((id) => id === ANNA)
+    })
+
+    expect(result.current.filesFor('first')).toBe(held)
+    rerender({ id: ANNA })
+    expect(result.current.filesFor('first')).toEqual([])
+  })
 })

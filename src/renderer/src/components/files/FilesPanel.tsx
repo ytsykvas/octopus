@@ -15,6 +15,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import { type CopyState, useCopy } from '../../hooks/useCopy.js'
 import { useFileFilter } from '../../hooks/useFileFilter.js'
 import { useFileTree } from '../../hooks/useFileTree.js'
+import { useWindowEvent } from '../../hooks/useWindowEvent.js'
 import { DisclosureChevron } from '../Disclosure.js'
 import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
 import { IconButton, Notice } from '../paneControls.js'
@@ -196,16 +197,11 @@ function WorkspaceTree({
   }, [])
   // Measured when the tab is shown and when the window resizes — the only two
   // things that change how tall the pane is. A hidden element measures zero.
-  useEffect(() => {
-    const measure = (): void => {
-      setHeight(scroller.current?.clientHeight ?? 0)
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => {
-      window.removeEventListener('resize', measure)
-    }
-  }, [visible, tree.index])
+  const measure = useCallback(() => {
+    setHeight(scroller.current?.clientHeight ?? 0)
+  }, [])
+  useEffect(measure, [visible, tree.index, measure])
+  useWindowEvent('resize', measure)
 
   const rows = useMemo(
     () => (tree.index === null ? [] : visibleRows(tree.index, expanded, tree.listings)),

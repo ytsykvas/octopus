@@ -46,7 +46,7 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   # macOS 15 refuses an unsigned download outright rather than warning, so an
   # unsigned build needs the instructions in docs/releasing.md.
-  minimumSystemVersion: '11.0'
+  minimumSystemVersion: '13.0'
 
 dmg:
   title: ${productName} ${version}
