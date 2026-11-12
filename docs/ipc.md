@@ -24,7 +24,8 @@ nothing useful about it.
 localised string. `error` is the English text, kept as a fallback for logs and
 for codes that have no translation yet.
 
-The only channel outside this shape is `theme:get`, which cannot fail.
+The only channels outside this shape are `theme:get`, which cannot fail, and
+`terminal:dispose`, which resolves with nothing once the session has gone.
 
 ## The channels
 
@@ -424,9 +425,9 @@ without creating one — the first message is what brings it into being.
 | Channel            | Arguments                          | Notes                                                                                                                                                                                                                    |
 | ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `terminal:create`  | `spec`                             | answers with a session id                                                                                                                                                                                                |
-| `terminal:write`   | `id`, `data`                       |                                                                                                                                                                                                                          |
-| `terminal:resize`  | `id`, `cols`, `rows`               | a resize after the session ended is ignored, not an error                                                                                                                                                                |
-| `terminal:dispose` | `id`                               | resolves when the session has gone, not when it was asked                                                                                                                                                                |
+| `terminal:write`   | `id`, `data`                       | an id that is not `term-<n>` (`TerminalIdSchema`) or data that is not a string is ignored; the preload does not await the answer                                                                                         |
+| `terminal:resize`  | `id`, `cols`, `rows`               | a resize after the session ended is ignored, not an error; so is a size outside 1–1000 or not a whole number (`TerminalSizeSchema`), and a pty that throws answers a failure rather than rejecting in the window         |
+| `terminal:dispose` | `id`                               | resolves when the session has gone, not when it was asked; an id that is not `term-<n>` resolves at once                                                                                                                 |
 | `terminal:refused` | `workspaceId`, `purpose`, `reason` | keeps a build or server the Scripts tab refused before it started, for Help. `purpose` is `setup` or `run` (`RunPurposeSchema`); `reason` is cut to 64K rather than refused, and a workspace not on record keeps nothing |
 
 Output flows the other way, on `terminal:data` and `terminal:exit`. It is sent
@@ -452,7 +453,7 @@ carrying its own session id.
 | ---------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `accounts:status`      | —               | asks the `claude` and `gh` CLIs, for the Settings card                                                                                    |
 | `accounts:github`      | —               | `gh` alone, on a short timeout: it sits behind a button. Carries whether the token can list organisations, `null` when `gh` would not say |
-| `accounts:signOut`     | `kind`, `login` | signing in is interactive and runs in a terminal instead                                                                                  |
+| `accounts:signOut`     | `kind`, `login` | signing in is interactive and runs in a terminal instead. `kind` is `claude` or `github`; `login` is a string or null                     |
 | `dialog:pickDirectory` | `title`         | `null` when cancelled                                                                                                                     |
 | `dialog:pickSkill`     | `title`         | a file **or** a folder: a skill arrives as either                                                                                         |
 
