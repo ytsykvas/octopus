@@ -1,4 +1,6 @@
-import { useEffect, type RefObject } from 'react'
+import type { RefObject } from 'react'
+
+import { useWindowEvent } from './useWindowEvent.js'
 
 /**
  * Closes a popup on Escape or a click outside it.
@@ -21,10 +23,9 @@ export function useDismiss(
    */
   portal?: RefObject<HTMLElement | null>
 ): void {
-  useEffect(() => {
-    if (!open) return
-
-    const onPointerDown = (event: MouseEvent): void => {
+  useWindowEvent(
+    'mousedown',
+    (event) => {
       const target = event.target as Node
 
       // A click inside is the popup's own business.
@@ -32,9 +33,13 @@ export function useDismiss(
       if (portal?.current?.contains(target) === true) return
 
       onDismiss()
-    }
+    },
+    { active: open }
+  )
 
-    const onKey = (event: KeyboardEvent): void => {
+  useWindowEvent(
+    'keydown',
+    (event) => {
       if (event.key !== 'Escape') return
 
       // Claimed, so the `<dialog>` this popup may sit in does not take the same
@@ -42,14 +47,7 @@ export function useDismiss(
       // plan dialog, answer — the dialog under it.
       event.preventDefault()
       onDismiss()
-    }
-
-    window.addEventListener('mousedown', onPointerDown)
-    window.addEventListener('keydown', onKey)
-
-    return () => {
-      window.removeEventListener('mousedown', onPointerDown)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open, container, portal, onDismiss])
+    },
+    { active: open }
+  )
 }

@@ -43,6 +43,7 @@ import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
 import { useFileTabs } from './hooks/useFileTabs.js'
+import { useWindowEvent } from './hooks/useWindowEvent.js'
 import {
   inProject,
   slotOf,
@@ -620,147 +621,130 @@ export function App(): React.JSX.Element {
   // ⌘1–⌘9 switch project, as they do between tabs everywhere else; ⌃1–⌃9 move
   // within the current project's workspaces, and ⌥1–⌥3 between the selected
   // workspace's conversations.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      /*
-       * A modal takes the keyboard, and nothing below asks whether one is open.
-       * `Modal` is the only `<dialog>` in the renderer and `showModal()` is how
-       * every one of them opens — Settings, Project settings, the repository
-       * picker, every confirmation — so the DOM is the one source of truth,
-       * and it covers the confirmation too, whose open state its hook does not
-       * expose. Asked here rather than threaded through as four booleans.
-       *
-       * What it prevented: ⌃2 behind Project settings re-read the checkout's
-       * scripts into the list sitting above the trust checkbox, and ⌘⇧N made a
-       * workspace and put an inert rename field into focus behind the dialog.
-       * The three `role="dialog"` popovers are dismissable and deliberately not
-       * matched.
-       */
-      if (document.querySelector('dialog[open]') !== null) return
+  useWindowEvent('keydown', (event) => {
+    /*
+     * A modal takes the keyboard, and nothing below asks whether one is open.
+     * `Modal` is the only `<dialog>` in the renderer and `showModal()` is how
+     * every one of them opens — Settings, Project settings, the repository
+     * picker, every confirmation — so the DOM is the one source of truth,
+     * and it covers the confirmation too, whose open state its hook does not
+     * expose. Asked here rather than threaded through as four booleans.
+     *
+     * What it prevented: ⌃2 behind Project settings re-read the checkout's
+     * scripts into the list sitting above the trust checkbox, and ⌘⇧N made a
+     * workspace and put an inert rename field into focus behind the dialog.
+     * The three `role="dialog"` popovers are dismissable and deliberately not
+     * matched.
+     */
+    if (document.querySelector('dialog[open]') !== null) return
 
-      if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 't') {
-        event.preventDefault()
-        if (chatTabs.canCreate) void chatTabs.create()
-        return
-      }
-
-      // The browser's and the editor's key for "bring back what I just closed",
-      // for the same reason: a slipped click on a tab is the same slip.
-      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') {
-        event.preventDefault()
-        void chatTabs.reopenLast()
-        return
-      }
-
-      /*
-       * Read from `code` rather than `key`, unlike every branch below it.
-       *
-       * On macOS ⌥ rewrites the character: Option-1 arrives as `¡`, Option-2 as
-       * `™`, Option-3 as `£`. `Number.parseInt` on those is `NaN`, so the digit
-       * check further down returns before this could ever run — and `code` is
-       * the physical key, which is also what makes this work on a layout where
-       * the digits are somewhere else.
-       */
-      if (event.altKey && !event.metaKey && !event.ctrlKey) {
-        // Only this branch asks where the focus is. ⌘ and ⌃ are not typing
-        // gestures, so a shortcut on them is unambiguous wherever it is
-        // pressed — but ⌥ is how a great many characters are typed on macOS,
-        // and this was switching conversation from inside the composer while
-        // swallowing the `¡` somebody meant to write.
-        if (takesText(event.target)) return
-
-        const position = ['Digit1', 'Digit2', 'Digit3'].indexOf(event.code)
-        const tab = position === -1 ? undefined : chatTabs.tabs[position]
-        if (tab) {
-          event.preventDefault()
-          chatTabs.select(tab.key)
-        }
-        return
-      }
-
-      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n') {
-        event.preventDefault()
-        if (selectedProjectId !== null) void createWorkspace(selectedProjectId)
-        return
-      }
-
-      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd') {
-        event.preventDefault()
-        // Unfolds as well as selects. A shortcut for the changes that does
-        // nothing while the pane is folded away does nothing in the one place
-        // it would save the most. It does not fold the pane shut again either:
-        // this names a tab, not a pane.
-        showRightPanel(true, { rightPanelTab: 'diff' })
-        return
-      }
-
-      // The editor's key for its explorer, and the same shape as ⌘⇧D above.
-      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') {
-        event.preventDefault()
-        showRightPanel(true, { rightPanelTab: 'files' })
-        return
-      }
-
-      // Closes the file in front, as in an editor — and only a file. With a
-      // conversation in front the key is left alone: closing a conversation is
-      // a menu item on purpose, and there is no window to close behind it.
-      if (
-        event.metaKey &&
-        !event.shiftKey &&
-        event.key.toLowerCase() === 'w' &&
-        fileTabs.active !== null
-      ) {
-        event.preventDefault()
-        fileTabs.close(fileTabs.active)
-        return
-      }
-
-      // The twin of the one above, and the shortcut §10.8 has listed since
-      // before there was a tab to give it. A listed shortcut that does nothing
-      // is read once, tried once, and takes the rest of the table with it.
-      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'p') {
-        event.preventDefault()
-        showPullRequests()
-        return
-      }
-
-      const digit = Number.parseInt(event.key, 10)
-      if (Number.isNaN(digit) || digit < 1 || digit > 9) return
-
-      if (event.metaKey) {
-        const project = projects.all[digit - 1]
-        if (project) {
-          event.preventDefault()
-          setSelectedProjectId(project.id)
-          setSelectedWorkspaceId(null)
-        }
-        return
-      }
-
-      if (event.ctrlKey && selectedProjectId !== null) {
-        const target = (workspaces.byProject.get(selectedProjectId) ?? [])[digit - 1]
-        if (target) {
-          event.preventDefault()
-          setSelectedWorkspaceId(target.id)
-        }
-      }
+    if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 't') {
+      event.preventDefault()
+      if (chatTabs.canCreate) void chatTabs.create()
+      return
     }
 
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('keydown', onKey)
+    // The browser's and the editor's key for "bring back what I just closed",
+    // for the same reason: a slipped click on a tab is the same slip.
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') {
+      event.preventDefault()
+      void chatTabs.reopenLast()
+      return
     }
-  }, [
-    selectedProjectId,
-    workspaces,
-    projects,
-    updateConfig,
-    showPullRequests,
-    showRightPanel,
-    chatTabs,
-    fileTabs,
-    createWorkspace
-  ])
+
+    /*
+     * Read from `code` rather than `key`, unlike every branch below it.
+     *
+     * On macOS ⌥ rewrites the character: Option-1 arrives as `¡`, Option-2 as
+     * `™`, Option-3 as `£`. `Number.parseInt` on those is `NaN`, so the digit
+     * check further down returns before this could ever run — and `code` is
+     * the physical key, which is also what makes this work on a layout where
+     * the digits are somewhere else.
+     */
+    if (event.altKey && !event.metaKey && !event.ctrlKey) {
+      // Only this branch asks where the focus is. ⌘ and ⌃ are not typing
+      // gestures, so a shortcut on them is unambiguous wherever it is
+      // pressed — but ⌥ is how a great many characters are typed on macOS,
+      // and this was switching conversation from inside the composer while
+      // swallowing the `¡` somebody meant to write.
+      if (takesText(event.target)) return
+
+      const position = ['Digit1', 'Digit2', 'Digit3'].indexOf(event.code)
+      const tab = position === -1 ? undefined : chatTabs.tabs[position]
+      if (tab) {
+        event.preventDefault()
+        chatTabs.select(tab.key)
+      }
+      return
+    }
+
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n') {
+      event.preventDefault()
+      if (selectedProjectId !== null) void createWorkspace(selectedProjectId)
+      return
+    }
+
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd') {
+      event.preventDefault()
+      // Unfolds as well as selects. A shortcut for the changes that does
+      // nothing while the pane is folded away does nothing in the one place
+      // it would save the most. It does not fold the pane shut again either:
+      // this names a tab, not a pane.
+      showRightPanel(true, { rightPanelTab: 'diff' })
+      return
+    }
+
+    // The editor's key for its explorer, and the same shape as ⌘⇧D above.
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') {
+      event.preventDefault()
+      showRightPanel(true, { rightPanelTab: 'files' })
+      return
+    }
+
+    // Closes the file in front, as in an editor — and only a file. With a
+    // conversation in front the key is left alone: closing a conversation is
+    // a menu item on purpose, and there is no window to close behind it.
+    if (
+      event.metaKey &&
+      !event.shiftKey &&
+      event.key.toLowerCase() === 'w' &&
+      fileTabs.active !== null
+    ) {
+      event.preventDefault()
+      fileTabs.close(fileTabs.active)
+      return
+    }
+
+    // The twin of the one above, and the shortcut §10.8 has listed since
+    // before there was a tab to give it. A listed shortcut that does nothing
+    // is read once, tried once, and takes the rest of the table with it.
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'p') {
+      event.preventDefault()
+      showPullRequests()
+      return
+    }
+
+    const digit = Number.parseInt(event.key, 10)
+    if (Number.isNaN(digit) || digit < 1 || digit > 9) return
+
+    if (event.metaKey) {
+      const project = projects.all[digit - 1]
+      if (project) {
+        event.preventDefault()
+        setSelectedProjectId(project.id)
+        setSelectedWorkspaceId(null)
+      }
+      return
+    }
+
+    if (event.ctrlKey && selectedProjectId !== null) {
+      const target = (workspaces.byProject.get(selectedProjectId) ?? [])[digit - 1]
+      if (target) {
+        event.preventDefault()
+        setSelectedWorkspaceId(target.id)
+      }
+    }
+  })
 
   const selectedProject = projects.all.find((project) => project.id === selectedProjectId) ?? null
   const hasProjects = projects.all.length > 0

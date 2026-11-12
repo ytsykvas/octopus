@@ -1,9 +1,19 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  getConfig,
+  render,
+  screen,
+  waitFor,
+  within
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { GitHubAccount } from '@core/accounts.js'
+import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { ScriptKind } from '@core/scripts.js'
@@ -130,6 +140,18 @@ function pending<T>(): {
       return promise
     }
   }
+}
+
+// Resolves in the microtask after the commit that drew it, before that commit's effects run.
+function whenDrawn(find: () => HTMLElement | null): Promise<void> {
+  return new Promise((resolve) => {
+    const observer = new MutationObserver(() => {
+      if (find() === null) return
+      observer.disconnect()
+      resolve()
+    })
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true })
+  })
 }
 
 /** Both projects, each with two workspaces — enough for the digit shortcuts. */
@@ -2811,6 +2833,35 @@ describe('App', () => {
     await screen.findByRole('button', { name: /^Claude 2: / })
 
     fireEvent.keyDown(window, { key: '™', code: 'Digit2', altKey: true })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Claude 2: / })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+    })
+  })
+
+  it('switches conversation with ⌥2 pressed the moment the second one is drawn', async () => {
+    const listed = pending<Result<Chat[]>>()
+    vi.mocked(window.octopus.chats.list).mockReturnValue(listed.promise)
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(screen.getByRole('button', { name: /anna/ }))
+
+    await getConfig().asyncWrapper(async () => {
+      const drawn = whenDrawn(() => screen.queryByRole('button', { name: /^Claude 2: / }))
+      await listed.settle({
+        ok: true,
+        value: [
+          chat({ workspaceId: 'planner/anna' }),
+          chat({ id: 'chat-2', workspaceId: 'planner/anna' })
+        ]
+      })
+      await drawn
+      fireEvent.keyDown(window, { key: '™', code: 'Digit2', altKey: true })
+    })
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^Claude 2: / })).toHaveAttribute(

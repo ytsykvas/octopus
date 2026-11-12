@@ -368,6 +368,14 @@ a test can still get wrong:
   `useBranchRequests.test.tsx` calls it. It is not in `setup.ts` yet, while
   other files still make updates outside `act`.
 
+**A gap can be the application's, not the test's.** ⌥2 failed once in CI's
+race run because `App` re-registered its `keydown` listener in a passive effect:
+pressed after the second tab was drawn but before that commit's effects, it
+reached the listener that still held one tab. No wait in a test closes that, so
+the listener moved to `useWindowEvent`, which keeps it current at commit.
+`App.test.tsx` pins it with `whenDrawn`, which resolves in the microtask after
+the commit that drew something — the one moment before its passive effects run.
+
 **`vi.useFakeTimers()` without `shouldAdvanceTime`** now holds a wait until a
 real `setImmediate` has run: advancing the fake clock while a `waitFor` is
 pending no longer releases it, and the test times out. Use `shouldAdvanceTime`,
