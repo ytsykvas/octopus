@@ -6,6 +6,7 @@ import type { CommandExec } from './accounts.js'
 import {
   cloneRepository,
   clonePath,
+  CloneRequestSchema,
   GitHubError,
   listRepositories,
   type RemoteRepository
@@ -407,5 +408,45 @@ describe('cloneRepository', () => {
     )
 
     expect((error as GitHubError).code).toBe('alreadyExists')
+  })
+
+  it.each(['..', '.', '/'])('refuses a name that is no directory of its own: %s', async (name) => {
+    let called = false
+    const exec: CommandExec = () => {
+      called = true
+      return Promise.resolve('')
+    }
+
+    const error = await cloneRepository(repo({ name }), '/dest', exec, missing).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as GitHubError).code).toBe('cloneFailed')
+    expect(called).toBe(false)
+  })
+})
+
+describe('CloneRequestSchema', () => {
+  it.each([
+    'ytsykvas/planner',
+    'octo_acme/app',
+    'org/.github',
+    'org/my.site',
+    'org/_private',
+    'org/a-b_c.d'
+  ])('accepts %s, a name GitHub itself hands out', (nameWithOwner) => {
+    const name = nameWithOwner.slice(nameWithOwner.indexOf('/') + 1)
+
+    expect(CloneRequestSchema.safeParse(repo({ name, nameWithOwner })).success).toBe(true)
+  })
+
+  it.each<[string, Partial<RemoteRepository>]>([
+    ['an owner read as a flag', { nameWithOwner: '--help/x' }],
+    ['a path for an owner', { nameWithOwner: 'a/b/c' }],
+    ['the parent directory', { name: '..' }],
+    ['the directory itself', { name: '.' }],
+    ['a separator in the name', { name: 'a/b' }]
+  ])('refuses %s', (_label, overrides) => {
+    expect(CloneRequestSchema.safeParse(repo(overrides)).success).toBe(false)
   })
 })

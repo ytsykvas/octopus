@@ -846,6 +846,19 @@ describe('validation at the boundary', () => {
     expect(config.rightPanelWidth).toBe(500)
     expect(config.theme).toBe('dark')
   })
+
+  it.each<[string, unknown]>([
+    ['an owner that reads as a flag', { ...REPOSITORY, nameWithOwner: '--help/x' }],
+    ['a name that is the parent directory', { ...REPOSITORY, name: '..' }],
+    ['a name that is the directory itself', { ...REPOSITORY, name: '.' }],
+    ['something that is not a repository', 42]
+  ])('refuses to clone %s before asking where to', async (_label, repository) => {
+    await expect(invoke('projects:addFromGitHub', repository)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    expect(bench.dialogOptions).toEqual([])
+  })
 })
 
 describe('failures come back as results', () => {

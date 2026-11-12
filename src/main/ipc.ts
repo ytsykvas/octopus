@@ -35,7 +35,7 @@ import { CarryListSchema } from '../core/carry.js'
 import { RewindScopeSchema } from '../core/rewind.js'
 import { EnvBodySchema } from '../core/env.js'
 import { ProfileNameSchema } from '../core/envProfileNames.js'
-import type { RemoteRepository } from '../core/github.js'
+import { CloneRequestSchema } from '../core/github.js'
 import type { DraftEvent } from '../core/pullRequestDraft.js'
 import {
   InstructionBodySchema,
@@ -1355,13 +1355,14 @@ export function registerIpc(
   // Inside `attempt`, not before it: resolving the destination writes the
   // choice to the config, and a failed write would otherwise reject across IPC
   // as an opaque Electron error the renderer cannot explain.
-  host.handle('projects:addFromGitHub', (event, repository: RemoteRepository) =>
+  host.handle('projects:addFromGitHub', (event, repository: unknown) =>
     attempt(async () => {
+      const wanted = CloneRequestSchema.parse(repository)
       const destination = await resolveCloneDirectory(service, event, host)
       // Cancelling the destination prompt is a decision, not a failure.
       if (destination === null) return null
 
-      return service.addProjectFromGitHub(repository, destination)
+      return service.addProjectFromGitHub(wanted, destination)
     })
   )
 
