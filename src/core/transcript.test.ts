@@ -34,6 +34,15 @@ describe('reading and writing', () => {
     await expect(readTranscript('chat-1', root)).resolves.toEqual([])
   })
 
+  it('says a file it cannot read is unreadable rather than empty', async () => {
+    await mkdir(chatTranscript('chat-1', root), { recursive: true })
+
+    await expect(readTranscript('chat-1', root)).rejects.toMatchObject({
+      name: 'InvalidFileError',
+      code: 'fileUnreadable'
+    })
+  })
+
   it('keeps entries in the order they were written', async () => {
     await appendEntry('chat-1', { role: 'user', at: AT, text: 'add a test' }, root)
     await appendEntry(

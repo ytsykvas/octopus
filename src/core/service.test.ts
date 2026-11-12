@@ -65,7 +65,7 @@ import type { CliOutput, PluginCli } from './plugins.js'
 import { POOL_START } from './ports.js'
 import type { DraftState } from './pullRequestDraft.js'
 import type { RecordedRun } from './runLog.js'
-import type { ChatEntry } from './transcript.js'
+import { type ChatEntry, readTranscript } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
@@ -144,6 +144,11 @@ function paths(root: string): Parameters<typeof createService>[0] {
     // Without this, a usage read would look at the real CLI's config.
     cliConfigDir: join(root, 'cli')
   }
+}
+
+// `chatHistory` refuses a chat no longer on record; these ask what is left on disk.
+function historyOnDisk(chatId: string): Promise<ChatEntry[]> {
+  return readTranscript(chatId, join(dir, 'data'))
 }
 
 /**
@@ -10066,6 +10071,21 @@ describe('the agent chat', () => {
       await expect(service.chatHistory(chat.id)).resolves.toEqual([])
     })
 
+    it('refuses a chat it has no record of', async () => {
+      const { service } = await withWorkspace()
+
+      await expect(service.chatHistory('nope')).rejects.toMatchObject({ code: 'worktreeMissing' })
+    })
+
+    it('still reads a conversation that was closed', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.createChat(workspaceId)
+      await service.closeChat(chat.id)
+
+      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+    })
+
     it('keeps what was said on both sides', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
@@ -13270,7 +13290,7 @@ describe('the agent chat', () => {
       await service.removeWorkspaceById(workspaceId, { force: true })
 
       expect(agent().closed()).toBe(1)
-      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+      await expect(historyOnDisk(chat.id)).resolves.toEqual([])
     })
 
     // Cancelling must cost nothing: the refusal comes before the sessions close and the cleanup.
@@ -13368,7 +13388,7 @@ describe('the agent chat', () => {
       await vi.waitFor(() => {
         expect(events.some((entry) => entry.event.type === 'result')).toBe(true)
       })
-      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+      await expect(historyOnDisk(chat.id)).resolves.toEqual([])
     })
 
     // Neither failure is a reason to keep a workspace the user asked to be rid
@@ -14394,6 +14414,16 @@ describe('the agent chat', () => {
       expect(agent().rewinds()).toEqual([])
     })
 
+    it('says a log it cannot read is unreadable, not that the message is unknown', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await mkdir(chatTranscript(chat.id, join(dir, 'data')), { recursive: true })
+
+      await expect(
+        service.previewRewind(chat.id, '00000000-0000-4000-8000-000000000000')
+      ).rejects.toMatchObject({ code: 'fileUnreadable' })
+    })
+
     it('refuses a conversation that has no session to ask', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
@@ -15105,7 +15135,7 @@ describe('the agent chat', () => {
       const kept = await service.listClosedChats(workspaceId)
       expect(kept).toHaveLength(MAX_CLOSED_CHATS_PER_WORKSPACE)
       expect(kept.map(({ chat }) => chat.id)).not.toContain(oldest.id)
-      await expect(service.chatHistory(oldest.id)).resolves.toEqual([])
+      await expect(historyOnDisk(oldest.id)).resolves.toEqual([])
     })
 
     // History is the workspace's, and goes with it — the closed ones included,
@@ -15119,7 +15149,7 @@ describe('the agent chat', () => {
 
       await service.removeProjectById(projectId)
 
-      await expect(service.chatHistory(first.id)).resolves.toEqual([])
+      await expect(historyOnDisk(first.id)).resolves.toEqual([])
     })
 
     it('discards the closed conversations with their workspace', async () => {
@@ -15131,7 +15161,7 @@ describe('the agent chat', () => {
 
       await service.removeWorkspaceById(workspaceId, { force: true })
 
-      await expect(service.chatHistory(first.id)).resolves.toEqual([])
+      await expect(historyOnDisk(first.id)).resolves.toEqual([])
       await expect(service.listClosedChats(workspaceId)).resolves.toEqual([])
     })
 

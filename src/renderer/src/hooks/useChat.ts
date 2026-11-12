@@ -583,8 +583,8 @@ export function useChat(
          *
          * The transcript decides rather than the `Result`, which cannot say how
          * far the call got: core writes the entry before it asks the agent
-         * anything, so a refusal on the way in — the boundary parse, a chat or
-         * workspace that is gone — leaves nothing, and a session that failed to
+         * anything, so a refusal on the way in — the boundary parse, say —
+         * leaves nothing, and a session that failed to
          * start leaves the message. Re-reading answers both without core having
          * to describe which happened.
          *

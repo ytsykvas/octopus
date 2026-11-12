@@ -22,6 +22,7 @@ import type { Config } from '../core/config.js'
 import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import type { RemoteRepository } from '../core/github.js'
 import type { DraftEvent } from '../core/pullRequestDraft.js'
+import { chatTranscript } from '../core/paths.js'
 import type { RemoteRefWatchDeps } from '../core/remoteRefs.js'
 import {
   createService as makeService,
@@ -858,6 +859,20 @@ describe('validation at the boundary', () => {
       code: 'valueRefused'
     })
     expect(bench.dialogOptions).toEqual([])
+  })
+
+  it('reads no history for an id not on record, wherever that id points', async () => {
+    const entry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'secret' }
+    await writeFile(
+      chatTranscript('../../outside', join(dir, 'data')),
+      `${JSON.stringify(entry)}\n`,
+      'utf8'
+    )
+
+    await expect(invoke('chats:history', '../../outside')).resolves.toMatchObject({
+      ok: false,
+      code: 'worktreeMissing'
+    })
   })
 })
 

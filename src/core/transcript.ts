@@ -18,7 +18,7 @@ import { z } from 'zod'
 
 import { AgentEventSchema } from './events.js'
 import { chatTranscript } from './paths.js'
-import { writeTextFile } from './persist.js'
+import { describeError, InvalidFileError, isNotFound, writeTextFile } from './persist.js'
 import type { ChatId } from './types.js'
 
 export const ChatEntrySchema = z.discriminatedUnion('role', [
@@ -47,7 +47,8 @@ export async function appendEntry(chatId: ChatId, entry: ChatEntry, root?: strin
 }
 
 /**
- * Everything recorded for a chat; empty when it has never spoken.
+ * Everything recorded for a chat; empty when it has never spoken, `fileUnreadable`
+ * when the file is there but cannot be read.
  *
  * A line that does not parse is skipped rather than thrown on. A crash during
  * a write leaves a half-finished last line, and refusing to open the whole
@@ -55,11 +56,13 @@ export async function appendEntry(chatId: ChatId, entry: ChatEntry, root?: strin
  * partial byte.
  */
 export async function readTranscript(chatId: ChatId, root?: string): Promise<ChatEntry[]> {
+  const path = chatTranscript(chatId, root)
   let contents: string
   try {
-    contents = await readFile(chatTranscript(chatId, root), 'utf8')
-  } catch {
-    return []
+    contents = await readFile(path, 'utf8')
+  } catch (error) {
+    if (isNotFound(error)) return []
+    throw new InvalidFileError(path, describeError(error))
   }
 
   const entries: ChatEntry[] = []
@@ -117,8 +120,7 @@ export async function previewOf(chatId: ChatId, root?: string): Promise<string> 
  * upstream can do: without it the forked conversation opens empty above an
  * agent that remembers all of it — this module's opening problem, inverted.
  *
- * Silent when it cannot be done, matching `readTranscript` rather than
- * `appendEntry`. A conversation whose log was cleared has a live session and no
+ * Silent when it cannot be done, unlike `appendEntry`. A conversation whose log was cleared has a live session and no
  * history, and forking it is a reasonable thing to want; and a copy that fails
  * for any other reason leaves the new conversation looking exactly like that
  * one — empty, above an agent that remembers. Failing the fork instead would

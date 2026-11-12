@@ -12,6 +12,13 @@ would spend most of its time serialising its own past. A line that does not
 parse is skipped rather than thrown on: a crash mid-write leaves a truncated
 last line, and losing the conversation over a partial byte is worse.
 
+A missing file is a chat that has not spoken yet and reads as empty. A file that
+is there but cannot be read — a permission, a directory in its place, a failing
+disk — is `fileUnreadable` instead: passed off as an empty conversation, it
+would look like an hour of work gone rather than a disk to look at. The id is
+proved against the store before the path is built, so a window cannot name a
+file outside `chats/` by the id it sends.
+
 Streaming fragments are **not** stored. The finished block follows immediately
 after, and keeping both would replay every answer twice on the next launch.
 
