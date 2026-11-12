@@ -54,7 +54,8 @@ interface UseWorkspaces {
   readonly rename: (workspaceId: string, name: string) => Promise<void>
   /** Another kind; the list is read again, since the branch may have moved with it. */
   readonly setKind: (workspaceId: string, kind: WorkspaceKind) => Promise<void>
-  readonly remove: (workspaceId: string) => Promise<void>
+  /** True once the workspace is gone, its cleanup script failing included. */
+  readonly remove: (workspaceId: string) => Promise<boolean>
   /**
    * Puts one project's workspaces in the order the sidebar was dragged into.
    *
@@ -424,7 +425,7 @@ export function useWorkspaces(
   const remove = useCallback(
     async (workspaceId: string) => {
       const workspace = [...byProject.values()].flat().find((item) => item.id === workspaceId)
-      if (!workspace) return
+      if (!workspace) return false
 
       const dirty = await window.octopus.workspaces.hasChanges(workspaceId)
       const hasChanges = dirty.ok && dirty.value
@@ -447,7 +448,7 @@ export function useWorkspaces(
         }
       })
 
-      if (!answer.confirmed) return
+      if (!answer.confirmed) return false
 
       onError(null)
       const choices = { force: hasChanges, deleteBranch: answer.checked }
@@ -462,7 +463,7 @@ export function useWorkspaces(
           cancelLabel: t('workspaces.removeCancel'),
           destructive: true
         })
-        if (!anyway.confirmed) return
+        if (!anyway.confirmed) return false
         result = await window.octopus.workspaces.remove(workspaceId, {
           ...choices,
           dropUnmerged: true
@@ -471,7 +472,7 @@ export function useWorkspaces(
 
       if (!result.ok) {
         onError(describeFailure(result))
-        return
+        return false
       }
       await refresh()
 
@@ -484,6 +485,7 @@ export function useWorkspaces(
       if (cleanup.status === 'unreadable') {
         onError(t('workspaces.cleanupUnreadable', { detail: cleanup.detail }))
       }
+      return true
     },
     [byProject, confirm, refresh, describeFailure, onError, t]
   )

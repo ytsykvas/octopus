@@ -2416,6 +2416,120 @@ describe('App', () => {
     expect(await screen.findByRole('textbox')).toHaveValue('drop the old migration')
   })
 
+  describe('a name that comes back after its workspace was removed', () => {
+    const DRAFT = 'drop the old migration'
+
+    function givenPlannerHolds(names: readonly string[]): void {
+      vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+        Promise.resolve({
+          ok: true,
+          value: projectId === 'planner' ? names.map((name) => workspaceView(name)) : []
+        })
+      )
+    }
+
+    async function draftInAnna(): Promise<ReturnType<typeof userEvent.setup>> {
+      givenTwoProjects()
+      const user = await openApp()
+      await user.click(await screen.findByRole('button', { name: 'PL' }))
+      await user.click(await screen.findByText('anna'))
+      await user.type(await screen.findByRole('textbox'), DRAFT)
+      return user
+    }
+
+    async function leaveForBob(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      await user.click(screen.getByText('bob'))
+      expect(await screen.findByRole('textbox')).toHaveValue('')
+    }
+
+    async function askToRemoveAnna(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      const [annaMenu] = screen.getAllByRole('button', { name: 'More' })
+      if (annaMenu === undefined) throw new Error('expected a menu on every row')
+      await user.click(annaMenu)
+      await user.click(screen.getByRole('menuitem', { name: 'Remove workspace' }))
+    }
+
+    async function removeAnna(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      givenPlannerHolds(['bob'])
+      await askToRemoveAnna(user)
+      await user.click(await screen.findByRole('button', { name: 'Remove' }))
+      await waitFor(() => {
+        expect(screen.queryByText('anna')).not.toBeInTheDocument()
+      })
+      expect(window.octopus.workspaces.remove).toHaveBeenCalledWith(
+        'planner/anna',
+        expect.anything()
+      )
+    }
+
+    async function make(
+      user: ReturnType<typeof userEvent.setup>,
+      name: string,
+      listed: readonly string[]
+    ): Promise<void> {
+      vi.mocked(window.octopus.workspaces.create).mockResolvedValue({
+        ok: true,
+        value: workspaceView(name)
+      })
+      givenPlannerHolds(listed)
+      await user.keyboard('{Meta>}{Shift>}N{/Shift}{/Meta}')
+    }
+
+    it('opens one made here without the draft, even when it was open as it went', async () => {
+      const user = await draftInAnna()
+
+      await removeAnna(user)
+      await make(user, 'anna', ['anna', 'bob'])
+
+      expect(await screen.findByRole('textbox')).toHaveValue('')
+    })
+
+    it('opens one made here without the draft it was left with', async () => {
+      const user = await draftInAnna()
+      await leaveForBob(user)
+
+      await removeAnna(user)
+      await make(user, 'anna', ['anna', 'bob'])
+
+      expect(await screen.findByRole('textbox')).toHaveValue('')
+    })
+
+    it('keeps the draft when the removal is declined', async () => {
+      const user = await draftInAnna()
+      await leaveForBob(user)
+
+      await askToRemoveAnna(user)
+      await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+      await user.click(screen.getByText('anna'))
+
+      expect(await screen.findByRole('textbox')).toHaveValue(DRAFT)
+    })
+
+    it('opens one in a project removed and added again without the draft', async () => {
+      const user = await draftInAnna()
+      await leaveForBob(user)
+      vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [LEDGER] })
+
+      fireEvent.contextMenu(tab('PL'))
+      await user.click(screen.getByRole('menuitem', { name: 'Remove project' }))
+      await user.click(await screen.findByRole('button', { name: 'Remove' }))
+      expect(await screen.findByText('Which project today?')).toBeInTheDocument()
+
+      givenPlannerHolds([])
+      vi.mocked(window.octopus.projects.add).mockResolvedValue({ ok: true, value: PLANNER })
+      vi.mocked(window.octopus.projects.list).mockResolvedValue({
+        ok: true,
+        value: [LEDGER, PLANNER]
+      })
+      await user.click(screen.getByRole('button', { name: 'Add repository' }))
+      await user.click(screen.getByRole('menuitem', { name: /From disk/ }))
+      await findTab('PL')
+      await make(user, 'anna', ['anna'])
+
+      expect(await screen.findByRole('textbox')).toHaveValue('')
+    })
+  })
+
   describe('the first conversation, closed with a draft in it', () => {
     const first = chat({ id: 'c-1', workspaceId: 'planner/anna' })
     const second = chat({ id: 'c-2', workspaceId: 'planner/anna' })

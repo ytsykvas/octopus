@@ -43,6 +43,13 @@ import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
 import { useFileTabs } from './hooks/useFileTabs.js'
+import {
+  inProject,
+  slotOf,
+  type WorkspaceMatch,
+  withoutWorkspaces,
+  workspaceOfSlot
+} from './hooks/workspaceSlots.js'
 import { useHelp } from './hooks/useHelp.js'
 import { usePlugins } from './hooks/usePlugins.js'
 import { useProjects } from './hooks/useProjects.js'
@@ -183,30 +190,6 @@ export function App(): React.JSX.Element {
     config?.notificationSound === true ? config.notificationSoundId : null
   )
 
-  /*
-   * Makes a workspace and opens it on its empty conversation.
-   *
-   * It used to land in the list, unselected, with its name open for editing —
-   * but what somebody knows at this moment is the task, not a name for it. So
-   * the conversation opens with its field taking the caret, and the set of
-   * variables it will run against can be chosen right there, before the
-   * first message.
-   */
-  const createWorkspace = useCallback(
-    async (projectId: string) => {
-      const made = await workspaces.create(projectId)
-      if (made === null) return
-
-      setSelectedProjectId(projectId)
-      setSelectedWorkspaceId(made)
-      // Moved by the creation itself, so the banner is already about where it
-      // lands: a creation that went round a branch named after its kind says
-      // so there, and clearing on the move would wipe it as it was written.
-      setShownSelection(`${projectId}/${made}`)
-      setFreshWorkspaceId(made)
-    },
-    [workspaces]
-  )
   // Held here because the diff writes the notes and the composer sends them,
   // and the two panes are siblings that know nothing of each other.
   const diffComments = useDiffComments(selectedWorkspaceId)
@@ -348,8 +331,69 @@ export function App(): React.JSX.Element {
    */
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map())
   const keepDraft = useCallback((workspaceId: string, tabKey: string, text: string) => {
-    setDrafts((current) => new Map(current).set(`${workspaceId}#${tabKey}`, text))
+    setDrafts((current) => new Map(current).set(slotOf(workspaceId, tabKey), text))
   }, [])
+
+  const forgetComments = diffComments.forget
+  const forgetQuotes = reviewQuotes.forget
+  const forgetCodeNotes = codeNotes.forget
+  const forgetAttachedFiles = attachedFiles.forget
+  const forgetConversations = conversations.forget
+  const forgetFileTabs = fileTabs.forget
+  const forgetWorkspaces = useCallback(
+    (gone: WorkspaceMatch) => {
+      setDrafts((current) => withoutWorkspaces(current, gone, workspaceOfSlot))
+      forgetComments(gone)
+      forgetQuotes(gone)
+      forgetCodeNotes(gone)
+      forgetAttachedFiles(gone)
+      forgetConversations(gone)
+      forgetFileTabs(gone)
+    },
+    [
+      forgetComments,
+      forgetQuotes,
+      forgetCodeNotes,
+      forgetAttachedFiles,
+      forgetConversations,
+      forgetFileTabs
+    ]
+  )
+
+  /*
+   * Makes a workspace and opens it on its empty conversation.
+   *
+   * It used to land in the list, unselected, with its name open for editing —
+   * but what somebody knows at this moment is the task, not a name for it. So
+   * the conversation opens with its field taking the caret, and the set of
+   * variables it will run against can be chosen right there, before the
+   * first message.
+   */
+  const createWorkspace = useCallback(
+    async (projectId: string) => {
+      const made = await workspaces.create(projectId)
+      if (made === null) return
+
+      // The removed workspace's composer files its draft as it unmounts, after the
+      // removal forgot it, so a name that comes back is cleared again here.
+      forgetWorkspaces((id) => id === made)
+      setSelectedProjectId(projectId)
+      setSelectedWorkspaceId(made)
+      // Moved by the creation itself, so the banner is already about where it
+      // lands: a creation that went round a branch named after its kind says
+      // so there, and clearing on the move would wipe it as it was written.
+      setShownSelection(`${projectId}/${made}`)
+      setFreshWorkspaceId(made)
+    },
+    [workspaces, forgetWorkspaces]
+  )
+
+  const removeWorkspace = useCallback(
+    async (workspaceId: string) => {
+      if (await workspaces.remove(workspaceId)) forgetWorkspaces((id) => id === workspaceId)
+    },
+    [workspaces, forgetWorkspaces]
+  )
 
   const startHelp = useHelp(selectedWorkspaceId, chatTabs.create, keepDraft, setError)
 
@@ -526,12 +570,13 @@ export function App(): React.JSX.Element {
     async (projectId: string) => {
       const count = (workspaces.byProject.get(projectId) ?? []).length
       if (!(await projects.remove(projectId, count))) return
+      forgetWorkspaces(inProject(projectId))
 
       setSelectedProjectId((current) => (current === projectId ? null : current))
       setSelectedWorkspaceId(null)
       await workspaces.refresh()
     },
-    [projects, workspaces]
+    [projects, workspaces, forgetWorkspaces]
   )
 
   /**
@@ -1051,7 +1096,7 @@ export function App(): React.JSX.Element {
                 }}
                 creating={workspaces.creating}
                 onRenameWorkspace={(id, name) => void workspaces.rename(id, name)}
-                onRemoveWorkspace={(id) => void workspaces.remove(id)}
+                onRemoveWorkspace={(id) => void removeWorkspace(id)}
                 onSetWorkspaceKind={(id, kind) => void workspaces.setKind(id, kind)}
                 editingWorkspaceId={workspaces.editingId}
                 onEditingWorkspaceChange={workspaces.setEditingId}
@@ -1115,7 +1160,7 @@ export function App(): React.JSX.Element {
               files={fileTabs}
               onError={setError}
               onShowChanges={showChanges}
-              draftOf={(tabKey) => drafts.get(`${selectedWorkspace.id}#${tabKey}`) ?? ''}
+              draftOf={(tabKey) => drafts.get(slotOf(selectedWorkspace.id, tabKey)) ?? ''}
               onDraftLeave={(tabKey, text) => {
                 keepDraft(selectedWorkspace.id, tabKey, text)
               }}
@@ -1226,7 +1271,7 @@ export function App(): React.JSX.Element {
           quotes={paneQuotes}
           envFile={selectedProject?.envFile ?? DEFAULT_ENV_FILE}
           onRequestChanged={branchRequests.refresh}
-          onRemoveWorkspace={(id) => void workspaces.remove(id)}
+          onRemoveWorkspace={(id) => void removeWorkspace(id)}
           activeFilePath={fileTabs.active}
           onConversation={fileTabs.showChat}
           onOpenFile={(path, pinned) => {

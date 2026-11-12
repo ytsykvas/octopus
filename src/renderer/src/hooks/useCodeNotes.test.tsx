@@ -89,4 +89,26 @@ describe('the notes from the viewer', () => {
   it('names a note by its path and lines', () => {
     expect(codeNoteKey(note())).toBe('src/a.ts:3-5')
   })
+
+  it('forgets a removed workspace and keeps the others', () => {
+    const { result, rerender } = renderHook(({ id }) => useCodeNotes(id), {
+      initialProps: { id: ANNA }
+    })
+    act(() => {
+      result.current.add('first', note({ text: 'about anna' }))
+    })
+    rerender({ id: BOB })
+    act(() => {
+      result.current.add('first', note({ text: 'about bob' }))
+    })
+    const held = result.current.pendingFor('first')
+
+    act(() => {
+      result.current.forget((id) => id === ANNA)
+    })
+
+    expect(result.current.pendingFor('first')).toBe(held)
+    rerender({ id: ANNA })
+    expect(result.current.pendingFor('first')).toEqual([])
+  })
 })

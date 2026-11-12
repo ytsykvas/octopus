@@ -1320,7 +1320,7 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.remove('planner/anna'))
+      const removed = await act(() => result.current.remove('planner/anna'))
 
       const request = confirm.mock.calls[0]?.[0]
       expect(request?.message).toContain('anna')
@@ -1334,6 +1334,7 @@ describe('useWorkspaces', () => {
         deleteBranch: false
       })
       expect(onError).not.toHaveBeenCalledWith(expect.any(String))
+      expect(removed).toBe(true)
     })
 
     // Uncommitted work is the only thing here nothing else keeps a copy of, so
@@ -1431,11 +1432,12 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.remove('planner/anna'))
+      const removed = await act(() => result.current.remove('planner/anna'))
 
       expect(confirm).toHaveBeenCalledTimes(1)
       expect(window.octopus.workspaces.remove).not.toHaveBeenCalled()
       expect(result.current.flat).toEqual([anna])
+      expect(removed).toBe(false)
     })
 
     it('does not ask about a workspace it has never heard of', async () => {
@@ -1448,11 +1450,12 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.remove('planner/ghost'))
+      const removed = await act(() => result.current.remove('planner/ghost'))
 
       expect(confirm).not.toHaveBeenCalled()
       expect(window.octopus.workspaces.hasChanges).not.toHaveBeenCalled()
       expect(window.octopus.workspaces.remove).not.toHaveBeenCalled()
+      expect(removed).toBe(false)
     })
 
     it('reports a removal that failed and keeps the workspace in the list', async () => {
@@ -1470,11 +1473,12 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.remove('planner/anna'))
+      const removed = await act(() => result.current.remove('planner/anna'))
 
       expect(onError).toHaveBeenCalledWith('That workspace is no longer there.')
       expect(result.current.flat).toEqual([anna])
       expect(window.octopus.workspaces.remove).toHaveBeenCalledTimes(1)
+      expect(removed).toBe(false)
     })
 
     const unmerged = {
@@ -1502,7 +1506,7 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.remove('planner/anna'))
+      const removed = await act(() => result.current.remove('planner/anna'))
 
       expect(vi.mocked(window.octopus.workspaces.remove).mock.calls).toEqual([
         ['planner/anna', { force: true, deleteBranch: true }],
@@ -1513,6 +1517,7 @@ describe('useWorkspaces', () => {
         message: 'ytsykvas/anna has commits that are in no other branch.'
       })
       expect(onError.mock.calls).toEqual([[null]])
+      expect(removed).toBe(true)
     })
 
     it('keeps the workspace when the second question is declined', async () => {
@@ -1531,11 +1536,12 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.remove('planner/anna'))
+      const removed = await act(() => result.current.remove('planner/anna'))
 
       expect(window.octopus.workspaces.remove).toHaveBeenCalledTimes(1)
       expect(onError.mock.calls).toEqual([[null]])
       expect(result.current.flat).toEqual([anna])
+      expect(removed).toBe(false)
     })
 
     it('reports a drop that failed and keeps the workspace in the list', async () => {
@@ -1551,10 +1557,11 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.remove('planner/anna'))
+      const removed = await act(() => result.current.remove('planner/anna'))
 
       expect(onError).toHaveBeenLastCalledWith('That workspace is no longer there.')
       expect(result.current.flat).toEqual([anna])
+      expect(removed).toBe(false)
     })
 
     // The workspace has gone either way; a cleanup that did not happen leaves
@@ -1586,9 +1593,10 @@ describe('useWorkspaces', () => {
         expect(result.current.flat).toEqual([anna])
       })
 
-      await act(() => result.current.remove('planner/anna'))
+      const removed = await act(() => result.current.remove('planner/anna'))
 
       expect(onError).toHaveBeenLastCalledWith(message)
+      expect(removed).toBe(true)
     })
 
     // Nothing checks one translation's placeholders against another's, and a

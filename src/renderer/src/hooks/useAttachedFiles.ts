@@ -1,5 +1,13 @@
 import { useCallback, useState } from 'react'
 
+import {
+  type ForgetsWorkspaces,
+  slotOf,
+  type WorkspaceMatch,
+  withoutWorkspaces,
+  workspaceOfSlot
+} from './workspaceSlots.js'
+
 export interface AttachedFileController {
   /** One conversation's attached paths in the open workspace, in the order added. */
   readonly filesFor: (tabKey: string) => readonly string[]
@@ -20,13 +28,15 @@ const NONE: readonly string[] = []
  *
  * In memory only, like the notes: a path is part of a question being typed now.
  */
-export function useAttachedFiles(workspaceId: string | null): AttachedFileController {
+export function useAttachedFiles(
+  workspaceId: string | null
+): AttachedFileController & ForgetsWorkspaces {
   const [byTab, setByTab] = useState<ReadonlyMap<string, readonly string[]>>(new Map())
 
   const update = useCallback(
     (tabKey: string, change: (files: readonly string[]) => readonly string[]) => {
       if (workspaceId === null) return
-      const slot = `${workspaceId}#${tabKey}`
+      const slot = slotOf(workspaceId, tabKey)
 
       setByTab((current) => new Map(current).set(slot, change(current.get(slot) ?? NONE)))
     },
@@ -35,7 +45,7 @@ export function useAttachedFiles(workspaceId: string | null): AttachedFileContro
 
   const filesFor = useCallback(
     (tabKey: string) =>
-      (workspaceId === null ? undefined : byTab.get(`${workspaceId}#${tabKey}`)) ?? NONE,
+      (workspaceId === null ? undefined : byTab.get(slotOf(workspaceId, tabKey))) ?? NONE,
     [byTab, workspaceId]
   )
 
@@ -55,5 +65,9 @@ export function useAttachedFiles(workspaceId: string | null): AttachedFileContro
     [update]
   )
 
-  return { filesFor, add, clear }
+  const forget = useCallback((gone: WorkspaceMatch) => {
+    setByTab((current) => withoutWorkspaces(current, gone, workspaceOfSlot))
+  }, [])
+
+  return { filesFor, add, clear, forget }
 }

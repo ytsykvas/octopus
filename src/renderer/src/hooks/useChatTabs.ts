@@ -16,6 +16,7 @@ import type { Result } from '../../../preload/index.js'
 
 import { useErrorMessage } from './useErrorMessage.js'
 import { useLatest } from './useLatest.js'
+import { type ForgetsWorkspaces, type WorkspaceMatch, withoutWorkspaces } from './workspaceSlots.js'
 
 /**
  * One tab of the chat pane.
@@ -227,7 +228,7 @@ export function useChatTabs(
   workspaceId: string | null,
   onChats: (workspaceId: string, chats: readonly ChatTab[]) => void,
   onError: (message: string | null) => void
-): ChatTabsController {
+): ChatTabsController & ForgetsWorkspaces {
   const describeFailure = useErrorMessage()
 
   const [tabs, setTabs] = useState<readonly ChatTab[]>(VIRGIN)
@@ -425,6 +426,20 @@ export function useChatTabs(
   const selectIn = useCallback((workspaceId: string, keyOrId: string) => {
     setActiveByWorkspace((current) => new Map(current).set(workspaceId, keyOrId))
   }, [])
+
+  const forget = useCallback(
+    (gone: WorkspaceMatch) => {
+      for (const id of firstChatByWorkspace.current.keys()) {
+        if (gone(id)) firstChatByWorkspace.current.delete(id)
+      }
+      setStrips((current) => withoutWorkspaces(current, gone))
+      setActiveByWorkspace((current) => withoutWorkspaces(current, gone))
+      // A removed workspace can stay the selected id, and one made under it draws no reset.
+      const id = shown.current
+      if (id !== null && gone(id)) setTabs(VIRGIN)
+    },
+    [shown]
+  )
 
   const remembered = workspaceId === null ? undefined : activeByWorkspace.get(workspaceId)
   // The remembered tab may have been closed since, here or in another window,
@@ -673,6 +688,7 @@ export function useChatTabs(
     refreshHistory,
     reopen,
     reopenLast,
-    bind
+    bind,
+    forget
   }
 }

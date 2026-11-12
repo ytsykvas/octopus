@@ -822,6 +822,89 @@ describe('which tab is showing', () => {
   })
 })
 
+describe('a removed workspace', () => {
+  const removed = (id: string): boolean => id === WORKSPACE
+
+  it('leaves alone a shown workspace that was not removed', async () => {
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+    act(() => {
+      result.current.select('chat-2')
+    })
+    const before = result.current.tabs
+
+    act(() => {
+      result.current.forget((id) => id === 'planner/bob')
+    })
+
+    expect(result.current.tabs).toBe(before)
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
+  it('shows nothing of a removed workspace while the list of one made anew is read', async () => {
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    const { result, rerender } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+    rerender({ id: 'planner/bob' })
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    act(() => {
+      result.current.forget(removed)
+    })
+    vi.mocked(octopus().chats.list).mockReturnValue(new Promise(() => undefined))
+    rerender({ id: WORKSPACE })
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual([null])
+  })
+
+  it('lets the first conversation of one made anew take first when its list is not empty', async () => {
+    const onChats = vi.fn()
+    const { result, rerender } = open({ onChats })
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalled()
+    })
+    act(() => {
+      result.current.bind('first', chat())
+    })
+    rerender({ id: 'planner/bob' })
+    await waitFor(() => {
+      expect(onChats).toHaveBeenCalledWith('planner/bob', expect.anything())
+    })
+
+    act(() => {
+      result.current.forget(removed)
+    })
+    givenChats([chat({ id: 'chat-7' })])
+    rerender({ id: WORKSPACE })
+
+    await waitFor(() => {
+      expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-7'])
+    })
+    expect(result.current.tabs[0]?.key).toBe('first')
+  })
+
+  it('starts afresh when the workspace removed is the one shown', async () => {
+    givenChats([chat(), chat({ id: 'chat-2' })])
+    const { result } = open()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    act(() => {
+      result.current.forget(removed)
+    })
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual([null])
+  })
+})
+
 function closedEntry(id: string, preview = 'fix the login bug'): ClosedChat {
   return {
     chat: chat({ id, closedAt: '2026-08-20T10:00:00.000Z' }),
