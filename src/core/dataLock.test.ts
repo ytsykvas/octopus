@@ -1,12 +1,13 @@
-import { createServer } from 'node:net'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { connect, createServer } from 'node:net'
+import { once } from 'node:events'
+import { mkdir, mkdtemp, readdir, rm, unlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { claimDataRoot, type DataLock, lockPathFor } from './dataLock.js'
+import { claimDataRoot, type DataLock, DataLockError, lockPathFor } from './dataLock.js'
 
 let dir: string
 const held: DataLock[] = []
@@ -68,7 +69,7 @@ describe('claiming the data root', () => {
   /*
    * A pid file left by a crash locks the user out of their own data until they
    * find and delete it. A socket cannot: nothing answers on it, so it is
-   * removed and rebound.
+   * removed and relinked.
    */
   it('takes a socket left behind by a process that is gone', async () => {
     const path = await root()
@@ -101,7 +102,7 @@ describe('claiming the data root', () => {
 
   /*
    * Something that is not a socket sitting where the socket goes: it cannot be
-   * bound, nothing answers on it, and it cannot be removed either. Refusing is
+   * linked over, nothing answers on it, and it cannot be removed either. Refusing is
    * the only safe answer — the alternative is starting a second copy over a
    * root this one could not claim.
    */
@@ -118,6 +119,103 @@ describe('claiming the data root', () => {
     await lock?.release()
 
     expect(existsSync(lock?.path ?? '')).toBe(false)
+  })
+
+  // Waiting for the server to close would wait for every peer still connected.
+  it('gives the root back while somebody is still connected to it', async () => {
+    const path = await root()
+    const lock = await claimDataRoot(path, dir)
+    const peer = connect(lock?.path ?? '')
+
+    try {
+      await once(peer, 'connect')
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      await lock?.release()
+
+      expect(existsSync(lock?.path ?? '')).toBe(false)
+    } finally {
+      peer.destroy()
+    }
+  })
+
+  it('lives in the system temporary directory by default', async () => {
+    const path = await root()
+
+    const lock = await claimDataRoot(path)
+    if (lock) held.push(lock)
+
+    expect(lock?.path).toBe(lockPathFor(path))
+  })
+
+  it('takes its private name away too when it is given back', async () => {
+    const path = await root()
+    const lock = await claimDataRoot(path, dir)
+    await lock?.release()
+
+    expect(await readdir(dir)).toEqual([])
+  })
+
+  it('leaves nothing of its own behind when it is refused', async () => {
+    const path = await root()
+    await claim(path)
+    const before = await readdir(dir)
+
+    await claimDataRoot(path, dir)
+
+    expect(await readdir(dir)).toEqual(before)
+  })
+
+  it('gives the root back once, however often it is released', async () => {
+    const path = await root()
+    const first = await claimDataRoot(path, dir)
+    await first?.release()
+    const second = await claim(path)
+
+    await first?.release()
+
+    expect(existsSync(second?.path ?? '')).toBe(true)
+    await expect(claimDataRoot(path, dir)).resolves.toBeNull()
+  })
+
+  // Settling is where a rival that also found the socket dead relinks it over ours.
+  it('refuses a takeover another claimant won meanwhile', async () => {
+    const path = await root()
+    const shared = lockPathFor(path, dir)
+    await writeFile(shared, '', 'utf8')
+    let rival: DataLock | null = null
+
+    const lock = await claimDataRoot(path, dir, async () => {
+      await unlink(shared)
+      rival = await claim(path)
+    })
+    if (lock) held.push(lock)
+
+    expect(lock).toBeNull()
+    expect(rival).not.toBeNull()
+    expect(existsSync(shared)).toBe(true)
+    await expect(claimDataRoot(path, dir)).resolves.toBeNull()
+  })
+
+  it('gives up when the socket it retook was removed while it settled', async () => {
+    const path = await root()
+    const shared = lockPathFor(path, dir)
+    await writeFile(shared, '', 'utf8')
+
+    const lock = await claimDataRoot(path, dir, () => unlink(shared))
+    if (lock) held.push(lock)
+
+    expect(lock).toBeNull()
+  })
+
+  it('reports a socket that cannot be bound for another reason', async () => {
+    await root()
+    const missing = join(dir, 'missing')
+
+    const claiming = claimDataRoot('/data', missing)
+
+    await expect(claiming).rejects.toThrow(DataLockError)
+    await expect(claiming).rejects.toThrow(missing)
   })
 })
 

@@ -18,10 +18,14 @@
  * **A socket rather than a pid file**, and the difference is the whole design:
  * a pid file left by a crash locks the user out of their own data until they
  * find and delete it, and a pid can be reused by something else entirely. A
- * socket cannot be stale in a way that refuses anybody — bind, and if the
- * address is taken, *connect* to it. A live holder accepts; a dead one's socket
- * refuses the connection, and is then removed and rebound. Nothing has to
- * decide whether a process is alive by looking at a number.
+ * socket cannot be stale in a way that refuses anybody — if the name is taken,
+ * *connect* to it. A live holder accepts; a dead one's socket refuses the
+ * connection, and is then removed and relinked. Nothing has to decide whether
+ * a process is alive by looking at a number.
+ *
+ * Bound under a private name and published by `link`: Node unlinks a socket's
+ * name when its server closes, whoever owns that name by then. The rest is in
+ * docs/data/ownership.md.
  *
  * **Outside the data root**, named after it. What is locked is the root, and
  * the lock is not part of what it locks — a file inside would travel with a
@@ -30,11 +34,13 @@
  * that should never outlive the process holding it.
  */
 
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { connect, createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { unlink } from 'node:fs/promises'
+import { link, stat, unlink } from 'node:fs/promises'
+
+import { describeError } from './persist.js'
 
 /** A claim on the data root, held until it is given back. */
 export interface DataLock {
@@ -42,6 +48,18 @@ export interface DataLock {
   readonly path: string
   readonly release: () => Promise<void>
 }
+
+/** The socket could not be bound, which is not the same as somebody holding the root. */
+export class DataLockError extends Error {
+  override readonly name = 'DataLockError'
+
+  constructor(reason: string) {
+    super(`Could not lock the data root: ${reason}`)
+  }
+}
+
+// A rival that also found the socket dead has one `await` between its probe and its unlink.
+const TAKEOVER_SETTLE_MS = 50
 
 /**
  * The socket for a data root.
@@ -51,8 +69,12 @@ export interface DataLock {
  * filename may not.
  */
 export function lockPathFor(root: string, dir: string = tmpdir()): string {
+  return nameFor(root, dir, 'sock')
+}
+
+function nameFor(root: string, dir: string, ending: string): string {
   const digest = createHash('sha256').update(root).digest('hex').slice(0, 16)
-  return join(dir, `octopus-${digest}.sock`)
+  return join(dir, `octopus-${digest}.${ending}`)
 }
 
 /**
@@ -60,51 +82,82 @@ export function lockPathFor(root: string, dir: string = tmpdir()): string {
  *
  * `null` rather than throwing: another copy already running is an ordinary
  * thing for a user to do, and the caller's job is to say so and stop rather
- * than to report an error.
+ * than to report an error. A socket that cannot be bound at all throws a
+ * {@link DataLockError}.
  */
-export async function claimDataRoot(root: string, dir?: string): Promise<DataLock | null> {
+export async function claimDataRoot(
+  root: string,
+  dir: string = tmpdir(),
+  settle: () => Promise<void> = afterRivals
+): Promise<DataLock | null> {
   const path = lockPathFor(root, dir)
+  const own = nameFor(root, dir, randomBytes(4).toString('hex'))
+  const server = await bind(own)
 
-  const server = await bind(path)
-  if (server) return held(server, path)
+  if (await publish(own, path)) return held(server, path)
 
   // Taken. Whether it is taken by anything still listening is the question.
-  if (await answers(path)) return null
+  if (await answers(path)) return giveUp(server)
 
   // Stale: the holder is gone and left the socket behind. Removing it is safe
   // precisely because nothing answered on it.
-  await unlink(path).catch(() => undefined)
+  await unlink(path).catch(ignore)
+  if (!(await publish(own, path))) return giveUp(server)
 
-  const second = await bind(path)
-  return second ? held(second, path) : null
+  await settle()
+  return (await stillOurs(own, path)) ? held(server, path) : giveUp(server)
 }
 
 function held(server: Server, path: string): DataLock {
+  let released: Promise<void> | undefined
+
   return {
     path,
+    // The shared name goes while the server still answers on it, so nobody can have retaken it.
     release: () =>
-      new Promise((resolve) => {
-        server.close(() => {
-          // The file outlives the listener, and a stale one is what the next
-          // start would have to probe. Removing it here is the tidy path;
-          // failing to is not an error, because the probe covers it.
-          void unlink(path)
-            .catch(() => undefined)
-            .then(() => {
-              resolve()
-            })
-        })
-      })
+      (released ??= unlink(path)
+        .catch(ignore)
+        .then(() => {
+          server.close()
+        }))
   }
 }
 
-/** Binds the socket, or answers null because the address is in use. */
-async function bind(path: string): Promise<Server | null> {
+// `close` removes the private name at once; its callback waits for every connected peer.
+function giveUp(server: Server): null {
+  server.close()
+  return null
+}
+
+async function publish(own: string, path: string): Promise<boolean> {
+  return link(own, path).then(
+    () => true,
+    () => false
+  )
+}
+
+async function stillOurs(own: string, path: string): Promise<boolean> {
+  const shared = await stat(path).catch(() => null)
+  return shared?.ino === (await stat(own)).ino
+}
+
+async function afterRivals(): Promise<void> {
   return new Promise((resolve) => {
+    setTimeout(resolve, TAKEOVER_SETTLE_MS)
+  })
+}
+
+function ignore(): undefined {
+  return undefined
+}
+
+/** Binds a name nobody else uses, so any failure is one to report rather than a holder. */
+async function bind(path: string): Promise<Server> {
+  return new Promise((resolve, reject) => {
     const server = createServer()
 
-    server.once('error', () => {
-      resolve(null)
+    server.once('error', (error) => {
+      reject(new DataLockError(describeError(error)))
     })
     server.listen(path, () => {
       // Nothing is ever sent over it. The socket exists to be **held**, and a

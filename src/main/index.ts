@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
 import { describeError } from '../core/persist.js'
-import { claimDataRoot } from '../core/dataLock.js'
+import { claimDataRoot, type DataLock } from '../core/dataLock.js'
 import { dataRootOverride, rootDir } from '../core/paths.js'
 import { diagnosticLog } from '../core/diagnostics.js'
 import { createService, type OctopusService } from '../core/service.js'
@@ -156,7 +156,15 @@ async function start(): Promise<void> {
    * Before the service, because the service reads the root as it is built:
    * losing here must mean never having opened the file at all.
    */
-  const lock = await claimDataRoot(rootDir())
+  let lock: DataLock | null
+
+  try {
+    lock = await claimDataRoot(rootDir())
+  } catch (error) {
+    dialog.showErrorBox('octopus could not start', describeError(error))
+    app.quit()
+    return
+  }
 
   if (!lock) {
     dialog.showErrorBox(
