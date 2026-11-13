@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TAIL_CHARS } from '../core/runLog.js'
+import { TerminalIdSchema } from '../core/terminal.js'
 
 /**
  * `node-pty` is a native module that spawns a real shell. Loading it here would
@@ -199,6 +200,7 @@ describe('creating a session', () => {
 
     expect(spawned).toHaveLength(1)
     expect(id).toMatch(/^term-/)
+    expect(TerminalIdSchema.safeParse(id).success).toBe(true)
     expect(manager.size).toBe(1)
   })
 

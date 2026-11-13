@@ -22,6 +22,7 @@ import type { Config } from '../core/config.js'
 import { MAX_PASTE_BYTES } from '../core/attachments.js'
 import type { RemoteRepository } from '../core/github.js'
 import type { DraftEvent } from '../core/pullRequestDraft.js'
+import { chatTranscript } from '../core/paths.js'
 import type { RemoteRefWatchDeps } from '../core/remoteRefs.js'
 import {
   createService as makeService,
@@ -160,12 +161,8 @@ function harness(): Harness {
   return state
 }
 
-/**
- * The session methods as plain spies.
- *
- * A PTY is a real process, so the manager is stubbed — and these three
- * channels forward without answering, so a spy is the only observable effect.
- */
+// A PTY is a real process, so the manager is stubbed; the terminal channels
+// answer with nothing of their own, so a spy is the only observable effect.
 interface TerminalSpies {
   readonly write: Mock<(id: string, data: string) => void>
   readonly resize: Mock<(id: string, cols: number, rows: number) => void>
@@ -845,6 +842,85 @@ describe('validation at the boundary', () => {
     expect(config.rightPanelTab).toBe('files')
     expect(config.rightPanelWidth).toBe(500)
     expect(config.theme).toBe('dark')
+  })
+
+  it.each<[string, unknown]>([
+    ['an owner that reads as a flag', { ...REPOSITORY, nameWithOwner: '--help/x' }],
+    ['a name that is the parent directory', { ...REPOSITORY, name: '..' }],
+    ['a name that is the directory itself', { ...REPOSITORY, name: '.' }],
+    ['something that is not a repository', 42]
+  ])('refuses to clone %s before asking where to', async (_label, repository) => {
+    await expect(invoke('projects:addFromGitHub', repository)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    expect(bench.dialogOptions).toEqual([])
+  })
+
+  it('reads no history for an id not on record, wherever that id points', async () => {
+    const entry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'secret' }
+    await writeFile(
+      chatTranscript('../../outside', join(dir, 'data')),
+      `${JSON.stringify(entry)}\n`,
+      'utf8'
+    )
+
+    await expect(invoke('chats:history', '../../outside')).resolves.toMatchObject({
+      ok: false,
+      code: 'worktreeMissing'
+    })
+  })
+
+  it.each<[string, unknown, unknown]>([
+    ['an account it does not know', 'root', null],
+    ['a login that is not a string', 'github', 42]
+  ])('signs nothing out for %s', async (_label, kind, login) => {
+    await expect(invoke('accounts:signOut', kind, login)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    expect(vi.mocked(signOut)).not.toHaveBeenCalled()
+  })
+
+  it.each<[string, unknown, unknown, unknown]>([
+    ['no columns', 'term-1', 0, 40],
+    ['NaN columns', 'term-1', Number.NaN, 40],
+    ['fractional columns', 'term-1', 80.5, 40],
+    ['no rows', 'term-1', 80, 0],
+    ['a session id that is not one', '../x', 80, 40]
+  ])('keeps a resize to %s away from the pty', async (_label, id, cols, rows) => {
+    await expect(invoke('terminal:resize', id, cols, rows)).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    expect(sessions.resize).not.toHaveBeenCalled()
+  })
+
+  it('answers a pty that throws on a resize rather than rejecting in the window', async () => {
+    sessions.resize.mockImplementation(() => {
+      throw new Error('ioctl(2) failed, EBADF')
+    })
+
+    await expect(invoke('terminal:resize', 'term-1', 120, 40)).resolves.toEqual({
+      ok: false,
+      error: 'ioctl(2) failed, EBADF'
+    })
+  })
+
+  it.each<[string, unknown, unknown]>([
+    ['a session id that is not a string', 42, 'x'],
+    ['a session id that is not one', '../x', 'x'],
+    ['a session id with more after the number', 'term-1/../x', 'x'],
+    ['data that is not text', 'term-1', 42]
+  ])('types nothing for %s', async (_label, id, data) => {
+    await invoke('terminal:write', id, data)
+
+    expect(sessions.write).not.toHaveBeenCalled()
+  })
+
+  it('answers a dispose of an id that is not one with nothing, as the preload expects', async () => {
+    await expect(invoke('terminal:dispose', {})).resolves.toBeUndefined()
+    expect(sessions.dispose).not.toHaveBeenCalled()
   })
 })
 
@@ -2776,6 +2852,14 @@ describe('accounts', () => {
       value: true
     })
     expect(vi.mocked(signOut)).toHaveBeenCalledWith('github', 'ytsykvas')
+  })
+
+  it('signs Claude out with no login, which is all the window sends for it', async () => {
+    await expect(invoke('accounts:signOut', 'claude', null)).resolves.toEqual({
+      ok: true,
+      value: true
+    })
+    expect(vi.mocked(signOut)).toHaveBeenCalledWith('claude', null)
   })
 
   it('answers with a result when the sign-out fails', async () => {

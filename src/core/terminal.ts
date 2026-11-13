@@ -11,8 +11,8 @@ import { join } from 'node:path'
 
 import { z } from 'zod'
 
-/** Identifies a live terminal session. */
-export type TerminalId = string
+export const TerminalIdSchema = z.string().regex(/^term-\d+$/)
+export type TerminalId = z.infer<typeof TerminalIdSchema>
 
 /**
  * What a session is for, in the words a reader would use.
@@ -44,6 +44,8 @@ export const TerminalOwnerSchema = z.object({
 })
 export type TerminalOwner = z.infer<typeof TerminalOwnerSchema>
 
+export const TerminalSizeSchema = z.number().int().min(1).max(1000)
+
 export const TerminalSpecSchema = z.object({
   /**
    * Whose session it is, for the list that says what is still running.
@@ -61,8 +63,8 @@ export const TerminalSpecSchema = z.object({
    * Empty means a plain shell session.
    */
   command: z.array(z.string()).default([]),
-  cols: z.number().int().min(1).max(1000).default(80),
-  rows: z.number().int().min(1).max(1000).default(24),
+  cols: TerminalSizeSchema.default(80),
+  rows: TerminalSizeSchema.default(24),
   /**
    * Extra environment for the session.
    *

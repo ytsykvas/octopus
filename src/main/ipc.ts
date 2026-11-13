@@ -13,7 +13,7 @@ import { z } from 'zod'
 import { type Config, ConfigEditSchema, ConfigPatchSchema } from '../core/config.js'
 import { isTaskFrame } from '../core/events.js'
 import {
-  type AccountKind,
+  AccountKindSchema,
   BUTTON_TIMEOUT_MS,
   checkAccounts,
   checkGitHubAccount,
@@ -35,7 +35,7 @@ import { CarryListSchema } from '../core/carry.js'
 import { RewindScopeSchema } from '../core/rewind.js'
 import { EnvBodySchema } from '../core/env.js'
 import { ProfileNameSchema } from '../core/envProfileNames.js'
-import type { RemoteRepository } from '../core/github.js'
+import { CloneRequestSchema } from '../core/github.js'
 import type { DraftEvent } from '../core/pullRequestDraft.js'
 import {
   InstructionBodySchema,
@@ -79,7 +79,7 @@ import type {
 } from '../core/service.js'
 import { SideExchangeSchema, SideHistorySchema, SideQuestionSchema } from '../core/sideQuestions.js'
 import { ProjectEditSchema, ProjectPatchSchema } from '../core/store.js'
-import { TerminalSpecSchema } from '../core/terminal.js'
+import { TerminalIdSchema, TerminalSizeSchema, TerminalSpecSchema } from '../core/terminal.js'
 import type { ThemeName } from '../core/types.js'
 import type { UsageWindows } from '../core/usage.js'
 import { RemovalRequestSchema, WorkspaceNameSchema } from '../core/workspaces.js'
@@ -292,8 +292,8 @@ export function registerIpc(
   )
 
   // Signing out asks nothing, so it runs silently rather than in a terminal.
-  host.handle('accounts:signOut', (_event, kind: AccountKind, login: string | null) =>
-    attempt(() => signOut(kind, login))
+  host.handle('accounts:signOut', (_event, kind: unknown, login: unknown) =>
+    attempt(() => signOut(AccountKindSchema.parse(kind), z.string().nullable().parse(login)))
   )
 
   // Terminal sessions. The spec is validated rather than trusted: it arrives
@@ -302,17 +302,28 @@ export function registerIpc(
     attempt(() => terminals.create(TerminalSpecSchema.parse(spec), event.sender))
   )
 
-  host.handle('terminal:write', (_event, id: string, data: string) => {
-    terminals.write(id, data)
-  })
+  host.handle('terminal:write', (_event, id: unknown, data: unknown) =>
+    attempt(() => {
+      terminals.write(TerminalIdSchema.parse(id), z.string().parse(data))
+    })
+  )
 
-  host.handle('terminal:resize', (_event, id: string, cols: number, rows: number) => {
-    terminals.resize(id, cols, rows)
-  })
+  host.handle('terminal:resize', (_event, id: unknown, cols: unknown, rows: unknown) =>
+    attempt(() => {
+      terminals.resize(
+        TerminalIdSchema.parse(id),
+        TerminalSizeSchema.parse(cols),
+        TerminalSizeSchema.parse(rows)
+      )
+    })
+  )
 
   // Answers when the session has gone rather than when it was asked to go: a
   // restart waits on this before binding the port again.
-  host.handle('terminal:dispose', (_event, id: string) => terminals.dispose(id))
+  host.handle('terminal:dispose', (_event, id: unknown) => {
+    const parsed = TerminalIdSchema.safeParse(id)
+    return parsed.success ? terminals.dispose(parsed.data) : undefined
+  })
 
   /*
    * Everything still running, whichever window asked for it.
@@ -1355,13 +1366,14 @@ export function registerIpc(
   // Inside `attempt`, not before it: resolving the destination writes the
   // choice to the config, and a failed write would otherwise reject across IPC
   // as an opaque Electron error the renderer cannot explain.
-  host.handle('projects:addFromGitHub', (event, repository: RemoteRepository) =>
+  host.handle('projects:addFromGitHub', (event, repository: unknown) =>
     attempt(async () => {
+      const wanted = CloneRequestSchema.parse(repository)
       const destination = await resolveCloneDirectory(service, event, host)
       // Cancelling the destination prompt is a decision, not a failure.
       if (destination === null) return null
 
-      return service.addProjectFromGitHub(repository, destination)
+      return service.addProjectFromGitHub(wanted, destination)
     })
   )
 

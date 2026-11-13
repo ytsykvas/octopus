@@ -32,6 +32,19 @@ const RemoteRepositorySchema = z.object({
 
 export type RemoteRepository = z.infer<typeof RemoteRepositorySchema>
 
+function isDirectoryName(name: string): boolean {
+  return name !== '' && name !== '.' && name !== '..'
+}
+
+// Stricter than `RemoteRepositorySchema`, which also reads GitHub's own list and must not refuse it.
+export const CloneRequestSchema = RemoteRepositorySchema.extend({
+  name: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]+$/)
+    .refine(isDirectoryName),
+  nameWithOwner: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*\/[A-Za-z0-9._-]+$/)
+})
+
 /**
  * The offered repositories and whether the walk stopped at the limit.
  *
@@ -339,6 +352,14 @@ export async function cloneRepository(
   exec: CommandExec = defaultExec,
   exists: (path: string) => Promise<boolean> = pathExists
 ): Promise<string> {
+  if (!isDirectoryName(basename(repository.name))) {
+    throw new GitHubError(
+      'cloneFailed',
+      { repository: repository.nameWithOwner },
+      `Could not clone ${repository.nameWithOwner}: "${repository.name}" names no directory.`
+    )
+  }
+
   const target = clonePath(repository, destination)
 
   if (await exists(target)) {

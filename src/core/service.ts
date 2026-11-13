@@ -1657,7 +1657,7 @@ export interface OctopusService {
   reopenChat(chatId: string): Promise<Chat>
   /** Every chat of a workspace, in the order they were opened. */
   listChats(workspaceId: string): readonly Chat[]
-  /** Everything said in a chat, as it will be redrawn after a restart. */
+  /** Everything said in a chat on record, closed or not, as it will be redrawn after a restart. */
   chatHistory(chatId: string): Promise<ChatEntry[]>
   /**
    * Sends a message, starting or resuming the agent session as needed.
@@ -7125,8 +7125,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return chatsOfWorkspace(state, workspaceId)
     },
 
-    chatHistory(chatId) {
-      return readTranscript(chatId, dataRoot)
+    async chatHistory(chatId) {
+      requireChat(chatId)
+      return await readTranscript(chatId, dataRoot)
     },
 
     async sendToChat(chatId, text, sending) {
