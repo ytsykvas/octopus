@@ -165,7 +165,12 @@ import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
 import { liveCount } from './backgroundTasks.js'
 import { createTaskRegistry, type TaskEnding, type TasksEvent } from './taskRegistry.js'
 import { type DirectoryListing, type FileTreeSnapshot, readFileTree } from './fileTree.js'
-import { type FileContent, readWorkspaceDirectory, readWorkspaceFile } from './workspaceFiles.js'
+import {
+  type FileContent,
+  fileToOpen,
+  readWorkspaceDirectory,
+  readWorkspaceFile
+} from './workspaceFiles.js'
 import { type LineChanges, NO_LINE_CHANGES, readLineChanges } from './lineChanges.js'
 import {
   cloneRepository,
@@ -6885,18 +6890,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async resolveWorkspaceFile(workspaceId, path) {
-      const workspace = requireWorkspace(workspaceId)
-      const resolved = await fileInWorkspace(workspace, path)
-
-      if (!resolved) {
-        throw new WorkspaceError(
-          'worktreeMissing',
-          { workspaceId, path },
-          `Path ${path} is not inside workspace ${workspaceId}.`
-        )
-      }
-
-      return resolved
+      return fileToOpen(requireWorkspace(workspaceId), path)
     },
 
     async openChat(workspaceId) {

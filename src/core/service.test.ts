@@ -1694,6 +1694,32 @@ describe('workspaces', () => {
     )
   })
 
+  it.each([
+    ['bin/setup', 0o755],
+    ['Install.command', 0o644]
+  ])('refuses to resolve %s, which the system opener would run', async (path, mode) => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await mkdir(join(workspace.path, 'bin'))
+    await writeFile(join(workspace.path, path), '#!/bin/sh\n', 'utf8')
+    await chmod(join(workspace.path, path), mode)
+
+    await expect(service.resolveWorkspaceFile(workspace.id, path)).rejects.toMatchObject({
+      code: 'notOpenable',
+      params: { path }
+    })
+  })
+
+  it('refuses to resolve a folder, which the system opener would launch as a bundle', async () => {
+    const { service, projectId } = await withProject()
+    const workspace = await service.createWorkspaceIn(projectId)
+    await mkdir(join(workspace.path, 'Tool.app', 'Contents', 'MacOS'), { recursive: true })
+
+    await expect(service.resolveWorkspaceFile(workspace.id, 'Tool.app')).rejects.toMatchObject({
+      code: 'notOpenable'
+    })
+  })
+
   describe('the Files tab', () => {
     it('reads the worktree of the workspace asked about, with its marks', async () => {
       const { service, projectId } = await withProject()

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -2717,6 +2717,19 @@ describe('workspaces of a real project', () => {
 
     expect(await invoke('files:open', workspace.id, '../../../etc/passwd')).toMatchObject({
       ok: false
+    })
+    expect(bench.opened).toEqual([])
+  })
+
+  it('refuses to open a program, and the system is never asked', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await writeFile(join(workspace.path, 'run'), '#!/bin/sh\n', 'utf8')
+    await chmod(join(workspace.path, 'run'), 0o755)
+
+    expect(await invoke('files:open', workspace.id, 'run')).toMatchObject({
+      ok: false,
+      code: 'notOpenable'
     })
     expect(bench.opened).toEqual([])
   })

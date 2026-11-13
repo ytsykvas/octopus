@@ -154,7 +154,9 @@ here. The strip scrolls sideways once the files outrun the room, and the one in
 front is scrolled into view. "Open file" in a file's menu in Changes opens it
 here too, kept, rather than in whatever app the system picks: reading a changed
 file whole is the common case, a file asked for from a menu is not a glance, and
-"Open in editor" in the viewer is still the way out.
+"Open in editor" in the viewer is still the way out. It declines a folder, a
+program or a bundle with `notOpenable` — the system opener would run those, not
+show them.
 
 A file in front hides every conversation behind it — still mounted, still
 streaming — and only the conversation on screen may raise a dialog, so none can

@@ -73,6 +73,8 @@ export type WorkspaceErrorCode =
   | 'branchBlockedRemote'
   /** The branch has left this machine; moving it would leave its pull request behind. */
   | 'branchPublished'
+  /** A folder, a launchable type or an executable: the system opener would run it. */
+  | 'notOpenable'
 
 export class WorkspaceError extends CodedError<WorkspaceErrorCode> {
   override readonly name = 'WorkspaceError'

@@ -2496,6 +2496,8 @@ export const en = {
     uncommittedChanges: '{{name}} has uncommitted changes.',
     nameEmpty: 'The name cannot be empty.',
     worktreeMissing: 'That workspace is no longer there.',
+    notOpenable:
+      '{{path}} is a program or a bundle, so octopus does not open it. Open it from Finder if you mean to run it.',
     // Ukrainian needs `few` and `many` as well; i18next picks the form that
     // applies to the active language and ignores the rest.
     tooManyChats_one: 'A workspace holds at most {{count}} conversation.',
