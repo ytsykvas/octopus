@@ -9,15 +9,15 @@
  */
 
 import { execFile } from 'node:child_process'
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { DiffError, readWorkspaceDiff } from './diff.js'
-import { type GitExec, gitIn } from './git.js'
+import { GitError, type GitExec, gitIn } from './git.js'
 import { revertFile } from './revert.js'
 
 const run = promisify(execFile)
@@ -306,6 +306,120 @@ describe('revertFile', () => {
       params: { path: 'folder' }
     })
     expect(await exists('folder/inside.txt')).toBe(true)
+  })
+
+  describe('beside a link', () => {
+    let outside: string
+
+    beforeEach(async () => {
+      outside = await mkdtemp(join(tmpdir(), 'octopus-revert-outside-'))
+      await mkdir(join(outside, 'sub'))
+      await writeFile(join(outside, 'victim.txt'), 'precious\n', 'utf8')
+      await writeFile(join(outside, 'sub', 'victim.txt'), 'precious\n', 'utf8')
+    })
+
+    afterEach(async () => {
+      await rm(outside, { recursive: true, force: true })
+    })
+
+    it.each([
+      ['link', 'victim.txt'],
+      ['real/link', 'victim.txt'],
+      ['link', 'sub/victim.txt']
+    ])('refuses to remove a file reached through %s as %s', async (linkAt, beyond) => {
+      const path = `${linkAt}/${beyond}`
+      await mkdir(join(dir, dirname(linkAt)), { recursive: true })
+      await symlink(outside, join(dir, linkAt))
+
+      const failure = revert(path)
+
+      await expect(failure).rejects.toBeInstanceOf(DiffError)
+      await expect(failure).rejects.toMatchObject({ code: 'notRemoved', params: { path } })
+      expect(await readFile(join(outside, beyond), 'utf8')).toBe('precious\n')
+    })
+
+    it('refuses to remove a tracked file once its directory became a link', async () => {
+      await mkdir(join(dir, 'cfg'))
+      await writeFile(join(dir, 'cfg', 'victim.txt'), 'committed\n', 'utf8')
+      await commit('add cfg')
+      await rm(join(dir, 'cfg'), { recursive: true })
+      await symlink(outside, join(dir, 'cfg'))
+
+      const failure = revert('cfg/victim.txt')
+
+      await expect(failure).rejects.toBeInstanceOf(DiffError)
+      await expect(failure).rejects.toMatchObject({
+        code: 'notRemoved',
+        params: { path: 'cfg/victim.txt' }
+      })
+      expect(await readFile(join(outside, 'victim.txt'), 'utf8')).toBe('precious\n')
+    })
+
+    it('restores a file the base had when its directory became a link', async () => {
+      await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+      await mkdir(join(dir, 'cfg'))
+      await writeFile(join(dir, 'cfg', 'kept.txt'), 'base\n', 'utf8')
+      await commit('add cfg')
+      await run('git', ['checkout', '-q', '-B', 'work'], { cwd: dir })
+      await rm(join(dir, 'cfg'), { recursive: true })
+      await symlink(outside, join(dir, 'cfg'))
+
+      await revert('cfg/kept.txt')
+
+      expect(await readFile(join(dir, 'cfg', 'kept.txt'), 'utf8')).toBe('base\n')
+      expect((await readdir(outside)).sort()).toEqual(['sub', 'victim.txt'])
+    })
+
+    it('deletes an untracked link without touching what it points at', async () => {
+      await symlink(join(outside, 'victim.txt'), join(dir, 'pointer'))
+
+      await revert('pointer')
+
+      expect(await exists('pointer')).toBe(false)
+      expect(await readFile(join(outside, 'victim.txt'), 'utf8')).toBe('precious\n')
+    })
+
+    it('deletes an untracked file when the worktree itself is reached through a link', async () => {
+      const root = join(outside, 'worktree')
+      await symlink(dir, root)
+      await writeFile(join(dir, 'new.txt'), 'fresh\n', 'utf8')
+
+      await revertFile(exec, { baseBranch: 'main', root, path: 'new.txt' })
+
+      expect(await exists('new.txt')).toBe(false)
+    })
+  })
+
+  describe('where the base had a directory', () => {
+    beforeEach(async () => {
+      await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+      await mkdir(join(dir, 'd'))
+      await writeFile(join(dir, 'd', 'a.txt'), 'base a\n', 'utf8')
+      await writeFile(join(dir, 'd', 'b.txt'), 'base b\n', 'utf8')
+      await commit('add d')
+      await run('git', ['checkout', '-q', '-B', 'work'], { cwd: dir })
+    })
+
+    it('refuses to put the whole directory back for one path', async () => {
+      await writeFile(join(dir, 'd', 'a.txt'), 'edited a\n', 'utf8')
+      await writeFile(join(dir, 'd', 'b.txt'), 'edited b\n', 'utf8')
+
+      await expect(revert('d')).rejects.toBeInstanceOf(GitError)
+
+      expect(await readFile(join(dir, 'd', 'a.txt'), 'utf8')).toBe('edited a\n')
+      expect(await readFile(join(dir, 'd', 'b.txt'), 'utf8')).toBe('edited b\n')
+    })
+
+    it('removes the file that replaced it and leaves the directory its own rows', async () => {
+      await run('git', ['rm', '-q', '-r', 'd'], { cwd: dir })
+      await writeFile(join(dir, 'd'), 'a file now\n', 'utf8')
+      await commit('d is a file')
+
+      await revert('d')
+
+      expect(await exists('d')).toBe(false)
+      expect(await changed()).toEqual(['d/a.txt', 'd/b.txt'])
+    })
   })
 
   it('refuses a path that leaves the workspace', async () => {
