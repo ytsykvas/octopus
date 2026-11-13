@@ -31,10 +31,48 @@ short enough for the 104 characters a socket name may have.
 A socket rather than a pid file, and that is the whole design. A pid file left
 by a crash locks the user out of their own data until they find and delete it,
 and a pid can be reused by something else entirely. A socket cannot be stale in
-a way that refuses anybody: bind, and if the address is taken, **connect** to
-it — a live holder accepts, a dead one's socket refuses, and the refused one is
-removed and rebound. Nothing has to decide whether a process is alive by looking
+a way that refuses anybody: if the name is taken, **connect** to it — a live
+holder accepts, a dead one's socket refuses, and the refused one is removed and
+relinked. Nothing has to decide whether a process is alive by looking
 at a number.
+
+**Bound under a private name, published by a hard link.** Node unlinks a unix
+socket's name when its server closes — whoever that name belongs to by then. So
+each claimant binds `octopus-<hash>.<random>` beside the shared
+`octopus-<hash>.sock` and `link`s it into place: `link` refuses a name that
+exists, which makes it the atomic "take it if nobody has", and a claimant that
+loses closes a server whose name was only ever its own. Giving the root back
+removes the shared name while the server still answers on it, so nobody can
+have retaken it in between, and only then closes — without waiting for the
+close to finish, which would wait for every peer still connected; a second
+release is the
+first one's promise again. A crash leaves both names behind: the next start
+retakes the shared one, and the private one waits for `os.tmpdir()` to be
+cleared. An older build binding the shared name directly is still refused,
+because a hard link answers like the socket it points at.
+
+**A retaken name is checked again.** After a crash two copies can both find the
+socket dead, and both remove and relink it — the later one removing the
+earlier's live link. So a claimant that retook a dead name waits
+`TAKEOVER_SETTLE_MS` (50 ms; between the probe and the unlink there is one
+`await`) and keeps the root only if the shared name is still its own socket,
+the same inode as its private name. A rival held up longer than that between
+its probe and its unlink still gets through: the wait narrows the race, it does
+not close it. A claim that found the name free is not
+checked again: arriving behind a takeover would need a third copy starting in
+the same instant.
+
+**"Taken" means only a refused `link`.** A socket that cannot be bound at all
+— `EACCES` or a name too long in `os.tmpdir()` — is a `DataLockError`, and
+`main` shows it as `octopus could not start` with the reason, not as another
+copy running.
+
+**The lock goes last.** `quitAfter` releases it after the terminals and the
+transcripts have settled and before the second quit, so a copy started during a
+quit is refused until the last write is down. Released from a `will-quit` of its
+own, as it once was, it went on the first pass, the one that is refused, while
+`state.json` and the transcripts were still being written; a start that fails
+after the claim gives it back before quitting.
 
 It is also the layer a CLI or a daemon would get for free, having no Electron
 and therefore no lock at all.

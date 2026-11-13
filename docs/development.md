@@ -6,11 +6,20 @@ seeing the old build come back.
 
 ## Two copies cannot share a data root
 
-Only one copy of the app runs on `~/.octopus`: it takes Electron's
-single-instance lock, and two copies writing `state.json` whole would each win
-in turn. The packaged `/Applications/Octopus.app` holds the same lock. While
-either is open, `npm run dev` builds, prints `DevTools listening` and exits 0
-with no window — that is the lock, not a failure.
+Only one copy of the app runs on a data root, and two locks see to it: two
+copies writing `state.json` whole would each win in turn.
+
+Electron's single-instance lock comes first. The packaged
+`/Applications/Octopus.app` holds the same one, so while either is open
+`npm run dev` builds, prints `DevTools listening` and exits 0 with no window —
+that is the lock, not a failure.
+
+The data-root lock catches what that one misses. `OCTOPUS_DATA_DIR` moves
+Electron's userData into the root it names, so a copy pointed at a root another
+copy is using passes Electron's lock and stops on this one: an "octopus is
+already running" dialog, then it quits. Quit the other copy, or give this one a
+root of its own as below. A crash leaves nothing to delete by hand; how the
+lock works is in `docs/data/ownership.md`.
 
 Give the copy a data directory of its own and the two never meet:
 

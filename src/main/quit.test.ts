@@ -96,6 +96,80 @@ describe('quitAfter', () => {
     expect(app.quit).toHaveBeenCalledOnce()
   })
 
+  it('releases what is held last, after the work and before quitting again', async () => {
+    const app = fakeApp()
+    const order: string[] = []
+    let release = (): void => undefined
+    app.quit.mockImplementation(() => {
+      order.push('quit')
+    })
+    quitAfter(
+      app,
+      () => {
+        order.push('terminals')
+        return Promise.resolve()
+      },
+      () => {
+        order.push('chats')
+        return Promise.resolve()
+      },
+      () => {
+        order.push('last')
+        return new Promise<void>((resolve) => {
+          release = resolve
+        })
+      }
+    )
+
+    app.willQuit()
+    await vi.runAllTimersAsync()
+    expect(order).toEqual(['terminals', 'chats', 'last'])
+
+    release()
+    await vi.runAllTimersAsync()
+    expect(order).toEqual(['terminals', 'chats', 'last', 'quit'])
+    expect(app.quit).toHaveBeenCalledOnce()
+  })
+
+  it('does not take the last step while the work is still writing', async () => {
+    const app = fakeApp()
+    const last = vi.fn(() => Promise.resolve())
+    let finish = (): void => undefined
+    quitAfter(
+      app,
+      () => Promise.resolve(),
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+      last
+    )
+
+    app.willQuit()
+    await vi.runAllTimersAsync()
+    expect(last).not.toHaveBeenCalled()
+
+    finish()
+    await vi.runAllTimersAsync()
+    expect(last).toHaveBeenCalledOnce()
+    expect(app.quit).toHaveBeenCalledOnce()
+  })
+
+  it('quits even when the last step fails', async () => {
+    const app = fakeApp()
+    quitAfter(
+      app,
+      () => Promise.resolve(),
+      () => Promise.resolve(),
+      () => Promise.reject(new Error('the lock would not go'))
+    )
+
+    app.willQuit()
+    await vi.runAllTimersAsync()
+
+    expect(app.quit).toHaveBeenCalledOnce()
+  })
+
   /*
    * The terminals are signalled first and synchronously, and then waited for:
    * a run's child that ignores SIGTERM is killed only once the grace is over,

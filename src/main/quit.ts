@@ -33,11 +33,15 @@ export interface QuittingApp {
  * it returns is waited for beside `work`: signalling the terminals is not the
  * same as their having gone, and a run's child that ignored SIGTERM outlived a
  * quit that left before its kill was due.
+ *
+ * `last` runs once both have settled and before the second quit, for what must
+ * outlive every write: the data-root lock, which a second copy would take.
  */
 export function quitAfter(
   app: QuittingApp,
   before: () => Promise<unknown>,
-  work: () => Promise<unknown>
+  work: () => Promise<unknown>,
+  last: () => Promise<unknown> = () => Promise.resolve()
 ): void {
   let leaving = false
 
@@ -50,10 +54,13 @@ export function quitAfter(
 
     // Settled rather than fulfilled, either way: a write that failed is no
     // reason to stay open, and `finally` would hand its rejection on to nobody.
-    void Promise.allSettled([first, work()]).then(() => {
-      setTimeout(() => {
-        app.quit()
-      }, 0)
-    })
+    void Promise.allSettled([first, work()])
+      .then(() => last())
+      .catch(() => undefined)
+      .then(() => {
+        setTimeout(() => {
+          app.quit()
+        }, 0)
+      })
   })
 }

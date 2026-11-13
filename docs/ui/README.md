@@ -87,6 +87,11 @@ ordinary quit stays as fast as it was (measured at 52 ms with a tab and a server
 open). A run that ignores SIGTERM holds it for 2.5 s, until its group is killed,
 and `dispose`'s own ceiling bounds the wait at 3.5 s.
 
+**The data-root lock goes last.** Once the terminals and the writes have
+settled, `quitAfter`'s `last` step releases it, and only then does the second
+quit run, so a copy started meanwhile is refused until the final write is down
+(`docs/data/ownership.md`).
+
 **Only the ⌥ shortcuts ask where the focus is.** ⌘ and ⌃ are not typing
 gestures, so a shortcut on them is unambiguous wherever it is pressed — but on
 macOS ⌥ is how a great many characters are typed, and ⌥1 in the composer was

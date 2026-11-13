@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 
 import { describeError } from '../core/persist.js'
-import { claimDataRoot } from '../core/dataLock.js'
+import { claimDataRoot, type DataLock } from '../core/dataLock.js'
 import { dataRootOverride, rootDir } from '../core/paths.js'
 import { diagnosticLog } from '../core/diagnostics.js'
 import { createService, type OctopusService } from '../core/service.js'
@@ -156,7 +156,15 @@ async function start(): Promise<void> {
    * Before the service, because the service reads the root as it is built:
    * losing here must mean never having opened the file at all.
    */
-  const lock = await claimDataRoot(rootDir())
+  let lock: DataLock | null
+
+  try {
+    lock = await claimDataRoot(rootDir())
+  } catch (error) {
+    dialog.showErrorBox('octopus could not start', describeError(error))
+    app.quit()
+    return
+  }
 
   if (!lock) {
     dialog.showErrorBox(
@@ -169,13 +177,6 @@ async function start(): Promise<void> {
     return
   }
 
-  // Released on the way out as well as by the process ending: a socket dies
-  // with its process either way, and unlinking the file is what spares the next
-  // start a probe.
-  app.on('will-quit', () => {
-    void lock.release()
-  })
-
   let service: OctopusService
 
   try {
@@ -184,6 +185,7 @@ async function start(): Promise<void> {
     })
   } catch (error) {
     dialog.showErrorBox('octopus could not start', describeError(error))
+    await lock.release()
     app.quit()
     return
   }
@@ -197,7 +199,9 @@ async function start(): Promise<void> {
     // disposed outlives the application whatever happens after this line.
     // Then waited for, since a group is gone only once it has emptied.
     () => terminals.disposeAll(),
-    () => service.closeChats()
+    () => service.closeChats(),
+    // Last, after every write: a second copy may take the root the moment it goes.
+    lock.release
   )
 
   registerIpc(service, terminals, {
