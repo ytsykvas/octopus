@@ -465,12 +465,18 @@ export class TerminalManager {
    * without this a dev server carries on with nothing on screen that can reach
    * it: no Stop, no output, and a port held by something the pane has forgotten.
    */
-  async disposeFor(target: WebContents): Promise<void> {
-    const theirs = [...this.sessions]
-      .filter(([, session]) => session.target === target)
-      .map(([id]) => id)
+  disposeFor(target: WebContents): Promise<void> {
+    return this.disposeWhere((session) => session.target === target)
+  }
 
-    await Promise.all(theirs.map((id) => this.dispose(id)))
+  /** Ends every session of one workspace; the sign-in one belongs to none. */
+  disposeWorkspace(workspaceId: string): Promise<void> {
+    return this.disposeWhere((session) => session.owner.workspaceId === workspaceId)
+  }
+
+  private async disposeWhere(matches: (session: Session) => boolean): Promise<void> {
+    const ids = [...this.sessions].filter(([, session]) => matches(session)).map(([id]) => id)
+    await Promise.all(ids.map((id) => this.dispose(id)))
   }
 
   /**

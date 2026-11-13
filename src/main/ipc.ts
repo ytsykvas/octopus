@@ -846,7 +846,7 @@ export function registerIpc(
     attempt(() => service.reorderProjects(z.array(z.string()).parse(orderedIds)))
   )
 
-  // Its workspaces' last runs go with it, once it has gone.
+  // Its workspaces' terminals end inside the service, before their cleanup; their last runs once it has gone.
   host.handle('projects:remove', (_event, projectId: string) =>
     attempt(async () => {
       const removal = await service.removeProjectById(projectId)
@@ -907,8 +907,8 @@ export function registerIpc(
     )
   )
 
-  // A removed workspace's last runs go with it, and only once it has gone: a
-  // removal that failed leaves the workspace, and its runs are still worth asking about.
+  // Its terminals end inside the service, once it has agreed. Its last runs go after, and only
+  // once it has gone: a refused removal keeps them, and the exit of the server just ended writes one.
   host.handle('workspaces:remove', (_event, workspaceId: string, options: unknown) =>
     attempt(async () => {
       const request = RemovalRequestSchema.parse(options)
@@ -1091,6 +1091,7 @@ export function registerIpc(
   service.onChatsChanged(host.broadcastChatsChanged)
   service.onTasks(host.broadcastTasks)
   service.onPullRequestDraft(host.broadcastPullRequestDraft)
+  service.onWorkspaceTeardown((workspaceId) => terminals.disposeWorkspace(workspaceId))
 
   // Listing does not create, opening does. The distinction is what keeps a
   // workspace nobody has spoken to free of a record and a transcript file.

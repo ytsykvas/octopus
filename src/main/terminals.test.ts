@@ -1023,6 +1023,28 @@ describe('disposal of a tab', () => {
   })
 })
 
+// Removing a workspace takes its server, its build and its tabs before the cleanup script.
+describe('disposal of a workspace', () => {
+  it('ends that workspace’s sessions and leaves every other alone', async () => {
+    manager.create({ ...RUN, owner: { workspaceId: 'ws-a', purpose: 'run' } }, renderer as never)
+    manager.create({ ...SPEC, owner: { workspaceId: 'ws-a', purpose: 'shell' } }, renderer as never)
+    manager.create({ ...RUN, owner: { workspaceId: 'ws-b', purpose: 'run' } }, renderer as never)
+    manager.create({ ...SPEC, owner: { workspaceId: null, purpose: 'auth' } }, renderer as never)
+    const [run, tab, other, signIn] = spawned
+
+    const ended = manager.disposeWorkspace('ws-a')
+    run?.end({ exitCode: 0 })
+    tab?.end({ exitCode: 0, signal: 1 })
+    await ended
+
+    expect(signals).toEqual([[-(run?.pid ?? 0), 'SIGTERM']])
+    expect(tab?.killed).toBe(true)
+    expect(other?.killed).toBe(false)
+    expect(signIn?.killed).toBe(false)
+    expect(manager.list().map(({ owner }) => owner.workspaceId)).toEqual(['ws-b', null])
+  })
+})
+
 describe('what is still running', () => {
   /*
    * The residue this exists to make visible. A pty whose pane is gone is held

@@ -187,7 +187,13 @@ Removal is the same rule read backwards. `removeWorkspaceById` asks
 that line destroys something a refusal cannot give back — and the refusal is the
 ordinary path, not a rare one: the pane pre-ticks the delete-branch box, so a
 workspace whose commits are not merged is refused every time, dirty or clean,
-and the window then asks once more rather than failing. `force` throws away
+and the window then asks once more rather than failing. Once it has agreed, the
+workspace's own processes go first: the hooks registered with
+`onWorkspaceTeardown` — main's ends every terminal the workspace owns — are
+awaited before the chats close and the cleanup script runs, so a dev server no
+longer holds the database the script drops or writes into the tree git is about
+to remove. A hook that rejects does not stop the removal; removing a project does
+the same for each workspace. `force` throws away
 uncommitted work, never committed work: the merged check runs whether it is set
 or not. Two removals delete an unmerged branch, both by passing no `baseBranch`,
 so the check is skipped: removing a project, whose dialog has already said every
@@ -202,8 +208,9 @@ same order: listed while the worktree still exists, deleted only once its record
 has gone, so a removal that fails keeps its history
 ([transcripts-and-ports.md](../data/transcripts-and-ports.md)).
 
-A removal can also stop partway. When a dev server or a test run keeps writing
-into the tree, `git worktree remove` has already dropped its own part — the
+A removal can also stop partway. When something octopus did not start — a dev
+server in another terminal, a test run an agent left behind — keeps writing into
+the tree, `git worktree remove` has already dropped its own part — the
 `.git` file and the entry in the repository — and then fails on the files, and
 every retry fails on "is not a working tree". The folder is on disk and git does
 not list it (`isOrphaned`). Nothing in it is under git's care, so `git status`
