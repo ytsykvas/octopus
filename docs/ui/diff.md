@@ -353,5 +353,6 @@ scope, so the row leaves the pane. It always asks first, and what the dialog
 says is the asymmetry: committed work survives, undone by a change in the
 working tree, while uncommitted work is gone and nothing in git holds a copy.
 An untracked path already gone counts as reverted; one that could not be
-removed — a folder, a file this user may not delete — says so in the banner
-rather than letting the row come back as though the click had worked.
+removed — a folder, a file this user may not delete, a path behind a linked
+directory — says so in the banner rather than letting the row come back as
+though the click had worked.

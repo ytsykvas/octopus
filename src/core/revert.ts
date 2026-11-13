@@ -20,13 +20,13 @@
  */
 
 import { unlink } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { z } from 'zod'
 
 import { DiffError, mergeBase } from './diff.js'
 import type { GitExec } from './git.js'
-import { insideWorktree } from './paths.js'
+import { insideWorktree, unlinkedInside } from './paths.js'
 import { describeError, isNotFound } from './persist.js'
 
 export interface RevertOptions {
@@ -94,6 +94,13 @@ async function revertPath(exec: GitExec, base: string, root: string, path: strin
     // commit should carry the file as the base had it.
     await exec(['checkout', base, '--', `:(literal)${path}`])
     return
+  }
+
+  // `rm` and `unlink` follow every segment but the last, where `checkout` above
+  // replaces a linked directory; a link the agent made is itself the file to go.
+  const parent = dirname(path)
+  if (parent !== '.' && !(await unlinkedInside(root, parent))) {
+    throw new DiffError('notRemoved', { path }, `refusing to remove ${path}: a parent is a link`)
   }
 
   if (await tracked(exec, path)) {

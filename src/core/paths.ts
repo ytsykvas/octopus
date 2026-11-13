@@ -289,7 +289,8 @@ export function workspacePath(
  * have landed in one of three places with nothing pointing at the other two.
  *
  * Lexical only, and deliberately so — it answers about a string, not about a
- * filesystem. `unlinkedInside` is the question to ask before writing.
+ * filesystem. `unlinkedInside` is the question to ask before writing or
+ * deleting.
  *
  * What the three callers do with the answer is still their own: the carry list
  * drops the line, `updateProject` refuses, and `RevertPathSchema` rejects at the

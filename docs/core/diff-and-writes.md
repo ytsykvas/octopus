@@ -45,6 +45,18 @@ that guessed wrong would send a file down the wrong arm of a `switch`. Two
 questions instead, "did the base commit have this path" and "is it tracked now",
 and the answers cannot be wrong about the repository they are asked of.
 
+A directory on the way that has become a link is not the same hazard for
+every arm. `checkout` replaces the link with a real directory and writes into
+that. `rm` and `unlink` follow it: `link/.zshrc` with `link -> ~` deletes
+outside the worktree, and git goes on listing a committed `cfg/y` as tracked
+after `cfg` has been swapped for a link. So both removing arms are preceded by
+a walk of the path's parent directories with `unlinkedInside`, refusing with
+`notRemoved` if any of them is a link. The last segment is not walked —
+removing a link removes the link, not what it names, so a link the agent
+created goes like any other file — and neither is the worktree root, which may
+itself be reached through one. The pane never draws a row this refuses: git
+stages nothing beyond a link and lists no untracked file inside one.
+
 ## The one place the app writes inside a checkout
 
 `SECURITY.md` named two places octopus may touch — the data root and the
