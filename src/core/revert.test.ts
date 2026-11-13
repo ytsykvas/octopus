@@ -17,7 +17,7 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { DiffError, readWorkspaceDiff } from './diff.js'
-import { type GitExec, gitIn } from './git.js'
+import { GitError, type GitExec, gitIn } from './git.js'
 import { revertFile } from './revert.js'
 
 const run = promisify(execFile)
@@ -387,6 +387,38 @@ describe('revertFile', () => {
       await revertFile(exec, { baseBranch: 'main', root, path: 'new.txt' })
 
       expect(await exists('new.txt')).toBe(false)
+    })
+  })
+
+  describe('where the base had a directory', () => {
+    beforeEach(async () => {
+      await run('git', ['checkout', '-q', 'main'], { cwd: dir })
+      await mkdir(join(dir, 'd'))
+      await writeFile(join(dir, 'd', 'a.txt'), 'base a\n', 'utf8')
+      await writeFile(join(dir, 'd', 'b.txt'), 'base b\n', 'utf8')
+      await commit('add d')
+      await run('git', ['checkout', '-q', '-B', 'work'], { cwd: dir })
+    })
+
+    it('refuses to put the whole directory back for one path', async () => {
+      await writeFile(join(dir, 'd', 'a.txt'), 'edited a\n', 'utf8')
+      await writeFile(join(dir, 'd', 'b.txt'), 'edited b\n', 'utf8')
+
+      await expect(revert('d')).rejects.toBeInstanceOf(GitError)
+
+      expect(await readFile(join(dir, 'd', 'a.txt'), 'utf8')).toBe('edited a\n')
+      expect(await readFile(join(dir, 'd', 'b.txt'), 'utf8')).toBe('edited b\n')
+    })
+
+    it('removes the file that replaced it and leaves the directory its own rows', async () => {
+      await run('git', ['rm', '-q', '-r', 'd'], { cwd: dir })
+      await writeFile(join(dir, 'd'), 'a file now\n', 'utf8')
+      await commit('d is a file')
+
+      await revert('d')
+
+      expect(await exists('d')).toBe(false)
+      expect(await changed()).toEqual(['d/a.txt', 'd/b.txt'])
     })
   })
 

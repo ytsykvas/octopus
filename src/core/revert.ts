@@ -50,15 +50,12 @@ export const RevertPathSchema = z.string().min(1).max(4_096).refine(insideWorktr
   message: 'a path must stay inside the workspace'
 })
 
-/** Whether the base commit had this path at all. */
-async function existedAtBase(exec: GitExec, base: string, path: string): Promise<boolean> {
+/** Whether the base commit had a file at this path — a directory there is not one. */
+async function fileAtBase(exec: GitExec, base: string, path: string): Promise<boolean> {
   try {
-    await exec(['cat-file', '-e', `${base}:${path}`])
-    return true
+    return (await exec(['cat-file', '-t', `${base}:${path}`])).trimEnd() === 'blob'
   } catch {
-    // `cat-file -e` answers by exit status, and the only question asked of it
-    // is this one — a path git cannot resolve at that commit is a path that
-    // was not there.
+    // A path git cannot resolve at that commit is a path that was not there.
     return false
   }
 }
@@ -85,11 +82,11 @@ async function tracked(exec: GitExec, path: string): Promise<boolean> {
  * uncommitted work and `rm` would delete outright. `diff.ts` says the same of
  * the reading side, above `attachHunks`.
  *
- * `existedAtBase` is deliberately not given the prefix: `<rev>:<path>` is git's
+ * `fileAtBase` is deliberately not given the prefix: `<rev>:<path>` is git's
  * object syntax rather than a pathspec, and does not glob.
  */
 async function revertPath(exec: GitExec, base: string, root: string, path: string): Promise<void> {
-  if (await existedAtBase(exec, base, path)) {
+  if (await fileAtBase(exec, base, path)) {
     // Restores the content and stages it, which is right: the workspace's next
     // commit should carry the file as the base had it.
     await exec(['checkout', base, '--', `:(literal)${path}`])

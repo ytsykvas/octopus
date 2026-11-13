@@ -42,8 +42,11 @@ The rule inside it is worth carrying elsewhere: **which command to run is
 decided by asking git, not by branching on what git already told us.** The diff
 reports a `FileStatus`, and rename and copy detection are heuristics — a status
 that guessed wrong would send a file down the wrong arm of a `switch`. Two
-questions instead, "did the base commit have this path" and "is it tracked now",
-and the answers cannot be wrong about the repository they are asked of.
+questions instead, "did the base commit have a file at this path" and "is it
+tracked now", and the answers cannot be wrong about the repository they are
+asked of. A directory at the base is not a file there: a yes for one would send
+`checkout` to restore everything under it for a single row, where `rm` refuses a
+directory outright without `-r`.
 
 A directory on the way that has become a link is not the same hazard for
 every arm. `checkout` replaces the link with a real directory and writes into
