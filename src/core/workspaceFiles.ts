@@ -1,6 +1,6 @@
 /**
  * Reading a workspace's files for the window to show — a folder's entries and
- * a file's contents.
+ * a file's contents — and saying which may be handed to the system opener.
  *
  * Both arrive with a path from the renderer, which draws agent output, so both
  * go through `fileInWorkspace` before touching the disk: a symlink an agent
@@ -9,7 +9,7 @@
  */
 
 import { lstat, readdir, readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 
 import { looksBinary } from './diff.js'
 import {
@@ -33,6 +33,65 @@ import { fileInWorkspace, WorkspaceError } from './workspaces.js'
  * whole-file cap.
  */
 export const MAX_VIEW_BYTES = 1_000_000
+
+const LAUNCHABLE_EXTENSIONS: ReadonlySet<string> = new Set([
+  'action',
+  'app',
+  'command',
+  'fileloc',
+  'inetloc',
+  'jar',
+  'mobileconfig',
+  'mpkg',
+  'pkg',
+  'scpt',
+  'scptd',
+  'shortcut',
+  'terminal',
+  'tool',
+  'webloc',
+  'workflow'
+])
+
+export type OpenRefusal = 'directory' | 'launchable' | 'executable'
+
+/** Why the system opener would run this rather than show it, or null when it would show it. */
+export function openRefusal(
+  name: string,
+  kind: { readonly directory: boolean; readonly mode: number }
+): OpenRefusal | null {
+  if (kind.directory) return 'directory'
+  if (LAUNCHABLE_EXTENSIONS.has(extname(name).slice(1).toLowerCase())) return 'launchable'
+  // Any execute bit, extension or not: the handler is the user's choice, and
+  // Ghostty claims `.sh`, `.zsh` and `.pl` and runs them.
+  if ((kind.mode & 0o111) !== 0) return 'executable'
+  return null
+}
+
+/** A file of the workspace as an absolute path the system opener may be given. */
+export async function fileToOpen(workspace: Workspace, path: string): Promise<string> {
+  const real = await fileInWorkspace(workspace, path)
+
+  if (real === null) {
+    throw new WorkspaceError(
+      'worktreeMissing',
+      { workspaceId: workspace.id, path },
+      `Path ${path} is not inside workspace ${workspace.id}.`
+    )
+  }
+
+  const facts = await stat(real)
+  const reason = openRefusal(basename(real), { directory: facts.isDirectory(), mode: facts.mode })
+  if (reason !== null) {
+    throw new WorkspaceError(
+      'notOpenable',
+      { path, reason },
+      `${path} is refused (${reason}): the system opener would run it.`
+    )
+  }
+
+  return real
+}
 
 /**
  * What the viewer is given for a path.

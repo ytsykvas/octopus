@@ -15,7 +15,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type GitExec, gitIn } from './git.js'
 import { type Workspace, WorkspaceSchema } from './store.js'
 import { MAX_DIRECTORY_ENTRIES } from './fileTree.js'
-import { MAX_VIEW_BYTES, readWorkspaceDirectory, readWorkspaceFile } from './workspaceFiles.js'
+import {
+  MAX_VIEW_BYTES,
+  openRefusal,
+  readWorkspaceDirectory,
+  readWorkspaceFile
+} from './workspaceFiles.js'
 import { WorkspaceError } from './workspaces.js'
 
 const run = promisify(execFile)
@@ -306,5 +311,27 @@ describe('readWorkspaceFile', () => {
         kind: 'missing'
       })
     })
+  })
+})
+
+describe('openRefusal', () => {
+  const file = (mode: number): { directory: boolean; mode: number } => ({ directory: false, mode })
+  const folder = { directory: true, mode: 0o755 }
+
+  it.each([
+    { name: 'run', kind: file(0o755), refusal: 'executable' },
+    { name: 'run.sh', kind: file(0o755), refusal: 'executable' },
+    { name: 'build', kind: file(0o654), refusal: 'executable' },
+    { name: 'src', kind: folder, refusal: 'directory' },
+    { name: 'Foo.app', kind: folder, refusal: 'directory' },
+    { name: 'x.COMMAND', kind: file(0o644), refusal: 'launchable' },
+    { name: 'a.webloc', kind: file(0o644), refusal: 'launchable' },
+    { name: 'README.md', kind: file(0o644), refusal: null },
+    { name: 'run.sh', kind: file(0o644), refusal: null },
+    { name: 'logo.png', kind: file(0o644), refusal: null },
+    { name: 'notes', kind: file(0o644), refusal: null },
+    { name: '.command', kind: file(0o644), refusal: null }
+  ] as const)('$name → $refusal', ({ name, kind, refusal }) => {
+    expect(openRefusal(name, kind)).toBe(refusal)
   })
 })

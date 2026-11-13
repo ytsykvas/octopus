@@ -113,6 +113,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   uncommittedChanges: { name: 'anna' },
   nameEmpty: null,
   worktreeMissing: null,
+  notOpenable: { path: 'bin/setup' },
   fetchFailed: { remote: 'origin', reason: 'no such host' },
   envPathEscapes: { file: 'config/.env' },
   baseUnknown: { branch: 'main' },

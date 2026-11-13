@@ -124,6 +124,13 @@ over it; the schemes that start programs are what is refused. It is attached in
 `web-contents-created` beside `guardNavigation`, and a rejection from
 `openExternal` is swallowed, since nothing waits on it.
 
+`files:open` hands a path to `shell.openPath`, which starts as readily as it
+shows: LaunchServices runs an `.app`, a `.command` or an executable, and a file
+the agent wrote carries no quarantine for Gatekeeper to ask about.
+`core/workspaceFiles.ts` (`fileToOpen`) refuses a folder, a launchable type and
+anything with an execute bit with `notOpenable` before the path leaves the
+service; the viewer still shows such a file.
+
 `terminals.ts` is the one part of `main/` that owns something rather than
 forwarding it: pseudo-terminals are process resources bound to a window, which
 is why they cannot live in the core. Ending one is the whole of what it knows

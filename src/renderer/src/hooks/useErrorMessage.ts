@@ -169,6 +169,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.nameEmpty')
         case 'worktreeMissing':
           return t('errors.worktreeMissing')
+        case 'notOpenable':
+          return t('errors.notOpenable', { path: failure.params?.path ?? '' })
         case 'tooManyChats':
           // Numeric, because the sentence counts: `count` is what i18next
           // pluralises on, and Ukrainian needs it to pick between three forms.

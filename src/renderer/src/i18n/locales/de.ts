@@ -2036,6 +2036,8 @@ export const de: Translation = {
     uncommittedChanges: '{{name}} hat nicht committete Änderungen.',
     nameEmpty: 'Der Name darf nicht leer sein.',
     worktreeMissing: 'Dieser Workspace ist nicht mehr da.',
+    notOpenable:
+      '{{path}} ist ein Programm oder ein Bundle, darum öffnet octopus es nicht. Öffne es im Finder, wenn du es ausführen willst.',
     tooManyChats_one: 'Ein Workspace fasst höchstens {{count}} Chat.',
     tooManyChats_few: 'Ein Workspace fasst höchstens {{count}} Chats.',
     tooManyChats_many: 'Ein Workspace fasst höchstens {{count}} Chats.',

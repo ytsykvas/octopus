@@ -2004,6 +2004,8 @@ export const uk: Translation = {
     uncommittedChanges: 'У {{name}} є незакомічені зміни.',
     nameEmpty: 'Назва не може бути порожньою.',
     worktreeMissing: 'Цього воркспейсу вже немає.',
+    notOpenable:
+      '{{path}} — це програма або бандл, тому octopus його не відкриває. Якщо справді хочете його запустити, відкрийте його з Finder.',
     tooManyChats_one: 'Воркспейс тримає щонайбільше {{count}} розмову.',
     tooManyChats_few: 'Воркспейс тримає щонайбільше {{count}} розмови.',
     tooManyChats_many: 'Воркспейс тримає щонайбільше {{count}} розмов.',

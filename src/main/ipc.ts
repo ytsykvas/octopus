@@ -1050,8 +1050,8 @@ export function registerIpc(
   )
 
   // The one channel here that takes a path. It is validated, and the service
-  // then proves it is inside the workspace, because what comes back is handed
-  // to the operating system rather than looked up in our own records.
+  // then proves it is inside the workspace and not something the system opener
+  // would run, because what comes back is handed to the operating system.
   host.handle('files:open', (_event, workspaceId: string, path: unknown) =>
     attempt(async () => {
       const absolute = await service.resolveWorkspaceFile(workspaceId, FilePathSchema.parse(path))
