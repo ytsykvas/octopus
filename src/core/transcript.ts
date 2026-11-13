@@ -120,8 +120,9 @@ export async function previewOf(chatId: ChatId, root?: string): Promise<string> 
  * upstream can do: without it the forked conversation opens empty above an
  * agent that remembers all of it — this module's opening problem, inverted.
  *
- * Silent when it cannot be done, unlike `appendEntry`. A conversation whose log was cleared has a live session and no
- * history, and forking it is a reasonable thing to want; and a copy that fails
+ * Silent when it cannot be done, unlike `appendEntry`. A conversation whose
+ * log was cleared has a live session and no history, and forking it is a
+ * reasonable thing to want; and a copy that fails
  * for any other reason leaves the new conversation looking exactly like that
  * one — empty, above an agent that remembers. Failing the fork instead would
  * cost the conversation itself over a file the caller can live without.
