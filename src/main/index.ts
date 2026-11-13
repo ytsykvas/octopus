@@ -177,13 +177,6 @@ async function start(): Promise<void> {
     return
   }
 
-  // Released on the way out as well as by the process ending: a socket dies
-  // with its process either way, and unlinking the file is what spares the next
-  // start a probe.
-  app.on('will-quit', () => {
-    void lock.release()
-  })
-
   let service: OctopusService
 
   try {
@@ -192,6 +185,7 @@ async function start(): Promise<void> {
     })
   } catch (error) {
     dialog.showErrorBox('octopus could not start', describeError(error))
+    await lock.release()
     app.quit()
     return
   }
@@ -205,7 +199,9 @@ async function start(): Promise<void> {
     // disposed outlives the application whatever happens after this line.
     // Then waited for, since a group is gone only once it has emptied.
     () => terminals.disposeAll(),
-    () => service.closeChats()
+    () => service.closeChats(),
+    // Last, after every write: a second copy may take the root the moment it goes.
+    lock.release
   )
 
   registerIpc(service, terminals, {

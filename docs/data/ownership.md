@@ -67,6 +67,13 @@ the same instant.
 `main` shows it as `octopus could not start` with the reason, not as another
 copy running.
 
+**The lock goes last.** `quitAfter` releases it after the terminals and the
+transcripts have settled and before the second quit, so a copy started during a
+quit is refused until the last write is down. Released from a `will-quit` of its
+own, as it once was, it went on the first pass, the one that is refused, while
+`state.json` and the transcripts were still being written; a start that fails
+after the claim gives it back before quitting.
+
 It is also the layer a CLI or a daemon would get for free, having no Electron
 and therefore no lock at all.
 
