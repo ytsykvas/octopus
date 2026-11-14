@@ -30,6 +30,7 @@ import { focusExisting } from './windows.js'
 import { openInBrowser } from './externalLinks.js'
 import { guardNavigation } from './navigation.js'
 import { quitAfter } from './quit.js'
+import { reportRejection, watchRendererCrash } from './crash.js'
 
 const rendererFile = join(import.meta.dirname, '../renderer/index.html')
 const devServer = process.env.ELECTRON_RENDERER_URL
@@ -73,7 +74,30 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
     void terminals.disposeFor(window.webContents)
   })
 
-  void window.loadURL(appUrl)
+  watchRendererCrash(window.webContents, {
+    dispose: () => terminals.disposeFor(window.webContents),
+    askReload: async (reason) => {
+      // A crash before `ready-to-show` leaves the window hidden, and its sheet with it.
+      window.show()
+      const { response } = await dialog.showMessageBox(window, {
+        type: 'warning',
+        buttons: ['Reload', 'Close window'],
+        defaultId: 0,
+        // Without it Esc answers 0, which is Reload.
+        cancelId: 1,
+        message: 'The octopus window stopped working',
+        detail: `Its page ended (${reason}). The terminals and servers it started have been stopped.`
+      })
+      return response === 0
+    },
+    close: () => {
+      window.close()
+    }
+  })
+
+  // A reload (ERR_ABORTED) or a crash (ERR_FAILED) mid-load rejects this, and each
+  // has its own answer: an error box on top would be a second one.
+  void window.loadURL(appUrl).catch(() => undefined)
 
   return window
 }
@@ -290,6 +314,15 @@ async function start(): Promise<void> {
 if (dataRootOverride() !== null) {
   app.setPath('userData', join(rootDir(), 'electron'))
 }
+
+// Electron shows a modal for an uncaught exception but only a stderr warning for a
+// rejection. Never `uncaughtException`: a listener of ours would remove that modal.
+process.on(
+  'unhandledRejection',
+  reportRejection((title, content) => {
+    dialog.showErrorBox(title, content)
+  })
+)
 
 // Every WebContents, so a window added later is covered without remembering to:
 // neither a navigation nor a window it opens may leave the application's document.
