@@ -1835,6 +1835,11 @@ export interface OctopusService {
   refreshSubscriptionUsage(pressed?: boolean): Promise<UsageOutcome>
   /** Subscribes to agent events; the returned function unsubscribes. */
   onAgentEvent(handler: (event: ChatEvent) => void): () => void
+  /**
+   * Awaited once a removal is agreed and before its cleanup script, for what main runs in the
+   * workspace; one that rejects does not stop the removal. The returned function unsubscribes.
+   */
+  onWorkspaceTeardown(hook: (workspaceId: string) => Promise<void>): () => void
   /** What a workspace is doing, as it changes. A broadcast, like the above. */
   onWorkspaceStatus(handler: (event: WorkspaceStatusEvent) => void): () => void
   /**
@@ -2131,6 +2136,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const chatsChangedListeners = new Set<(event: ChatsChangedEvent) => void>()
   const taskListeners = new Set<(event: TasksEvent) => void>()
   const draftListeners = new Set<(event: DraftEvent) => void>()
+  const teardownHooks = new Set<(workspaceId: string) => Promise<void>>()
   const drafts = createDraftRegistry((event) => {
     for (const listener of draftListeners) listener(event)
   })
@@ -4838,6 +4844,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
   }
 
+  async function teardown(workspaceId: string): Promise<void> {
+    await Promise.allSettled([...teardownHooks].map((hook) => hook(workspaceId)))
+  }
+
   /**
    * The settings sources this workspace may load.
    *
@@ -6414,6 +6424,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             // is about to be rewritten.
             closing.push(...allChatsOfWorkspace(state, workspace.id))
 
+            await teardown(workspace.id)
+
             // The same closing `removeWorkspaceById` does, and for the same
             // reason: a session outliving its worktree holds a child process
             // pointed at a directory that no longer exists, and nothing in the
@@ -6626,6 +6638,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
         // First, dirty or clean: ensureRemovable says why nothing may be destroyed before it.
         await ensureRemovable(workspace, execs, removal)
+
+        // After the refusal, so a workspace that stays keeps its server; before the cleanup,
+        // whose database and worktree a running server would still be holding.
+        await teardown(workspaceId)
 
         // Captured before the chats are closed, because the records go with the
         // workspace at the commit below and the transcripts are discarded after
@@ -7780,6 +7796,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     onAgentEvent(handler) {
       listeners.add(handler)
       return () => listeners.delete(handler)
+    },
+
+    onWorkspaceTeardown(hook) {
+      teardownHooks.add(hook)
+      return () => teardownHooks.delete(hook)
     },
 
     onWorkspaceStatus(handler) {

@@ -33,8 +33,9 @@ why the version is shown once before it runs.
 
 There are three of them now, and the third runs on the way out. `archive.sh`
 is given the same environment as the others and the workspace as its working
-directory, so it can drop a database named after it — and **it cannot stop the
-removal**. A failure, a hang, a script that was never written: all end with the
+directory, so it can drop a database named after it. The workspace's terminals —
+its server, its build, its tabs — have been ended by then, so nothing octopus
+started still holds that database. And **it cannot stop the removal**. A failure, a hang, a script that was never written: all end with the
 workspace gone. A workspace that cannot be deleted because a cleanup script is
 broken is a worse problem than the one being cleaned up. It is not silent,
 though: a script that fails — with what it wrote to stderr — a repository's

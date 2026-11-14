@@ -192,6 +192,13 @@ nothing on screen able to reach it: no Stop, no output, and a port held by
 something the pane had forgotten. A Vite HMR update is not a navigation, so in
 development an edit can still leave one behind — nothing in `main` can see it.
 
+**And with the workspace they belong to.** Removing a workspace, or the project
+it is in, ends its sessions — `disposeWorkspace`, through the service's
+`onWorkspaceTeardown` — once the removal has been agreed and before the cleanup
+script runs. Before, a server still running held the database `archive.sh`
+drops and wrote into the tree git was removing. A refused removal ends nothing,
+and the sign-in session belongs to no workspace.
+
 ## The path of one call
 
 Removing a workspace, end to end:
@@ -203,7 +210,9 @@ WorkspaceRow (click)
                                   says when the cleanup script failed or did not run
   → window.octopus.workspaces.remove   preload: names the channel
   → ipcMain 'workspaces:remove'   main/ipc.ts: validates, calls attempt()
-  → service.removeWorkspaceById   core/service.ts: the façade
+  → service.removeWorkspaceById   core/service.ts: the façade; once ensureRemovable
+                                  agrees, onWorkspaceTeardown has main end the
+                                  workspace's terminals before the cleanup script
   → removeWorkspace               core/workspaces.ts: git, then the record
 ```
 

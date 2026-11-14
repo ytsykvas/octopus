@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
 import {
   access,
+  appendFile,
   chmod,
   mkdir,
   mkdtemp,
@@ -69,6 +70,7 @@ import { type ChatEntry, readTranscript } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
+import type { Workspace } from './store.js'
 import { listWorktrees } from './worktree.js'
 import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
 import { type RemovalRequest, WorkspaceError } from './workspaces.js'
@@ -3400,6 +3402,81 @@ describe('the cleanup script', () => {
     await service.removeWorkspaceById(workspace.id, { deleteBranch: false, force: true })
 
     await expect(readFile(marker, 'utf8')).resolves.toBe(workspace.name)
+  })
+})
+
+describe('the workspace’s own processes', () => {
+  type Hook = (workspaceId: string) => Promise<void>
+
+  async function withWorkspace(): Promise<{ projectId: string; workspace: Workspace }> {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    return { projectId: project.id, workspace: await service.createWorkspaceIn(project.id) }
+  }
+
+  // A server still running holds the database the script drops and writes into the tree git removes.
+  it('stops them before its cleanup runs', async () => {
+    const { projectId, workspace } = await withWorkspace()
+    const log = join(dir, 'order.txt')
+    await service.saveProjectScript(
+      projectId,
+      'archive',
+      `#!/bin/sh\nprintf 'cleanup\\n' >> '${log}'\n`
+    )
+    service.onWorkspaceTeardown(async (id) => {
+      await appendFile(log, `teardown ${id}\n`)
+    })
+
+    await service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+
+    await expect(readFile(log, 'utf8')).resolves.toBe(`teardown ${workspace.id}\ncleanup\n`)
+  })
+
+  it('leaves a refused workspace’s processes alone', async () => {
+    const { workspace } = await withWorkspace()
+    const hook = vi.fn<Hook>(() => Promise.resolve())
+    service.onWorkspaceTeardown(hook)
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await expect(service.removeWorkspaceById(workspace.id)).rejects.toMatchObject({
+      code: 'uncommittedChanges'
+    })
+    expect(hook).not.toHaveBeenCalled()
+  })
+
+  it('still removes the workspace when stopping them fails', async () => {
+    const { projectId, workspace } = await withWorkspace()
+    const hook = vi.fn<Hook>(() => Promise.reject(new Error('the pty would not go')))
+    service.onWorkspaceTeardown(hook)
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    ).resolves.toEqual({ status: 'none' })
+    expect(hook).toHaveBeenCalledExactlyOnceWith(workspace.id)
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+  })
+
+  it('stops every workspace’s when the whole project goes', async () => {
+    const { projectId, workspace } = await withWorkspace()
+    const second = await service.createWorkspaceIn(projectId)
+    const hook = vi.fn<Hook>(() => Promise.resolve())
+    service.onWorkspaceTeardown(hook)
+
+    await service.removeProjectById(projectId)
+
+    expect(hook.mock.calls.map(([id]) => id).sort()).toEqual([workspace.id, second.id].sort())
+  })
+
+  it('stops asking a hook that has been taken off', async () => {
+    const { workspace } = await withWorkspace()
+    const hook = vi.fn<Hook>(() => Promise.resolve())
+    const off = service.onWorkspaceTeardown(hook)
+    off()
+
+    await service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+
+    expect(hook).not.toHaveBeenCalled()
   })
 })
 

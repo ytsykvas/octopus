@@ -167,6 +167,7 @@ interface TerminalSpies {
   readonly write: Mock<(id: string, data: string) => void>
   readonly resize: Mock<(id: string, cols: number, rows: number) => void>
   readonly dispose: Mock<(id: string) => void>
+  readonly disposeWorkspace: Mock<(workspaceId: string) => Promise<void>>
   readonly lastRuns: Mock<(workspaceId: string) => RecordedRun[]>
   readonly forgetRuns: Mock<(workspaceId: string) => void>
   readonly refuse: Mock<(workspaceId: string, purpose: string, reason: string) => void>
@@ -177,6 +178,7 @@ function terminalsStub(): { manager: TerminalManager; sessions: TerminalSpies } 
     write: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
+    disposeWorkspace: vi.fn(() => Promise.resolve()),
     lastRuns: vi.fn((): RecordedRun[] => []),
     forgetRuns: vi.fn(),
     refuse: vi.fn()
@@ -2042,6 +2044,33 @@ describe('workspaces of a real project', () => {
     })
     expect(sessions.forgetRuns).toHaveBeenCalledExactlyOnceWith(workspace.id)
     await expect(invoke('workspaces:list', projectId)).resolves.toEqual({ ok: true, value: [] })
+  })
+
+  // Only once the service has agreed, and before the last runs go: the exit of the server it ends writes one.
+  it('ends a removed workspace’s terminals before it forgets their runs', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    sessions.forgetRuns.mockClear()
+    await writeFile(join(workspace.path, 'draft.txt'), 'work\n', 'utf8')
+
+    await invoke('workspaces:remove', workspace.id, {})
+    expect(sessions.disposeWorkspace).not.toHaveBeenCalled()
+
+    await invoke('workspaces:remove', workspace.id, { force: true })
+    expect(sessions.disposeWorkspace).toHaveBeenCalledExactlyOnceWith(workspace.id)
+    const disposed = sessions.disposeWorkspace.mock.invocationCallOrder[0] ?? 0
+    const forgotten = sessions.forgetRuns.mock.invocationCallOrder[0] ?? 0
+    expect(disposed).toBeGreaterThan(0)
+    expect(disposed).toBeLessThan(forgotten)
+  })
+
+  it('ends the terminals of every workspace of a project it removes', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+
+    await invoke('projects:remove', projectId)
+
+    expect(sessions.disposeWorkspace).toHaveBeenCalledExactlyOnceWith(workspace.id)
   })
 
   it('refuses to drop unmerged commits even when uncommitted work is forced', async () => {
