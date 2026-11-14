@@ -6,11 +6,12 @@
  * see a token (§10.9 docs/PROJECT.md).
  */
 
+import { rm } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 import { z } from 'zod'
 
-import { type CommandExec, defaultExec } from './accounts.js'
+import { type CommandExec, defaultExec, execWithin } from './accounts.js'
 import { CodedError } from './codedError.js'
 import { extractCode, reasonFrom } from './git.js'
 
@@ -359,6 +360,10 @@ export function clonePath(repository: RemoteRepository, destination: string): st
   return join(destination, basename(repository.name))
 }
 
+// Sized for a whole history rather than a button press: gh is killed past it. Prompts are
+// off because nobody can answer one, and git would sit waiting out the clock.
+const cloneExec = execWithin(10 * 60_000, { GIT_TERMINAL_PROMPT: '0' })
+
 /**
  * Clones a repository into `destination`.
  *
@@ -367,7 +372,7 @@ export function clonePath(repository: RemoteRepository, destination: string): st
 export async function cloneRepository(
   repository: RemoteRepository,
   destination: string,
-  exec: CommandExec = defaultExec,
+  exec: CommandExec = cloneExec,
   exists: (path: string) => Promise<boolean> = pathExists
 ): Promise<string> {
   if (!isDirectoryName(basename(repository.name))) {
@@ -391,6 +396,7 @@ export async function cloneRepository(
   try {
     await exec('gh', ['repo', 'clone', repository.nameWithOwner, target])
   } catch (error) {
+    await Promise.allSettled([rm(target, { recursive: true, force: true })])
     throw new GitHubError(
       'cloneFailed',
       { repository: repository.nameWithOwner, reason: reasonFrom(error) },

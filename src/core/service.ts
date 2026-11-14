@@ -560,6 +560,8 @@ export interface ServiceOptions {
    */
   readonly makeExec?: (cwd: string, options?: GitOptions) => GitExec
   readonly commandExec?: CommandExec
+  /** The clone alone, which outlives `commandExec`'s deadline; without it, `commandExec` clones. */
+  readonly cloneExec?: CommandExec
   /** `ps` and `lsof`, injected so a test reads a process table of its own. */
   readonly processExec?: ProcessExec
   /** The machine's core count, injected so a test's CPU figures do not depend on the machine. */
@@ -5598,7 +5600,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async addProjectFromGitHub(repository, destination) {
-      const path = await cloneRepository(repository, destination, commandExec)
+      const path = await cloneRepository(
+        repository,
+        destination,
+        options.cloneExec ?? options.commandExec
+      )
       return addFromPath(path)
     },
 

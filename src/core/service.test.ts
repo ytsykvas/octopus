@@ -313,6 +313,23 @@ describe('GitHub projects', () => {
     expect(withGitHub.listProjects()).toHaveLength(1)
   })
 
+  it('clones with its own executor when one is given, not the short one for lists', async () => {
+    const destination = join(dir, 'clones')
+    await mkdir(destination, { recursive: true })
+
+    const cloneExec: CommandExec = async (_command, args) => {
+      const target = args[3]
+      if (target !== undefined) await initRepo(target)
+      return ''
+    }
+    const commandExec: CommandExec = () => Promise.reject(new Error('fifteen seconds were up'))
+
+    const withGitHub = await createService({ ...paths(dir), commandExec, cloneExec })
+    const project = await withGitHub.addProjectFromGitHub(repository, destination)
+
+    expect(project.name).toBe('planner')
+  })
+
   it('does not add a project when the clone fails', async () => {
     const commandExec: CommandExec = () => Promise.reject(new Error('clone failed'))
     const withGitHub = await createService({ ...paths(dir), commandExec })

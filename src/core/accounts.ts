@@ -31,9 +31,16 @@ export type CommandExec = (command: string, args: readonly string[]) => Promise<
  * on who is waiting. A check running behind the Settings card can take its
  * time; one behind a button press cannot.
  */
-export function execWithin(timeout: number): CommandExec {
+export function execWithin(
+  timeout: number,
+  env: Readonly<Record<string, string>> = {}
+): CommandExec {
   return async (command, args) => {
-    const { stdout } = await run(command, [...args], { timeout, maxBuffer: MAX_OUTPUT_BYTES })
+    const { stdout } = await run(command, [...args], {
+      timeout,
+      maxBuffer: MAX_OUTPUT_BYTES,
+      env: { ...process.env, ...env }
+    })
     return stdout
   }
 }

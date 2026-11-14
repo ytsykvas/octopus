@@ -1,6 +1,8 @@
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
 import {
@@ -470,6 +472,22 @@ describe('cloneRepository', () => {
     })
   })
 
+  it('removes the half-cloned directory a failed clone left, so trying again is not refused', async () => {
+    const destination = await mkdtemp(join(tmpdir(), 'octopus-clone-'))
+    const target = join(destination, 'planner')
+    const interrupted: CommandExec = async () => {
+      await mkdir(join(target, '.git'), { recursive: true })
+      throw new Error('fatal: early EOF')
+    }
+
+    try {
+      await cloneRepository(repo(), destination, interrupted).catch(() => undefined)
+      await expect(access(target)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(destination, { recursive: true, force: true })
+    }
+  })
+
   it('checks the real filesystem by default: a free path proceeds to cloning', async () => {
     const error = await cloneRepository(repo(), '/nonexistent-root-xyz', fails).catch(
       (cause: unknown) => cause
@@ -486,6 +504,28 @@ describe('cloneRepository', () => {
     )
 
     expect((error as GitHubError).code).toBe('alreadyExists')
+  })
+
+  it('clones by default with git unable to prompt, since nobody is there to answer', async () => {
+    const destination = await mkdtemp(join(tmpdir(), 'octopus-clone-'))
+    const bin = join(destination, 'bin')
+    await mkdir(bin)
+    await writeFile(
+      join(bin, 'gh'),
+      '#!/bin/sh\nmkdir -p "$4"\nprintf %s "$GIT_TERMINAL_PROMPT" > "$4/prompt"\n',
+      'utf8'
+    )
+    await chmod(join(bin, 'gh'), 0o755)
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
+    vi.stubEnv('GIT_TERMINAL_PROMPT', '1')
+
+    try {
+      const target = await cloneRepository(repo(), destination)
+      await expect(readFile(join(target, 'prompt'), 'utf8')).resolves.toBe('0')
+    } finally {
+      vi.unstubAllEnvs()
+      await rm(destination, { recursive: true, force: true })
+    }
   })
 
   it.each(['..', '.', '/'])('refuses a name that is no directory of its own: %s', async (name) => {

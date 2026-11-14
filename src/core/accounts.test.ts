@@ -70,6 +70,15 @@ describe('execWithin', () => {
 
     expect(said).toHaveLength(2_097_152)
   })
+
+  it('adds the variables it was given to the environment it inherits', async () => {
+    const said = await execWithin(10_000, { OCTOPUS_PROBE: 'given' })('sh', [
+      '-c',
+      'printf "%s %s" "$OCTOPUS_PROBE" "${HOME:+inherited}"'
+    ])
+
+    expect(said).toBe('given inherited')
+  })
 })
 
 describe('checkClaudeAccount', () => {
