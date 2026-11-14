@@ -8,6 +8,7 @@
  */
 
 import { allOf } from './parallel.js'
+import { MAX_OUTPUT_BYTES } from './git.js'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -32,7 +33,7 @@ export type CommandExec = (command: string, args: readonly string[]) => Promise<
  */
 export function execWithin(timeout: number): CommandExec {
   return async (command, args) => {
-    const { stdout } = await run(command, [...args], { timeout })
+    const { stdout } = await run(command, [...args], { timeout, maxBuffer: MAX_OUTPUT_BYTES })
     return stdout
   }
 }

@@ -17,7 +17,7 @@ import { z } from 'zod'
 
 import { shortBranchName } from './branches.js'
 import { GitHubError } from './github.js'
-import { countAhead, currentBranch, type GitExec, reasonFrom } from './git.js'
+import { countAhead, currentBranch, type GitExec, MAX_OUTPUT_BYTES, reasonFrom } from './git.js'
 import {
   type BranchListPayload,
   type BranchOwner,
@@ -49,7 +49,11 @@ export type GhExec = (args: readonly string[]) => Promise<string>
 
 export function ghIn(cwd: string): GhExec {
   return async (args) => {
-    const { stdout } = await run('gh', [...args], { cwd, timeout: 30_000 })
+    const { stdout } = await run('gh', [...args], {
+      cwd,
+      timeout: 30_000,
+      maxBuffer: MAX_OUTPUT_BYTES
+    })
     return stdout
   }
 }

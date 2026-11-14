@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type GitExec, gitIn } from './git.js'
 import { GitHubError } from './github.js'
@@ -2001,6 +2001,24 @@ describe('gh in a directory', () => {
     const gh = ghIn(join(dir, 'work'))
 
     await expect(gh(['not-a-command'])).rejects.toBeDefined()
+  })
+
+  it('reads an answer past a mebibyte, as a hundred requests with their checks can be', async () => {
+    const bin = join(dir, 'bin')
+    await mkdir(bin)
+    await writeFile(
+      join(bin, 'gh'),
+      '#!/bin/sh\nhead -c 2097152 /dev/zero | tr "\\000" x\n',
+      'utf8'
+    )
+    await chmod(join(bin, 'gh'), 0o755)
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
+
+    try {
+      await expect(ghIn(join(dir, 'work'))(['pr', 'list'])).resolves.toHaveLength(2_097_152)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 
