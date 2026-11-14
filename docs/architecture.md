@@ -124,10 +124,10 @@ over it; the schemes that start programs are what is refused. It is attached in
 `web-contents-created` beside `guardNavigation`, and a rejection from
 `openExternal` is swallowed, since nothing waits on it.
 
-`crash.ts` holds what main does when a window's renderer dies and when a promise
-fails with nobody waiting on it. Both take what they act on as parameters — the
-contents, the disposal and the dialogs — so the decisions are tested without
-Electron, and `index.ts` passes in the real ones.
+`crash.ts` holds what main does when a window's renderer dies, when its first
+load fails, and when a promise fails with nobody waiting on it. Each takes what
+it acts on as parameters — the contents, the disposal and the dialogs — so the
+decisions are tested without Electron, and `index.ts` passes in the real ones.
 
 `files:open` hands a path to `shell.openPath`, which starts as readily as it
 shows: LaunchServices runs an `.app`, a `.command` or an executable, and a file
@@ -249,9 +249,11 @@ its own modal, "A JavaScript error occurred in the main process", and drops that
 modal as soon as anything else listens on `uncaughtException` — so nothing does.
 An unhandled rejection gets only a warning on stderr, so `index.ts` shows it in an
 error box through `reportRejection` in `crash.ts`, and does not exit. The first
-`loadURL` is the one rejection caught on purpose: a reload or a crash in the
-middle of it rejects with `ERR_ABORTED` or `ERR_FAILED`, and both already have an
-answer of their own.
+`loadURL` answers its own rejection, through `reportLoadFailure`: a dev server
+that is not up, or a build missing its page, says so instead of leaving a blank
+window. A reload or a crash in the middle of that load rejects it too, with
+`ERR_ABORTED` or `ERR_FAILED`, and those two stay quiet — each already has an
+answer of its own, and an error box over it would be a second one.
 
 ## Where state lives
 

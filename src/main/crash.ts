@@ -32,3 +32,16 @@ export function reportRejection(
     showError('octopus hit an unexpected error', describeError(reason))
   }
 }
+
+// What a reload (ERR_ABORTED) or a crash (ERR_FAILED) in the middle of the first load
+// rejects `loadURL` with; each already has an answer of its own.
+const INTERRUPTIONS: ReadonlySet<unknown> = new Set(['ERR_ABORTED', 'ERR_FAILED'])
+
+export function reportLoadFailure(
+  showError: (title: string, content: string) => void
+): (error: unknown) => void {
+  return (error) => {
+    if (error instanceof Error && 'code' in error && INTERRUPTIONS.has(error.code)) return
+    showError('octopus could not load its window', describeError(error))
+  }
+}

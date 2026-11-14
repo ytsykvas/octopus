@@ -30,7 +30,7 @@ import { focusExisting } from './windows.js'
 import { openInBrowser } from './externalLinks.js'
 import { guardNavigation } from './navigation.js'
 import { quitAfter } from './quit.js'
-import { reportRejection, watchRendererCrash } from './crash.js'
+import { reportLoadFailure, reportRejection, watchRendererCrash } from './crash.js'
 
 const rendererFile = join(import.meta.dirname, '../renderer/index.html')
 const devServer = process.env.ELECTRON_RENDERER_URL
@@ -95,9 +95,11 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
     }
   })
 
-  // A reload (ERR_ABORTED) or a crash (ERR_FAILED) mid-load rejects this, and each
-  // has its own answer: an error box on top would be a second one.
-  void window.loadURL(appUrl).catch(() => undefined)
+  void window.loadURL(appUrl).catch(
+    reportLoadFailure((title, content) => {
+      dialog.showErrorBox(title, content)
+    })
+  )
 
   return window
 }
