@@ -380,6 +380,11 @@ describe('ghFailure', () => {
       code: 'notConnected'
     },
     { said: 'no gh installed', error: failed({ code: 'ENOENT' }), code: 'notConnected' },
+    {
+      said: 'a token GitHub no longer accepts',
+      error: failed({ code: 1, stderr: 'gh: Requires authentication (HTTP 401)\n' }),
+      code: 'notConnected'
+    },
     { said: 'an error with no exit status', error: new Error('x'), code: 'notConnected' },
     {
       said: 'a refusal',

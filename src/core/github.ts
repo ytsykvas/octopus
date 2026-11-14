@@ -166,17 +166,18 @@ export class GitHubError extends CodedError<GitHubErrorCode> {
   override readonly name = 'GitHubError'
 }
 
-// Exit 4 is gh's "authentication required" (`gh help exit-codes`). An error with no
-// status at all comes from an injected fake and keeps meaning what it always did here.
+// Exit 4 is gh's "authentication required" (`gh help exit-codes`), but a token GitHub
+// rejects exits 1 with HTTP 401. An error with no status at all comes from an injected fake.
 export function ghFailure(error: unknown, message: string): GitHubError {
   const code = extractCode(error)
   if (code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
     return new GitHubError('ghOutputTooLarge', {}, message)
   }
-  if (code === '' || code === 'ENOENT' || code === '4') {
+  const reason = reasonFrom(error)
+  if (code === '' || code === 'ENOENT' || code === '4' || reason.includes('(HTTP 401)')) {
     return new GitHubError('notConnected', {}, message)
   }
-  return new GitHubError('ghFailed', { reason: reasonFrom(error) }, message)
+  return new GitHubError('ghFailed', { reason }, message)
 }
 
 /** GraphQL's own ceiling on one page, whatever `REPOSITORY_LIMIT` allows. */
