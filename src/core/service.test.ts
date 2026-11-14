@@ -9148,16 +9148,8 @@ describe('the agent chat', () => {
       await expect(unstamped()).resolves.toBe(before)
     })
 
-    /*
-     * The other half of the same fire-and-forget, and it used to have nobody
-     * to catch it: only the read was guarded, so a list that arrived and could
-     * not be written left an uncaught rejection in the main process — which
-     * Electron shows as a modal about a JavaScript error, over an application
-     * that is otherwise fine.
-     *
-     * The answer is held until the state file is unwritable, or it lands
-     * before there is anything to fail against.
-     */
+    // The write half of the same fire-and-forget: unguarded, it left main an unhandled
+    // rejection. Held until the state file is unwritable, or it lands too early to fail.
     it('reports a list that cannot be written instead of leaving it to the process', async () => {
       const { service, workspaceId, events } = await withWorkspace()
       let release: (models: ModelInfo[]) => void = () => undefined

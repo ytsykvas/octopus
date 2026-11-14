@@ -106,5 +106,6 @@ is fire-and-forget: a list that cannot be **read** is swallowed, since it is a
 convenience for the picker and failing a message over it would report the wrong
 problem — but a list that cannot be **written** is a failed write like any
 other, and goes into the chat through `background`. Handling only the first left
-the second uncaught in the main process, where Electron answers with a modal
-about a JavaScript error over an application that is otherwise fine.
+the second as an unhandled rejection in the main process, which reaches the
+user as an error box over an application that is otherwise fine
+([architecture.md](../architecture.md), "An error in main is never silent").
