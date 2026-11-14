@@ -66,6 +66,10 @@ function fakeGh(answers: Partial<Record<string, string | Error>> = {}): {
   return { gh, calls }
 }
 
+/** What `execFile` rejects with when `gh` exits non-zero with `stderr`. */
+const refusal = (stderr: string): Error =>
+  Object.assign(new Error('Command failed: gh'), { code: 1, stderr })
+
 /** When the fixtures' workspace began, and when their requests were opened — after it. */
 const BEGAN = '2026-01-01T00:00:00Z'
 const OPENED = '2026-02-01T00:00:00Z'
@@ -465,6 +469,18 @@ describe('reading a branch', () => {
 
     await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
       code: 'notConnected'
+    })
+  })
+
+  it('passes on why GitHub refused to list the branch', async () => {
+    const branch = await branchWithCommit()
+    const { gh } = fakeGh({
+      list: refusal('error connecting to api.github.com\ncheck your internet connection')
+    })
+
+    await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
+      code: 'ghFailed',
+      params: { reason: 'error connecting to api.github.com' }
     })
   })
 
@@ -1902,6 +1918,17 @@ describe('every branch of a project at once', () => {
 
     await expect(readBranchRequests([], gh, workExec())).rejects.toMatchObject({
       code: 'notConnected'
+    })
+  })
+
+  it('passes on why GitHub refused rather than blaming the sign-in', async () => {
+    const { gh } = fakeGh({
+      list: refusal('HTTP 403: Resource protected by organization SAML enforcement\n')
+    })
+
+    await expect(readBranchRequests([], gh, workExec())).rejects.toMatchObject({
+      code: 'ghFailed',
+      params: { reason: 'HTTP 403: Resource protected by organization SAML enforcement' }
     })
   })
 

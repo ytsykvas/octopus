@@ -12,6 +12,7 @@ import { z } from 'zod'
 
 import { type CommandExec, defaultExec } from './accounts.js'
 import { CodedError } from './codedError.js'
+import { extractCode, reasonFrom } from './git.js'
 
 /** How many repositories to fetch. Beyond this the list needs a search box, not a longer page. */
 export const REPOSITORY_LIMIT = 200
@@ -106,6 +107,10 @@ export type GitHubErrorCode =
   | 'listFailed'
   | 'cloneFailed'
   | 'alreadyExists'
+  // `gh` ran and refused, timed out or broke some other way than a missing sign-in.
+  | 'ghFailed'
+  // An answer past `MAX_OUTPUT_BYTES`, which no sign-in would fix.
+  | 'ghOutputTooLarge'
   // Opening a pull request and everything either side of it, which
   // `pullRequests.ts` does through the same `gh` and reports through this same
   // error so the renderer has one place to map.
@@ -158,6 +163,19 @@ export type GitHubErrorCode =
 
 export class GitHubError extends CodedError<GitHubErrorCode> {
   override readonly name = 'GitHubError'
+}
+
+// Exit 4 is gh's "authentication required" (`gh help exit-codes`). An error with no
+// status at all comes from an injected fake and keeps meaning what it always did here.
+export function ghFailure(error: unknown, message: string): GitHubError {
+  const code = extractCode(error)
+  if (code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+    return new GitHubError('ghOutputTooLarge', {}, message)
+  }
+  if (code === '' || code === 'ENOENT' || code === '4') {
+    return new GitHubError('notConnected', {}, message)
+  }
+  return new GitHubError('ghFailed', { reason: reasonFrom(error) }, message)
 }
 
 /** GraphQL's own ceiling on one page, whatever `REPOSITORY_LIMIT` allows. */
@@ -291,8 +309,8 @@ async function readPage(
   let raw: string
   try {
     raw = await exec('gh', args)
-  } catch {
-    throw new GitHubError('notConnected', {}, 'Could not read repositories from GitHub.')
+  } catch (error) {
+    throw ghFailure(error, 'Could not read repositories from GitHub.')
   }
 
   let parsed: unknown
@@ -372,10 +390,10 @@ export async function cloneRepository(
 
   try {
     await exec('gh', ['repo', 'clone', repository.nameWithOwner, target])
-  } catch {
+  } catch (error) {
     throw new GitHubError(
       'cloneFailed',
-      { repository: repository.nameWithOwner },
+      { repository: repository.nameWithOwner, reason: reasonFrom(error) },
       `Could not clone ${repository.nameWithOwner}.`
     )
   }

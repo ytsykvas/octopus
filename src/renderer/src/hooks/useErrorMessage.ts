@@ -65,8 +65,16 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.notConnected')
         case 'listFailed':
           return t('errors.listFailed')
-        case 'cloneFailed':
-          return t('errors.cloneFailed', { repository: failure.params?.repository ?? '' })
+        case 'cloneFailed': {
+          const repository = failure.params?.repository ?? ''
+          return failure.params?.reason
+            ? t('errors.cloneFailedReason', { repository, reason: failure.params.reason })
+            : t('errors.cloneFailed', { repository })
+        }
+        case 'ghFailed':
+          return t('errors.ghFailed', { reason: failure.params?.reason ?? '' })
+        case 'ghOutputTooLarge':
+          return t('errors.ghOutputTooLarge')
         case 'alreadyExists':
           return t('errors.alreadyExists', { path: failure.params?.path ?? '' })
         case 'noCommits':

@@ -7,6 +7,7 @@ import {
   cloneRepository,
   clonePath,
   CloneRequestSchema,
+  ghFailure,
   GitHubError,
   listRepositories,
   type RemoteRepository
@@ -261,6 +262,21 @@ describe('listRepositories', () => {
     expect((error as GitHubError).code).toBe('notConnected')
   })
 
+  it('passes on why GitHub refused rather than blaming the sign-in', async () => {
+    const refused: CommandExec = () =>
+      Promise.reject(
+        Object.assign(new Error('Command failed: gh api graphql'), {
+          code: 1,
+          stderr: 'API rate limit exceeded for user ID 1.\n'
+        })
+      )
+
+    await expect(listRepositories(refused)).rejects.toMatchObject({
+      code: 'ghFailed',
+      params: { reason: 'API rate limit exceeded for user ID 1.' }
+    })
+  })
+
   it('reports unreadable output separately from a missing account', async () => {
     const error = await listRepositories(succeeds('<html>')).catch((cause: unknown) => cause)
     expect((error as GitHubError).code).toBe('listFailed')
@@ -348,6 +364,49 @@ describe('clonePath', () => {
   })
 })
 
+describe('ghFailure', () => {
+  const failed = (fields: Record<string, unknown>): Error =>
+    Object.assign(new Error('Command failed: gh'), fields)
+
+  it.each([
+    {
+      said: 'a missing sign-in',
+      error: failed({
+        code: 4,
+        stderr: 'To get started with GitHub CLI, please run:  gh auth login\n'
+      }),
+      code: 'notConnected'
+    },
+    { said: 'no gh installed', error: failed({ code: 'ENOENT' }), code: 'notConnected' },
+    { said: 'an error with no exit status', error: new Error('x'), code: 'notConnected' },
+    {
+      said: 'a refusal',
+      error: failed({ code: 1, stderr: 'API rate limit exceeded for user\nmore' }),
+      code: 'ghFailed'
+    },
+    {
+      said: 'a timeout',
+      error: failed({ code: null, killed: true, signal: 'SIGTERM' }),
+      code: 'ghFailed'
+    },
+    {
+      said: 'too much to read',
+      error: failed({ code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }),
+      code: 'ghOutputTooLarge'
+    }
+  ])('reads $said as $code', ({ error, code }) => {
+    expect(ghFailure(error, 'Could not ask.')).toMatchObject({ code, message: 'Could not ask.' })
+  })
+
+  it('carries the first line of what gh said when it refused', () => {
+    const error = failed({ code: 1, stderr: 'API rate limit exceeded for user\nmore' })
+
+    expect(ghFailure(error, 'Could not ask.').params).toEqual({
+      reason: 'API rate limit exceeded for user'
+    })
+  })
+})
+
 describe('cloneRepository', () => {
   const missing = (): Promise<boolean> => Promise.resolve(false)
   const present = (): Promise<boolean> => Promise.resolve(true)
@@ -390,6 +449,25 @@ describe('cloneRepository', () => {
 
     expect((error as GitHubError).code).toBe('cloneFailed')
     expect((error as GitHubError).params.repository).toBe('ytsykvas/planner')
+  })
+
+  it('says why the clone failed', async () => {
+    const refused: CommandExec = () =>
+      Promise.reject(
+        Object.assign(new Error('Command failed: gh repo clone'), {
+          code: 1,
+          stderr: "fatal: could not create work tree dir '/dest/planner': Permission denied\n"
+        })
+      )
+
+    const error = await cloneRepository(repo(), '/dest', refused, missing).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as GitHubError).params).toEqual({
+      repository: 'ytsykvas/planner',
+      reason: "fatal: could not create work tree dir '/dest/planner': Permission denied"
+    })
   })
 
   it('checks the real filesystem by default: a free path proceeds to cloning', async () => {

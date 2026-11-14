@@ -101,7 +101,9 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   branchMissing: { branch: 'develop' },
   notConnected: null,
   listFailed: null,
-  cloneFailed: { repository: 'ytsykvas/planner' },
+  cloneFailed: { repository: 'ytsykvas/planner', reason: 'Permission denied' },
+  ghFailed: { reason: 'API rate limit exceeded for user' },
+  ghOutputTooLarge: null,
   alreadyExists: { path: '/Users/someone/code/planner' },
   branchUnmerged: { branch: 'ytsykvas/anna' },
   branchExists: { branch: 'ytsykvas/anna' },
@@ -242,6 +244,19 @@ describe('useErrorMessage', () => {
 
     expect(said).toContain('origin')
     expect(said).toContain('could not read Username')
+  })
+
+  it('names the repository whether or not gh said why the clone failed', () => {
+    const { result } = renderHook(() => useErrorMessage())
+
+    const bare = result.current({
+      ok: false,
+      error: RAW,
+      code: 'cloneFailed',
+      params: { repository: 'ytsykvas/planner' }
+    })
+
+    expect(bare).toBe('Could not clone ytsykvas/planner.')
   })
 
   /*

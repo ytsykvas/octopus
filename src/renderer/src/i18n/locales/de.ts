@@ -1988,6 +1988,9 @@ export const de: Translation = {
     notConnected: 'GitHub ist nicht erreichbar. Prüfe das Konto in den Einstellungen.',
     listFailed: 'GitHub hat etwas Unerwartetes geliefert.',
     cloneFailed: '{{repository}} ließ sich nicht klonen.',
+    cloneFailedReason: '{{repository}} ließ sich nicht klonen. gh meldet: {{reason}}',
+    ghFailed: 'GitHub ließ sich nicht befragen. gh meldet: {{reason}}',
+    ghOutputTooLarge: 'GitHub hat mehr geliefert, als octopus auf einmal lesen kann.',
     noCommits: 'Dieser Branch hat nichts, was {{base}} nicht hat.',
     pushFailed: '{{branch}} ließ sich nicht pushen. Git meldet: {{reason}}',
     fetchFailed:
