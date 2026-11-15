@@ -515,6 +515,39 @@ describe('createWorkspace', () => {
     expect(second.port).not.toBe(first.port)
   })
 
+  it('takes the port the caller chooses', async () => {
+    const workspace = await createWorkspace(project, state, exec, {
+      root,
+      random: first,
+      answers: nothingListens,
+      choosePort: () => Promise.resolve(4242)
+    })
+
+    expect(workspace.port).toBe(4242)
+  })
+
+  // The service frees its reservation through the workspace returned, so a
+  // failure after the choice would hold the block until a restart.
+  it('asks for the port only after the last step that can fail', async () => {
+    const asked: number[] = []
+    const noRoom: GitExec = (args) =>
+      args[0] === 'worktree' && args[1] === 'add'
+        ? Promise.reject(new Error('no room'))
+        : exec(args)
+
+    await expect(
+      createWorkspace(project, state, noRoom, {
+        root,
+        answers: nothingListens,
+        choosePort: () => {
+          asked.push(4242)
+          return Promise.resolve(4242)
+        }
+      })
+    ).rejects.toThrow('no room')
+    expect(asked).toEqual([])
+  })
+
   it('starts idle', async () => {
     const workspace = await create()
     expect(workspace.status).toBe('idle')
