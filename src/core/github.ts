@@ -6,12 +6,14 @@
  * see a token (§10.9 docs/PROJECT.md).
  */
 
+import { rm } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 import { z } from 'zod'
 
-import { type CommandExec, defaultExec } from './accounts.js'
+import { type CommandExec, defaultExec, execWithin } from './accounts.js'
 import { CodedError } from './codedError.js'
+import { extractCode, reasonFrom } from './git.js'
 
 /** How many repositories to fetch. Beyond this the list needs a search box, not a longer page. */
 export const REPOSITORY_LIMIT = 200
@@ -106,6 +108,10 @@ export type GitHubErrorCode =
   | 'listFailed'
   | 'cloneFailed'
   | 'alreadyExists'
+  // `gh` ran and refused, timed out or broke some other way than a missing sign-in.
+  | 'ghFailed'
+  // An answer past `MAX_OUTPUT_BYTES`, which no sign-in would fix.
+  | 'ghOutputTooLarge'
   // Opening a pull request and everything either side of it, which
   // `pullRequests.ts` does through the same `gh` and reports through this same
   // error so the renderer has one place to map.
@@ -158,6 +164,20 @@ export type GitHubErrorCode =
 
 export class GitHubError extends CodedError<GitHubErrorCode> {
   override readonly name = 'GitHubError'
+}
+
+// Exit 4 is gh's "authentication required" (`gh help exit-codes`), but a token GitHub
+// rejects exits 1 with HTTP 401. An error with no status at all comes from an injected fake.
+export function ghFailure(error: unknown, message: string): GitHubError {
+  const code = extractCode(error)
+  if (code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+    return new GitHubError('ghOutputTooLarge', {}, message)
+  }
+  const reason = reasonFrom(error)
+  if (code === '' || code === 'ENOENT' || code === '4' || reason.includes('(HTTP 401)')) {
+    return new GitHubError('notConnected', {}, message)
+  }
+  return new GitHubError('ghFailed', { reason }, message)
 }
 
 /** GraphQL's own ceiling on one page, whatever `REPOSITORY_LIMIT` allows. */
@@ -291,8 +311,8 @@ async function readPage(
   let raw: string
   try {
     raw = await exec('gh', args)
-  } catch {
-    throw new GitHubError('notConnected', {}, 'Could not read repositories from GitHub.')
+  } catch (error) {
+    throw ghFailure(error, 'Could not read repositories from GitHub.')
   }
 
   let parsed: unknown
@@ -341,6 +361,10 @@ export function clonePath(repository: RemoteRepository, destination: string): st
   return join(destination, basename(repository.name))
 }
 
+// Sized for a whole history rather than a button press: gh is killed past it. Prompts are
+// off because nobody can answer one, and git would sit waiting out the clock.
+const cloneExec = execWithin(10 * 60_000, { GIT_TERMINAL_PROMPT: '0' })
+
 /**
  * Clones a repository into `destination`.
  *
@@ -349,7 +373,7 @@ export function clonePath(repository: RemoteRepository, destination: string): st
 export async function cloneRepository(
   repository: RemoteRepository,
   destination: string,
-  exec: CommandExec = defaultExec,
+  exec: CommandExec = cloneExec,
   exists: (path: string) => Promise<boolean> = pathExists
 ): Promise<string> {
   if (!isDirectoryName(basename(repository.name))) {
@@ -372,10 +396,11 @@ export async function cloneRepository(
 
   try {
     await exec('gh', ['repo', 'clone', repository.nameWithOwner, target])
-  } catch {
+  } catch (error) {
+    await Promise.allSettled([rm(target, { recursive: true, force: true })])
     throw new GitHubError(
       'cloneFailed',
-      { repository: repository.nameWithOwner },
+      { repository: repository.nameWithOwner, reason: reasonFrom(error) },
       `Could not clone ${repository.nameWithOwner}.`
     )
   }

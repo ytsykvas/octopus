@@ -1,12 +1,15 @@
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
 import {
   cloneRepository,
   clonePath,
   CloneRequestSchema,
+  ghFailure,
   GitHubError,
   listRepositories,
   type RemoteRepository
@@ -261,6 +264,21 @@ describe('listRepositories', () => {
     expect((error as GitHubError).code).toBe('notConnected')
   })
 
+  it('passes on why GitHub refused rather than blaming the sign-in', async () => {
+    const refused: CommandExec = () =>
+      Promise.reject(
+        Object.assign(new Error('Command failed: gh api graphql'), {
+          code: 1,
+          stderr: 'API rate limit exceeded for user ID 1.\n'
+        })
+      )
+
+    await expect(listRepositories(refused)).rejects.toMatchObject({
+      code: 'ghFailed',
+      params: { reason: 'API rate limit exceeded for user ID 1.' }
+    })
+  })
+
   it('reports unreadable output separately from a missing account', async () => {
     const error = await listRepositories(succeeds('<html>')).catch((cause: unknown) => cause)
     expect((error as GitHubError).code).toBe('listFailed')
@@ -348,6 +366,54 @@ describe('clonePath', () => {
   })
 })
 
+describe('ghFailure', () => {
+  const failed = (fields: Record<string, unknown>): Error =>
+    Object.assign(new Error('Command failed: gh'), fields)
+
+  it.each([
+    {
+      said: 'a missing sign-in',
+      error: failed({
+        code: 4,
+        stderr: 'To get started with GitHub CLI, please run:  gh auth login\n'
+      }),
+      code: 'notConnected'
+    },
+    { said: 'no gh installed', error: failed({ code: 'ENOENT' }), code: 'notConnected' },
+    {
+      said: 'a token GitHub no longer accepts',
+      error: failed({ code: 1, stderr: 'gh: Requires authentication (HTTP 401)\n' }),
+      code: 'notConnected'
+    },
+    { said: 'an error with no exit status', error: new Error('x'), code: 'notConnected' },
+    {
+      said: 'a refusal',
+      error: failed({ code: 1, stderr: 'API rate limit exceeded for user\nmore' }),
+      code: 'ghFailed'
+    },
+    {
+      said: 'a timeout',
+      error: failed({ code: null, killed: true, signal: 'SIGTERM' }),
+      code: 'ghFailed'
+    },
+    {
+      said: 'too much to read',
+      error: failed({ code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }),
+      code: 'ghOutputTooLarge'
+    }
+  ])('reads $said as $code', ({ error, code }) => {
+    expect(ghFailure(error, 'Could not ask.')).toMatchObject({ code, message: 'Could not ask.' })
+  })
+
+  it('carries the first line of what gh said when it refused', () => {
+    const error = failed({ code: 1, stderr: 'API rate limit exceeded for user\nmore' })
+
+    expect(ghFailure(error, 'Could not ask.').params).toEqual({
+      reason: 'API rate limit exceeded for user'
+    })
+  })
+})
+
 describe('cloneRepository', () => {
   const missing = (): Promise<boolean> => Promise.resolve(false)
   const present = (): Promise<boolean> => Promise.resolve(true)
@@ -392,6 +458,41 @@ describe('cloneRepository', () => {
     expect((error as GitHubError).params.repository).toBe('ytsykvas/planner')
   })
 
+  it('says why the clone failed', async () => {
+    const refused: CommandExec = () =>
+      Promise.reject(
+        Object.assign(new Error('Command failed: gh repo clone'), {
+          code: 1,
+          stderr: "fatal: could not create work tree dir '/dest/planner': Permission denied\n"
+        })
+      )
+
+    const error = await cloneRepository(repo(), '/dest', refused, missing).catch(
+      (cause: unknown) => cause
+    )
+
+    expect((error as GitHubError).params).toEqual({
+      repository: 'ytsykvas/planner',
+      reason: "fatal: could not create work tree dir '/dest/planner': Permission denied"
+    })
+  })
+
+  it('removes the half-cloned directory a failed clone left, so trying again is not refused', async () => {
+    const destination = await mkdtemp(join(tmpdir(), 'octopus-clone-'))
+    const target = join(destination, 'planner')
+    const interrupted: CommandExec = async () => {
+      await mkdir(join(target, '.git'), { recursive: true })
+      throw new Error('fatal: early EOF')
+    }
+
+    try {
+      await cloneRepository(repo(), destination, interrupted).catch(() => undefined)
+      await expect(access(target)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(destination, { recursive: true, force: true })
+    }
+  })
+
   it('checks the real filesystem by default: a free path proceeds to cloning', async () => {
     const error = await cloneRepository(repo(), '/nonexistent-root-xyz', fails).catch(
       (cause: unknown) => cause
@@ -408,6 +509,28 @@ describe('cloneRepository', () => {
     )
 
     expect((error as GitHubError).code).toBe('alreadyExists')
+  })
+
+  it('clones by default with git unable to prompt, since nobody is there to answer', async () => {
+    const destination = await mkdtemp(join(tmpdir(), 'octopus-clone-'))
+    const bin = join(destination, 'bin')
+    await mkdir(bin)
+    await writeFile(
+      join(bin, 'gh'),
+      '#!/bin/sh\nmkdir -p "$4"\nprintf %s "$GIT_TERMINAL_PROMPT" > "$4/prompt"\n',
+      'utf8'
+    )
+    await chmod(join(bin, 'gh'), 0o755)
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
+    vi.stubEnv('GIT_TERMINAL_PROMPT', '1')
+
+    try {
+      const target = await cloneRepository(repo(), destination)
+      await expect(readFile(join(target, 'prompt'), 'utf8')).resolves.toBe('0')
+    } finally {
+      vi.unstubAllEnvs()
+      await rm(destination, { recursive: true, force: true })
+    }
   })
 
   it.each(['..', '.', '/'])('refuses a name that is no directory of its own: %s', async (name) => {

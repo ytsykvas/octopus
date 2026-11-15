@@ -2437,6 +2437,9 @@ export const en = {
     notConnected: 'Could not reach GitHub. Check the account in Settings.',
     listFailed: 'GitHub returned something unexpected.',
     cloneFailed: 'Could not clone {{repository}}.',
+    cloneFailedReason: 'Could not clone {{repository}}. gh said: {{reason}}',
+    ghFailed: 'Could not ask GitHub. gh said: {{reason}}',
+    ghOutputTooLarge: 'GitHub answered with more than octopus can read at once.',
     noCommits: 'This branch has nothing that {{base}} does not.',
     pushFailed: 'Could not push {{branch}}. Git said: {{reason}}',
     fetchFailed:

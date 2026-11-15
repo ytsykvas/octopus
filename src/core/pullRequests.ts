@@ -16,8 +16,8 @@ import { promisify } from 'node:util'
 import { z } from 'zod'
 
 import { shortBranchName } from './branches.js'
-import { GitHubError } from './github.js'
-import { countAhead, currentBranch, type GitExec, reasonFrom } from './git.js'
+import { ghFailure, GitHubError } from './github.js'
+import { countAhead, currentBranch, type GitExec, MAX_OUTPUT_BYTES, reasonFrom } from './git.js'
 import {
   type BranchListPayload,
   type BranchOwner,
@@ -49,7 +49,11 @@ export type GhExec = (args: readonly string[]) => Promise<string>
 
 export function ghIn(cwd: string): GhExec {
   return async (args) => {
-    const { stdout } = await run('gh', [...args], { cwd, timeout: 30_000 })
+    const { stdout } = await run('gh', [...args], {
+      cwd,
+      timeout: 30_000,
+      maxBuffer: MAX_OUTPUT_BYTES
+    })
     return stdout
   }
 }
@@ -269,8 +273,8 @@ async function listPullRequests(
       '--json',
       'number,state,title,url,createdAt,headRefOid'
     ])
-  } catch {
-    throw new GitHubError('notConnected', {}, 'Could not ask GitHub about this branch.')
+  } catch (error) {
+    throw ghFailure(error, 'Could not ask GitHub about this branch.')
   }
 
   let parsed: unknown
@@ -1154,8 +1158,8 @@ async function branchesMovedPast(
 async function asked(run: () => Promise<string>): Promise<string> {
   try {
     return await run()
-  } catch {
-    throw new GitHubError('notConnected', {}, 'Could not ask GitHub about this pull request.')
+  } catch (error) {
+    throw ghFailure(error, 'Could not ask GitHub about this pull request.')
   }
 }
 

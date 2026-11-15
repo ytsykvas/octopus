@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type GitExec, gitIn } from './git.js'
 import { GitHubError } from './github.js'
@@ -65,6 +65,10 @@ function fakeGh(answers: Partial<Record<string, string | Error>> = {}): {
 
   return { gh, calls }
 }
+
+/** What `execFile` rejects with when `gh` exits non-zero with `stderr`. */
+const refusal = (stderr: string): Error =>
+  Object.assign(new Error('Command failed: gh'), { code: 1, stderr })
 
 /** When the fixtures' workspace began, and when their requests were opened — after it. */
 const BEGAN = '2026-01-01T00:00:00Z'
@@ -465,6 +469,18 @@ describe('reading a branch', () => {
 
     await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
       code: 'notConnected'
+    })
+  })
+
+  it('passes on why GitHub refused to list the branch', async () => {
+    const branch = await branchWithCommit()
+    const { gh } = fakeGh({
+      list: refusal('error connecting to api.github.com\ncheck your internet connection')
+    })
+
+    await expect(readPullRequest(owner(branch), 'main', gh, workExec())).rejects.toMatchObject({
+      code: 'ghFailed',
+      params: { reason: 'error connecting to api.github.com' }
     })
   })
 
@@ -1905,6 +1921,17 @@ describe('every branch of a project at once', () => {
     })
   })
 
+  it('passes on why GitHub refused rather than blaming the sign-in', async () => {
+    const { gh } = fakeGh({
+      list: refusal('HTTP 403: Resource protected by organization SAML enforcement\n')
+    })
+
+    await expect(readBranchRequests([], gh, workExec())).rejects.toMatchObject({
+      code: 'ghFailed',
+      params: { reason: 'HTTP 403: Resource protected by organization SAML enforcement' }
+    })
+  })
+
   it('reports an answer it cannot read, and one shaped like something else', async () => {
     const unreadable = fakeGh({ list: 'not json' })
     await expect(readBranchRequests([], unreadable.gh, workExec())).rejects.toMatchObject({
@@ -2001,6 +2028,24 @@ describe('gh in a directory', () => {
     const gh = ghIn(join(dir, 'work'))
 
     await expect(gh(['not-a-command'])).rejects.toBeDefined()
+  })
+
+  it('reads an answer past a mebibyte, as a hundred requests with their checks can be', async () => {
+    const bin = join(dir, 'bin')
+    await mkdir(bin)
+    await writeFile(
+      join(bin, 'gh'),
+      '#!/bin/sh\nhead -c 2097152 /dev/zero | tr "\\000" x\n',
+      'utf8'
+    )
+    await chmod(join(bin, 'gh'), 0o755)
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
+
+    try {
+      await expect(ghIn(join(dir, 'work'))(['pr', 'list'])).resolves.toHaveLength(2_097_152)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 

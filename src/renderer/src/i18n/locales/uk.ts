@@ -1959,6 +1959,9 @@ export const uk: Translation = {
     notConnected: 'Не вдалося звернутися до GitHub. Перевірте акаунт у налаштуваннях.',
     listFailed: 'GitHub повернув щось неочікуване.',
     cloneFailed: 'Не вдалося клонувати {{repository}}.',
+    cloneFailedReason: 'Не вдалося клонувати {{repository}}. gh каже: {{reason}}',
+    ghFailed: 'Не вдалося звернутися до GitHub. gh каже: {{reason}}',
+    ghOutputTooLarge: 'GitHub відповів більшим обсягом, ніж octopus може прочитати за раз.',
     noCommits: 'У цій гілці немає нічого, чого немає в {{base}}.',
     pushFailed: 'Не вдалося запушити {{branch}}. Git каже: {{reason}}',
     fetchFailed:

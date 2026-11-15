@@ -6,6 +6,7 @@ import {
   checkGitHubAccount,
   type CommandExec,
   defaultExec,
+  execWithin,
   InvalidAuthRequestError,
   signInCommand,
   signOut,
@@ -60,6 +61,23 @@ describe('defaultExec', () => {
 
   it('rejects when the command does not exist', async () => {
     await expect(defaultExec('octopus-no-such-binary', [])).rejects.toThrow()
+  })
+})
+
+describe('execWithin', () => {
+  it('reads an answer past a mebibyte, as a GitHub listing can be', async () => {
+    const said = await execWithin(10_000)('sh', ['-c', 'head -c 2097152 /dev/zero | tr "\\000" x'])
+
+    expect(said).toHaveLength(2_097_152)
+  })
+
+  it('adds the variables it was given to the environment it inherits', async () => {
+    const said = await execWithin(10_000, { OCTOPUS_PROBE: 'given' })('sh', [
+      '-c',
+      'printf "%s %s" "$OCTOPUS_PROBE" "${HOME:+inherited}"'
+    ])
+
+    expect(said).toBe('given inherited')
   })
 })
 

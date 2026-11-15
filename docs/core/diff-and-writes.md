@@ -97,9 +97,15 @@ front of it.
 
 ## Errors are not swallowed
 
-If git fails, stderr reaches the user. A `catch` is justified when the fallback
-is genuinely correct — not to make a coverage gap disappear. If the alternative
-is a clearer error one line later, let it through.
+If git fails, stderr reaches the user. `gh` is held to the same rule through
+`ghFailure` in `github.ts`. Exit 4 (gh's "authentication required"), a token
+GitHub rejects — which exits 1 with "HTTP 401", not 4 — and a `gh` that is not
+installed are `notConnected`, the one message that sends the reader to Settings. An answer past `MAX_OUTPUT_BYTES` is `ghOutputTooLarge`. Anything
+else — a rate limit, an SSO refusal, no network, a timeout — is `ghFailed` with
+the first line of what `gh` said, so an authorised user is not told to check an
+account that is fine. A `catch` is justified when the fallback is genuinely
+correct — not to make a coverage gap disappear. If the alternative is a clearer
+error one line later, let it through.
 
 Two failures in one chain are two decisions. Asking the agent for its model list
 is fire-and-forget: a list that cannot be **read** is swallowed, since it is a
