@@ -19,6 +19,7 @@ import { CodedError } from './codedError.js'
 import {
   anyBranchExists,
   branchBlocker,
+  branchExistsStrict,
   countAhead,
   type GitExec,
   type IndexCopyReader,
@@ -57,6 +58,7 @@ export type WorkspaceErrorCode =
   | 'branchExists'
   | 'pathExists'
   | 'uncommittedChanges'
+  | 'statusUnreadable'
   /** The branch holds commits the base branch does not. */
   | 'branchUnmerged'
   | 'nameEmpty'
@@ -701,7 +703,7 @@ export async function ensureRemovable(
 ): Promise<void> {
   const force = options.force ?? false
 
-  if (!force && (await holdsUncommittedWork(exec, workspace.path))) {
+  if (!force && (await holdsUncommittedWork(exec, workspace))) {
     throw new WorkspaceError(
       'uncommittedChanges',
       { name: workspace.name },
@@ -714,6 +716,9 @@ export async function ensureRemovable(
   // with half an operation: the directory deleted, the branch still there, and
   // an error about the branch.
   if (options.deleteBranch === true && options.baseBranch !== undefined) {
+    const subject = await commitsAtStake(exec.repository, workspace)
+    if (subject === null) return
+
     /*
      * Three questions, cheapest first, and none of them is "is it merged".
      *
@@ -728,8 +733,8 @@ export async function ensureRemovable(
      * when the other two have already said no.
      */
     const safe =
-      (await isBranchMerged(exec.repository, workspace.branch, options.baseBranch)) ||
-      (await isReachableElsewhere(exec.repository, workspace.branch)) ||
+      (await isBranchMerged(exec.repository, subject, options.baseBranch)) ||
+      (await isReachableElsewhere(exec.repository, subject)) ||
       (await (options.mergedRemotely?.() ?? Promise.resolve(false)))
 
     if (!safe) {
@@ -740,6 +745,12 @@ export async function ensureRemovable(
       )
     }
   }
+}
+
+async function commitsAtStake(repository: GitExec, workspace: Workspace): Promise<string | null> {
+  if (await branchExistsStrict(repository, workspace.branch)) return workspace.branch
+  // Renamed or deleted by hand: the commit the worktree stands on may be all that is left.
+  return (await listedWorktree(repository, workspace.path))?.head ?? null
 }
 
 /**
@@ -756,7 +767,10 @@ export async function discardWorkspace(
 ): Promise<void> {
   await discardWorktree(exec.repository, workspace.path, options.force ?? false)
 
-  if (options.deleteBranch === true) {
+  if (
+    options.deleteBranch === true &&
+    (await branchExistsStrict(exec.repository, workspace.branch))
+  ) {
     // -D is safe here: ensureRemovable found every commit kept elsewhere, or the caller left
     // out baseBranch — a project removal, or a user who said drop them — and so agreed to it.
     await deleteBranch(exec.repository, workspace.branch, true)
@@ -830,13 +844,16 @@ export async function isOrphaned(repository: GitExec, path: string): Promise<boo
   if (!(await pathExists(path))) return false
 
   try {
-    const known = await Promise.all(
-      (await listWorktrees(repository)).map((worktree) => resolveOrSelf(worktree.path))
-    )
-    return !known.includes(await resolveOrSelf(path))
+    return (await listedWorktree(repository, path)) === undefined
   } catch {
     return false
   }
+}
+
+async function listedWorktree(repository: GitExec, path: string): Promise<Worktree | undefined> {
+  const worktrees = await listWorktrees(repository)
+  const known = await Promise.all(worktrees.map((worktree) => resolveOrSelf(worktree.path)))
+  return worktrees[known.indexOf(await resolveOrSelf(path))]
 }
 
 /** Whether a directory holds anything at all. */
@@ -864,17 +881,23 @@ async function resolveOrSelf(path: string): Promise<string> {
  * entry they cannot remove.
  *
  * A directory git has let go of is asked differently. `git status` there would
- * answer for whatever repository lies above it, or fail and read as clean, and
- * either way say nothing of the files that are about to be deleted — so any
- * file in it counts.
+ * answer for whatever repository lies above it, or fail, and either way say
+ * nothing of the files that are about to be deleted — so any file in it counts.
  */
-async function holdsUncommittedWork(exec: WorkspaceExec, path: string): Promise<boolean> {
-  if (await isOrphaned(exec.repository, path)) return holdsLeftovers(path)
+async function holdsUncommittedWork(exec: WorkspaceExec, workspace: Workspace): Promise<boolean> {
+  if (!(await pathExists(workspace.path))) return false
+  if (await isOrphaned(exec.repository, workspace.path)) return holdsLeftovers(workspace.path)
 
   try {
     return await hasUncommittedChanges(exec.workspace)
-  } catch {
-    return false
+  } catch (error) {
+    // Not "clean": the cleanup would run, then `git worktree remove` refuse this same tree.
+    const reason = reasonFrom(error)
+    throw new WorkspaceError(
+      'statusUnreadable',
+      { name: workspace.name, reason },
+      `git could not read ${workspace.name}: ${reason}`
+    )
   }
 }
 

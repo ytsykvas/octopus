@@ -221,14 +221,17 @@ Removing a workspace, end to end:
 ```
 WorkspaceRow (click)
   → useWorkspaces.remove          asks for confirmation, handles the failure,
-                                  asks again before dropping unmerged commits,
+                                  asks again before forcing a worktree git
+                                  cannot read and before dropping unmerged commits,
                                   says when the cleanup script failed or did not run
   → window.octopus.workspaces.remove   preload: names the channel
   → ipcMain 'workspaces:remove'   main/ipc.ts: validates, calls attempt()
   → service.removeWorkspaceById   core/service.ts: the façade; once ensureRemovable
                                   agrees, onWorkspaceTeardown has main end the
                                   workspace's terminals before the cleanup script
-  → removeWorkspace               core/workspaces.ts: git, then the record
+  → ensureRemovable, discardWorkspace   core/workspaces.ts: the refusal before
+                                  anything is destroyed, then git; the service
+                                  commits the record once both are done
 ```
 
 Two things are worth noticing.

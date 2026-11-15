@@ -213,6 +213,36 @@ same order: listed while the worktree still exists, deleted only once its record
 has gone, so a removal that fails keeps its history
 ([transcripts-and-ports.md](../data/transcripts-and-ports.md)).
 
+Silence from `git status` is not an answer. A worktree still on disk whose
+status fails — a corrupt index, a folder git refuses for its owner
+(`safe.directory`), no git to run — refuses the removal with `statusUnreadable`,
+carrying git's first line, before a terminal ends, a session closes or the
+cleanup script runs. It used to read as clean, and for a corrupt index that was
+the worst order: the script dropped the database, and `git worktree remove` then
+refused the same tree. A folder already gone is still clean, and an orphan is
+judged by its files (below). `force` skips the question, because the user has
+already agreed to lose what it would count; removing a project always forces, so
+it is never stopped here. The window cannot send `force` on its own here — the
+count it asks before the dialog reads the same failure as no changes — so it
+asks a second question, quoting git's reason, and resends with `force` once the
+user agrees; a `branchUnmerged` after that keeps the `force`.
+
+A branch renamed or deleted by hand in the workspace terminal counts as
+deleted, but the commits it held are still weighed. Asked of a name that is not
+there, every merged question answers no, and the removal was refused over
+commits that now live under the other name. So `ensureRemovable` asks them of
+the commit the worktree stands on instead (`commitsAtStake`): a rename keeps that
+commit on the new branch and the removal goes ahead, while a detached HEAD
+holding commits found nowhere else is refused with `branchUnmerged`, much as
+the branch would have been — except that its old copy on `origin` now counts,
+since the commits are kept there. A worktree git no longer lists has no HEAD to
+weigh.
+`discardWorkspace` deletes the branch only while it is still there, and the
+branch under its new name is never touched. Both ask `branchExistsStrict`, for
+which only git's own "no such ref" is a no: a repository that cannot be asked
+refuses with git's own error — before anything is destroyed when
+`ensureRemovable` asks, and with the branch kept when `discardWorkspace` does.
+
 A removal can also stop partway. When something octopus did not start — a dev
 server in another terminal, a test run an agent left behind — keeps writing into
 the tree, `git worktree remove` has already dropped its own part — the
@@ -220,7 +250,7 @@ the tree, `git worktree remove` has already dropped its own part — the
 every retry fails on "is not a working tree". The folder is on disk and git does
 not list it (`isOrphaned`). Nothing in it is under git's care, so `git status`
 there cannot say what is at stake: it answers for whatever repository lies above
-the folder, or fails and reads as clean. Any file in it counts as work that
+the folder, or fails. Any file in it counts as work that
 would be lost (`holdsLeftovers`), the same refusal and the same forced
 confirmation a dirty tree gets, and once the user has agreed — or the folder is
 empty — it is deleted by hand and the entry pruned. A repository git cannot be

@@ -113,6 +113,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   slugTaken: { name: 'fix-login', slug: 'fix_login' },
   pathExists: { path: '/tmp/planner/anna' },
   uncommittedChanges: { name: 'anna' },
+  statusUnreadable: { name: 'anna', reason: 'index file smaller than expected' },
   nameEmpty: null,
   worktreeMissing: null,
   notOpenable: { path: 'bin/setup' },

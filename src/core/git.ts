@@ -498,6 +498,18 @@ export async function branchExists(exec: GitExec, branch: string): Promise<boole
   return refExists(exec, `refs/heads/${branch}`)
 }
 
+/** As `branchExists`, but a git that cannot answer throws rather than reading as absent. */
+export async function branchExistsStrict(exec: GitExec, branch: string): Promise<boolean> {
+  try {
+    await exec(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
+    return true
+  } catch (error) {
+    // `--verify --quiet` exits 1 for a missing ref and 128 when git cannot read the repository.
+    if (extractCode(error) !== '1') throw error
+    return false
+  }
+}
+
 /**
  * Whether a name resolves to a branch at all — local or remote-tracking.
  *

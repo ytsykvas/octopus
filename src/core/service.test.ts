@@ -3299,6 +3299,25 @@ describe('the cleanup script', () => {
     await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(0)
   })
 
+  it('does not run when git cannot read the worktree', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+
+    const marker = join(dir, 'archived.txt')
+    await service.saveProjectScript(project.id, 'archive', `#!/bin/sh\nprintf ran > '${marker}'\n`)
+    const index = (await gitIn(workspace.path)(['rev-parse', '--git-path', 'index'])).trim()
+    await writeFile(index, 'garbage', 'utf8')
+
+    await expect(
+      service.removeWorkspaceById(workspace.id, { deleteBranch: false })
+    ).rejects.toMatchObject({ code: 'statusUnreadable' })
+
+    await expect(readFile(marker, 'utf8')).rejects.toThrow()
+    await expect(listWorktrees(gitIn(repo))).resolves.toHaveLength(2)
+  })
+
   it('answers none when there is no cleanup script', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)

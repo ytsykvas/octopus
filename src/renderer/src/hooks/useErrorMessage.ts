@@ -178,6 +178,11 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.pathExists', { path: failure.params?.path ?? '' })
         case 'uncommittedChanges':
           return t('errors.uncommittedChanges', { name: failure.params?.name ?? '' })
+        case 'statusUnreadable':
+          return t('errors.statusUnreadable', {
+            name: failure.params?.name ?? '',
+            reason: failure.params?.reason ?? ''
+          })
         case 'nameEmpty':
           return t('errors.nameEmpty')
         case 'worktreeMissing':

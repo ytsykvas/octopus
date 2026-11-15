@@ -17,6 +17,7 @@ import {
   anyBranchExists,
   branchBlocker,
   branchExists,
+  branchExistsStrict,
   currentBranch,
   detectBaseBranch,
   extractCode,
@@ -294,6 +295,28 @@ describe('branchExists', () => {
     await initRepo(dir)
     await addRemote()
     await expect(branchExists(exec, 'origin/develop')).resolves.toBe(false)
+  })
+})
+
+describe('branchExistsStrict', () => {
+  it('finds an existing branch', async () => {
+    await initRepo(dir)
+    await expect(branchExistsStrict(exec, 'main')).resolves.toBe(true)
+  })
+
+  it('does not find a missing one', async () => {
+    await initRepo(dir)
+    await expect(branchExistsStrict(exec, 'missing')).resolves.toBe(false)
+  })
+
+  it('throws when git cannot answer', async () => {
+    await expect(branchExistsStrict(exec, 'main')).rejects.toMatchObject({ code: '128' })
+  })
+
+  it('throws when git cannot start there at all', async () => {
+    await expect(branchExistsStrict(gitIn(join(dir, 'moved')), 'main')).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
   })
 })
 
