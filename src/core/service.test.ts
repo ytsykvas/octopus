@@ -90,6 +90,9 @@ const UNPROMPTED: GitOptions = {
   }
 }
 
+/** Spelt out, not imported: compared with `FETCH_OPTIONS` itself, any value would pass. */
+const DEADLINED: GitOptions = { timeout: 30_000, env: { GIT_TERMINAL_PROMPT: '0' } }
+
 /** Writes a script the way a repository carries it: under `.octopus/scripts/`, executable. */
 async function carryScript(root: string, name: string, body: string): Promise<void> {
   const path = join(root, '.octopus', 'scripts', name)
@@ -829,6 +832,51 @@ describe('workspaces', () => {
 
     expect(pushedWith).not.toHaveLength(0)
     expect(pushedWith).toEqual(pushedWith.map(() => UNPROMPTED))
+  })
+
+  it.each([
+    ['the pane', (service: OctopusService, id: string) => service.readPullRequest(id)],
+    ['Amend & push', (service: OctopusService, id: string) => service.amendAndPushWorkspace(id)],
+    [
+      'removal',
+      async (service: OctopusService, id: string) => {
+        await expect(
+          service.removeWorkspaceById(id, { force: true, deleteBranch: true })
+        ).rejects.toMatchObject({ code: 'branchUnmerged' })
+      }
+    ]
+  ])('asks origin where the branch is for %s with a deadline and no prompt', async (_, asking) => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const remote = join(dir, 'remote')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: repo })
+
+    const asked: { ref: string | undefined; options: GitOptions | undefined }[] = []
+    const service = await createService({
+      ...paths(dir),
+      makeGh: () => () => Promise.resolve('[]'),
+      makeExec: (cwd, options) => {
+        const git = gitIn(cwd, options)
+        return (args) => {
+          if (args[0] === 'ls-remote') asked.push({ ref: args.at(-1), options })
+          return git(args)
+        }
+      }
+    })
+    const project = await service.addProjectFromPath(repo)
+    const workspace = await service.createWorkspaceIn(project.id)
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
+    await writeFile(join(workspace.path, 'more.txt'), 'more\n', 'utf8')
+
+    await asking(service, workspace.id)
+
+    const asks = asked.filter(({ ref }) => ref === `refs/heads/${workspace.branch}`)
+    expect(asks).not.toHaveLength(0)
+    expect(asks.map(({ options }) => options)).toEqual(asks.map(() => DEADLINED))
   })
 
   it('lines a rename up behind a push', async () => {

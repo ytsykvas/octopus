@@ -1974,6 +1974,8 @@ export const uk: Translation = {
     nothingToAmend: 'У цієї гілки немає власного коміта, який можна доповнити.',
     remoteAhead:
       'На GitHub у цій гілці є коміти, яких тут ще немає, тому останній коміт не змінено. Спершу підтягніть їх у терміналі.',
+    remoteUnreadable:
+      'Не вдалося запитати origin про {{branch}}, тому останній коміт не змінено. Git каже: {{reason}}',
     commitFailed: 'Не вдалося зробити коміт. Git каже: {{reason}}',
     mergeFailed: 'GitHub не влив #{{number}}. Каже: {{reason}}',
     requestNotOnBranch:

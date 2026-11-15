@@ -185,7 +185,8 @@ export async function readPullRequest(
   owner: BranchOwner,
   base: string,
   gh: GhExec,
-  git: GitExec
+  git: GitExec,
+  fetchGit: GitExec = git
 ): Promise<PullRequestView> {
   /* `allOf`, not `Promise.all`: the `gh` read below refuses an answer of the
      wrong shape, and three `git` reads are in flight beside it. Rejecting on
@@ -196,7 +197,8 @@ export async function readPullRequest(
   const [remote, dirty, tip, ahead, head] = await allOf([
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
-    remoteTip(branch, git),
+    // Origin unreadable draws as not pushed; only amendAndPush must refuse it.
+    remoteTip(branch, fetchGit).catch(() => null),
     countAhead(git, base, branch),
     currentBranch(git)
   ])
@@ -311,14 +313,7 @@ async function listPullRequests(
  * remote does not have.
  */
 async function remoteTip(branch: string, git: GitExec): Promise<string | null> {
-  let out: string
-  try {
-    out = await git(['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])
-  } catch {
-    // No remote, no network, no permission — none of which is an answer of
-    // "yes", and none of which should stop the pane drawing what it does know.
-    return null
-  }
+  const out = await git(['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])
 
   for (const line of out.split('\n')) {
     const [commit, ref] = line.split('\t')
@@ -599,7 +594,12 @@ export async function commitAndPush(message: string, branch: string, git: GitExe
  * remote-tracking ref, which a background fetch moves to whatever someone else
  * pushed, and then it protects nothing.
  */
-export async function amendAndPush(branch: string, base: string, git: GitExec): Promise<void> {
+export async function amendAndPush(
+  branch: string,
+  base: string,
+  git: GitExec,
+  fetchGit: GitExec = git
+): Promise<void> {
   await requireHeadOn(branch, git)
 
   if ((await countAhead(git, base, branch)) === 0) {
@@ -613,7 +613,13 @@ export async function amendAndPush(branch: string, base: string, git: GitExec): 
     throw new GitHubError('nothingToCommit', {}, 'There is nothing here to commit.')
   }
 
-  const tip = await remoteTip(branch, git)
+  const tip = await remoteTip(branch, fetchGit).catch((error: unknown) => {
+    throw new GitHubError(
+      'remoteUnreadable',
+      { branch, reason: reasonFrom(error) },
+      'Could not ask origin about the branch. Nothing was amended.'
+    )
+  })
   if (tip !== null && !(await contains(tip, git))) {
     throw new GitHubError(
       'remoteAhead',

@@ -137,6 +137,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   nothingToCommit: null,
   nothingToAmend: null,
   remoteAhead: null,
+  remoteUnreadable: { branch: 'octopus/anna', reason: 'Could not resolve host: github.com' },
   commitFailed: { reason: 'hook refused' },
   createFailed: { reason: 'no upstream' },
   draftFailed: { reason: 'the agent gave up' },

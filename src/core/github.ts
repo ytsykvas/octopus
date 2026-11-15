@@ -126,6 +126,9 @@ export type GitHubErrorCode =
   // Refused before an amend: the remote holds commits this checkout does not,
   // and replacing the branch there would throw them away.
   | 'remoteAhead'
+  // Refused before an amend: origin could not be asked, so whether it holds
+  // this commit is unknown.
+  | 'remoteUnreadable'
   | 'commitFailed'
   | 'pushFailed'
   | 'createFailed'

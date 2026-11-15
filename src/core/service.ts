@@ -6628,7 +6628,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
               workspace,
               baseRef,
               makeGh(workspace.path),
-              makeExec(workspace.path)
+              makeExec(workspace.path),
+              makeExec(workspace.path, FETCH_OPTIONS)
             )
             return view.request?.state === 'merged'
           } catch {
@@ -6754,7 +6755,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         workspace,
         await baseRefOf(project),
         makeGh(workspace.path),
-        makeExec(workspace.path)
+        makeExec(workspace.path),
+        makeExec(workspace.path, FETCH_OPTIONS)
       )
     },
 
@@ -6802,7 +6804,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         return amendAndPush(
           workspace.branch,
           await baseRefOf(project),
-          makeExec(workspace.path, PUSH_OPTIONS)
+          makeExec(workspace.path, PUSH_OPTIONS),
+          makeExec(workspace.path, FETCH_OPTIONS)
         )
       })
     },

@@ -149,16 +149,21 @@ workspace's work onto the base branch, which is what a worktree per task exists
 to prevent. It is invisible with `push.default=current`, so looking for it on
 the wrong machine finds nothing.
 
-The fetch and the pushes are the commands in `src/core` that leave the machine
-on purpose, and the only ones given an environment (`FETCH_OPTIONS`,
-`PUSH_OPTIONS` in `remotes.ts`). `GIT_TERMINAL_PROMPT=0` is the load-bearing
-half: git spawned from Electron has no controlling terminal, so a command that
-decides to ask for a password writes the prompt nowhere and waits for ever,
-behind a button with no way to cancel. The fetch also has a deadline. A push
-does not — a big one, or a pre-push hook running a test suite, legitimately
-takes minutes — and gives up instead on a transfer that has stopped moving
-(`GIT_HTTP_LOW_SPEED_*`). That matters because everything else done to the
-workspace's branch, its removal included, now waits behind its push (below).
+The pushes and the reads of `origin` are the `git` commands in `src/core` that
+leave the machine on purpose, and they run with `FETCH_OPTIONS` and
+`PUSH_OPTIONS` from `remotes.ts`. The reads are the fetch, the `ls-remote` that
+`pruneGoneBranches` asks before dropping stale copies, and the `ls-remote` that
+asks where a workspace's branch stands — for the pull-request pane, removal's
+merged-on-GitHub check and Amend & push. `GIT_TERMINAL_PROMPT=0` is the
+load-bearing half: git spawned from Electron has no controlling terminal, so a
+command that decides to ask for a password writes the prompt nowhere and waits
+for ever, behind a button with no way to cancel. The reads also have a deadline.
+A push does not — a big one, or a pre-push hook running a test suite,
+legitimately takes minutes — and gives up instead on a transfer that has stopped
+moving (`GIT_HTTP_LOW_SPEED_*`). That matters because everything else done to
+the workspace's branch, its removal included, now waits behind its push
+(below) — and removal asks where its branch stands inside that same queue, so an
+origin that never answered the read held every rename and push behind it.
 
 The same resolution has to serve the reads. `baseRefOf` in `service.ts` applies
 it to the diff, the count of commits ahead and the merged check — a workspace

@@ -101,6 +101,11 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.nothingToAmend')
         case 'remoteAhead':
           return t('errors.remoteAhead')
+        case 'remoteUnreadable':
+          return t('errors.remoteUnreadable', {
+            branch: failure.params?.branch ?? '',
+            reason: failure.params?.reason ?? ''
+          })
         case 'commitFailed':
           return t('errors.commitFailed', { reason: failure.params?.reason ?? '' })
         case 'closeFailed':

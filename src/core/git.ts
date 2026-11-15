@@ -111,9 +111,9 @@ export function reasonFrom(error: unknown): string {
  * instead of faking the failure — the interesting case is what a caller does
  * with an overflow, and a fake would only assert that the fake was believed.
  *
- * The other two exist for the one command that leaves the machine. A deadline
- * on `git branch` would invent a failure mode for something that cannot hang,
- * so neither is a constant here: the caller that needs them says so.
+ * `timeout` is for the commands that leave the machine. A deadline on `git branch`
+ * would invent a failure mode for something that cannot hang, so it is not a
+ * constant here: the caller that needs one says so.
  */
 export interface GitOptions {
   readonly maxBuffer?: number
