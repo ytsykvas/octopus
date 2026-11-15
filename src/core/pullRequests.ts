@@ -185,7 +185,8 @@ export async function readPullRequest(
   owner: BranchOwner,
   base: string,
   gh: GhExec,
-  git: GitExec
+  git: GitExec,
+  fetchGit: GitExec = git
 ): Promise<PullRequestView> {
   /* `allOf`, not `Promise.all`: the `gh` read below refuses an answer of the
      wrong shape, and three `git` reads are in flight beside it. Rejecting on
@@ -196,7 +197,7 @@ export async function readPullRequest(
   const [remote, dirty, tip, ahead, head] = await allOf([
     listPullRequests(branch, gh),
     hasUncommittedChanges(git),
-    remoteTip(branch, git),
+    remoteTip(branch, fetchGit),
     countAhead(git, base, branch),
     currentBranch(git)
   ])
@@ -599,7 +600,12 @@ export async function commitAndPush(message: string, branch: string, git: GitExe
  * remote-tracking ref, which a background fetch moves to whatever someone else
  * pushed, and then it protects nothing.
  */
-export async function amendAndPush(branch: string, base: string, git: GitExec): Promise<void> {
+export async function amendAndPush(
+  branch: string,
+  base: string,
+  git: GitExec,
+  fetchGit: GitExec = git
+): Promise<void> {
   await requireHeadOn(branch, git)
 
   if ((await countAhead(git, base, branch)) === 0) {
@@ -613,7 +619,7 @@ export async function amendAndPush(branch: string, base: string, git: GitExec): 
     throw new GitHubError('nothingToCommit', {}, 'There is nothing here to commit.')
   }
 
-  const tip = await remoteTip(branch, git)
+  const tip = await remoteTip(branch, fetchGit)
   if (tip !== null && !(await contains(tip, git))) {
     throw new GitHubError(
       'remoteAhead',

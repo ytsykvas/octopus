@@ -133,6 +133,15 @@ async function branchWithCommit(name = 'octopus/anna'): Promise<string> {
 
 const workExec = (): ReturnType<typeof gitIn> => gitIn(join(dir, 'work'))
 
+function recordingGit(): { git: GitExec; asked: string[] } {
+  const asked: string[] = []
+  const git: GitExec = (args) => {
+    asked.push(args.join(' '))
+    return workExec()(args)
+  }
+  return { git, asked }
+}
+
 /** One request on the branch, as `gh pr list` answers, ending at `headRefOid`. */
 const listed = (state: string, headRefOid: string): string =>
   JSON.stringify([{ number: 7, state, title: 't', url: 'u', createdAt: OPENED, headRefOid }])
@@ -441,6 +450,17 @@ describe('reading a branch', () => {
 
     expect(before.pushed).toBe(false)
     expect(after.pushed).toBe(true)
+  })
+
+  it('asks origin through the exec it is given for that', async () => {
+    const branch = await branchWithCommit()
+    await run('git', ['push', '-q', '-u', 'origin', branch], { cwd: join(dir, 'work') })
+    const fetch = recordingGit()
+
+    const view = await readPullRequest(owner(branch), 'main', fakeGh().gh, workExec(), fetch.git)
+
+    expect(fetch.asked).toEqual([`ls-remote --heads origin refs/heads/${branch}`])
+    expect(view.pushed).toBe(true)
   })
 
   // No remote at all answers "no", not an error: the pane can still say what
@@ -1227,6 +1247,18 @@ describe('amending the last commit onto a request that exists', () => {
     await amendAndPush(branch, 'main', workExec())
 
     expect(await subjects('main..HEAD')).toEqual(['work'])
+    expect(await remoteHead(branch)).toBe(await head())
+  })
+
+  it('asks origin through the exec it is given for that, and pushes through the other', async () => {
+    const branch = await branchWithCommit()
+    await publish(branch)
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+    const fetch = recordingGit()
+
+    await amendAndPush(branch, 'main', workExec(), fetch.git)
+
+    expect(fetch.asked).toEqual([`ls-remote --heads origin refs/heads/${branch}`])
     expect(await remoteHead(branch)).toBe(await head())
   })
 
