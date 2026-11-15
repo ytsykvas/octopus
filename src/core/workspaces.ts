@@ -19,6 +19,7 @@ import { CodedError } from './codedError.js'
 import {
   anyBranchExists,
   branchBlocker,
+  branchExistsStrict,
   countAhead,
   type GitExec,
   type IndexCopyReader,
@@ -715,6 +716,9 @@ export async function ensureRemovable(
   // with half an operation: the directory deleted, the branch still there, and
   // an error about the branch.
   if (options.deleteBranch === true && options.baseBranch !== undefined) {
+    const subject = await commitsAtStake(exec.repository, workspace)
+    if (subject === null) return
+
     /*
      * Three questions, cheapest first, and none of them is "is it merged".
      *
@@ -729,8 +733,8 @@ export async function ensureRemovable(
      * when the other two have already said no.
      */
     const safe =
-      (await isBranchMerged(exec.repository, workspace.branch, options.baseBranch)) ||
-      (await isReachableElsewhere(exec.repository, workspace.branch)) ||
+      (await isBranchMerged(exec.repository, subject, options.baseBranch)) ||
+      (await isReachableElsewhere(exec.repository, subject)) ||
       (await (options.mergedRemotely?.() ?? Promise.resolve(false)))
 
     if (!safe) {
@@ -741,6 +745,12 @@ export async function ensureRemovable(
       )
     }
   }
+}
+
+async function commitsAtStake(repository: GitExec, workspace: Workspace): Promise<string | null> {
+  if (await branchExistsStrict(repository, workspace.branch)) return workspace.branch
+  // Renamed or deleted by hand: the commit the worktree stands on may be all that is left.
+  return (await listedWorktree(repository, workspace.path))?.head ?? null
 }
 
 /**
@@ -757,7 +767,10 @@ export async function discardWorkspace(
 ): Promise<void> {
   await discardWorktree(exec.repository, workspace.path, options.force ?? false)
 
-  if (options.deleteBranch === true) {
+  if (
+    options.deleteBranch === true &&
+    (await branchExistsStrict(exec.repository, workspace.branch))
+  ) {
     // -D is safe here: ensureRemovable found every commit kept elsewhere, or the caller left
     // out baseBranch — a project removal, or a user who said drop them — and so agreed to it.
     await deleteBranch(exec.repository, workspace.branch, true)
@@ -831,13 +844,16 @@ export async function isOrphaned(repository: GitExec, path: string): Promise<boo
   if (!(await pathExists(path))) return false
 
   try {
-    const known = await Promise.all(
-      (await listWorktrees(repository)).map((worktree) => resolveOrSelf(worktree.path))
-    )
-    return !known.includes(await resolveOrSelf(path))
+    return (await listedWorktree(repository, path)) === undefined
   } catch {
     return false
   }
+}
+
+async function listedWorktree(repository: GitExec, path: string): Promise<Worktree | undefined> {
+  const worktrees = await listWorktrees(repository)
+  const known = await Promise.all(worktrees.map((worktree) => resolveOrSelf(worktree.path)))
+  return worktrees[known.indexOf(await resolveOrSelf(path))]
 }
 
 /** Whether a directory holds anything at all. */

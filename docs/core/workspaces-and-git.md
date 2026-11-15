@@ -227,6 +227,22 @@ count it asks before the dialog reads the same failure as no changes — so it
 asks a second question, quoting git's reason, and resends with `force` once the
 user agrees; a `branchUnmerged` after that keeps the `force`.
 
+A branch renamed or deleted by hand in the workspace terminal counts as
+deleted, but the commits it held are still weighed. Asked of a name that is not
+there, every merged question answers no, and the removal was refused over
+commits that now live under the other name. So `ensureRemovable` asks them of
+the commit the worktree stands on instead (`commitsAtStake`): a rename keeps that
+commit on the new branch and the removal goes ahead, while a detached HEAD
+holding commits found nowhere else is refused with `branchUnmerged`, much as
+the branch would have been — except that its old copy on `origin` now counts,
+since the commits are kept there. A worktree git no longer lists has no HEAD to
+weigh.
+`discardWorkspace` deletes the branch only while it is still there, and the
+branch under its new name is never touched. Both ask `branchExistsStrict`, for
+which only git's own "no such ref" is a no: a repository that cannot be asked
+refuses with git's own error — before anything is destroyed when
+`ensureRemovable` asks, and with the branch kept when `discardWorkspace` does.
+
 A removal can also stop partway. When something octopus did not start — a dev
 server in another terminal, a test run an agent left behind — keeps writing into
 the tree, `git worktree remove` has already dropped its own part — the

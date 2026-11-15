@@ -18,6 +18,7 @@ import {
   fileInWorkspace,
   createWorkspace,
   discardWorkspace,
+  ensureRemovable,
   freshBase,
   holdsLeftovers,
   isOrphaned,
@@ -1721,6 +1722,116 @@ describe('removeWorkspace', () => {
     await removeWorkspace(workspace, { repository: exec, workspace: inside }, { force: true })
 
     await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+  })
+
+  it('removes a workspace whose branch was deleted by hand, when the merged check is left out', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+    await inside(['switch', '-q', '--detach'])
+    await exec(['branch', '-D', workspace.branch])
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { deleteBranch: true }
+    )
+
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+  })
+
+  it('reports a branch git will not delete while it is still there', async () => {
+    const workspace = await create()
+    await writeFile(join(repo, '.git', 'refs', 'heads', `${workspace.branch}.lock`), '', 'utf8')
+
+    const error = await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: gitIn(workspace.path) },
+      { force: true, deleteBranch: true }
+    ).catch((cause: unknown) => cause)
+
+    expect(error).toMatchObject({ args: ['branch', '-D', workspace.branch] })
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(workspace.name)
+  })
+
+  it('removes a workspace whose branch was renamed by hand, with the branch box ticked', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+    await inside(['branch', '-m', 'elsewhere'])
+
+    await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { deleteBranch: true, baseBranch: 'main' }
+    )
+
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+    await expect(exec(['branch', '--list', 'elsewhere'])).resolves.toContain('elsewhere')
+  })
+
+  it('refuses commits only the worktree still stands on once its branch was deleted by hand', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+    await writeFile(join(workspace.path, 'only.txt'), 'only copy\n', 'utf8')
+    await inside(['add', '.'])
+    await inside(['commit', '-q', '-m', 'nowhere else'])
+    await inside(['switch', '-q', '--detach'])
+    await exec(['branch', '-D', workspace.branch])
+
+    const error = await removeWorkspace(
+      workspace,
+      { repository: exec, workspace: inside },
+      { deleteBranch: true, baseBranch: 'main' }
+    ).catch((cause: unknown) => cause)
+
+    expect(error).toMatchObject({ code: 'branchUnmerged' })
+    await expect(listWorktrees(exec)).resolves.toHaveLength(2)
+  })
+
+  it('removes a forgotten workspace whose branch was deleted by hand', async () => {
+    const workspace = await create()
+    await exec(['worktree', 'remove', workspace.path])
+    await exec(['branch', '-D', workspace.branch])
+
+    await expect(
+      removeWorkspace(
+        workspace,
+        { repository: exec, workspace: gitIn(workspace.path) },
+        { deleteBranch: true, baseBranch: 'main' }
+      )
+    ).resolves.toBeUndefined()
+  })
+
+  it('keeps a branch git cannot say is gone once the worktree has been discarded', async () => {
+    const workspace = await create()
+    const refusing: GitExec = (args) =>
+      args[0] === 'rev-parse'
+        ? Promise.reject(new GitError([...args], 'fatal: unable to read the repository', '128'))
+        : exec(args)
+
+    await expect(
+      discardWorkspace(
+        workspace,
+        { repository: refusing, workspace: gitIn(workspace.path) },
+        { deleteBranch: true }
+      )
+    ).rejects.toMatchObject({ code: '128' })
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(workspace.name)
+  })
+
+  it('refuses when git cannot say whether the branch is still there', async () => {
+    const workspace = await create()
+    await writeFile(join(repo, '.git', 'HEAD'), 'garbage', 'utf8')
+
+    await expect(
+      ensureRemovable(
+        workspace,
+        { repository: exec, workspace: gitIn(workspace.path) },
+        { force: true, deleteBranch: true, baseBranch: 'main' }
+      )
+    ).rejects.toMatchObject({
+      args: ['rev-parse', '--verify', '--quiet', `refs/heads/${workspace.branch}`],
+      code: '128'
+    })
   })
 })
 
