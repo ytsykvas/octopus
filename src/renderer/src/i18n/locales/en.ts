@@ -2452,6 +2452,8 @@ export const en = {
     nothingToAmend: 'This branch has no commit of its own to amend.',
     remoteAhead:
       'GitHub has commits on this branch that are not here yet, so the last commit was left alone. Pull them in the terminal first.',
+    remoteUnreadable:
+      'Could not ask origin about {{branch}}, so the last commit was left alone. Git said: {{reason}}',
     commitFailed: 'Could not commit the changes. Git said: {{reason}}',
     mergeFailed: 'GitHub would not merge #{{number}}. It said: {{reason}}',
     /* Refused before `gh` was asked to do anything. Names both branches,

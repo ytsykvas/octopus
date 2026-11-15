@@ -1287,6 +1287,22 @@ describe('amending the last commit onto a request that exists', () => {
     expect(await remoteHead(branch)).toBe(theirs)
   })
 
+  it('refuses, and amends nothing, when origin cannot be asked', async () => {
+    const branch = await branchWithCommit()
+    await publish(branch)
+    await writeFile(join(work(), 'b.txt'), 'two\n', 'utf8')
+    await run('git', ['remote', 'set-url', 'origin', join(dir, 'nowhere.git')], { cwd: work() })
+    const before = await head()
+
+    await expect(amendAndPush(branch, 'main', workExec())).rejects.toMatchObject({
+      code: 'remoteUnreadable',
+      params: { branch, reason: expect.stringContaining('nowhere.git') }
+    })
+    expect(await head()).toBe(before)
+    const status = await run('git', ['status', '--porcelain'], { cwd: work() })
+    expect(status.stdout).toContain('b.txt')
+  })
+
   /* HEAD would be the base's own commit, and amending it rewrites work this
      branch never made. */
   it('refuses on a branch with no commit of its own', async () => {

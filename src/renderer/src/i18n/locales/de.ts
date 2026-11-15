@@ -2004,6 +2004,8 @@ export const de: Translation = {
     nothingToAmend: 'Dieser Branch hat keinen eigenen Commit zum Ergänzen.',
     remoteAhead:
       'Auf GitHub hat dieser Branch Commits, die hier noch fehlen, deshalb blieb der letzte Commit unverändert. Hol sie zuerst im Terminal.',
+    remoteUnreadable:
+      'Der Stand von {{branch}} ließ sich bei origin nicht abfragen, deshalb blieb der letzte Commit unverändert. Git meldet: {{reason}}',
     commitFailed: 'Die Änderungen ließen sich nicht committen. Git meldet: {{reason}}',
     mergeFailed: 'GitHub hat #{{number}} nicht gemergt. Meldung: {{reason}}',
     requestNotOnBranch:

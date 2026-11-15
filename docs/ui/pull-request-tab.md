@@ -291,6 +291,13 @@ pushed from somewhere else would be thrown away, so that case is refused with a
 sentence instead — and with the lease pinned to that tip rather than left bare,
 which a background fetch would otherwise make protect nothing.
 
+An amend for which `origin` could not be asked — no remote, no network, no
+permission — is refused too (`remoteUnreadable`), before anything is rewritten.
+Read as "not pushed", it rewrote a commit already on GitHub, the unforced push
+was refused, and every amend after it found the old tip missing from HEAD and
+said `remoteAhead` for good. The pane itself still draws such an `origin` as not
+pushed.
+
 **What is left to push is counted from the commit the remote just named.**
 `ls-remote` prints `<sha>\t<ref>`, and the sha was being thrown away — so the
 count came from this clone's cached refs, which go stale exactly when the live
