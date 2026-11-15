@@ -171,3 +171,12 @@ is alive, which is what makes the answer knowable: anything answering then
 belongs to somebody else. A pool with nothing free answers with the port the
 workspace already had, so the failure is the server's own and not an invented
 one of ours.
+
+A new workspace's block is chosen in the same line as `settlePort`
+(`settlingOneAtATime` in `service.ts`), from the state as it stands at that
+moment, and held in `portsInFlight` until the record is stored or the creation
+is rolled back. A creation spends up to half a minute fetching, and a run of
+another workspace in that time must neither be missed by the creation's choice
+nor see the new block, which is in no record yet, as free. Two creations at
+once are not covered: the window starts one at a time (`useWorkspaces`), so a
+claim does not step over another claim.

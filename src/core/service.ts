@@ -90,7 +90,7 @@ import {
   type DraftEvent,
   draftPullRequest
 } from './pullRequestDraft.js'
-import { isListening, type PortProbe, settlePort } from './ports.js'
+import { isListening, newWorkspacePort, type PortProbe, settlePort } from './ports.js'
 import {
   defaultStrayDeps,
   findStrayServers,
@@ -2886,6 +2886,21 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * neither had moved, and both took the same free block.
    */
   const settlingOneAtATime = oneAtATime()
+
+  // A new workspace's block, between its claim in `settlingOneAtATime` and its
+  // record: until then no settlement could see it in the state.
+  const portsInFlight = new Set<number>()
+
+  function claimNewPort(): Promise<number> {
+    return settlingOneAtATime(async () => {
+      const port = await newWorkspacePort(
+        state.workspaces.map((workspace) => workspace.port),
+        listening
+      )
+      portsInFlight.add(port)
+      return port
+    })
+  }
 
   /**
    * Plugin writes, one after another.
@@ -6052,7 +6067,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
         const free = await settlePort(
           workspace.port,
-          state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port])),
+          [
+            ...state.workspaces.flatMap((other) => (other.id === workspaceId ? [] : [other.port])),
+            ...portsInFlight
+          ],
           listening
         )
         if (free === workspace.port) return free
@@ -6536,7 +6554,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         root: dataRoot,
         answers: listening,
         fetchExec: makeExec(project.repoPath, FETCH_OPTIONS),
-        onDetour: (detour) => detours.push(detour)
+        onDetour: (detour) => detours.push(detour),
+        choosePort: claimNewPort
       })
 
       try {
@@ -6553,6 +6572,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       } catch (error) {
         await rollbackWorkspace(created, exec)
         throw error
+      } finally {
+        // Not before the commit: until then this set is all that holds the block.
+        portsInFlight.delete(created.port)
       }
     },
 

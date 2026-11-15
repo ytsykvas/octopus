@@ -5097,6 +5097,59 @@ describe('the port a workspace serves on', () => {
     expect(a).not.toBe(b)
   })
 
+  it('does not hand a block promised to a workspace being created to another\u2019s run', async () => {
+    let probed = (): void => undefined
+    const probing = await createService({
+      ...paths(dir),
+      listening: (port) => {
+        probed()
+        return Promise.resolve(answering.has(port))
+      }
+    })
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await probing.addProjectFromPath(repo)
+    const first = await probing.createWorkspaceIn(project.id)
+    answering.add(first.port)
+
+    // Fired from inside the creation's own probe, so the run asks for a port
+    // while the new block is promised and not yet stored.
+    const settlements: Promise<number>[] = []
+    probed = () => {
+      probed = () => undefined
+      settlements.push(probing.ensureWorkspacePort(first.id))
+    }
+    const created = await probing.createWorkspaceIn(project.id)
+
+    expect(created.port).toBe(POOL_START + BLOCK)
+    await expect(Promise.all(settlements)).resolves.toEqual([POOL_START + 2 * BLOCK])
+  })
+
+  it('frees the block it promised once the creation fails', async () => {
+    const { id, port } = await withWorkspace()
+    const project = service.listProjects()[0]
+    await rm(join(dir, 'state.json'))
+    await mkdir(join(dir, 'state.json'))
+
+    await expect(service.createWorkspaceIn(project?.id ?? '')).rejects.toMatchObject({
+      code: 'EISDIR'
+    })
+
+    await rm(join(dir, 'state.json'), { recursive: true })
+    answering.add(port)
+    await expect(service.ensureWorkspacePort(id)).resolves.toBe(port + BLOCK)
+  })
+
+  it('frees the block it promised once the creation is stored', async () => {
+    const { id: gone, port } = await withWorkspace()
+    const project = service.listProjects()[0]
+    const kept = await service.createWorkspaceIn(project?.id ?? '')
+    await service.removeWorkspaceById(gone, { force: true, deleteBranch: true })
+
+    answering.add(kept.port)
+    await expect(service.ensureWorkspacePort(kept.id)).resolves.toBe(port)
+  })
+
   // A failure must not stop the workspace queued behind it from being served.
   it('settles the next port after one that could not be settled', async () => {
     const { id } = await withWorkspace()

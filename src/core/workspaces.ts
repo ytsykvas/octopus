@@ -32,7 +32,7 @@ import { fetchRemote, pruneGoneBranches, resolveBase } from './remotes.js'
 import { nextWorkspaceName, type Random } from './names.js'
 import { workspacePath } from './paths.js'
 import { workspaceSlug } from './scriptEnv.js'
-import { firstFreeBlock, POOL_START, type PortProbe } from './ports.js'
+import { newWorkspacePort, type PortProbe } from './ports.js'
 import type { Project, State, Workspace } from './store.js'
 import { allOf } from './parallel.js'
 import { DEFAULT_WORKSPACE_KIND, isWorkspaceKind, type WorkspaceKind } from './workspaceKinds.js'
@@ -233,6 +233,8 @@ interface CreateOptions {
   readonly fetchExec?: GitExec
   /** Told when the branch had to go round one named after its kind (`KindDetour`). */
   readonly onDetour?: (detour: KindDetour) => void
+  /** Awaited last, so a caller that reserves the port frees it via the workspace returned. */
+  readonly choosePort?: () => Promise<number>
 }
 
 /**
@@ -280,6 +282,13 @@ export async function createWorkspace(
 ): Promise<Workspace> {
   const exists = options.exists ?? pathExists
   const fetchExec = options.fetchExec ?? exec
+  const choosePort =
+    options.choosePort ??
+    (() =>
+      newWorkspacePort(
+        state.workspaces.map((workspace) => workspace.port),
+        options.answers
+      ))
 
   /*
    * Names are picked per project, so every project starts from the top of the
@@ -345,18 +354,7 @@ export async function createWorkspace(
     branch,
     path: await canonicalPath(exec, branch, path),
     status: 'idle',
-    /*
-     * The lowest block nothing is using. A pool that is entirely spoken for
-     * falls back to its first block rather than refusing to make the
-     * workspace: everything else about it works, and a port that clashes says
-     * so the moment a server binds — which is the script's own words rather
-     * than an invented failure from us.
-     */
-    port:
-      (await firstFreeBlock(
-        state.workspaces.map((workspace) => workspace.port),
-        options.answers
-      )) ?? POOL_START,
+    port: await choosePort(),
     createdAt: new Date().toISOString(),
     branchSince: null,
     // Following the project, which is what a workspace nobody has moved does.

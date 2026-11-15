@@ -123,6 +123,15 @@ export async function firstFreeBlock(
   return null
 }
 
+// A full pool falls back to its first block rather than refusing the workspace:
+// the clash then surfaces as the server's own error, not an invented one of ours.
+export async function newWorkspacePort(
+  claimed: readonly number[],
+  answers: PortProbe
+): Promise<number> {
+  return (await firstFreeBlock(claimed, answers)) ?? POOL_START
+}
+
 /**
  * The port a workspace should serve on now, which is usually the one it had.
  *

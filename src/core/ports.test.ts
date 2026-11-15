@@ -8,6 +8,7 @@ import {
   type Connect,
   firstFreeBlock,
   isListening,
+  newWorkspacePort,
   POOL_BLOCKS,
   POOL_START,
   settlePort
@@ -224,6 +225,18 @@ describe('firstFreeBlock', () => {
     const last = await firstFreeBlock(claimed, quiet)
 
     expect(last).toBe(POOL_START + (POOL_BLOCKS - 1) * BLOCK)
+  })
+})
+
+describe('newWorkspacePort', () => {
+  it('takes the lowest free block', async () => {
+    await expect(newWorkspacePort([POOL_START], () => Promise.resolve(false))).resolves.toBe(
+      POOL_START + BLOCK
+    )
+  })
+
+  it('falls back to the first block when every block is spoken for', async () => {
+    await expect(newWorkspacePort([], () => Promise.resolve(true))).resolves.toBe(POOL_START)
   })
 })
 
