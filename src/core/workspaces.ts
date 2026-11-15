@@ -57,6 +57,7 @@ export type WorkspaceErrorCode =
   | 'branchExists'
   | 'pathExists'
   | 'uncommittedChanges'
+  | 'statusUnreadable'
   /** The branch holds commits the base branch does not. */
   | 'branchUnmerged'
   | 'nameEmpty'
@@ -701,7 +702,7 @@ export async function ensureRemovable(
 ): Promise<void> {
   const force = options.force ?? false
 
-  if (!force && (await holdsUncommittedWork(exec, workspace.path))) {
+  if (!force && (await holdsUncommittedWork(exec, workspace))) {
     throw new WorkspaceError(
       'uncommittedChanges',
       { name: workspace.name },
@@ -864,17 +865,23 @@ async function resolveOrSelf(path: string): Promise<string> {
  * entry they cannot remove.
  *
  * A directory git has let go of is asked differently. `git status` there would
- * answer for whatever repository lies above it, or fail and read as clean, and
- * either way say nothing of the files that are about to be deleted — so any
- * file in it counts.
+ * answer for whatever repository lies above it, or fail, and either way say
+ * nothing of the files that are about to be deleted — so any file in it counts.
  */
-async function holdsUncommittedWork(exec: WorkspaceExec, path: string): Promise<boolean> {
-  if (await isOrphaned(exec.repository, path)) return holdsLeftovers(path)
+async function holdsUncommittedWork(exec: WorkspaceExec, workspace: Workspace): Promise<boolean> {
+  if (!(await pathExists(workspace.path))) return false
+  if (await isOrphaned(exec.repository, workspace.path)) return holdsLeftovers(workspace.path)
 
   try {
     return await hasUncommittedChanges(exec.workspace)
-  } catch {
-    return false
+  } catch (error) {
+    // Not "clean": the cleanup would run, then `git worktree remove` refuse this same tree.
+    const reason = reasonFrom(error)
+    throw new WorkspaceError(
+      'statusUnreadable',
+      { name: workspace.name, reason },
+      `git could not read ${workspace.name}: ${reason}`
+    )
   }
 }
 

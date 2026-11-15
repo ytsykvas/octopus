@@ -163,6 +163,11 @@ export const en = {
     dropUnmergedDetail:
       'Deleting the branch loses them for good. To keep them, cancel and remove the workspace with the branch checkbox cleared.',
     dropUnmergedConfirm: 'Delete anyway',
+    forceUnreadableTitle: 'Remove without checking?',
+    forceUnreadableMessage: 'git could not read {{name}}: {{reason}}',
+    forceUnreadableDetail:
+      'So octopus cannot tell whether it holds uncommitted work. Removing it anyway loses anything uncommitted for good. To keep it, cancel and repair the worktree in its terminal first.',
+    forceUnreadableConfirm: 'Remove anyway',
     cleanupFailed:
       'The workspace is removed, but its cleanup script failed, so whatever it was meant to take back — a database, say — may still be there. It said: {{detail}}',
     cleanupUnapproved:
@@ -2499,6 +2504,7 @@ export const en = {
       'Another workspace, \u201c{{name}}\u201d, already names the database {{slug}}. Two workspaces sharing one write over each other\u2019s data. Choose a name that differs by more than a dash or a dot.',
     pathExists: '{{path}} already exists.',
     uncommittedChanges: '{{name}} has uncommitted changes.',
+    statusUnreadable: 'git could not read {{name}}, so nothing was removed: {{reason}}',
     nameEmpty: 'The name cannot be empty.',
     worktreeMissing: 'That workspace is no longer there.',
     notOpenable:

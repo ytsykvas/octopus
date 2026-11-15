@@ -213,6 +213,20 @@ same order: listed while the worktree still exists, deleted only once its record
 has gone, so a removal that fails keeps its history
 ([transcripts-and-ports.md](../data/transcripts-and-ports.md)).
 
+Silence from `git status` is not an answer. A worktree still on disk whose
+status fails — a corrupt index, a folder git refuses for its owner
+(`safe.directory`), no git to run — refuses the removal with `statusUnreadable`,
+carrying git's first line, before a terminal ends, a session closes or the
+cleanup script runs. It used to read as clean, and for a corrupt index that was
+the worst order: the script dropped the database, and `git worktree remove` then
+refused the same tree. A folder already gone is still clean, and an orphan is
+judged by its files (below). `force` skips the question, because the user has
+already agreed to lose what it would count; removing a project always forces, so
+it is never stopped here. The window cannot send `force` on its own here — the
+count it asks before the dialog reads the same failure as no changes — so it
+asks a second question, quoting git's reason, and resends with `force` once the
+user agrees; a `branchUnmerged` after that keeps the `force`.
+
 A removal can also stop partway. When something octopus did not start — a dev
 server in another terminal, a test run an agent left behind — keeps writing into
 the tree, `git worktree remove` has already dropped its own part — the
@@ -220,7 +234,7 @@ the tree, `git worktree remove` has already dropped its own part — the
 every retry fails on "is not a working tree". The folder is on disk and git does
 not list it (`isOrphaned`). Nothing in it is under git's care, so `git status`
 there cannot say what is at stake: it answers for whatever repository lies above
-the folder, or fails and reads as clean. Any file in it counts as work that
+the folder, or fails. Any file in it counts as work that
 would be lost (`holdsLeftovers`), the same refusal and the same forced
 confirmation a dirty tree gets, and once the user has agreed — or the folder is
 empty — it is deleted by hand and the entry pruned. A repository git cannot be

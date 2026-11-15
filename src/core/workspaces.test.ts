@@ -1694,6 +1694,34 @@ describe('removeWorkspace', () => {
       removeWorkspace(workspace, { repository: exec, workspace: gitIn(workspace.path) })
     ).resolves.toBeUndefined()
   })
+
+  it('refuses when git cannot read the worktree', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+    await writeFile((await inside(['rev-parse', '--git-path', 'index'])).trim(), 'garbage', 'utf8')
+
+    const error = await removeWorkspace(workspace, {
+      repository: exec,
+      workspace: inside
+    }).catch((cause: unknown) => cause)
+
+    expect(error).toMatchObject({
+      code: 'statusUnreadable',
+      params: { name: workspace.name, reason: expect.stringContaining('index file') }
+    })
+    await expect(listWorktrees(exec)).resolves.toHaveLength(2)
+    await expect(exec(['branch', '--list', workspace.branch])).resolves.toContain(workspace.name)
+  })
+
+  it('removes a worktree git cannot read once forced', async () => {
+    const workspace = await create()
+    const inside = gitIn(workspace.path)
+    await writeFile((await inside(['rev-parse', '--git-path', 'index'])).trim(), 'garbage', 'utf8')
+
+    await removeWorkspace(workspace, { repository: exec, workspace: inside }, { force: true })
+
+    await expect(listWorktrees(exec)).resolves.toHaveLength(1)
+  })
 })
 
 describe('rollbackWorkspace', () => {

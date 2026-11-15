@@ -1514,7 +1514,9 @@ describe('useWorkspaces', () => {
       ])
       expect(confirm.mock.calls[1]?.[0]).toMatchObject({
         destructive: true,
-        message: 'ytsykvas/anna has commits that are in no other branch.'
+        title: 'Delete unmerged commits?',
+        message: 'ytsykvas/anna has commits that are in no other branch.',
+        confirmLabel: 'Delete anyway'
       })
       expect(onError.mock.calls).toEqual([[null]])
       expect(removed).toBe(true)
@@ -1542,6 +1544,109 @@ describe('useWorkspaces', () => {
       expect(onError.mock.calls).toEqual([[null]])
       expect(result.current.flat).toEqual([anna])
       expect(removed).toBe(false)
+    })
+
+    const unreadable = {
+      ok: false as const,
+      error: 'git could not read anna: fatal: index file smaller than expected',
+      code: 'statusUnreadable',
+      params: { name: 'anna', reason: 'fatal: index file smaller than expected' }
+    }
+
+    it('asks again before forcing a worktree git cannot read, and forces it when told to', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.remove)
+        .mockResolvedValueOnce(unreadable)
+        .mockResolvedValueOnce({ ok: true, value: { status: 'done' } })
+      const confirm = acceptsAndDeletesBranch()
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, confirm, vi.fn<OnError>()))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      const removed = await act(() => result.current.remove('planner/anna'))
+
+      expect(vi.mocked(window.octopus.workspaces.remove).mock.calls).toEqual([
+        ['planner/anna', { force: false, deleteBranch: true }],
+        ['planner/anna', { force: true, deleteBranch: true }]
+      ])
+      expect(confirm.mock.calls[1]?.[0]).toMatchObject({
+        destructive: true,
+        title: 'Remove without checking?',
+        message: 'git could not read anna: fatal: index file smaller than expected',
+        confirmLabel: 'Remove anyway'
+      })
+      expect(removed).toBe(true)
+    })
+
+    it('asks even when the failure carries no reason', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.remove).mockResolvedValueOnce({
+        ok: false,
+        error: unreadable.error,
+        code: 'statusUnreadable'
+      })
+      const confirm = vi
+        .fn<Confirm>()
+        .mockResolvedValueOnce({ confirmed: true, checked: true })
+        .mockResolvedValueOnce({ confirmed: false, checked: false })
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, confirm, vi.fn<OnError>()))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.remove('planner/anna'))
+
+      expect(confirm.mock.calls[1]?.[0].message).toBe('git could not read anna: ')
+    })
+
+    it('keeps a worktree git cannot read when forcing it is declined', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.remove).mockResolvedValueOnce(unreadable)
+      const confirm = vi
+        .fn<Confirm>()
+        .mockResolvedValueOnce({ confirmed: true, checked: true })
+        .mockResolvedValueOnce({ confirmed: false, checked: false })
+      const projects = [planner]
+
+      const { result } = renderHook(() => useWorkspaces(projects, confirm, vi.fn<OnError>()))
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      const removed = await act(() => result.current.remove('planner/anna'))
+
+      expect(window.octopus.workspaces.remove).toHaveBeenCalledTimes(1)
+      expect(result.current.flat).toEqual([anna])
+      expect(removed).toBe(false)
+    })
+
+    it('keeps the force when the forced removal then finds unmerged commits', async () => {
+      workspacesPerProject({ planner: [anna] })
+      vi.mocked(window.octopus.workspaces.remove)
+        .mockResolvedValueOnce(unreadable)
+        .mockResolvedValueOnce(unmerged)
+        .mockResolvedValueOnce({ ok: true, value: { status: 'done' } })
+      const projects = [planner]
+
+      const { result } = renderHook(() =>
+        useWorkspaces(projects, acceptsAndDeletesBranch(), vi.fn<OnError>())
+      )
+      await waitFor(() => {
+        expect(result.current.flat).toEqual([anna])
+      })
+
+      await act(() => result.current.remove('planner/anna'))
+
+      expect(vi.mocked(window.octopus.workspaces.remove).mock.calls).toEqual([
+        ['planner/anna', { force: false, deleteBranch: true }],
+        ['planner/anna', { force: true, deleteBranch: true }],
+        ['planner/anna', { force: true, deleteBranch: true, dropUnmerged: true }]
+      ])
     })
 
     it('reports a drop that failed and keeps the workspace in the list', async () => {

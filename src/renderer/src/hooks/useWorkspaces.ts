@@ -450,20 +450,36 @@ export function useWorkspaces(
 
       if (!answer.confirmed) return false
 
+      const confirmAgain = async (
+        question: 'forceUnreadable' | 'dropUnmerged',
+        message: string
+      ): Promise<boolean> =>
+        (
+          await confirm({
+            title: t(`workspaces.${question}Title`),
+            message,
+            detail: t(`workspaces.${question}Detail`),
+            confirmLabel: t(`workspaces.${question}Confirm`),
+            cancelLabel: t('workspaces.removeCancel'),
+            destructive: true
+          })
+        ).confirmed
+
       onError(null)
-      const choices = { force: hasChanges, deleteBranch: answer.checked }
+      let choices = { force: hasChanges, deleteBranch: answer.checked }
       let result = await window.octopus.workspaces.remove(workspaceId, choices)
 
+      if (!result.ok && result.code === 'statusUnreadable') {
+        const reason = result.params?.reason ?? ''
+        const message = t('workspaces.forceUnreadableMessage', { name: workspace.name, reason })
+        if (!(await confirmAgain('forceUnreadable', message))) return false
+        choices = { ...choices, force: true }
+        result = await window.octopus.workspaces.remove(workspaceId, choices)
+      }
+
       if (!result.ok && result.code === 'branchUnmerged') {
-        const anyway = await confirm({
-          title: t('workspaces.dropUnmergedTitle'),
-          message: t('workspaces.dropUnmergedMessage', { branch: workspace.branch }),
-          detail: t('workspaces.dropUnmergedDetail'),
-          confirmLabel: t('workspaces.dropUnmergedConfirm'),
-          cancelLabel: t('workspaces.removeCancel'),
-          destructive: true
-        })
-        if (!anyway.confirmed) return false
+        const message = t('workspaces.dropUnmergedMessage', { branch: workspace.branch })
+        if (!(await confirmAgain('dropUnmerged', message))) return false
         result = await window.octopus.workspaces.remove(workspaceId, {
           ...choices,
           dropUnmerged: true

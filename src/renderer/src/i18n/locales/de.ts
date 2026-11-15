@@ -137,6 +137,11 @@ export const de: Translation = {
     dropUnmergedDetail:
       'Wird der Branch gelöscht, sind sie endgültig verloren. Um sie zu behalten, abbrechen und den Workspace ohne Häkchen beim Branch entfernen.',
     dropUnmergedConfirm: 'Trotzdem löschen',
+    forceUnreadableTitle: 'Ohne Prüfung entfernen?',
+    forceUnreadableMessage: 'git konnte {{name}} nicht lesen: {{reason}}',
+    forceUnreadableDetail:
+      'Daher kann octopus nicht sagen, ob er nicht committete Änderungen enthält. Wer ihn trotzdem entfernt, verliert sie endgültig. Um sie zu behalten, abbrechen und den Worktree zuerst in seinem Terminal reparieren.',
+    forceUnreadableConfirm: 'Trotzdem entfernen',
     cleanupFailed:
       'Der Workspace ist entfernt, aber sein Aufräumskript ist fehlgeschlagen – was es zurücknehmen sollte, etwa eine Datenbank, ist womöglich noch da. Ausgabe: {{detail}}',
     cleanupUnapproved:
@@ -2039,6 +2044,7 @@ export const de: Translation = {
       'Ein anderer Workspace, „{{name}}“, nutzt bereits den Datenbanknamen {{slug}}. Zwei Workspaces mit derselben Datenbank überschreiben gegenseitig ihre Daten. Wähle einen Namen, der sich um mehr als einen Bindestrich oder Punkt unterscheidet.',
     pathExists: '{{path}} existiert bereits.',
     uncommittedChanges: '{{name}} hat nicht committete Änderungen.',
+    statusUnreadable: 'git konnte {{name}} nicht lesen, daher wurde nichts entfernt: {{reason}}',
     nameEmpty: 'Der Name darf nicht leer sein.',
     worktreeMissing: 'Dieser Workspace ist nicht mehr da.',
     notOpenable:
