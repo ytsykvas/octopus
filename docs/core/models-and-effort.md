@@ -239,12 +239,17 @@ on its way out — the opusPlan model switch included — is no fault, and an au
 mode it refuses is not given up. The SDK refuses a dying process's requests
 before its stream ends, so a refusal first waits up to `LET_GO_GRACE_MS` for the
 session's `ended` (`wasLetGo`); only one still unexplained after that counts as
-a refusal. A tab closed after that refuses the send as closed.
+a refusal. A tab closed after that refuses the send as closed. A message whose
+session is no longer the chat's by the time it goes — a close or a rewind ended
+it, or the one started in its place was let go too — is refused rather than
+written into an input nobody reads: `chatClosed` for a closed tab,
+`sessionGone` otherwise.
 "At rest" is `atRest`: idle or errored, no turn open, no agent live, no question
 waiting, nothing held in the CLI's queue, no edit announced and unfinished, no
-`/clear`, rewind or push pending, no session on its way up, and the account not
-being read. Rest is measured from the last event heard or the last time the
-session was asked for — a message sent into it included.
+`/clear`, rewind or push pending, no session on its way up, no side question
+being answered, and the account not being read. Rest is measured from the last
+event heard or the last time the session was asked for — a message sent into it
+or a side question asked of it included.
 
 The log has the matching rule, because the transcripts written before this did
 not get one: a footer at the head of the log closes no turn, so `buildBlocks`

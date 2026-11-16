@@ -302,8 +302,8 @@ of our transcript (the question without a `uuid`, since the agent has no point
 to rewind to), the new record carries it as `aside`, and the tab is named
 `btw: <question>`. The first message that reaches the agent as a prompt has the
 exchange put in front of it (`formatAside`), and `aside` is cleared. A message
-that is not sent after all — the session after a dead one failing to start —
-puts it back. A command is sent as typed, because text in front would stop it
+that is not sent after all — the session after a dead one failing to start, or
+the session a close or a rewind ended while it was on its way — puts it back. A command is sent as typed, because text in front would stop it
 being one: `/clear` drops the exchange, and any other listed command leaves it
 for the next message.
 

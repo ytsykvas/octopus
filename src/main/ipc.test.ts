@@ -3467,7 +3467,7 @@ describe('the agent chat', () => {
 
     // Built after the workspace exists, so the replacement reads it back from
     // the state file the first service wrote.
-    await useService({ query: answeringQuery('there') })
+    await useService({ query: answeringQuery('there', { lives: true }) })
 
     const opened = await invoke('chats:open', workspace.id)
 
@@ -3665,8 +3665,13 @@ function chatIdOf(result: unknown): string {
  * Enough to prove an event made the trip from the core to the window; the
  * mapping itself is covered where it lives, in `agent.test.ts`.
  */
-function answeringQuery(text: string): QueryFn {
+function answeringQuery(text: string, { lives = false } = {}): QueryFn {
   return () => {
+    let closed: () => void = () => undefined
+    const closing = new Promise<void>((resolve) => {
+      closed = resolve
+    })
+
     async function* stream(): AsyncGenerator<SDKMessage> {
       // Yields on the next tick, as a real session does — a generator that
       // answers before `startSession` has returned is not a shape the SDK has.
@@ -3679,6 +3684,9 @@ function answeringQuery(text: string): QueryFn {
         uuid: 'u-1',
         session_id: 'sess-1'
       } as unknown as SDKMessage
+
+      // A stream that ends here is a process that died, and a message sent after it is refused.
+      if (lives) await closing
     }
 
     return Object.assign(stream(), {
@@ -3702,7 +3710,9 @@ function answeringQuery(text: string): QueryFn {
           rate_limits: { five_hour: { utilization: 18, resets_at: null } },
           behaviors: null
         }),
-      close: () => undefined
+      close: () => {
+        closed()
+      }
     }) as unknown as Query
   }
 }
