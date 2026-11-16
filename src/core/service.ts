@@ -161,7 +161,7 @@ import {
   type SettingSourceName,
   toSdkSettingSources
 } from './config.js'
-import { type AgentEvent, forTranscript, isEphemeral } from './events.js'
+import { type AgentEvent, endedInError, forTranscript, isEphemeral } from './events.js'
 import { liveCount } from './backgroundTasks.js'
 import { createTaskRegistry, type TaskEnding, type TasksEvent } from './taskRegistry.js'
 import { type DirectoryListing, type FileTreeSnapshot, readFileTree } from './fileTree.js'
@@ -3530,9 +3530,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     if (event.type === 'result' || event.type === 'error') registry.setTurnOpen(chat.id, false)
 
     // Not idle while agents it sent off are still working — see `restingStatus`.
-    if (event.type === 'result' && !(event.ok && another)) {
-      if (event.ok) rest(chat)
-      else background(chat, setChatStatus(chat.id, 'error'))
+    if (event.type === 'result') {
+      if (endedInError(event)) background(chat, setChatStatus(chat.id, 'error'))
+      else if (!another) rest(chat)
     }
 
     /*

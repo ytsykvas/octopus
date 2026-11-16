@@ -5937,16 +5937,22 @@ describe('the agent chat', () => {
     session_id: 'sess-1'
   } as unknown as SDKMessage
 
-  /** What a session that was stopped says last. */
-  const abortedResultMessage = {
+  const failedResultMessage = {
     type: 'result',
     subtype: 'error_during_execution',
     is_error: true,
     total_cost_usd: 0,
     duration_ms: 1,
     usage: { input_tokens: 1, output_tokens: 1 },
-    terminal_reason: 'aborted',
+    terminal_reason: 'model_error',
     session_id: 'sess-1'
+  } as unknown as SDKMessage
+
+  /** What SDK 0.3.308 says when a turn is stopped before its reply ends — measured. */
+  const interruptedResultMessage = {
+    ...failedResultMessage,
+    terminal_reason: 'aborted_streaming',
+    errors: ['[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null']
   } as unknown as SDKMessage
 
   /** A service with a project, a workspace and a stubbed agent. */
@@ -6240,7 +6246,7 @@ describe('the agent chat', () => {
       const { service, chat, pushes } = await recording()
       await service.sendToChat(chat.id, 'fix the checks', { instruction: 'fixChecks' })
       agent().emit(initMessage)
-      agent().emit(abortedResultMessage)
+      agent().emit(failedResultMessage)
       // The entry went with the failed turn, so the next one pushes nothing.
       agent().emit(resultMessage)
       await service.closeChats()
@@ -6379,6 +6385,26 @@ describe('the agent chat', () => {
       })
     })
 
+    it('goes on to the held message after a stopped turn without saying it is done', async () => {
+      const { service, workspaceId, events } = await withWorkspace({ finishedAfterMs: 20 })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'work')
+      agent().emit(initMessage)
+      agent().emit(lifecycle('waited', 'queued'))
+      await service.interruptChat(chat.id)
+
+      agent().emit(interruptedResultMessage)
+      // Long enough for a "done" or a status write the result started to land.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      agent().emit(lifecycle('waited', 'started'))
+
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('running')
+      })
+      expect(events.map(({ event }) => event.type)).not.toContain('finished')
+    })
+
     // A failure is news even with another turn to come.
     it('still says a turn failed with a message held', async () => {
       const { service, workspaceId } = await withWorkspace()
@@ -6386,7 +6412,7 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'work')
       agent().emit(initMessage)
       agent().emit(lifecycle('waited', 'queued'))
-      agent().emit(abortedResultMessage)
+      agent().emit(failedResultMessage)
 
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('error')
@@ -6401,7 +6427,7 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'work')
       agent().emit(initMessage)
       agent().emit(lifecycle('lost', 'queued'))
-      agent().emit(abortedResultMessage)
+      agent().emit(failedResultMessage)
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('error')
       })
@@ -6869,7 +6895,7 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'look around')
       agent().emit(initMessage)
       agent().emit(started('task-1', 'call-1'))
-      agent().emit(abortedResultMessage)
+      agent().emit(failedResultMessage)
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('error')
       })
@@ -10170,6 +10196,23 @@ describe('the agent chat', () => {
         type: 'error',
         message: 'claude exited with code 1'
       })
+    })
+
+    it('leaves the workspace idle when the turn was stopped', async () => {
+      const { service, workspaceId, events } = await withWorkspace({ finishedAfterMs: 20 })
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'hello')
+      agent().emit(initMessage)
+      await service.interruptChat(chat.id)
+
+      agent().emit(interruptedResultMessage)
+
+      await vi.waitFor(() => {
+        expect(events.map(({ event }) => event.type)).toContain('finished')
+      })
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      const [workspace] = await service.listWorkspaces('planner')
+      expect(workspace?.status).toBe('idle')
     })
 
     it('hands every listener the event when one of them throws', async () => {
@@ -15595,7 +15638,7 @@ describe('the agent chat', () => {
       const heard: ChatStatusEvent[] = []
       service.onChatStatus((event) => heard.push(event))
 
-      agent().emit(abortedResultMessage)
+      agent().emit(failedResultMessage)
       // A write queued after the late one, so it has landed by the time this has.
       await new Promise((resolve) => setTimeout(resolve, 0))
       await service.renameChat(second.id, 'barrier')
@@ -15615,7 +15658,7 @@ describe('the agent chat', () => {
       await service.sendToChat(first.id, 'go')
 
       const closing = service.closeChat(first.id)
-      agent().emit(abortedResultMessage)
+      agent().emit(failedResultMessage)
       await closing
       await new Promise((resolve) => setTimeout(resolve, 0))
       await service.renameChat(second.id, 'barrier')
