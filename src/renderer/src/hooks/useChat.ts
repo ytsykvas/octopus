@@ -20,6 +20,7 @@ import type { ChatEntry } from '@core/transcript.js'
 import type { Failure, Result } from '../../../preload/index.js'
 import { useMainWorking } from './backgroundTasks.js'
 import { onChatEvent } from './chatEvents.js'
+import { type Heard, mergeHistory, withEvent } from './mergeHistory.js'
 import { type StreamStore, useStreaming } from './useStreaming.js'
 import { useLatest } from './useLatest.js'
 
@@ -199,9 +200,8 @@ type Describe = (failure: Failure) => string
 /**
  * One conversation.
  *
- * The history is read from disk once; everything after that arrives as events.
- * The two are deliberately never merged by re-reading the file — an append the
- * UI has already drawn would come back as a duplicate of itself.
+ * The history is read from disk; everything after that arrives as events. What
+ * arrives while a read is out is held and drawn over it by number (`mergeHistory`).
  */
 export function useChat(
   /**
@@ -294,6 +294,32 @@ export function useChat(
    */
   const announce = useLatest(onOpened)
 
+  // The array is the read's identity: one whose array has gone was replaced or abandoned.
+  const reading = useRef<Heard[] | null>(null)
+
+  const readHistory = useCallback(
+    async (id: string, signal?: AbortSignal): Promise<Failure | null> => {
+      const heard: Heard[] = []
+      reading.current = heard
+      // Let go at once, not when the read lands: the next conversation's events would wait on it.
+      signal?.addEventListener('abort', () => {
+        reading.current = null
+      })
+      const history = await window.octopus.chats.history(id)
+      if (reading.current !== heard) return null
+
+      reading.current = null
+      if (!history.ok) {
+        setEntries((current) => heard.reduce(withEvent, current))
+        return history
+      }
+
+      setEntries(mergeHistory(history.value, heard))
+      return null
+    },
+    []
+  )
+
   // Reset during render rather than in an effect. React supports this for
   // state derived from a prop, and it matters here: an effect runs after the
   // paint, so switching conversation would show the previous one for a frame
@@ -348,11 +374,10 @@ export function useChat(
     if (chatId === null || chatId === created.current) return
 
     void (async () => {
-      const history = await window.octopus.chats.history(chatId)
+      const failure = await readHistory(chatId, controller.signal)
       if (abandoned()) return
 
-      if (history.ok) setEntries(history.value.entries)
-      else setError(describeFailure(history))
+      if (failure !== null) setError(describeFailure(failure))
       setLoading(false)
 
       // Whether the agent is waiting on an answer. The event that asked went
@@ -373,7 +398,7 @@ export function useChat(
     return () => {
       controller.abort()
     }
-  }, [chatId, describeFailure])
+  }, [chatId, describeFailure, readHistory])
 
   const openChatId = chat?.id ?? null
 
@@ -393,9 +418,14 @@ export function useChat(
     if (openChatId === null) return
     // A read started here can land after the pane has moved to another
     // conversation; this is what tells it the log it brings is no longer wanted.
-    let listening = true
+    const controller = new AbortController()
 
-    const release = onChatEvent(({ event }) => {
+    const draw = (heard: Heard): void => {
+      if (reading.current === null) setEntries((current) => withEvent(current, heard))
+      else reading.current.push(heard)
+    }
+
+    const release = onChatEvent(({ event, seq }) => {
       if (event.type === 'text_delta') {
         appendStreaming('text', event.text)
         return
@@ -413,10 +443,8 @@ export function useChat(
          one that asked puts the message back in its field. */
       if (event.type === 'conversation_rewound') {
         discardStreaming()
-        void window.octopus.chats.history(openChatId).then((history) => {
-          if (!listening) return
-          if (history.ok) setEntries(history.value.entries)
-          else setError(describeFailure(history))
+        void readHistory(openChatId, controller.signal).then((failure) => {
+          if (failure !== null) setError(describeFailure(failure))
         })
         return
       }
@@ -457,7 +485,7 @@ export function useChat(
       // history that no longer exists anywhere and that nothing can continue.
       if (event.type === 'conversation_reset' && event.cleared) {
         discardStreaming()
-        setEntries([])
+        draw({ seq, at: new Date().toISOString(), event })
         return
       }
 
@@ -466,7 +494,7 @@ export function useChat(
       const outlived = event.type === 'error' && event.code === 'background'
       if (!isTaskBoundary(event) && event.type !== 'message_skipped' && !outlived)
         discardStreaming()
-      setEntries((current) => [...current, { role: 'agent', at: new Date().toISOString(), event }])
+      draw({ seq, at: new Date().toISOString(), event })
 
       // The core gave up auto mode on its own. This line is the only word of
       // it a window gets, so the chip is moved here — left alone it would go
@@ -526,11 +554,11 @@ export function useChat(
 
     const pendingMarks = queuing.current
     return () => {
-      listening = false
+      controller.abort()
       release()
       forgetQueuing(pendingMarks)
     }
-  }, [openChatId, describeFailure, appendStreaming, discardStreaming])
+  }, [openChatId, describeFailure, appendStreaming, discardStreaming, readHistory])
 
   /**
    * The conversation's record, created if this is the first thing done to it.
@@ -593,8 +621,7 @@ export function useChat(
          * land, which is the lesser failure — and the log now shows which case
          * this is.
          */
-        const history = await window.octopus.chats.history(target.id)
-        if (history.ok) setEntries(history.value.entries)
+        await readHistory(target.id)
 
         return false
       }
@@ -612,7 +639,7 @@ export function useChat(
 
       return true
     },
-    [ensureChat, describeFailure, discardStreaming]
+    [ensureChat, describeFailure, discardStreaming, readHistory]
   )
 
   const interrupt = useCallback(async () => {

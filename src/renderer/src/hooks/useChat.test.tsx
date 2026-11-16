@@ -7,10 +7,11 @@ import type { ChatHistory } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
-import { chat, emitAgentEvent, givenChat, TURN_DONE } from '../test/chat.js'
+import { CHAT_ID, chat, emitAgentEvent, givenChat, TURN_DONE } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { task } from '../test/tasks.js'
+import { onChatEvent } from './chatEvents.js'
 import { useChat } from './useChat.js'
 
 /** The English fallback is enough here; the mapping is `useErrorMessage`'s job. */
@@ -129,6 +130,192 @@ describe('a load that outlives the hook', () => {
     })
 
     expect(result.current.entries).toEqual([])
+  })
+
+  it('drops a history that lands after the pane let go of its conversation', async () => {
+    const history = held<Result<ChatHistory>>()
+    vi.mocked(octopus().chats.history).mockReturnValue(history.promise)
+    const initialProps: { record: Chat | null } = { record: chat() }
+    const { result, rerender } = renderHook(
+      ({ record }) => useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps }
+    )
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    rerender({ record: null })
+    await act(async () => {
+      history.resolve({
+        ok: true,
+        value: {
+          entries: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'not this one' }],
+          seq: 0
+        }
+      })
+      await history.promise
+    })
+
+    expect(result.current.entries).toEqual([])
+  })
+})
+
+describe('events heard while the history loads', () => {
+  const AT = '2026-08-11T09:00:00.000Z'
+  const line = (text: string): ChatEntry => ({
+    role: 'agent',
+    at: AT,
+    event: { type: 'text', text }
+  })
+  const textOf = (entry: ChatEntry): string => {
+    if (entry.role === 'user') return entry.text
+    return entry.event.type === 'text' ? entry.event.text : entry.event.type
+  }
+
+  function holdHistory(): ReturnType<typeof held<Result<ChatHistory>>> {
+    const history = held<Result<ChatHistory>>()
+    vi.mocked(octopus().chats.history).mockReturnValueOnce(history.promise)
+    return history
+  }
+
+  it('keeps an event that arrived while the history was loading', async () => {
+    const history = holdHistory()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    emitAgentEvent({ type: 'text', text: 'already on disk' }, CHAT_ID, 'planner/anna', 1)
+    emitAgentEvent({ type: 'text', text: 'not on disk yet' }, CHAT_ID, 'planner/anna', 2)
+    await act(async () => {
+      history.resolve({
+        ok: true,
+        value: { entries: [line('look'), line('already on disk')], seq: 1 }
+      })
+      await history.promise
+    })
+
+    expect(result.current.entries.map(textOf)).toEqual([
+      'look',
+      'already on disk',
+      'not on disk yet'
+    ])
+  })
+
+  it('keeps what it heard when the history cannot be read', async () => {
+    const history = holdHistory()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    emitAgentEvent({ type: 'text', text: 'still here' }, CHAT_ID, 'planner/anna', 1)
+    await act(async () => {
+      history.resolve({ ok: false, error: 'EACCES' })
+      await history.promise
+    })
+
+    expect(result.current.error).toBe('EACCES')
+    expect(result.current.entries.map(textOf)).toEqual(['still here'])
+  })
+
+  it('lets the read a rewind asked for win over the one still loading', async () => {
+    const first = holdHistory()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    vi.mocked(octopus().chats.history).mockResolvedValueOnce({
+      ok: true,
+      value: { entries: [line('after the cut')], seq: 2 }
+    })
+    emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-1' }, CHAT_ID, 'planner/anna', 2)
+    await waitFor(() => {
+      expect(result.current.entries.map(textOf)).toEqual(['after the cut'])
+    })
+
+    await act(async () => {
+      first.resolve({ ok: true, value: { entries: [line('before the cut')], seq: 1 } })
+      await first.promise
+    })
+
+    expect(result.current.entries.map(textOf)).toEqual(['after the cut'])
+  })
+
+  it('lets a clear heard during the read empty what the read brings', async () => {
+    const history = holdHistory()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    emitAgentEvent({ type: 'conversation_reset', cleared: true }, CHAT_ID, 'planner/anna', 2)
+    emitAgentEvent({ type: 'text', text: 'after the clear' }, CHAT_ID, 'planner/anna', 3)
+    await act(async () => {
+      history.resolve({ ok: true, value: { entries: [line('before the clear')], seq: 1 } })
+      await history.promise
+    })
+
+    expect(result.current.entries.map(textOf)).toEqual(['after the clear'])
+  })
+
+  it('keeps an event heard while a failed send reads the history again', async () => {
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+    vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'no session' })
+    const reread = holdHistory()
+
+    await act(async () => {
+      void result.current.send('hi')
+      await Promise.resolve()
+    })
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalledTimes(2)
+    })
+    emitAgentEvent({ type: 'text', text: 'heard meanwhile' }, CHAT_ID, 'planner/anna', 5)
+    await act(async () => {
+      reread.resolve({
+        ok: true,
+        value: { entries: [{ role: 'user', at: AT, text: 'hi' }], seq: 4 }
+      })
+      await reread.promise
+    })
+
+    expect(result.current.entries.map(textOf)).toEqual(['hi', 'heard meanwhile'])
+  })
+
+  it('draws what the next conversation says while a read the pane left is still out', async () => {
+    const history = holdHistory()
+    // Holds the bridge: released and taken again, emitAgentEvent would also call the old subscription.
+    const keepBridge = onChatEvent(() => undefined)
+    vi.mocked(octopus().chats.open).mockResolvedValue({
+      ok: true,
+      value: chat({ id: 'chat-b' })
+    })
+    const initialProps: { record: Chat | null } = { record: chat() }
+    const { result, rerender } = renderHook(
+      ({ record }) => useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps }
+    )
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalled()
+    })
+
+    rerender({ record: null })
+    await act(async () => {
+      await result.current.send('hi b')
+    })
+    emitAgentEvent({ type: 'text', text: 'b answers' }, 'chat-b', 'planner/anna', 1)
+    await act(async () => {
+      history.resolve({ ok: true, value: { entries: [line('not this one')], seq: 0 } })
+      await history.promise
+    })
+
+    expect(result.current.entries.map(textOf)).toEqual(['hi b', 'b answers'])
+    keepBridge()
   })
 })
 
