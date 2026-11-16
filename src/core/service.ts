@@ -856,6 +856,11 @@ export interface PermissionRequest {
   readonly taskId?: string
 }
 
+/** An MCP server's question still open; the card itself is drawn from the transcript. */
+export interface PendingElicitationView {
+  readonly requestId: string
+}
+
 interface PendingElicitation {
   readonly resolve: (answer: ElicitationAnswer) => void
   /** Kept so the fields can be read again when the answer arrives. */
@@ -1753,6 +1758,8 @@ export interface OctopusService {
    * ever while the answer it needs is one nobody can give.
    */
   pendingPermissions(chatId: string): readonly PermissionRequest[]
+  /** The MCP servers' questions still open, oldest first — asked for the reason above. */
+  pendingElicitations(chatId: string): readonly PendingElicitationView[]
   /**
    * Models the agent last reported, for the picker.
    *
@@ -3181,15 +3188,28 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return setChatStatus(chatId, asking ? 'waiting_permission' : 'running')
   }
 
+  /** `carryOn` while a turn is open or queued; after it, what the agents leave (`restingStatus`). */
+  function afterQuestion(chatId: string): Promise<void> {
+    const chat = findChat(state, chatId)
+    const working = registry.turnOpen(chatId) || (heldMessages.get(chatId)?.size ?? 0) > 0
+    if (!chat || working) return carryOn(chatId)
+    rest(chat)
+    return Promise.resolve()
+  }
+
   /**
    * What a conversation is doing once its main agent has stopped.
    *
    * Not simply idle: a background agent waiting on an answer still needs one,
    * and agents still working are still working. Only questions an agent asked
-   * count here — the turn's own are refused as it ends.
+   * count here — the turn's own are refused as it ends, and a server's question
+   * still open at rest is an agent's.
    */
   function restingStatus(chatId: string): ChatStatus {
-    if (askingTasks(chatId).size > 0) return 'waiting_permission'
+    const serverAsking = [...pendingElicitations.values()].some(
+      (request) => request.chatId === chatId
+    )
+    if (askingTasks(chatId).size > 0 || serverAsking) return 'waiting_permission'
     return liveCount(registry.tasks(chatId)) > 0 ? 'running' : 'idle'
   }
 
@@ -3578,8 +3598,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // question outlives the turn that launched the agent; it goes with the agent or the session.
     if (event.type === 'result' || event.type === 'error') {
       abandonPermissions(chat.id, event.type === 'result' ? 'turn' : 'all')
-      abandonElicitations(chat.id)
     }
+    // Never the ended turn's own: a server's question goes when the SDK aborts its signal.
+    if (event.type === 'error') abandonElicitations(chat.id)
 
     emit({ chatId: chat.id, workspaceId: chat.workspaceId, event })
 
@@ -3776,6 +3797,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         chatId: chat.id,
         workspaceId: chat.workspaceId
       })
+
+      // Taken back by the SDK when the server's call is gone; a live card would answer nothing.
+      ask.signal.addEventListener(
+        'abort',
+        () => {
+          if (!pendingElicitations.delete(requestId)) return
+
+          resolve({ action: 'cancel' })
+          handleEvent(chat, { type: 'elicitation_answered', requestId, action: 'cancel' })
+          background(chat, afterQuestion(chat.id))
+        },
+        { once: true }
+      )
     })
   }
 
@@ -3784,7 +3818,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    *
    * `cancel` rather than `decline`, and the two are different words to a
    * server: declining is the user saying no, and cancelling is the question
-   * going away without one. A turn that was stopped is the second.
+   * going away without one. A Stop, a failed session or a closed one is the second.
    */
   function abandonElicitations(chatId: string): void {
     for (const [requestId, request] of pendingElicitations) {
@@ -7572,9 +7606,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         }))
     },
 
+    pendingElicitations(chatId) {
+      requireChat(chatId)
+
+      return [...pendingElicitations]
+        .filter(([, request]) => request.chatId === chatId)
+        .map(([requestId]) => ({ requestId }))
+    },
+
     async answerElicitation(requestId, answer, values = {}) {
       const request = pendingElicitations.get(requestId)
-      // Unknown means already answered, or the turn it belonged to is over.
+      // Unknown means already answered, or withdrawn: by the SDK, a Stop or the session's end.
       if (!request) return
 
       // Removed as the answer is given, never before it: a question taken out
@@ -7592,9 +7634,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // the question rather than showing it still waiting.
       if (chat) handleEvent(chat, { type: 'elicitation_answered', requestId, action: answer })
 
-      // The turn carries on either way — a declined question is an answer the
-      // server acts on, not the end of anything.
-      await carryOn(request.chatId)
+      // A declined question is an answer the server acts on, not the end of
+      // anything: back to work, or to rest once the turn is over.
+      await afterQuestion(request.chatId)
     },
 
     async answerPermission(requestId, answer, feedback, editedPlan) {

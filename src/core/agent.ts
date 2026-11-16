@@ -311,6 +311,8 @@ export interface ElicitationAsk {
   /** A heading the server offered, where it offered one. */
   readonly title: string
   readonly fields: readonly ElicitationField[]
+  /** Aborted when the SDK takes the question back before anyone answered. */
+  readonly signal: AbortSignal
 }
 
 /** What comes back. `content` only for an answer, and only what was filled in. */
@@ -1098,7 +1100,7 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
        * because a half-drawn form collects an answer the server then refuses
        * and the user has typed it for nothing.
        */
-      onElicitation: async (request) => {
+      onElicitation: async (request, { signal }) => {
         if (request.mode === 'url') {
           return {
             action: 'decline',
@@ -1118,7 +1120,8 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
           serverName: request.serverName,
           message: request.message,
           title: request.title ?? '',
-          fields
+          fields,
+          signal
         })
       },
 

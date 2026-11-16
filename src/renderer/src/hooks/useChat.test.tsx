@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { Chat } from '@core/chats.js'
 import type { AgentEvent } from '@core/events.js'
-import type { ChatHistory } from '@core/service.js'
+import type { ChatHistory, PendingElicitationView } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
@@ -662,11 +662,7 @@ describe("an MCP server's question", () => {
     fields: []
   }
 
-  /*
-   * Its own state beside the permission, not the same one: a server's question
-   * does not put the conversation into `waiting_permission`, because the turn
-   * is inside a tool call and the agent is not the one asking.
-   */
+  // Apart from a permission: a server's question is answered by a call of its own.
   it('is held apart from a permission request', async () => {
     givenChat()
     const { result } = renderHook(() => useChat(...open()))
@@ -676,7 +672,7 @@ describe("an MCP server's question", () => {
 
     emitAgentEvent(REQUEST)
 
-    expect(result.current.pendingElicitation).toBe('e-1')
+    expect(result.current.pendingElicitations).toEqual(new Set(['e-1']))
     expect(result.current.pending).toBeNull()
   })
 
@@ -698,7 +694,7 @@ describe("an MCP server's question", () => {
     })
     // Cleared first: the server is released either way, and a form that stayed
     // live while it works reads as though the button did nothing.
-    expect(result.current.pendingElicitation).toBeNull()
+    expect(result.current.pendingElicitations.size).toBe(0)
   })
 
   it('says why an answer could not be sent', async () => {
@@ -720,7 +716,7 @@ describe("an MCP server's question", () => {
     expect(result.current.error).toBe('the agent is gone')
   })
 
-  // Another window on the same workspace answered it, or the turn withdrew it.
+  // Another window on the same workspace answered it, or the SDK took it back.
   it('drops a form something else has settled', async () => {
     givenChat()
     const { result } = renderHook(() => useChat(...open()))
@@ -731,7 +727,7 @@ describe("an MCP server's question", () => {
     emitAgentEvent(REQUEST)
     emitAgentEvent({ type: 'elicitation_answered', requestId: 'e-1', action: 'decline' })
 
-    expect(result.current.pendingElicitation).toBeNull()
+    expect(result.current.pendingElicitations.size).toBe(0)
   })
 
   // An outcome for some other question leaves this one alone.
@@ -745,7 +741,169 @@ describe("an MCP server's question", () => {
     emitAgentEvent(REQUEST)
     emitAgentEvent({ type: 'elicitation_answered', requestId: 'e-other', action: 'cancel' })
 
-    expect(result.current.pendingElicitation).toBe('e-1')
+    expect(result.current.pendingElicitations).toEqual(new Set(['e-1']))
+  })
+
+  it('keeps two forms open at once', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    emitAgentEvent(REQUEST)
+    emitAgentEvent({ ...REQUEST, requestId: 'e-2' })
+
+    expect(result.current.pendingElicitations).toEqual(new Set(['e-1', 'e-2']))
+  })
+
+  it('answers one form and leaves the other open', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+    emitAgentEvent(REQUEST)
+    emitAgentEvent({ ...REQUEST, requestId: 'e-2' })
+
+    await act(async () => {
+      await result.current.answerElicitation('e-1', 'decline')
+    })
+
+    expect(result.current.pendingElicitations).toEqual(new Set(['e-2']))
+  })
+
+  it("keeps an agent's form past the end of the turn", async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+    emitAgentEvent(REQUEST)
+
+    emitAgentEvent(TURN_DONE)
+
+    expect(result.current.pendingElicitations).toEqual(new Set(['e-1']))
+  })
+
+  it('takes every form away when the session fails', async () => {
+    givenChat()
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+    emitAgentEvent(REQUEST)
+    emitAgentEvent({ ...REQUEST, requestId: 'e-2' })
+
+    emitAgentEvent({ type: 'error', message: 'exited' })
+
+    expect(result.current.pendingElicitations.size).toBe(0)
+  })
+
+  it('restores an open form after a reload', async () => {
+    givenChat()
+    vi.mocked(octopus().chats.pendingElicitations).mockResolvedValue({
+      ok: true,
+      value: [{ requestId: 'e-1' }]
+    })
+
+    const { result } = renderHook(() => useChat(...open()))
+
+    await waitFor(() => {
+      expect(result.current.pendingElicitations).toEqual(new Set(['e-1']))
+    })
+  })
+
+  it('keeps a form raised while the open ones were being asked for', async () => {
+    givenChat()
+    const asking = held<Result<readonly PendingElicitationView[]>>()
+    vi.mocked(octopus().chats.pendingElicitations).mockReturnValue(asking.promise)
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.pendingElicitations).toHaveBeenCalled()
+    })
+
+    emitAgentEvent({ ...REQUEST, requestId: 'e-2' })
+    await act(async () => {
+      asking.resolve({ ok: true, value: [{ requestId: 'e-1' }] })
+      await asking.promise
+    })
+
+    expect(result.current.pendingElicitations).toEqual(new Set(['e-1', 'e-2']))
+  })
+
+  it('opens no form when the open ones cannot be asked for', async () => {
+    givenChat()
+    vi.mocked(octopus().chats.pendingElicitations).mockResolvedValue({
+      ok: false,
+      error: 'no such chat'
+    })
+
+    const { result } = renderHook(() => useChat(...open()))
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+    expect(result.current.pendingElicitations.size).toBe(0)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('drops the open forms that land after the pane let go of its conversation', async () => {
+    givenChat()
+    const asking = held<Result<readonly PendingElicitationView[]>>()
+    vi.mocked(octopus().chats.pendingElicitations).mockReturnValue(asking.promise)
+    const initialProps: { record: Chat | null } = { record: chat() }
+    const { result, rerender } = renderHook(
+      ({ record }) => useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps }
+    )
+    await waitFor(() => {
+      expect(octopus().chats.pendingElicitations).toHaveBeenCalled()
+    })
+
+    rerender({ record: null })
+    await act(async () => {
+      asking.resolve({ ok: true, value: [{ requestId: 'e-1' }] })
+      await asking.promise
+    })
+
+    expect(result.current.pendingElicitations.size).toBe(0)
+  })
+
+  // The log's rows are memoised on the set: a new empty one would redraw them all for nothing.
+  it('keeps the same set when no form is open', async () => {
+    givenChat()
+    const asking = held<Result<readonly PendingElicitationView[]>>()
+    vi.mocked(octopus().chats.pendingElicitations).mockReturnValue(asking.promise)
+    const { result } = renderHook(() => useChat(...open()))
+    await waitFor(() => {
+      expect(octopus().chats.pendingElicitations).toHaveBeenCalled()
+    })
+    const before = result.current.pendingElicitations
+
+    await act(async () => {
+      asking.resolve({ ok: true, value: [] })
+      await asking.promise
+    })
+
+    expect(result.current.pendingElicitations).toBe(before)
+  })
+
+  it('leaves the forms of one conversation behind on switching to another', async () => {
+    givenChat()
+    const initialProps: { record: Chat | null } = { record: chat() }
+    const { result, rerender } = renderHook(
+      ({ record }) => useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps }
+    )
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+    emitAgentEvent(REQUEST)
+
+    rerender({ record: chat({ id: 'chat-other' }) })
+
+    expect(result.current.pendingElicitations.size).toBe(0)
   })
 })
 

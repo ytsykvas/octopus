@@ -1741,7 +1741,7 @@ export const de: Translation = {
     was: {
       accept: 'Beantwortet.',
       decline: 'Abgelehnt.',
-      cancel: 'Zurückgezogen, als die Runde stoppte.'
+      cancel: 'Zurückgezogen, bevor es beantwortet wurde.'
     },
     gone: 'Wartet nicht mehr auf eine Antwort.'
   },

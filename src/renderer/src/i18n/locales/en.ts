@@ -2171,9 +2171,9 @@ export const en = {
     was: {
       accept: 'Answered.',
       decline: 'Declined.',
-      cancel: 'Withdrawn when the turn stopped.'
+      cancel: 'Withdrawn before it was answered.'
     },
-    /* Neither open nor recorded: the turn it belonged to is gone, and the
+    /* Neither open nor recorded: the session it belonged to is gone, and the
        transcript never got its outcome. */
     gone: 'No longer waiting for an answer.'
   },

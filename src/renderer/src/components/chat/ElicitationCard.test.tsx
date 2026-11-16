@@ -226,12 +226,12 @@ describe('one that is no longer waiting', () => {
     expect(screen.getByText('Declined.')).toBeInTheDocument()
   })
 
-  it('says when the turn took it away', () => {
+  it('says when it was taken away unanswered', () => {
     renderCard({ answerable: false, answered: 'cancel' })
-    expect(screen.getByText('Withdrawn when the turn stopped.')).toBeInTheDocument()
+    expect(screen.getByText('Withdrawn before it was answered.')).toBeInTheDocument()
   })
 
-  // Neither open nor recorded: the turn it belonged to is gone and the
+  // Neither open nor recorded: the session it belonged to is gone and the
   // transcript never got its outcome.
   it('says so when nothing was ever recorded', () => {
     renderCard({ answerable: false, answered: null })

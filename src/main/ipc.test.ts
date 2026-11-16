@@ -506,6 +506,7 @@ describe('channel table', () => {
     'chats:agents',
     'chats:answerQuestions',
     'chats:pending',
+    'chats:pendingElicitations',
     'chats:usage',
     'chats:sideQuestion',
     'chats:permission',
@@ -3355,6 +3356,23 @@ describe('the agent chat', () => {
 
   it('refuses to answer for a chat that does not exist', async () => {
     await expect(invoke('chats:pending', 'chat-nothing')).resolves.toMatchObject({ ok: false })
+  })
+
+  it('reports no open form for a chat no server is asking anything of', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    const opened = await invoke('chats:open', workspace.id)
+
+    await expect(invoke('chats:pendingElicitations', chatIdOf(opened))).resolves.toEqual({
+      ok: true,
+      value: []
+    })
+  })
+
+  it('refuses to list the forms of a chat that does not exist', async () => {
+    await expect(invoke('chats:pendingElicitations', 'chat-nothing')).resolves.toMatchObject({
+      ok: false
+    })
   })
 
   // The answers reach the agent as text, so they are parsed at the boundary

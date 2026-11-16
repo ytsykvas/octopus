@@ -48,5 +48,7 @@ function isMainTurnEntry(entry: ChatEntry): boolean {
   // A skipped frame names no owner, and mid-turn the start is already set.
   if (isTaskBoundary(event) || event.type === 'message_skipped') return false
   if (event.type === 'permission_request') return event.taskId === undefined
+  // Names no agent, and outlives the turn: one asked or settled after it is an agent's.
+  if (event.type === 'elicitation_request' || event.type === 'elicitation_answered') return false
   return !('parentToolUseId' in event) || event.parentToolUseId === undefined
 }

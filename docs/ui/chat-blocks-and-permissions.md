@@ -177,8 +177,8 @@ phishing prompt has.
 **It marks the conversation as waiting**, as a permission does: the turn is held
 on it just the same. So the workspace's amber dot, the project tile's mark and a
 "has a question for you" notice all appear for it, and answering puts the
-conversation back to working. It used to stay `running`, and an agent stuck on a
-form looked busy rather than stuck.
+conversation back to working — or, once the turn is over, to rest. It used to
+stay `running`, and an agent stuck on a form looked busy rather than stuck.
 
 Two things are refused rather than drawn, and both would otherwise be this app
 pretending. A `url` mode asks the host to send somebody to an address a
@@ -189,4 +189,14 @@ user has typed it for nothing.
 
 `decline` and `cancel` are different words to a server and so different
 sentences here: one is the user saying no, the other is the question going away
-when the turn stopped.
+without one — the SDK taking it back, a Stop, or the session failing or closing.
+The end of a turn is not one of them: the main agent cannot finish while its own
+call waits, so a question still open at a `result` is a background agent's, and
+the conversation stays amber for it — unless the turn failed, which shows red
+until the form is settled.
+
+**More than one can be open, and a reload keeps them.** Two servers, or two
+agents, can each hold a form at once, and every card a server is still waiting
+on keeps its buttons. The card is drawn from the transcript, so a window that
+opens later asks `chats:pendingElicitations` which are still live, as it asks
+`chats:pending` for permissions.

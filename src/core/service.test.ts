@@ -5587,7 +5587,10 @@ describe('the agent chat', () => {
       extra?: { signal?: AbortSignal; suppressAlwaysAllowRule?: boolean; agentID?: string }
     ) => Promise<unknown>
     /** Calls the SDK's `onElicitation`, which is what an MCP server blocks on. */
-    readonly elicit: (request: Record<string, unknown>) => Promise<{ action: string }>
+    readonly elicit: (
+      request: Record<string, unknown>,
+      signal?: AbortSignal
+    ) => Promise<{ action: string }>
     readonly sent: string[]
     /** The id each message carried, in step with `sent`. */
     readonly sentIds: (string | undefined)[]
@@ -5780,7 +5783,7 @@ describe('the agent chat', () => {
             ...(extra.agentID !== undefined && { agentID: extra.agentID })
           })
         },
-        elicit: (request) => {
+        elicit: (request, signal = new AbortController().signal) => {
           const onElicitation = options.onElicitation
           if (typeof onElicitation !== 'function') throw new Error('no onElicitation')
 
@@ -5789,7 +5792,7 @@ describe('the agent chat', () => {
               request: Record<string, unknown>,
               options: { signal: AbortSignal }
             ) => Promise<{ action: string }>
-          )(request, { signal: new AbortController().signal })
+          )(request, { signal })
         },
         interrupted: () => interrupted,
         stoppedTasks: () => stoppedTasks,
@@ -6516,6 +6519,12 @@ describe('the agent chat', () => {
 
     const settle = (): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, 50))
 
+    const QUESTION = {
+      serverName: 'ledger',
+      message: 'x',
+      requestedSchema: { type: 'object', properties: { token: { type: 'string' } } }
+    }
+
     it('stays working while an agent it sent off is still running', async () => {
       const { service, workspaceId } = await withAgentAway()
       await settle()
@@ -6723,6 +6732,83 @@ describe('the agent chat', () => {
       expect(service.pendingPermissions(chat.id)).toHaveLength(1)
       expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
       expect(service.listTasks()[0]?.tasks[0]?.waiting).toBe(true)
+    })
+
+    it("keeps the conversation waiting on a server's question past the turn", async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+      void agent().elicit(QUESTION)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      })
+
+      agent().emit(resultMessage)
+      await settle()
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+    })
+
+    it('comes to rest when a server takes back a question after its agent ended', async () => {
+      const { service, workspaceId } = await withAgentAway()
+      const withdraw = new AbortController()
+      void agent().elicit(QUESTION, withdraw.signal)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      })
+      agent().emit(notified('task-1'))
+      agent().emit(alive())
+      await settle()
+
+      withdraw.abort()
+      await settle()
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+    })
+
+    it('comes to rest when a question is answered after its agent ended', async () => {
+      const { service, workspaceId, events } = await withAgentAway()
+      void agent().elicit(QUESTION)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      })
+      const raised = events.find((entry) => entry.event.type === 'elicitation_request')?.event
+      if (raised?.type !== 'elicitation_request') throw new Error('no request was raised')
+      agent().emit(notified('task-1'))
+      agent().emit(alive())
+      await settle()
+
+      await service.answerElicitation(raised.requestId, 'decline')
+      await settle()
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+    })
+
+    // A message still queued at the result is another turn about to start, not a rest.
+    it('stays working when a question is answered with a message still queued', async () => {
+      const { service, workspaceId, events } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'look around')
+      agent().emit(initMessage)
+      agent().emit(started('task-1', 'call-1'))
+      void agent().elicit(QUESTION)
+      await vi.waitFor(() => {
+        expect(service.listChats(workspaceId)[0]?.status).toBe('waiting_permission')
+      })
+      const raised = events.find((entry) => entry.event.type === 'elicitation_request')?.event
+      if (raised?.type !== 'elicitation_request') throw new Error('no request was raised')
+      agent().emit(lifecycle('waited', 'queued'))
+      agent().emit(resultMessage)
+      agent().emit(notified('task-1'))
+      agent().emit(alive())
+      await settle()
+
+      await service.answerElicitation(raised.requestId, 'decline')
+      await settle()
+
+      expect(service.listChats(workspaceId)[0]?.status).toBe('running')
     })
 
     it('names the agent that is asking', async () => {
@@ -13175,7 +13261,7 @@ describe('the agent chat', () => {
     }
 
     /** A session with a question from a server already on the books. */
-    async function asked(): Promise<{
+    async function asked(signal?: AbortSignal): Promise<{
       service: OctopusService
       workspaceId: string
       chatId: string
@@ -13187,11 +13273,14 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
 
-      const answer = agent().elicit({
-        serverName: 'ledger',
-        message: 'Which token should I use?',
-        requestedSchema: FORM
-      })
+      const answer = agent().elicit(
+        {
+          serverName: 'ledger',
+          message: 'Which token should I use?',
+          requestedSchema: FORM
+        },
+        signal
+      )
 
       await vi.waitFor(() => {
         expect(events.some((entry) => entry.event.type === 'elicitation_request')).toBe(true)
@@ -13256,22 +13345,20 @@ describe('the agent chat', () => {
       })
     })
 
-    /*
-     * `cancel`, not `decline`: declining is the user saying no, and cancelling
-     * is the question going away without one. A turn that ended is the second,
-     * and a server tells the two apart.
-     */
-    it('is withdrawn as cancelled when the turn ends under it', async () => {
-      const { answer, events } = await asked()
+    // `cancel`, not `decline`: the question went away without the user saying no.
+    it('is withdrawn as cancelled when the session fails under it', async () => {
+      const { answer, events, requestId } = await asked()
 
-      agent().emit(resultMessage)
+      agent().finish(new Error('exited with code 1'))
 
-      await expect(answer).resolves.toEqual({ action: 'cancel' })
       await vi.waitFor(() => {
-        expect(events.map((entry) => entry.event)).toContainEqual(
-          expect.objectContaining({ type: 'elicitation_answered', action: 'cancel' })
-        )
+        expect(events.map((entry) => entry.event)).toContainEqual({
+          type: 'elicitation_answered',
+          requestId,
+          action: 'cancel'
+        })
       })
+      await expect(answer).resolves.toEqual({ action: 'cancel' })
     })
 
     /*
@@ -13291,6 +13378,67 @@ describe('the agent chat', () => {
       await service.answerElicitation(requestId, 'decline')
 
       expect(status()).toBe('running')
+    })
+
+    it('is withdrawn when the SDK takes it back', async () => {
+      const withdraw = new AbortController()
+      const { service, workspaceId, chatId, answer, events, requestId } = await asked(
+        withdraw.signal
+      )
+      const status = (): string | undefined =>
+        service.listChats(workspaceId).find((chat) => chat.id === chatId)?.status
+      await vi.waitFor(() => {
+        expect(status()).toBe('waiting_permission')
+      })
+
+      withdraw.abort()
+
+      await vi.waitFor(() => {
+        expect(events.map((entry) => entry.event)).toContainEqual({
+          type: 'elicitation_answered',
+          requestId,
+          action: 'cancel'
+        })
+      })
+      await expect(answer).resolves.toEqual({ action: 'cancel' })
+      await vi.waitFor(() => {
+        expect(status()).toBe('running')
+      })
+    })
+
+    it('takes nothing back from a question already answered', async () => {
+      const withdraw = new AbortController()
+      const { service, requestId, events } = await asked(withdraw.signal)
+      await service.answerElicitation(requestId, 'decline')
+
+      withdraw.abort()
+
+      expect(
+        events.map((entry) => entry.event).filter((event) => event.type === 'elicitation_answered')
+      ).toEqual([{ type: 'elicitation_answered', requestId, action: 'decline' }])
+    })
+
+    it('is handed to a window that opens later', async () => {
+      const { service, workspaceId, chatId, requestId } = await asked()
+      const other = await service.createChat(workspaceId)
+
+      expect(service.pendingElicitations(chatId)).toEqual([{ requestId }])
+      expect(service.pendingElicitations(other.id)).toEqual([])
+      expect(() => service.pendingElicitations('chat-nothing')).toThrow(WorkspaceError)
+    })
+
+    // The main agent cannot finish while its own call waits: one still open is an agent's.
+    it('outlives the end of the turn, for an agent that is still asking', async () => {
+      const { service, chatId, answer, requestId, events } = await asked()
+
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(events.some((entry) => entry.event.type === 'result')).toBe(true)
+      })
+
+      expect(service.pendingElicitations(chatId)).toEqual([{ requestId }])
+      await service.answerElicitation(requestId, 'decline')
+      await expect(answer).resolves.toEqual({ action: 'decline' })
     })
 
     /*
@@ -13352,11 +13500,11 @@ describe('the agent chat', () => {
 
     /*
      * Two conversations share a workspace, and each may have a server waiting.
-     * A turn ending in one must not withdraw the other's question — the server
+     * A session failing in one must not withdraw the other's question — the server
      * behind it is still there, and cancelling would be this application
      * answering for a turn that never stopped.
      */
-    it("leaves another conversation's question alone when this turn ends", async () => {
+    it("leaves another conversation's question alone when this session fails", async () => {
       const { service, workspaceId, events } = await withWorkspace()
       const first = await service.openChat(workspaceId)
       const second = await service.createChat(workspaceId)
@@ -13385,14 +13533,14 @@ describe('the agent chat', () => {
         othersAnswered = true
       })
 
-      one.emit(resultMessage)
+      one.finish(new Error('exited with code 1'))
       await expect(heldByOne).resolves.toMatchObject({ action: 'cancel' })
 
       // The loop has run by now — it is what settled the promise above — and
-      // the other server is still waiting, because its turn never stopped.
+      // the other server is still waiting, because its session never failed.
       expect(othersAnswered).toBe(false)
 
-      other.emit(resultMessage)
+      other.finish(new Error('exited with code 1'))
       await expect(heldByOther).resolves.toMatchObject({ action: 'cancel' })
     })
 

@@ -802,7 +802,7 @@ export function ChatSession({
                     busy={chat.busy}
                     waiting={chat.waiting}
                     answerable={chat.answerable}
-                    pendingElicitationId={chat.pendingElicitation}
+                    answerableElicitations={chat.pendingElicitations}
                     onAnswer={answerInLog}
                     onAnswerElicitation={answerElicitationInLog}
                     onAnswerQuestions={answerQuestionsInLog}

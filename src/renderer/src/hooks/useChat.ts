@@ -77,6 +77,7 @@ function without(
 }
 
 const NOTHING_WAITING: ReadonlySet<string> = new Set()
+const NO_FORMS: ReadonlySet<string> = new Set()
 
 /**
  * How long a message has to sit in the queue before it is marked.
@@ -95,17 +96,17 @@ function forgetQueuing(timers: Map<string, ReturnType<typeof setTimeout>>): void
   timers.clear()
 }
 
-/** The set with one message added or taken away, the same set when nothing moved. */
-function withWaiting(
+/** The set with one member added or taken away, the same set when nothing moved. */
+function withMember(
   current: ReadonlySet<string>,
-  messageId: string,
-  waiting: boolean
+  member: string,
+  present: boolean
 ): ReadonlySet<string> {
-  if (current.has(messageId) === waiting) return current
+  if (current.has(member) === present) return current
 
   const next = new Set(current)
-  if (waiting) next.add(messageId)
-  else next.delete(messageId)
+  if (present) next.add(member)
+  else next.delete(member)
   return next
 }
 
@@ -130,15 +131,8 @@ export interface ChatController {
    * agents'. An agent's outlives the turn, so it can be the only one.
    */
   readonly answerable: ReadonlySet<string>
-  /**
-   * The MCP server's question still open, by request id, or null.
-   *
-   * Beside `pending` rather than folded into it: a server's question is not a
-   * permission, is answered by a different call, and does not put the
-   * conversation into `waiting_permission` — the turn is inside a tool call and
-   * the agent is not the one asking.
-   */
-  readonly pendingElicitation: string | null
+  /** The MCP servers' questions still open, by request id — the turn's and its agents'. */
+  readonly pendingElicitations: ReadonlySet<string>
   /** Answers it, or turns it down. */
   readonly answerElicitation: (
     requestId: string,
@@ -256,8 +250,7 @@ export function useChat(
   /** Messages queued too recently to mark yet, each with the timer that will. */
   const queuing = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const [requests, setRequests] = useState<readonly PendingPermission[]>(NO_REQUESTS)
-  /** The one MCP question a server is holding open, by its request id. */
-  const [pendingElicitation, setPendingElicitation] = useState<string | null>(null)
+  const [pendingElicitations, setPendingElicitations] = useState<ReadonlySet<string>>(NO_FORMS)
   const [loading, setLoading] = useState(chatId !== null)
   const [error, setError] = useState<string | null>(null)
   const [shownChatId, setShownChatId] = useState(chatId)
@@ -333,6 +326,7 @@ export function useChat(
       resetStreaming()
       setBusy(false)
       setRequests(NO_REQUESTS)
+      setPendingElicitations(NO_FORMS)
       setError(null)
       // Set here rather than in the effect that loads: by the time an effect
       // runs the frame is already on screen, so the pane would flash the empty
@@ -386,8 +380,18 @@ export function useChat(
       // ever with no way to unblock it. Asked after the history so the log is
       // on screen first; a failure here is not worth an error, since the worst
       // case is the state we were already in.
-      const blocked = await window.octopus.chats.pendingPermissions(chatId)
-      if (abandoned() || !blocked.ok || blocked.value.length === 0) return
+      const [blocked, open] = await Promise.all([
+        window.octopus.chats.pendingPermissions(chatId),
+        window.octopus.chats.pendingElicitations(chatId)
+      ])
+      if (abandoned()) return
+
+      // Merged: a form raised while this was asked is in the set already.
+      if (open.ok && open.value.length > 0) {
+        const ids = open.value.map(({ requestId }) => requestId)
+        setPendingElicitations((current) => new Set([...current, ...ids]))
+      }
+      if (!blocked.ok || blocked.value.length === 0) return
 
       setRequests(blocked.value)
       // Only the turn's own question means the main agent is mid-turn; an
@@ -458,7 +462,7 @@ export function useChat(
             messageId,
             setTimeout(() => {
               queuing.current.delete(messageId)
-              setWaiting((current) => withWaiting(current, messageId, true))
+              setWaiting((current) => withMember(current, messageId, true))
             }, QUEUED_AFTER_MS)
           )
           return
@@ -466,7 +470,7 @@ export function useChat(
 
         clearTimeout(timer)
         queuing.current.delete(messageId)
-        setWaiting((current) => withWaiting(current, messageId, false))
+        setWaiting((current) => withMember(current, messageId, false))
         return
       }
 
@@ -508,15 +512,16 @@ export function useChat(
         )
       }
 
-      /* Its own state beside the permission, not the same one: the two are
-         answered by different calls, and a server's question does not put the
-         conversation into `waiting_permission` — the turn is inside a tool
-         call, and the agent is not asking anything. */
-      if (event.type === 'elicitation_request') setPendingElicitation(event.requestId)
+      // Apart from `requests`: a server's question is answered by a call of its own.
+      if (event.type === 'elicitation_request') {
+        const { requestId } = event
+        setPendingElicitations((current) => withMember(current, requestId, true))
+      }
 
-      // Answered somewhere else, or withdrawn when the turn stopped.
+      // Answered somewhere else, or taken back: by the SDK, a Stop or the session's end.
       if (event.type === 'elicitation_answered') {
-        setPendingElicitation((current) => (current === event.requestId ? null : current))
+        const { requestId } = event
+        setPendingElicitations((current) => withMember(current, requestId, false))
       }
 
       if (event.type === 'permission_request') {
@@ -542,7 +547,7 @@ export function useChat(
             ? NO_REQUESTS
             : current.filter((request) => request.taskId !== undefined)
         )
-        setPendingElicitation(null)
+        if (event.type === 'error') setPendingElicitations(NO_FORMS)
         // A mark must never outlive the reason for it. A message still queued
         // here is taken by the very next frame, which starts its turn — and one
         // the CLI never says more about, a session that died holding it, would
@@ -689,7 +694,7 @@ export function useChat(
       // and leaving the form live while it works reads as though the button did
       // nothing. The card stays in the log and redraws from the
       // `elicitation_answered` event.
-      setPendingElicitation(null)
+      setPendingElicitations((current) => withMember(current, requestId, false))
 
       const sent = await window.octopus.chats.answerElicitation(requestId, answer, values)
       if (!sent.ok) setError(describeFailure(sent))
@@ -851,7 +856,7 @@ export function useChat(
     interrupt,
     answer,
     answerElicitation,
-    pendingElicitation,
+    pendingElicitations,
     answerQuestions,
     setMode,
     setEfforts,

@@ -1215,6 +1215,10 @@ export function registerIpc(
     attempt(() => service.pendingPermissions(chatId))
   )
 
+  host.handle('chats:pendingElicitations', (_event, chatId: string) =>
+    attempt(() => service.pendingElicitations(chatId))
+  )
+
   host.handle('chats:usage', (_event, chatId: string) =>
     attempt(() => service.sessionUsage(chatId))
   )

@@ -111,7 +111,7 @@ function renderLog({
           entries={[]}
           busy={false}
           answerable={pendingRequestId === null ? NOTHING_ASKED : new Set([pendingRequestId])}
-          pendingElicitationId={null}
+          answerableElicitations={NOTHING_ASKED}
           onAnswer={onAnswer}
           onAnswerElicitation={onAnswerElicitation}
           onAnswerQuestions={onAnswerQuestions}
@@ -555,7 +555,7 @@ describe('what the log shows', () => {
         ]}
         busy={false}
         answerable={NOTHING_ASKED}
-        pendingElicitationId={null}
+        answerableElicitations={NOTHING_ASKED}
         onAnswer={vi.fn()}
         onAnswerElicitation={vi.fn()}
         onAnswerQuestions={vi.fn()}
@@ -584,7 +584,7 @@ describe('what the log shows', () => {
     const props = {
       entries,
       answerable: NOTHING_ASKED,
-      pendingElicitationId: null,
+      answerableElicitations: NOTHING_ASKED,
       onAnswer: vi.fn(),
       onAnswerElicitation: vi.fn(),
       onAnswerQuestions: vi.fn(),
@@ -620,7 +620,7 @@ describe('what the log shows', () => {
     const props = {
       busy: true,
       answerable: NOTHING_ASKED,
-      pendingElicitationId: null,
+      answerableElicitations: NOTHING_ASKED,
       onAnswer: vi.fn(),
       onAnswerElicitation: vi.fn(),
       onAnswerQuestions: vi.fn(),
@@ -672,7 +672,7 @@ describe('what the log shows', () => {
           entries={[]}
           busy
           answerable={NOTHING_ASKED}
-          pendingElicitationId={null}
+          answerableElicitations={NOTHING_ASKED}
           onAnswer={vi.fn()}
           onAnswerElicitation={vi.fn()}
           onAnswerQuestions={vi.fn()}
@@ -2226,7 +2226,7 @@ describe('a log cut back and written again', () => {
     const props = {
       streaming: { text: '', thinking: '' },
       busy: false,
-      pendingElicitationId: null,
+      answerableElicitations: NOTHING_ASKED,
       onAnswer: vi.fn(),
       onAnswerElicitation: vi.fn(),
       onAnswerQuestions: vi.fn(),
@@ -2449,8 +2449,17 @@ describe('a question from an MCP server, in the log', () => {
   /** The card's own confirm, which the composer's `Send` is not. */
   const answer = (): HTMLElement => screen.getByRole('button', { name: 'Answer' })
 
+  const SECOND: AgentEvent = {
+    type: 'elicitation_request',
+    requestId: 'e-2',
+    serverName: 'ledger',
+    message: 'And which account?',
+    title: '',
+    fields: []
+  }
+
   it('is drawn as a card of its own', () => {
-    renderLog({ entries: [fromAgent(REQUEST)], pendingElicitationId: 'e-1' })
+    renderLog({ entries: [fromAgent(REQUEST)], answerableElicitations: new Set(['e-1']) })
 
     expect(screen.getByText('A question from ledger')).toBeInTheDocument()
     expect(answer()).toBeInTheDocument()
@@ -2460,7 +2469,7 @@ describe('a question from an MCP server, in the log', () => {
     const user = userEvent.setup()
     const { onAnswerElicitation } = renderLog({
       entries: [fromAgent(REQUEST)],
-      pendingElicitationId: 'e-1'
+      answerableElicitations: new Set(['e-1'])
     })
 
     await user.type(screen.getByLabelText('Token'), 'abc')
@@ -2473,12 +2482,34 @@ describe('a question from an MCP server, in the log', () => {
     const user = userEvent.setup()
     const { onAnswerElicitation } = renderLog({
       entries: [fromAgent(REQUEST)],
-      pendingElicitationId: 'e-1'
+      answerableElicitations: new Set(['e-1'])
     })
 
     await user.click(screen.getByRole('button', { name: 'Decline' }))
 
     expect(onAnswerElicitation).toHaveBeenCalledWith('e-1', 'decline')
+  })
+
+  it('keeps every card a server is still waiting on answerable', () => {
+    renderLog({
+      entries: [fromAgent(REQUEST), fromAgent(SECOND)],
+      answerableElicitations: new Set(['e-1', 'e-2'])
+    })
+
+    expect(screen.getAllByRole('button', { name: 'Decline' })).toHaveLength(2)
+  })
+
+  // The log is the record: an id the window still holds after the outcome was written is stale.
+  it('offers no buttons for one the log says was settled', () => {
+    renderLog({
+      entries: [
+        fromAgent(REQUEST),
+        fromAgent({ type: 'elicitation_answered', requestId: 'e-1', action: 'cancel' })
+      ],
+      answerableElicitations: new Set(['e-1'])
+    })
+
+    expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument()
   })
 
   /*
@@ -2487,7 +2518,7 @@ describe('a question from an MCP server, in the log', () => {
    * question nobody is holding open.
    */
   it('offers no buttons for one nothing is waiting on', () => {
-    renderLog({ entries: [fromAgent(REQUEST)], pendingElicitationId: null })
+    renderLog({ entries: [fromAgent(REQUEST)], answerableElicitations: NOTHING_ASKED })
 
     expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument()
   })
@@ -2504,7 +2535,7 @@ describe('a question from an MCP server, in the log', () => {
         fromAgent(REQUEST),
         fromAgent({ type: 'elicitation_answered', requestId: 'e-1', action: 'decline' })
       ],
-      pendingElicitationId: null
+      answerableElicitations: NOTHING_ASKED
     })
 
     expect(screen.getByText('Declined.')).toBeInTheDocument()

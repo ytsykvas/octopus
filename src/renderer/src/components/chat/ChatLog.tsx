@@ -93,8 +93,8 @@ interface ChatLogProps {
   readonly busy: boolean
   /** Every question still open, by request id — the turn's and its agents'. */
   readonly answerable: ReadonlySet<string>
-  /** The one MCP question a server is still holding open, if any. */
-  readonly pendingElicitationId: string | null
+  /** Every MCP server's question still open, by request id. */
+  readonly answerableElicitations: ReadonlySet<string>
   readonly onAnswer: (requestId: string, answer: PermissionAnswer) => void
   /** Answers an MCP server's question, which is neither a permission nor a tool. */
   readonly onAnswerElicitation: (
@@ -149,7 +149,7 @@ export const ChatLog = memo(function ChatLog({
   entries,
   busy,
   answerable,
-  pendingElicitationId,
+  answerableElicitations,
   onAnswer,
   onAnswerElicitation,
   onAnswerQuestions,
@@ -217,7 +217,7 @@ export const ChatLog = memo(function ChatLog({
       waiting,
       busy,
       answerable,
-      pendingElicitationId,
+      answerableElicitations,
       elicitationAnswers,
       onAnswerElicitation,
       answers,
@@ -232,7 +232,7 @@ export const ChatLog = memo(function ChatLog({
       waiting,
       busy,
       answerable,
-      pendingElicitationId,
+      answerableElicitations,
       elicitationAnswers,
       onAnswerElicitation,
       answers,
@@ -405,7 +405,7 @@ const renderTurn = (): React.JSX.Element => (
 interface AnswerProps {
   busy: boolean
   answerable: ReadonlySet<string>
-  pendingElicitationId: string | null
+  answerableElicitations: ReadonlySet<string>
   elicitationAnswers: Map<string, 'accept' | 'decline' | 'cancel'>
   onAnswerElicitation: (
     requestId: string,
@@ -489,7 +489,7 @@ function AgentRow({
   plans,
   busy,
   answerable,
-  pendingElicitationId,
+  answerableElicitations,
   elicitationAnswers,
   onAnswerElicitation,
   answers,
@@ -544,7 +544,9 @@ function AgentRow({
           // Answerable only while the server is still waiting. One read back
           // from the transcript is history, and buttons on it would let the
           // user answer a question nobody is holding open.
-          answerable={pendingElicitationId === event.requestId}
+          answerable={
+            answerableElicitations.has(event.requestId) && !elicitationAnswers.has(event.requestId)
+          }
           answered={elicitationAnswers.get(event.requestId) ?? null}
           onAnswer={(values) => {
             onAnswerElicitation(event.requestId, 'accept', values)

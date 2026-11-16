@@ -438,6 +438,11 @@ describe('channel names', () => {
       () => method('chats', 'pendingPermissions')('c' as never),
       'chats:pending'
     ],
+    [
+      'chats.pendingElicitations',
+      () => method('chats', 'pendingElicitations')('c' as never),
+      'chats:pendingElicitations'
+    ],
     ['chats.usage', () => method('chats', 'usage')('c' as never), 'chats:usage'],
     [
       'chats.sideQuestion',
