@@ -3819,7 +3819,10 @@ describe("an MCP server's question", () => {
   /** Calls the SDK's `onElicitation` the way the SDK does. */
   function elicitationCall(
     agent: FakeQuery
-  ): (request: Record<string, unknown>) => Promise<{ action: string; content?: unknown }> {
+  ): (
+    request: Record<string, unknown>,
+    signal?: AbortSignal
+  ) => Promise<{ action: string; content?: unknown }> {
     const onElicitation = agent.options().onElicitation
     if (typeof onElicitation !== 'function') {
       throw new Error('onElicitation was not passed to the SDK')
@@ -3830,7 +3833,7 @@ describe("an MCP server's question", () => {
       options: { signal: AbortSignal }
     ) => Promise<{ action: string; content?: unknown }>
 
-    return (request) => call(request, { signal: new AbortController().signal })
+    return (request, signal = new AbortController().signal) => call(request, { signal })
   }
 
   const FORM = {
@@ -3882,7 +3885,8 @@ describe("an MCP server's question", () => {
             required: true,
             value: ''
           }
-        ]
+        ],
+        signal: expect.any(AbortSignal)
       }
     ])
     expect(answer).toEqual({ action: 'accept', content: { token: 'abc' } })
@@ -3908,6 +3912,27 @@ describe("an MCP server's question", () => {
     })
 
     expect(asked).toEqual([{ title: 'Credentials' }])
+  })
+
+  it('hands over the signal the SDK takes a question back with', async () => {
+    const asked: { signal: AbortSignal }[] = []
+    const { agent } = fakeAgent(
+      {},
+      {
+        askElicitation: (ask) => {
+          asked.push(ask)
+          return Promise.resolve({ action: 'decline' })
+        }
+      }
+    )
+    const withdraw = new AbortController()
+
+    await elicitationCall(agent)(
+      { serverName: 'ledger', message: 'x', requestedSchema: FORM },
+      withdraw.signal
+    )
+
+    expect(asked[0]?.signal).toBe(withdraw.signal)
   })
 
   /*

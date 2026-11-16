@@ -232,10 +232,10 @@ it anyway would redraw the whole list for nothing.
 
 **A conversation is working while its background agents are.** Once its turn
 is over it rests at `restingStatus`: `waiting_permission` while an agent's
-question is open, `running` while any task is live, and `idle` only after — and
-it moves between those as the agents do, whenever no turn is open and no message
-is queued behind one. A turn is open from a message sent or taken from the
-queue, or from the main agent speaking unprompted — the CLI starts a turn of its
+question or an MCP server's form is open, `running` while any task is live, and
+`idle` only after — and it moves between those as the agents do, whenever no
+turn is open and no message is queued behind one. A turn is open from a message
+sent or taken from the queue, or from the main agent speaking unprompted — the CLI starts a turn of its
 own to hand a finished agent's report over — until its result
 (`taskRegistry.ts`). An agent ending takes its open question with it, and the
 window is told (`permission_withdrawn`).
@@ -354,8 +354,9 @@ server's form sets `waiting_permission` as a permission does, and two tool calls
 can wait at once — a form and a permission, or two permissions. Every answer,
 withdrawal and refusal therefore goes through one function that writes
 `running` only when no other question of that conversation is still open, and
-leaves it waiting otherwise; writing `running` unconditionally put the amber
-mark out over a question still on the screen. A message the CLI takes from its
+leaves it waiting otherwise — a form settled once the turn is over goes through
+`afterQuestion` instead, which rests the conversation. Writing `running`
+unconditionally put the amber mark out over a question still on the screen. A message the CLI takes from its
 queue (`message_queue` with `started`) goes through it too: after a turn's
 result, that is a turn of its own starting.
 
@@ -386,6 +387,17 @@ the chat goes back to `running` for the reason the deny path gives — the turn
 carries on. Unheard, the card kept live buttons until the turn ended and
 pressing them reached nothing. An abort after the answer finds nothing to take
 back.
+
+**An MCP server's question follows the same rule, with one difference.**
+`onElicitation` carries the same per-request `signal`, and `askElicitation`
+listens on it: an open question is answered `cancel`, `elicitation_answered`
+takes the card's buttons down, and `afterQuestion` settles the status — `carryOn`
+while a turn is open, `rest` once it is over, so a question taken back after its
+agent ended does not leave the conversation `running` over nothing. The
+difference is the `result`: it withdraws no server's question, because the main
+agent cannot reach one while its own MCP call waits. What is still open then is
+a background agent's, and the SDK does not say whose (`ElicitationRequest` has
+no agent id). An `error`, a Stop and closing the session still withdraw them all.
 
 ## "Always" is not offered where the bridge forbids it
 

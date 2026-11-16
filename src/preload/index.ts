@@ -22,6 +22,7 @@ import type {
   ChatStatusEvent,
   HelpContext,
   NumberedChatEvent,
+  PendingElicitationView,
   PermissionAnswer,
   PermissionRequest,
   PluginApplied,
@@ -399,6 +400,12 @@ const api = {
      */
     pendingPermissions: (chatId: string): Promise<Result<readonly PermissionRequest[]>> =>
       ipcRenderer.invoke('chats:pending', chatId) as Promise<Result<readonly PermissionRequest[]>>,
+
+    /** The MCP servers' questions still open, asked on opening for the same reason. */
+    pendingElicitations: (chatId: string): Promise<Result<readonly PendingElicitationView[]>> =>
+      ipcRenderer.invoke('chats:pendingElicitations', chatId) as Promise<
+        Result<readonly PendingElicitationView[]>
+      >,
 
     /** How full the context is and how much of the subscription is gone. */
     usage: (chatId: string): Promise<Result<SessionUsage>> =>

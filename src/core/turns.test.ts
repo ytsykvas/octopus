@@ -105,6 +105,31 @@ describe('when the turn under way began', () => {
     ).toBe('09:04')
   })
 
+  // A server's question outlives the turn: one asked or settled after it is an agent's.
+  it('is not a server asking or being answered after the turn closed', () => {
+    const asked = agent(
+      {
+        type: 'elicitation_request',
+        requestId: 'e-1',
+        serverName: 'ledger',
+        message: 'x',
+        title: '',
+        fields: []
+      },
+      '09:02'
+    )
+    const answered = agent(
+      { type: 'elicitation_answered', requestId: 'e-1', action: 'accept' },
+      '09:03'
+    )
+
+    expect(turnStartedAt([user('one', '09:00'), footer, asked])).toBeNull()
+    expect(turnStartedAt([user('one', '09:00'), footer, answered])).toBeNull()
+    expect(turnStartedAt([user('one', '09:00'), footer, answered, user('two', '09:04')])).toBe(
+      '09:04'
+    )
+  })
+
   it('is the start of the log when no turn has closed yet', () => {
     expect(turnStartedAt([user('one', '09:00')])).toBe('09:00')
   })
