@@ -4152,6 +4152,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     )
   }
 
+  // One entry per side question still being answered: a Set would forget the first of two.
+  const asking: string[] = []
+
   /**
    * Whether nothing at all is going on in a conversation.
    *
@@ -4159,7 +4162,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * still working, a question waiting for an answer, a message the CLI holds
    * in its queue, an edit announced and not finished, a `/clear` or a rewind
    * under way, a push promised for after the turn, a session on its way up,
-   * and the account being read through whatever session there is.
+   * a side question being answered, and the account being read through
+   * whatever session there is.
    */
   function atRest(chatId: string): Chat | null {
     const chat = findChat(state, chatId)
@@ -4178,6 +4182,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       !rewinding.has(chatId) &&
       !publishAfterTurn.has(chatId) &&
       !starts.has(chatId) &&
+      !asking.includes(chatId) &&
       reading === null
       ? chat
       : null
@@ -7747,8 +7752,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       }
 
       // Started if none is running, as for `/usage`.
-      const session = sessions.get(chatId) ?? (await sessionFor(chat, workspace))
+      const session = await sessionFor(chat, workspace)
       const deadline = AbortSignal.timeout(sideTimeoutMs)
+      asking.push(chatId)
 
       try {
         return await session.sideQuestion(question, history, deadline)
@@ -7761,6 +7767,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         }
         const reason = describeError(error)
         throw new ChatError('sideQuestionFailed', { chatId, reason }, reason)
+      } finally {
+        asking.splice(asking.indexOf(chatId), 1)
       }
     },
 

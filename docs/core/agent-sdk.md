@@ -215,8 +215,9 @@ not what the types suggested:
   it is used and checks the reply with a schema; a CLI without it is
   `sideQuestionUnsupported`. An abort rejects rather than answering null, so
   the service's own deadline (`sideQuestionTimeoutMs`, five minutes) becomes
-  `sideQuestionTimedOut`, and a chat being rewound is refused with
-  `rewindInProgress`, as a message is. The earlier exchanges are the window's
+  `sideQuestionTimedOut`; the session is not let go for rest while it
+  answers, and a chat being rewound is refused with `rewindInProgress`, as a
+  message is. The earlier exchanges are the window's
   to keep and send back (`history`, twenty at most, as the CLI replays) —
   nothing about the thread is stored.
 

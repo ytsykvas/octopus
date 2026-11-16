@@ -7672,6 +7672,60 @@ describe('the agent chat', () => {
       await letGo()
     })
 
+    it('is kept while a side question is being answered through it', async () => {
+      const { service, chatId } = await resting()
+      sideAnswer = () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ response: 'It is a flag.', synthetic: false })
+          }, 300)
+        })
+
+      await expect(service.askSideQuestion(chatId, 'what is x?', [])).resolves.toEqual({
+        text: 'It is a flag.',
+        synthetic: false
+      })
+      expect(agents[0]?.closed()).toBe(0)
+      await letGo()
+    })
+
+    it('is kept while the second of two side questions is still being answered', async () => {
+      const { service, chatId } = await resting()
+      const delays = [400, 0]
+      sideAnswer = () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ response: 'It is a flag.', synthetic: false })
+          }, delays.shift())
+        })
+
+      const slow = service.askSideQuestion(chatId, 'and y?', [])
+      await service.askSideQuestion(chatId, 'what is x?', [])
+      await slow
+
+      expect(agents[0]?.closed()).toBe(0)
+    })
+
+    it('rests from a side question asked of it, as from a message', async () => {
+      const { service, chatId } = await resting()
+      await after(100)
+      await service.askSideQuestion(chatId, 'what is x?', [])
+      await after(100)
+
+      expect(agents[0]?.closed()).toBe(0)
+      await letGo()
+    })
+
+    it('rests again after a side question that failed', async () => {
+      const { service, chatId } = await resting()
+      sideAnswer = () => Promise.reject(new Error('transport closed'))
+
+      await expect(service.askSideQuestion(chatId, 'what is x?', [])).rejects.toMatchObject({
+        code: 'sideQuestionFailed'
+      })
+      await letGo()
+    })
+
     // Best effort, as a tab closing is: a process that will not die is not a
     // reason to keep its conversation from starting another.
     it('is let go even when its process will not close', async () => {
