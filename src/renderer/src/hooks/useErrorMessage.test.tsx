@@ -130,6 +130,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   chatClosed: null,
   autoModeUnavailable: { reason: 'auto mode is unavailable for your plan' },
   turnRunning: null,
+  sessionGone: null,
   sideQuestionUnsupported: null,
   sideQuestionFailed: { reason: 'side_question timed out' },
   sideQuestionTimedOut: null,

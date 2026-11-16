@@ -7381,14 +7381,26 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // between deciding this is the clear and sending it.
       const { aside } = requireChat(chatId)
       const prompted = await withAside(chatId, text)
+      // Not sent after all: the exchange withAside took goes back for the next message.
+      const putAsideBack = (): Promise<void> =>
+        commit((current) => updateChat(current, chatId, { aside }))
       // Let go during the awaits above — dead or rested — the session would swallow it.
       const target = letGo.has(session)
         ? await sessionFor(requireChat(chatId), workspace).catch(async (error: unknown) => {
-            // Not sent after all: the exchange withAside took goes back for the next message.
-            await commit((current) => updateChat(current, chatId, { aside }))
+            await putAsideBack()
             throw error
           })
         : session
+      // No longer the chat's — closed, rewound, or let go once found: nothing would read it.
+      if (sessions.get(chatId) !== target) {
+        await putAsideBack()
+        requireOpenChat(chatId)
+        throw new ChatError(
+          'sessionGone',
+          { chatId },
+          `Chat ${chatId} lost its session before the message was sent.`
+        )
+      }
 
       /*
        * Whether this message is the one that throws the conversation away.
@@ -7400,15 +7412,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
        * same command — which is why the chat's own list is consulted rather
        * than the text compared to one word.
        *
-       * Only once the message is going, and only while the session it goes to
-       * is still the chat's. Marked earlier, a start that failed or was
+       * Only once the message is going, past the check above that the session
+       * it goes to is still the chat's. Marked earlier, a start that failed or was
        * refused, or a session a close or a rewind ended during the awaits
        * above, left the request with no reset coming — and the next reset the
        * agent sent of its own accord was read as the clear. A `/clear` that
        * also restarted the session for a new window was the opposite: the
        * restart emptied the set, and the clear asked for was never honoured.
        */
-      if (sessions.get(chatId) === target && isClearCommand(text, chat.knownCommands)) {
+      if (isClearCommand(text, chat.knownCommands)) {
         clearRequests.add(chatId)
       }
       target.send(prompted, messageId)

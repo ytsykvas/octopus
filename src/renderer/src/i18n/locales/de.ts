@@ -2065,6 +2065,8 @@ export const de: Translation = {
     autoModeUnavailable: 'Der Auto-Modus ist hier nicht verfügbar: {{reason}}',
     turnRunning:
       'Der Agent arbeitet noch. Warte, bis er fertig ist, und klicke dann erneut auf den Button.',
+    sessionGone:
+      'Der Chat hat seine Sitzung verloren, bevor die Nachricht gesendet wurde. Sende sie erneut.',
     sideQuestionUnsupported:
       'Diese Version von Claude Code kann keine Nebenfragen beantworten. Aktualisiere sie und versuch es erneut.',
     sideQuestionFailed: 'Die Nebenfrage ließ sich nicht beantworten: {{reason}}',

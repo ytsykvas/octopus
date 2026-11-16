@@ -15062,6 +15062,29 @@ describe('the agent chat', () => {
         await expect(saidIn(service, chatId)).resolves.toEqual(['rename the helper', 'now'])
       })
 
+      it('refuses a message whose session it ended on the way, leaving the chat idle', async () => {
+        const { service, workspaceId, chatId, second } = await spokenTwice()
+        let release: () => void = () => undefined
+        let asked = false
+        modeAnswer = () => {
+          asked = true
+          return new Promise<void>((resolve) => {
+            release = resolve
+          })
+        }
+        const sent = service.sendToChat(chatId, 'on its way')
+        await vi.waitFor(() => {
+          expect(asked).toBe(true)
+        })
+
+        await service.rewindChat(chatId, second, 'conversation')
+        modeAnswer = () => Promise.resolve()
+        release()
+
+        await expect(sent).rejects.toMatchObject({ code: 'sessionGone' })
+        expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
+      })
+
       // The worktree is shared, so the files are refused if another
       // conversation began working while this one was finding its cut.
       it('asks again whether the workspace is quiet before the files', async () => {
@@ -15287,7 +15310,7 @@ describe('the agent chat', () => {
       await service.closeChat(first.id)
       modeAnswer = () => Promise.resolve()
       release()
-      await sent
+      await expect(sent).rejects.toMatchObject({ code: 'chatClosed' })
 
       await service.reopenChat(first.id)
       await service.sendToChat(first.id, 'carry on')
@@ -15852,6 +15875,31 @@ describe('the agent chat', () => {
         expect(service.listChats(workspaceId).find((chat) => chat.id === forked.id)?.aside).toEqual(
           aside
         )
+      })
+
+      it('keeps the exchange when the tab closes while its message is on the way', async () => {
+        const { service, forkId, record } = await forkedOff()
+        await service.askSideQuestion(forkId, 'warm up', [])
+        let release: () => void = () => undefined
+        let asked = false
+        modeAnswer = () => {
+          asked = true
+          return new Promise<void>((resolve) => {
+            release = resolve
+          })
+        }
+        const sent = service.sendToChat(forkId, 'go on')
+        await vi.waitFor(() => {
+          expect(asked).toBe(true)
+        })
+
+        await service.closeChat(forkId)
+        modeAnswer = () => Promise.resolve()
+        release()
+
+        await expect(sent).rejects.toMatchObject({ code: 'chatClosed' })
+        await service.reopenChat(forkId)
+        expect(record()?.aside).toEqual(aside)
       })
 
       it('is named after the question and remembers the exchange', async () => {

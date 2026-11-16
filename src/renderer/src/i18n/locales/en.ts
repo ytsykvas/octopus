@@ -2525,6 +2525,7 @@ export const en = {
     chatClosed: 'That conversation was closed. Reopen it from the history first.',
     autoModeUnavailable: 'Auto mode is not available here: {{reason}}',
     turnRunning: 'The agent is still working. Wait for it to finish, then press the button again.',
+    sessionGone: 'The conversation lost its session before the message was sent. Send it again.',
     sideQuestionUnsupported:
       'This version of Claude Code cannot answer side questions. Update it and try again.',
     sideQuestionFailed: 'The side question could not be answered: {{reason}}',

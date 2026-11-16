@@ -91,6 +91,7 @@ export type ChatErrorCode =
   | 'chatClosed'
   | 'autoModeUnavailable'
   | 'turnRunning'
+  | 'sessionGone'
   | 'sideQuestionUnsupported'
   | 'sideQuestionFailed'
   | 'sideQuestionTimedOut'

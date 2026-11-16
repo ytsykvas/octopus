@@ -215,6 +215,8 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.autoModeUnavailable', { reason: failure.params?.reason ?? '' })
         case 'turnRunning':
           return t('errors.turnRunning')
+        case 'sessionGone':
+          return t('errors.sessionGone')
         case 'sideQuestionUnsupported':
           return t('errors.sideQuestionUnsupported')
         case 'sideQuestionFailed':
