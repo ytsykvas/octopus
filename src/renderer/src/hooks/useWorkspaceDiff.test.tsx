@@ -18,7 +18,7 @@ function emit(event: AgentEvent, workspaceId = WORKSPACE): void {
 
   const [subscriber] = calls.at(-1) ?? []
   act(() => {
-    subscriber?.({ chatId: 'chat-1', workspaceId, event })
+    subscriber?.({ chatId: 'chat-1', workspaceId, event, seq: 1 })
   })
 }
 

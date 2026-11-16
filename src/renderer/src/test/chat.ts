@@ -62,7 +62,10 @@ export function givenChat(history: ChatEntry[] = [], overrides: Partial<Chat> = 
   const record = chat(overrides)
 
   vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [record] })
-  vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: history })
+  vi.mocked(octopus().chats.history).mockResolvedValue({
+    ok: true,
+    value: { entries: history, seq: 0 }
+  })
 
   return record
 }
@@ -139,6 +142,8 @@ export function emitChatsChanged(workspaceId = 'planner/anna'): void {
   })
 }
 
+let emitted = 0
+
 /**
  * Delivers an agent event to whatever subscribed, as main would.
  *
@@ -148,14 +153,16 @@ export function emitChatsChanged(workspaceId = 'planner/anna'): void {
 export function emitAgentEvent(
   event: AgentEvent,
   chatId: string = CHAT_ID,
-  workspaceId = 'planner/anna'
+  workspaceId = 'planner/anna',
+  // Counted up when left out, so it always lands past a history's `seq: 0`.
+  seq = ++emitted
 ): void {
   const handlers = vi.mocked(octopus().chats.onEvent).mock.calls.map(([handler]) => handler)
   refuseSilence(handlers.length, 'chats.onEvent')
 
   act(() => {
     for (const handler of handlers) {
-      handler({ chatId, workspaceId, event })
+      handler({ chatId, workspaceId, event, seq })
     }
   })
 }

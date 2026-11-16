@@ -71,6 +71,7 @@ function emitTurnEnd(): void {
       handler({
         chatId: 'chat-1',
         workspaceId: anna.id,
+        seq: 1,
         event: {
           type: 'result',
           ok: true,

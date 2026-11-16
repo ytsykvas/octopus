@@ -174,7 +174,10 @@ describe('the way back to the first message', () => {
     givenChats([chat(), chat({ id: 'chat-2' })])
     vi.mocked(octopus().chats.history).mockResolvedValue({
       ok: true,
-      value: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the very first' }]
+      value: {
+        entries: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the very first' }],
+        seq: 0
+      }
     })
     render(<Pane />)
     await waitFor(() => {

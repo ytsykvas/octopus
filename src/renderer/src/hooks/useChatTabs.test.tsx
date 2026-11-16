@@ -1499,7 +1499,7 @@ describe('copying a conversation to brief another', () => {
     const { result } = await opened()
     vi.mocked(octopus().chats.history).mockResolvedValue({
       ok: true,
-      value: [{ role: 'user', at: AT, text: 'add a test' }]
+      value: { entries: [{ role: 'user', at: AT, text: 'add a test' }], seq: 0 }
     })
 
     let copied = false

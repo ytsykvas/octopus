@@ -30,9 +30,20 @@ conversation already at its turn.
 account rather than to a conversation: every workspace reports the same one, and
 switching between them must not blank it out.
 
-`useChat` reads the history from disk **once** and then only appends what
-arrives as events. Re-reading the file to merge would bring back, as a
-duplicate, every entry the UI had already drawn.
+`useChat` reads the history from disk when the pane opens, after a rewind and
+after a send that failed, and otherwise only appends what arrives as events.
+A read takes time, and events keep arriving meanwhile: some are in the file it
+brings back, some are not. Every event carries `seq` and the history answers
+with the `seq` of the last event it can hold (`chats:history` in
+[ipc](../ipc.md)), so while a read is out `useChat` holds the events that would
+change the log, and when it lands `mergeHistory` draws those numbered past the
+history's `seq` on top, so nothing the transcript keeps is lost or drawn twice.
+A line it never keeps — a background failure — can go with the read, as it
+would with a restart. A read that fails draws what was held onto the log as it
+was. A newer read drops an older one, and starts its buffer empty: everything
+heard before it was asked for is numbered at or below its `seq`. A read the pane
+abandons — its conversation switched away or gone — lets its buffer go at once,
+so what the next conversation says is drawn as it arrives.
 
 The split is not all-or-nothing: `useProjects.remove` asks and deletes, while
 `App` clears the selection afterwards — what points at a project is the window's
