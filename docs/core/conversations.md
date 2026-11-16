@@ -44,6 +44,9 @@ a list.
 
 Transcript appends have their own line. They do not read the state, so making
 them wait for a save would only slow the log down — what they need is order.
+The user's message goes through it too: `sendToChat` awaits its place in the
+line, so a write that fails still fails the send, and the message can no longer
+land between the lines of the turn before it.
 
 All three are a `oneAtATime` line (`parallel.ts`), not three hand-written copies
 of `tail.then(apply, apply)` and a settled tail. Another file written from
@@ -120,9 +123,10 @@ again.
 Everything that can refuse is asked before anything changes; then the files go
 first, while the session that checkpointed them is alive, and their row is
 written after the cut so the cut cannot take it. A message, or a second rewind,
-arriving mid-way is refused with `rewindInProgress`: a send writes its line
-outside the write queue and starts a session, and either would land in the
-history being cut. The preview answers each half for itself — the conversation
+arriving mid-way is refused with `rewindInProgress`: a send would queue its line
+on one side of the cut or the other — and be taken by it if ahead — and start a
+session in a conversation whose session the rewind is closing. The preview
+answers each half for itself — the conversation
 as a yes or no, the files as the agent's dry run, `canRewind` false included,
 or null while another conversation of the workspace works — and changes
 nothing.

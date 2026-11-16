@@ -7227,7 +7227,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         text,
         ...(reachesAgent && { uuid: messageId })
       }
-      await appendEntry(chatId, prompt, dataRoot)
+      await transcriptWrites(() => appendEntry(chatId, prompt, dataRoot))
       noteTurn(chatId, prompt)
 
       /*

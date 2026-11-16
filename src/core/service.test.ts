@@ -10350,6 +10350,12 @@ describe('the agent chat', () => {
   })
 
   describe('the history', () => {
+    const said = (entries: readonly ChatEntry[]): string[] =>
+      entries.map((entry) => {
+        if (entry.role === 'user') return entry.text
+        return entry.event.type === 'text' ? entry.event.text : entry.event.type
+      })
+
     it('is empty for a chat that has said nothing', async () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
@@ -10386,6 +10392,33 @@ describe('the agent chat', () => {
             role: 'agent',
             event: { type: 'text', text: 'done', uuid: 'u-1' }
           })
+        ])
+      })
+    })
+
+    // Sent from inside the listener: the twentieth answer's append is queued but not yet written.
+    it('writes the message in line with the events before it', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'first')
+
+      const sending: Promise<unknown>[] = []
+      service.onAgentEvent(({ event }) => {
+        if (event.type === 'text' && event.text === 'answer 20') {
+          sending.push(service.sendToChat(chat.id, 'second'))
+        }
+      })
+      for (let n = 1; n <= 20; n += 1) agent().emit(textMessage(`answer ${String(n)}`))
+
+      await vi.waitFor(() => {
+        expect(sending).toHaveLength(1)
+      })
+      await Promise.all(sending)
+      await vi.waitFor(async () => {
+        expect(said(await service.chatHistory(chat.id))).toEqual([
+          'first',
+          ...Array.from({ length: 20 }, (_, n) => `answer ${String(n + 1)}`),
+          'second'
         ])
       })
     })
