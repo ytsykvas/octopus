@@ -17,9 +17,9 @@
  * with nothing open holds nothing.
  */
 
-import type { ChatEvent } from '@core/service.js'
+import type { NumberedChatEvent } from '@core/service.js'
 
-type Handler = (event: ChatEvent) => void
+type Handler = (event: NumberedChatEvent) => void
 
 /** Listeners that asked about one conversation, by its id. */
 const byChat = new Map<string, Set<Handler>>()
@@ -30,7 +30,7 @@ const everything = new Set<Handler>()
 /** How to let go of the bridge, or null while nobody is listening. */
 let release: (() => void) | null = null
 
-function deliver(event: ChatEvent): void {
+function deliver(event: NumberedChatEvent): void {
   // Copied before the walk: a handler may unsubscribe from inside its own call,
   // and a set edited mid-iteration would skip whichever came next.
   for (const handler of [...everything]) handler(event)

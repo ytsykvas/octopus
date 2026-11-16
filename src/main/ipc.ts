@@ -69,7 +69,7 @@ import { PromptDraftSchema, PromptIdSchema } from '../core/promptSchema.js'
 import { StoreSchema } from '../core/stores.js'
 import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core/plugins.js'
 import type {
-  ChatEvent,
+  NumberedChatEvent,
   ChatsChangedEvent,
   TasksEvent,
   ChatStatusEvent,
@@ -136,7 +136,7 @@ export interface IpcHost {
    * arriving long after the call that started them returned, and a second
    * window looking at the same workspace should see the same conversation.
    */
-  readonly broadcastChatEvent: (event: ChatEvent) => void
+  readonly broadcastChatEvent: (event: NumberedChatEvent) => void
   /**
    * What a workspace is doing, to every window.
    *
@@ -1081,8 +1081,8 @@ export function registerIpc(
   // The agent chat. Everything the renderer sends here reaches a model or a
   // stored record, so each argument is validated rather than trusted.
   // Not every event is a window's business: see `isTaskFrame`.
-  service.onAgentEvent((event) => {
-    if (!isTaskFrame(event.event)) host.broadcastChatEvent(event)
+  service.onAgentEvent((event, seq) => {
+    if (!isTaskFrame(event.event)) host.broadcastChatEvent({ ...event, seq })
   })
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
   service.onWorkspacePushed(host.broadcastWorkspacePushed)

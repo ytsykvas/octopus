@@ -17,10 +17,11 @@ import type {
   WorkingMode
 } from '@core/chats.js'
 import type {
-  ChatEvent,
+  ChatHistory,
   ChatsChangedEvent,
   ChatStatusEvent,
   HelpContext,
+  NumberedChatEvent,
   PermissionAnswer,
   PermissionRequest,
   PluginApplied,
@@ -38,7 +39,6 @@ import type { StrayServer } from '@core/strayServers.js'
 import type { QuestionAnswer } from '@core/questions.js'
 import type { ResourceReading } from '@core/resources.js'
 import type { RewindOutcome, RewindPreview, RewindScope } from '@core/rewind.js'
-import type { ChatEntry } from '@core/transcript.js'
 import type { RunPurpose } from '@core/runLog.js'
 import type { TerminalExit, TerminalOutput, TerminalSession, TerminalSpec } from '@core/terminal.js'
 import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
@@ -319,9 +319,9 @@ const api = {
         Result<RewindOutcome>
       >,
 
-    /** Everything said in this chat before now. */
-    history: (chatId: string): Promise<Result<ChatEntry[]>> =>
-      ipcRenderer.invoke('chats:history', chatId) as Promise<Result<ChatEntry[]>>,
+    /** Everything said in this chat before now, and the `seq` of the last event it can hold. */
+    history: (chatId: string): Promise<Result<ChatHistory>> =>
+      ipcRenderer.invoke('chats:history', chatId) as Promise<Result<ChatHistory>>,
 
     /**
      * Sends a message. The answer arrives through `onEvent`, not here.
@@ -469,8 +469,8 @@ const api = {
     refreshSubscription: (pressed = false): Promise<Result<UsageOutcome>> =>
       ipcRenderer.invoke('chats:refreshSubscription', pressed) as Promise<Result<UsageOutcome>>,
 
-    onEvent: (handler: (event: ChatEvent) => void): (() => void) => {
-      const listener = (_event: unknown, chatEvent: ChatEvent): void => {
+    onEvent: (handler: (event: NumberedChatEvent) => void): (() => void) => {
+      const listener = (_event: unknown, chatEvent: NumberedChatEvent): void => {
         handler(chatEvent)
       }
       ipcRenderer.on('chats:event', listener)

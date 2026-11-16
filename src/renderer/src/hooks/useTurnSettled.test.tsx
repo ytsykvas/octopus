@@ -49,7 +49,7 @@ describe('useTurnSettled', () => {
     emitAgentEvent({ type: 'text', text: 'hello' })
     const [subscriber] = vi.mocked(octopus().chats.onEvent).mock.calls.at(-1) ?? []
     act(() => {
-      subscriber?.({ chatId: 'chat-1', workspaceId: 'planner/bob', event: TURN_DONE })
+      subscriber?.({ chatId: 'chat-1', workspaceId: 'planner/bob', event: TURN_DONE, seq: 1 })
       vi.advanceTimersByTime(SETTLE_MS)
     })
 

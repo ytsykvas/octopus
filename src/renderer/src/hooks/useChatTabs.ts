@@ -558,7 +558,7 @@ export function useChatTabs(
       }
 
       try {
-        await navigator.clipboard.writeText(formatHandoff(history.value, { title }))
+        await navigator.clipboard.writeText(formatHandoff(history.value.entries, { title }))
         return true
       } catch {
         // A refused clipboard is real — an unfocused document is enough.

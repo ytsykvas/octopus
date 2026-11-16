@@ -30,7 +30,7 @@ import {
   type ServiceOptions
 } from '../core/service.js'
 import type {
-  ChatEvent,
+  NumberedChatEvent,
   ChatsChangedEvent,
   ChatStatusEvent,
   TasksEvent,
@@ -71,7 +71,7 @@ interface Harness {
   readonly host: IpcHost
   readonly handlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
   readonly broadcasts: ThemeName[]
-  readonly chatEvents: ChatEvent[]
+  readonly chatEvents: NumberedChatEvent[]
   readonly statusEvents: WorkspaceStatusEvent[]
   /** Every workspace branch the remote was heard to move. */
   readonly pushedEvents: WorkspacePushedEvent[]
@@ -101,7 +101,7 @@ interface Harness {
 function harness(): Harness {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
   const broadcasts: ThemeName[] = []
-  const chatEvents: ChatEvent[] = []
+  const chatEvents: NumberedChatEvent[] = []
   const statusEvents: WorkspaceStatusEvent[] = []
   const pushedEvents: WorkspacePushedEvent[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
@@ -3120,7 +3120,7 @@ describe('the agent chat', () => {
 
     await expect(invoke('chats:history', chatIdOf(opened))).resolves.toEqual({
       ok: true,
-      value: []
+      value: { entries: [], seq: 0 }
     })
   })
 
@@ -3487,6 +3487,21 @@ describe('the agent chat', () => {
         uuid: 'u-1'
       })
     })
+  })
+
+  it('numbers the events it broadcasts', async () => {
+    const projectId = await addProject()
+    const workspace = await createWorkspace(projectId)
+    await useService({ query: answeringQuery('there', { lives: true }) })
+    const opened = await invoke('chats:open', workspace.id)
+    await invoke('chats:send', chatIdOf(opened), 'hello')
+
+    await vi.waitFor(() => {
+      expect(bench.chatEvents.map(({ event }) => event.type)).toContain('text')
+    })
+    expect(bench.chatEvents.map(({ seq }) => seq)).toEqual(
+      bench.chatEvents.map((_, index) => index + 1)
+    )
   })
 
   describe('the agent map', () => {

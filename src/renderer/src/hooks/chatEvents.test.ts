@@ -1,23 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { ChatEvent } from '@core/service.js'
+import type { NumberedChatEvent } from '@core/service.js'
 
 import { octopus } from '../test/octopus.js'
 import { onChatEvent } from './chatEvents.js'
 
 /** Hands back whatever the module gave the bridge, so a test can drive it. */
-function deliverer(): (event: ChatEvent) => void {
+function deliverer(): (event: NumberedChatEvent) => void {
   const calls = vi.mocked(octopus().chats.onEvent).mock.calls
   const last = calls.at(-1)
   if (!last) throw new Error('nothing subscribed to the bridge')
   return last[0]
 }
 
-function event(chatId: string): ChatEvent {
+function event(chatId: string): NumberedChatEvent {
   return {
     chatId,
     workspaceId: 'planner/anna',
-    event: { type: 'text_delta', text: 'x' }
+    event: { type: 'text_delta', text: 'x' },
+    seq: 1
   }
 }
 

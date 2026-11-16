@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { Chat } from '@core/chats.js'
 import type { AgentEvent } from '@core/events.js'
+import type { ChatHistory } from '@core/service.js'
 import type { ChatEntry } from '@core/transcript.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
@@ -106,7 +107,7 @@ describe('a load that outlives the hook', () => {
   it('is dropped when the history comes back too late', async () => {
     vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [chat()] })
 
-    const history = held<Result<ChatEntry[]>>()
+    const history = held<Result<ChatHistory>>()
     vi.mocked(octopus().chats.history).mockReturnValue(history.promise)
 
     const { result, unmount } = renderHook(() => useChat(...open()))
@@ -119,7 +120,10 @@ describe('a load that outlives the hook', () => {
     await act(async () => {
       history.resolve({
         ok: true,
-        value: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'too late' }]
+        value: {
+          entries: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'too late' }],
+          seq: 0
+        }
       })
       await history.promise
     })
@@ -692,7 +696,10 @@ describe('the record the pane creates for itself', () => {
     const created = chat()
     vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: created })
     vi.mocked(octopus().chats.send).mockResolvedValue({ ok: false, error: 'no session' })
-    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: { entries: [], seq: 0 }
+    })
 
     const { result } = renderHook(() =>
       useChat(null, 'planner/anna', 'idle', describeFailure, noted)
@@ -707,7 +714,10 @@ describe('the record the pane creates for itself', () => {
 
     vi.mocked(octopus().chats.history).mockResolvedValue({
       ok: true,
-      value: [{ role: 'user', at: '2026-09-02T10:00:00.000Z', text: 'add another' }]
+      value: {
+        entries: [{ role: 'user', at: '2026-09-02T10:00:00.000Z', text: 'add another' }],
+        seq: 0
+      }
     })
 
     await act(async () => {
@@ -828,7 +838,10 @@ describe('a conversation rewound', () => {
       expect(result.current.entries).toEqual([kept, dropped])
     })
 
-    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [kept] })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: { entries: [kept], seq: 0 }
+    })
     emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-2' })
 
     await waitFor(() => {
@@ -955,7 +968,10 @@ describe('the id a message is sent under', () => {
       sent = result.current.send('first')
     })
     const lookalike: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'first' }
-    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [lookalike] })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: { entries: [lookalike], seq: 0 }
+    })
     emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-1' })
     await waitFor(() => {
       expect(result.current.entries).toEqual([lookalike])
@@ -979,7 +995,10 @@ describe('a different conversation in the same pane', () => {
     const second = chat({ id: 'chat-2' })
     vi.mocked(octopus().chats.history).mockResolvedValue({
       ok: true,
-      value: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the first one' }]
+      value: {
+        entries: [{ role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the first one' }],
+        seq: 0
+      }
     })
 
     const { result, rerender } = renderHook(
@@ -991,7 +1010,10 @@ describe('a different conversation in the same pane', () => {
       expect(result.current.entries).toHaveLength(1)
     })
 
-    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: { entries: [], seq: 0 }
+    })
     rerender({ record: second })
 
     expect(result.current.entries).toEqual([])
@@ -1006,7 +1028,10 @@ describe('a different conversation in the same pane', () => {
   it('takes the models the settings gave this conversation, and nothing else of the record', async () => {
     const before = chat()
     const kept: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the first one' }
-    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [kept] })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: { entries: [kept], seq: 0 }
+    })
     const { result, rerender } = renderHook(
       ({ record }: { record: Chat }) =>
         useChat(record, 'planner/anna', 'idle', describeFailure, noted),
@@ -1054,7 +1079,10 @@ describe('a different conversation in the same pane', () => {
     const second = chat({ id: 'chat-2' })
     const kept: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the first one' }
     const other: ChatEntry = { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'the second' }
-    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [kept] })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: { entries: [kept], seq: 0 }
+    })
     const { result, rerender } = renderHook(
       ({ record }: { record: Chat }) =>
         useChat(record, 'planner/anna', 'idle', describeFailure, noted),
@@ -1064,18 +1092,21 @@ describe('a different conversation in the same pane', () => {
       expect(result.current.entries).toEqual([kept])
     })
 
-    const reread = held<Result<ChatEntry[]>>()
+    const reread = held<Result<ChatHistory>>()
     vi.mocked(octopus().chats.history).mockReturnValueOnce(reread.promise)
     emitAgentEvent({ type: 'conversation_rewound', messageId: 'm-1' })
 
-    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [other] })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: { entries: [other], seq: 0 }
+    })
     rerender({ record: second })
     await waitFor(() => {
       expect(result.current.entries).toEqual([other])
     })
 
     await act(async () => {
-      reread.resolve({ ok: true, value: [] })
+      reread.resolve({ ok: true, value: { entries: [], seq: 0 } })
       await reread.promise
     })
 

@@ -32,7 +32,7 @@ function emit(event: AgentEvent, chatId = CHAT): void {
   refuseSilence(calls.length, 'chats.onEvent')
 
   const [subscriber] = calls.at(-1) ?? []
-  subscriber?.({ chatId, workspaceId: 'planner/kyiv', event })
+  subscriber?.({ chatId, workspaceId: 'planner/kyiv', event, seq: 1 })
 }
 
 const answering = (usage: SessionUsage): void => {

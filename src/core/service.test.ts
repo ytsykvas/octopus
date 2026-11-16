@@ -49,6 +49,7 @@ import { chatTranscript, projectEnvProfile, skillsDirOf } from './paths.js'
 import { ProjectValidationError } from './projects.js'
 import {
   type ChatEvent,
+  type ChatHistory,
   type ChatsChangedEvent,
   type ChatStatusEvent,
   type TasksEvent,
@@ -5873,6 +5874,10 @@ describe('the agent chat', () => {
     return only
   }
 
+  async function entriesOf(service: OctopusService, chatId: string): Promise<ChatEntry[]> {
+    return (await service.chatHistory(chatId)).entries
+  }
+
   function textMessage(text: string): SDKMessage {
     return {
       type: 'assistant',
@@ -7070,7 +7075,7 @@ describe('the agent chat', () => {
       agent().emit(alive())
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chatId)
+        const history = await entriesOf(service, chatId)
         expect(
           history.flatMap((entry) => (entry.role === 'agent' ? [entry.event] : []))
         ).toContainEqual({
@@ -7267,7 +7272,7 @@ describe('the agent chat', () => {
       agents[1]?.emit(resultMessage)
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chatId)
+        const history = await entriesOf(service, chatId)
         expect(
           history.map((entry) => (entry.role === 'agent' ? entry.event.type : entry.role))
         ).toContain('result')
@@ -8564,7 +8569,7 @@ describe('the agent chat', () => {
 
       expect(events).toEqual([])
       expect(service.listChats(workspaceId)[0]?.knownCommands).toEqual([])
-      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+      await expect(entriesOf(service, chat.id)).resolves.toEqual([])
       expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
     })
 
@@ -8695,7 +8700,7 @@ describe('the agent chat', () => {
 
       agents[1]?.emit(textMessage('still going'))
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(second.id)).not.toHaveLength(0)
+        expect(await entriesOf(service, second.id)).not.toHaveLength(0)
       })
 
       await service.refreshSubscriptionUsage()
@@ -8713,11 +8718,11 @@ describe('the agent chat', () => {
 
       agents[1]?.emit(textMessage('one'))
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(second.id)).not.toHaveLength(0)
+        expect(await entriesOf(service, second.id)).not.toHaveLength(0)
       })
       agents[0]?.emit(textMessage('two'))
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(first.id)).not.toHaveLength(0)
+        expect(await entriesOf(service, first.id)).not.toHaveLength(0)
       })
 
       await service.refreshSubscriptionUsage()
@@ -8913,7 +8918,7 @@ describe('the agent chat', () => {
 
         agent().emit(textMessage('thinking out loud'))
         await vi.waitFor(async () => {
-          expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+          expect(await entriesOf(service, chat.id)).not.toHaveLength(0)
         })
         clock = '2026-08-12T10:40:00.000Z'
 
@@ -8930,7 +8935,7 @@ describe('the agent chat', () => {
 
         agent().emit(textMessage('thinking out loud'))
         await vi.waitFor(async () => {
-          expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+          expect(await entriesOf(service, chat.id)).not.toHaveLength(0)
         })
         clock = '2026-08-12T10:02:00.000Z'
 
@@ -9085,7 +9090,7 @@ describe('the agent chat', () => {
       expect(options.signal).toBeInstanceOf(AbortSignal)
       expect(agent().sent).toEqual(['work'])
       expect(events.slice(before)).toEqual([])
-      expect(await service.chatHistory(chat.id)).toHaveLength(1)
+      expect(await entriesOf(service, chat.id)).toHaveLength(1)
       expect(service.listChats(workspaceId)[0]?.status).toBe('running')
     })
 
@@ -9151,7 +9156,7 @@ describe('the agent chat', () => {
 
       await expect(service.sendToChat(chat.id, '/btw why?')).rejects.toThrow('askSideQuestion')
       expect(agents).toHaveLength(0)
-      expect(await service.chatHistory(chat.id)).toEqual([])
+      expect(await entriesOf(service, chat.id)).toEqual([])
     })
   })
 
@@ -9203,7 +9208,7 @@ describe('the agent chat', () => {
       // Both halves. A log that kept the command and dropped what it returned
       // would be worse read back than one that kept neither.
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chat.id)
+        const history = await entriesOf(service, chat.id)
         expect(history.map((entry) => entry.role)).toEqual(['user', 'agent'])
         // Read back through `AgentEventSchema`, so this is also the round trip:
         // a report the stored schema could not parse would take the whole entry
@@ -9607,13 +9612,13 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'remember this')
       agent().emit(textMessage('noted'))
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+        expect(await entriesOf(service, chat.id)).not.toHaveLength(0)
       })
 
       await sendAndReset(service, chat.id, '/clear')
 
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).toEqual([])
+        expect(await entriesOf(service, chat.id)).toEqual([])
       })
     })
 
@@ -9641,13 +9646,13 @@ describe('the agent chat', () => {
       agent().emit(textMessage('and now something else'))
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chat.id)
+        const history = await entriesOf(service, chat.id)
         expect(history.some((entry) => entry.role === 'agent' && entry.event.type === 'text')).toBe(
           true
         )
       })
 
-      const history = await service.chatHistory(chat.id)
+      const history = await entriesOf(service, chat.id)
       expect(history.some((entry) => entry.role === 'agent' && entry.event.type === 'result')).toBe(
         false
       )
@@ -9685,13 +9690,13 @@ describe('the agent chat', () => {
       agent().emit(textMessage('finished'))
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chat.id)
+        const history = await entriesOf(service, chat.id)
         expect(history.some((entry) => entry.role === 'agent' && entry.event.type === 'text')).toBe(
           true
         )
       })
 
-      const history = await service.chatHistory(chat.id)
+      const history = await entriesOf(service, chat.id)
       expect(
         history.filter((entry) => entry.role === 'agent' && entry.event.type === 'result')
       ).toHaveLength(1)
@@ -9729,7 +9734,7 @@ describe('the agent chat', () => {
         })
       })
 
-      const history = await service.chatHistory(chat.id)
+      const history = await entriesOf(service, chat.id)
       expect(
         history.some((entry) => entry.role === 'user' && entry.text === 'get on with it')
       ).toBe(true)
@@ -9769,13 +9774,13 @@ describe('the agent chat', () => {
 
       await sendAndReset(service, chat.id, '/clear')
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).toEqual([])
+        expect(await entriesOf(service, chat.id)).toEqual([])
       })
 
       await sendAndReset(service, chat.id, 'carry on')
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chat.id)
+        const history = await entriesOf(service, chat.id)
         expect(history.some((entry) => entry.role === 'user' && entry.text === 'carry on')).toBe(
           true
         )
@@ -9794,13 +9799,13 @@ describe('the agent chat', () => {
       await service.sendToChat(chat.id, 'remember this')
       agent().emit(textMessage('noted'))
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+        expect(await entriesOf(service, chat.id)).not.toHaveLength(0)
       })
 
       agent().emit({ ...resetMessage, trigger: 'clear' } as unknown as SDKMessage)
 
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).toEqual([])
+        expect(await entriesOf(service, chat.id)).toEqual([])
       })
     })
 
@@ -9863,13 +9868,13 @@ describe('the agent chat', () => {
 
       agent().emit(textMessage('noted'))
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+        expect(await entriesOf(service, chat.id)).not.toHaveLength(0)
       })
 
       await sendAndReset(service, chat.id, '/reset')
 
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).toEqual([])
+        expect(await entriesOf(service, chat.id)).toEqual([])
       })
     })
   })
@@ -10213,7 +10218,7 @@ describe('the agent chat', () => {
       agent().emit(initMessage)
       agent().emit(textMessage('and something after it, so the queue has drained'))
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).not.toHaveLength(0)
+        expect(await entriesOf(service, chat.id)).not.toHaveLength(0)
       })
 
       expect(await readFile(join(dir, 'state.json'), 'utf8')).toBe(before)
@@ -10298,7 +10303,7 @@ describe('the agent chat', () => {
       agent().emit(textMessage('done'))
 
       await vi.waitFor(async () => {
-        await expect(service.chatHistory(chat.id)).resolves.toHaveLength(2)
+        await expect(entriesOf(service, chat.id)).resolves.toHaveLength(2)
       })
     })
   })
@@ -10360,13 +10365,13 @@ describe('the agent chat', () => {
       const { service, workspaceId } = await withWorkspace()
       const chat = await service.openChat(workspaceId)
 
-      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+      await expect(entriesOf(service, chat.id)).resolves.toEqual([])
     })
 
     it('refuses a chat it has no record of', async () => {
       const { service } = await withWorkspace()
 
-      await expect(service.chatHistory('nope')).rejects.toMatchObject({ code: 'worktreeMissing' })
+      await expect(entriesOf(service, 'nope')).rejects.toMatchObject({ code: 'worktreeMissing' })
     })
 
     it('still reads a conversation that was closed', async () => {
@@ -10375,7 +10380,7 @@ describe('the agent chat', () => {
       await service.createChat(workspaceId)
       await service.closeChat(chat.id)
 
-      await expect(service.chatHistory(chat.id)).resolves.toEqual([])
+      await expect(entriesOf(service, chat.id)).resolves.toEqual([])
     })
 
     it('keeps what was said on both sides', async () => {
@@ -10386,7 +10391,7 @@ describe('the agent chat', () => {
       agent().emit(textMessage('done'))
 
       await vi.waitFor(async () => {
-        await expect(service.chatHistory(chat.id)).resolves.toEqual([
+        await expect(entriesOf(service, chat.id)).resolves.toEqual([
           expect.objectContaining({ role: 'user', text: 'add a test' }),
           expect.objectContaining({
             role: 'agent',
@@ -10415,12 +10420,82 @@ describe('the agent chat', () => {
       })
       await Promise.all(sending)
       await vi.waitFor(async () => {
-        expect(said(await service.chatHistory(chat.id))).toEqual([
+        expect(said(await entriesOf(service, chat.id))).toEqual([
           'first',
           ...Array.from({ length: 20 }, (_, n) => `answer ${String(n + 1)}`),
           'second'
         ])
       })
+    })
+
+    // Read from inside the listener: the twentieth answer is queued, the twenty-first not yet emitted.
+    it('reads behind the writes already queued', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'go')
+
+      const reads: Promise<readonly ChatEntry[]>[] = []
+      service.onAgentEvent(({ event }) => {
+        if (event.type === 'text' && event.text === 'answer 20') {
+          reads.push(entriesOf(service, chat.id))
+        }
+      })
+      for (let n = 1; n <= 21; n += 1) agent().emit(textMessage(`answer ${String(n)}`))
+
+      await vi.waitFor(() => {
+        expect(reads).toHaveLength(1)
+      })
+      expect((await Promise.all(reads)).map(said)).toEqual([
+        ['go', ...Array.from({ length: 20 }, (_, n) => `answer ${String(n + 1)}`)]
+      ])
+    })
+
+    it('names the last event its history can hold', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const chat = await service.openChat(workspaceId)
+      await service.sendToChat(chat.id, 'go')
+
+      const seqOf = new Map<string, number>()
+      const reads: Promise<ChatHistory>[] = []
+      service.onAgentEvent(({ event }, seq) => {
+        if (event.type !== 'text') return
+        seqOf.set(event.text, seq)
+        if (event.text === 'answer 2') reads.push(service.chatHistory(chat.id))
+      })
+      for (const text of ['answer 1', 'answer 2', 'answer 3']) agent().emit(textMessage(text))
+
+      await vi.waitFor(() => {
+        expect(seqOf.size).toBe(3)
+      })
+      expect(seqOf.get('answer 2')).toEqual(expect.any(Number))
+      expect(
+        (await Promise.all(reads)).map(({ entries, seq }) => ({ said: said(entries), seq }))
+      ).toEqual([{ said: ['go', 'answer 1', 'answer 2'], seq: seqOf.get('answer 2') }])
+    })
+
+    it('counts each conversation’s events on its own', async () => {
+      const { service, workspaceId } = await withWorkspace()
+      const first = await service.openChat(workspaceId)
+      const second = await service.createChat(workspaceId)
+      const quiet = await service.createChat(workspaceId)
+      const firstSeq = new Map<string, number>()
+      service.onAgentEvent(({ chatId }, seq) => {
+        if (!firstSeq.has(chatId)) firstSeq.set(chatId, seq)
+      })
+      await service.sendToChat(first.id, 'go')
+      await service.sendToChat(second.id, 'go')
+
+      for (const one of agents) one.emit(textMessage('done'))
+
+      await vi.waitFor(() => {
+        expect(firstSeq).toEqual(
+          new Map([
+            [first.id, 1],
+            [second.id, 1]
+          ])
+        )
+      })
+      await expect(service.chatHistory(quiet.id)).resolves.toEqual({ entries: [], seq: 0 })
     })
 
     // Storing the fragments as well would replay every answer twice.
@@ -10443,7 +10518,7 @@ describe('the agent chat', () => {
       agent().emit(textMessage('done'))
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chat.id)
+        const history = await entriesOf(service, chat.id)
         expect(history).toHaveLength(2)
       })
     })
@@ -10455,7 +10530,7 @@ describe('the agent chat', () => {
 
       const restarted = await createService({ ...paths(dir), query: fakeQuery() })
 
-      await expect(restarted.chatHistory(chat.id)).resolves.toHaveLength(1)
+      await expect(entriesOf(restarted, chat.id)).resolves.toHaveLength(1)
     })
 
     // The transcript directory is a file: nothing can be written there. The
@@ -11116,7 +11191,7 @@ describe('the agent chat', () => {
       )
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chat.id)
+        const history = await entriesOf(service, chat.id)
         expect(history.at(-1)).toMatchObject({
           role: 'agent',
           event: { type: 'plan_edited', plan: '# The user wrote this instead' }
@@ -11454,7 +11529,7 @@ describe('the agent chat', () => {
       agent().emit(toolResultMessage('c-1', true, 'x'.repeat(5000)))
 
       await vi.waitFor(async () => {
-        await expect(service.chatHistory(chat.id)).resolves.toContainEqual(
+        await expect(entriesOf(service, chat.id)).resolves.toContainEqual(
           expect.objectContaining({
             role: 'agent',
             event: {
@@ -11495,7 +11570,7 @@ describe('the agent chat', () => {
       agent().emit(toolResultMessage('c-1', false, 'x'.repeat(5000)))
 
       await vi.waitFor(async () => {
-        await expect(service.chatHistory(chat.id)).resolves.toContainEqual(
+        await expect(entriesOf(service, chat.id)).resolves.toContainEqual(
           expect.objectContaining({
             role: 'agent',
             event: {
@@ -13401,7 +13476,7 @@ describe('the agent chat', () => {
 
       await service.closeChats()
 
-      const history = await service.chatHistory(chat.id)
+      const history = await entriesOf(service, chat.id)
       expect(history.filter((entry) => entry.role === 'agent')).toHaveLength(200)
     })
 
@@ -13535,7 +13610,7 @@ describe('the agent chat', () => {
       agent().emit(textMessage('done'))
 
       await vi.waitFor(async () => {
-        await expect(service.chatHistory(chat.id)).resolves.toHaveLength(2)
+        await expect(entriesOf(service, chat.id)).resolves.toHaveLength(2)
       })
       expect(seen).toEqual([])
     })
@@ -13577,7 +13652,7 @@ describe('the agent chat', () => {
           code: 'branchUnmerged'
         })
 
-        await expect(service.chatHistory(chat.id)).resolves.toHaveLength(1)
+        await expect(entriesOf(service, chat.id)).resolves.toHaveLength(1)
         expect(agent().closed()).toBe(0)
         await expect(access(marker)).rejects.toThrow()
         await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
@@ -13686,7 +13761,7 @@ describe('the agent chat', () => {
 
       await expect(service.removeWorkspaceById(workspace.id, { force: true })).rejects.toThrow()
 
-      await expect(service.chatHistory(chat.id)).resolves.toHaveLength(1)
+      await expect(entriesOf(service, chat.id)).resolves.toHaveLength(1)
       await expect(service.listWorkspaces(project.id)).resolves.toHaveLength(1)
     })
 
@@ -13840,7 +13915,7 @@ describe('the agent chat', () => {
       ])
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chatId)
+        const history = await entriesOf(service, chatId)
         expect(
           history.some(
             (entry) => entry.role === 'agent' && entry.event.type === 'question_answered'
@@ -14198,7 +14273,7 @@ describe('the agent chat', () => {
       clock = '2026-10-20T09:03:00.000Z'
       agent().emit(textMessage('working on it'))
       await vi.waitFor(async () => {
-        expect(await service.chatHistory(chat.id)).toHaveLength(2)
+        expect(await entriesOf(service, chat.id)).toHaveLength(2)
       })
 
       expect(statuses[0]?.turnStartedAt).toBe('2026-10-20T09:00:00.000Z')
@@ -14450,7 +14525,7 @@ describe('the agent chat', () => {
         })
       })
 
-      const [entry] = await service.chatHistory(chat.id)
+      const [entry] = await entriesOf(service, chat.id)
       const messageId = entry?.role === 'user' ? (entry.uuid ?? '') : ''
       sessionChain = () => Promise.resolve(chainOf(messageId))
       return { service, workspaceId, chatId: chat.id, messageId, events }
@@ -14475,7 +14550,7 @@ describe('the agent chat', () => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
       })
 
-      const history = await service.chatHistory(chatId)
+      const history = await entriesOf(service, chatId)
       const last = history.findLast((entry) => entry.role === 'user')
       const second = last?.role === 'user' ? (last.uuid ?? '') : ''
       sessionChain = () => Promise.resolve(chainOf(first, second))
@@ -14484,7 +14559,7 @@ describe('the agent chat', () => {
 
     /** The texts of what the user said, as the history now holds them. */
     async function saidIn(service: OctopusService, chatId: string): Promise<string[]> {
-      return (await service.chatHistory(chatId)).flatMap((entry) =>
+      return (await entriesOf(service, chatId)).flatMap((entry) =>
         entry.role === 'user' ? [entry.text] : []
       )
     }
@@ -14498,7 +14573,7 @@ describe('the agent chat', () => {
 
       const answered = await service.sendToChat(chat.id, 'first')
 
-      const [recorded] = await service.chatHistory(chat.id)
+      const [recorded] = await entriesOf(service, chat.id)
       expect(recorded).toMatchObject({ role: 'user', uuid: expect.any(String) })
       expect(agent().sentIds).toEqual([recorded?.role === 'user' ? recorded.uuid : null])
       // And says it back: the window has drawn the message already, and without
@@ -14538,7 +14613,7 @@ describe('the agent chat', () => {
       // In the log as well, because it changed the tree without the agent
       // doing anything — read back later it would otherwise be unexplained.
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chatId)
+        const history = await entriesOf(service, chatId)
         expect(history.at(-1)).toMatchObject({
           role: 'agent',
           event: { type: 'files_rewound', messageId, files: 2, insertions: 12, deletions: 4 }
@@ -14569,7 +14644,7 @@ describe('the agent chat', () => {
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'go')
       agent().emit(initMessage)
-      const [entry] = await service.chatHistory(chat.id)
+      const [entry] = await entriesOf(service, chat.id)
       const messageId = entry?.role === 'user' ? (entry.uuid ?? '') : ''
 
       // Either half: the conversation is being added to, and its files edited.
@@ -14698,7 +14773,7 @@ describe('the agent chat', () => {
       await service.rewindChat(chatId, messageId, 'files')
 
       await vi.waitFor(async () => {
-        const history = await service.chatHistory(chatId)
+        const history = await entriesOf(service, chatId)
         expect(history.at(-1)).toMatchObject({
           event: { type: 'files_rewound', files: 1, skippedLinks: 2 }
         })
@@ -14713,7 +14788,7 @@ describe('the agent chat', () => {
 
       const answered = await service.sendToChat(chat.id, '/usage')
 
-      const [entry] = await service.chatHistory(chat.id)
+      const [entry] = await entriesOf(service, chat.id)
       expect(entry).toMatchObject({ role: 'user', text: '/usage' })
       expect(entry).not.toHaveProperty('uuid')
       expect(answered).toBeNull()
@@ -14751,7 +14826,7 @@ describe('the agent chat', () => {
       await vi.waitFor(() => {
         expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
       })
-      const [entry] = await service.chatHistory(chat.id)
+      const [entry] = await entriesOf(service, chat.id)
       const messageId = entry?.role === 'user' ? (entry.uuid ?? '') : ''
 
       await expect(service.rewindChat(chat.id, messageId, 'both')).rejects.toMatchObject({
@@ -14774,7 +14849,7 @@ describe('the agent chat', () => {
         conversation: true,
         files: { canRewind: false, error: 'No checkpoint for that message' }
       })
-      const history = await service.chatHistory(chatId)
+      const history = await entriesOf(service, chatId)
       expect(
         history.some((entry) => entry.role === 'agent' && entry.event.type === 'files_rewound')
       ).toBe(false)
@@ -14869,7 +14944,7 @@ describe('the agent chat', () => {
         await vi.waitFor(() => {
           expect(service.listChats(workspaceId)[0]?.status).toBe('idle')
         })
-        const third = (await service.chatHistory(chatId))
+        const third = (await entriesOf(service, chatId))
           .flatMap((entry) => (entry.role === 'user' ? [entry.uuid ?? ''] : []))
           .at(-1)
         sessionChain = () => Promise.resolve(chainOf(first, second, third ?? ''))
@@ -14916,7 +14991,7 @@ describe('the agent chat', () => {
           text: 'rename the helper'
         })
 
-        await expect(service.chatHistory(chatId)).resolves.toEqual([])
+        await expect(entriesOf(service, chatId)).resolves.toEqual([])
         expect(service.listChats(workspaceId)[0]).toMatchObject({
           sessionId: null,
           resumeAt: null
@@ -14945,7 +15020,7 @@ describe('the agent chat', () => {
       it('is not offered for a message the session no longer holds', async () => {
         const { service, workspaceId, chatId, second } = await spokenTwice()
         sessionChain = () => Promise.resolve(chainOf('someone-else'))
-        const before = await service.chatHistory(chatId)
+        const before = await entriesOf(service, chatId)
 
         await expect(service.previewRewind(chatId, second)).resolves.toMatchObject({
           conversation: false
@@ -14954,7 +15029,7 @@ describe('the agent chat', () => {
           code: 'rewindUnavailable'
         })
 
-        await expect(service.chatHistory(chatId)).resolves.toEqual(before)
+        await expect(entriesOf(service, chatId)).resolves.toEqual(before)
         expect(agent().rewinds()).toEqual([{ messageId: second, dryRun: true }])
         expect(service.listChats(workspaceId)[0]?.resumeAt).toBeNull()
       })
@@ -15023,7 +15098,7 @@ describe('the agent chat', () => {
 
         expect(asked).toEqual(['files while alive'])
         // Written after the cut, or the cut would have taken it.
-        const history = await service.chatHistory(chatId)
+        const history = await entriesOf(service, chatId)
         expect(
           history.map((entry) => (entry.role === 'user' ? entry.text : entry.event.type))
         ).toEqual(['rename the helper', 'session_started', 'result', 'files_rewound'])
@@ -15041,7 +15116,7 @@ describe('the agent chat', () => {
         const push = events.push.bind(events)
         events.push = (...added: ChatEvent[]): number => {
           for (const one of added) {
-            if (one.event.type === 'conversation_rewound') reads.push(service.chatHistory(chatId))
+            if (one.event.type === 'conversation_rewound') reads.push(entriesOf(service, chatId))
           }
           return push(...added)
         }
@@ -15198,7 +15273,7 @@ describe('the agent chat', () => {
       await service.closeChat(first.id)
 
       expect(agent().closed()).toBe(1)
-      await expect(service.chatHistory(first.id)).resolves.toMatchObject([
+      await expect(entriesOf(service, first.id)).resolves.toMatchObject([
         { role: 'user', text: 'go' }
       ])
       expect(service.listChats(workspaceId).map((chat) => chat.id)).toEqual([second.id])
@@ -15432,7 +15507,7 @@ describe('the agent chat', () => {
       expect(reopened.closedAt).toBeNull()
       expect(service.listChats(workspaceId).map((chat) => chat.id)).toContain(first.id)
       await expect(service.listClosedChats(workspaceId)).resolves.toEqual([])
-      await expect(service.chatHistory(first.id)).resolves.toMatchObject([
+      await expect(entriesOf(service, first.id)).resolves.toMatchObject([
         { role: 'user', text: 'go' }
       ])
     })
@@ -15516,7 +15591,7 @@ describe('the agent chat', () => {
       await service.sendToChat(second.id, 'second')
       await service.closeChat(first.id)
 
-      await expect(service.chatHistory(second.id)).resolves.toMatchObject([
+      await expect(entriesOf(service, second.id)).resolves.toMatchObject([
         { role: 'user', text: 'second' }
       ])
     })
@@ -15707,9 +15782,7 @@ describe('the agent chat', () => {
 
       // Entry for entry, the session's own opening included: what the new tab
       // draws has to be what the one it came from drew.
-      await expect(service.chatHistory(forked.id)).resolves.toEqual(
-        await service.chatHistory(chatId)
-      )
+      await expect(entriesOf(service, forked.id)).resolves.toEqual(await entriesOf(service, chatId))
     })
 
     it('refuses a conversation that has never run', async () => {
@@ -15780,7 +15853,7 @@ describe('the agent chat', () => {
           title: null
         })
         expect(service.listChats(workspaceId)).toHaveLength(2)
-        await expect(service.chatHistory(handed.id)).resolves.toEqual([])
+        await expect(entriesOf(service, handed.id)).resolves.toEqual([])
       })
 
       it('says the set of conversations changed', async () => {
@@ -15945,8 +16018,8 @@ describe('the agent chat', () => {
       it('ends its history with the question and the answer', async () => {
         const { service, sourceId, forkId } = await forkedOff()
 
-        const source = await service.chatHistory(sourceId)
-        const history = await service.chatHistory(forkId)
+        const source = await entriesOf(service, sourceId)
+        const history = await entriesOf(service, forkId)
 
         expect(history.slice(0, source.length)).toEqual(source)
         expect(history.slice(source.length)).toEqual([
@@ -15964,7 +16037,7 @@ describe('the agent chat', () => {
         expect(agents.at(-1)?.sent).toEqual([formatAside(aside, 'go on'), 'and then'])
         expect(record()?.aside).toBeNull()
         // The screen keeps what was typed.
-        expect((await service.chatHistory(forkId)).at(-1)).toMatchObject({ text: 'and then' })
+        expect((await entriesOf(service, forkId)).at(-1)).toMatchObject({ text: 'and then' })
       })
 
       it('forgets it on a /clear, which goes as typed', async () => {

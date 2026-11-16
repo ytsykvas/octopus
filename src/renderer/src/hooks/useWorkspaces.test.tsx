@@ -116,6 +116,7 @@ const emitTurnEnd = (workspaceId: string, failed = false): void => {
       handler({
         chatId: 'chat-1',
         workspaceId,
+        seq: 1,
         event: failed
           ? { type: 'error', message: 'the agent gave up' }
           : {
@@ -715,7 +716,8 @@ describe('useWorkspaces', () => {
         handler({
           chatId: 'chat-1',
           workspaceId: anna.id,
-          event: { type: 'text', text: 'still working' }
+          event: { type: 'text', text: 'still working' },
+          seq: 1
         })
       }
     })

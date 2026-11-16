@@ -46,7 +46,13 @@ Transcript appends have their own line. They do not read the state, so making
 them wait for a save would only slow the log down — what they need is order.
 The user's message goes through it too: `sendToChat` awaits its place in the
 line, so a write that fails still fails the send, and the message can no longer
-land between the lines of the turn before it.
+land between the lines of the turn before it. `chatHistory` reads in the same
+line, and takes the conversation's `seq` (counted in `emit`) just before:
+`handleEvent` queues an event's append before announcing it, so every event
+numbered up to that `seq` that is written at all is in the file the read
+returns. Two are announced without being written — a background failure
+(`report`) and the `result` closing a cleared turn — and a read can drop them,
+as a restart would.
 
 All three are a `oneAtATime` line (`parallel.ts`), not three hand-written copies
 of `tail.then(apply, apply)` and a settled tail. Another file written from

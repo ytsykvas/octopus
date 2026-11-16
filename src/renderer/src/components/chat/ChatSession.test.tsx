@@ -694,7 +694,10 @@ describe('an existing conversation', () => {
     expect(await screen.findByText('first workspace')).toBeInTheDocument()
 
     vi.mocked(octopus().chats.list).mockResolvedValue({ ok: true, value: [] })
-    vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: { entries: [], seq: 0 }
+    })
     rerender(<ChatPane workspace={workspaceView('maria')} />)
 
     await waitFor(() => {
@@ -2364,7 +2367,10 @@ describe('the permission mode', () => {
       await openLoadedChat()
 
       await user.click(await mark())
-      vi.mocked(octopus().chats.history).mockResolvedValue({ ok: true, value: [] })
+      vi.mocked(octopus().chats.history).mockResolvedValue({
+        ok: true,
+        value: { entries: [], seq: 0 }
+      })
       await user.click(await screen.findByRole('button', { name: /Conversation only/ }))
       emitAgentEvent({ type: 'conversation_rewound', messageId: MESSAGE })
       await waitFor(() => {

@@ -299,7 +299,7 @@ the row redraws itself from the write rather than from a second read.
 | `chats:rename`              | `chatId`, `title`                                 | names a conversation. The one of these carrying something the user typed, so it is parsed and bounded; an empty name is a request rather than a refusal — the conversation goes back to the name it is given                                                                                                                                                                                                                 |
 | `chats:rewindPreview`       | `chatId`, `messageId`                             | what rewinding to a message could do, without doing it: whether the conversation can be cut there, and the files' dry run — how many, +/− lines, or why not — or null while another conversation of the workspace works. The id is parsed as a uuid at the bridge and then proved to be one **this** conversation recorded, because the agent will rewind to any it has heard of. Refused while this conversation is working |
 | `chats:rewind`              | `chatId`, `messageId`, `scope`                    | does it — `both`, `conversation` or `files`, parsed at the bridge. The files write a `files_rewound` row into the log: the tree changed without the agent doing anything. The conversation is cut back and the message's text answered, for the composer. Same checks as the preview, plus a quiet workspace when the files are part of it                                                                                   |
-| `chats:history`             | `chatId`                                          | the transcript, as it will be redrawn after a restart. Refused for an id not on record (a closed conversation is still on record); a file that is there but cannot be read is `fileUnreadable`, not an empty log                                                                                                                                                                                                             |
+| `chats:history`             | `chatId`                                          | the transcript, as it will be redrawn after a restart, as `{ entries, seq }`: `seq` is the number of the last event `entries` can hold — the read is queued behind the transcript writes, and an event's write is queued before it is broadcast. Refused for an id not on record (a closed conversation is still on record); a file that is there but cannot be read is `fileUnreadable`, not an empty log                   |
 | `chats:send`                | `chatId`, `text`                                  | answers immediately with the message's id (null for `/usage`, which never reaches the agent), so the line already drawn can be rewound at once; the reply arrives as events                                                                                                                                                                                                                                                  |
 | `tasks:list`                | —                                                 | every conversation's background tasks — subagents, commands, workflows — ended ones included, as the agent map draws them                                                                                                                                                                                                                                                                                                    |
 | `tasks:stop`                | `chatId`, `taskId`                                | stops one of them. The id reaches the agent's process, so it is parsed and bounded. One that has already ended, or that the conversation never had, is taken as stopped: the click was behind the push that said so                                                                                                                                                                                                          |
@@ -322,13 +322,16 @@ the row redraws itself from the write rather than from a second read.
 | `chats:refreshSubscription` | —                                                 | asks the account now rather than waiting for a turn — a press of the limits block in the left column's footer, which is what makes reading it allowed. Asks the session that spoke last, and starts one if none is running; nothing is sent to the agent, so it costs no turn. `null` where there is no conversation to ask through                                                                                          |
 
 Events flow the other way, on `chats:event`, carrying `{ chatId, workspaceId,
-event }`. A **broadcast**, not a reply to whoever asked: events keep arriving
-long after the call that started them returned, and a second window on the same
-workspace should see the same conversation. Two kinds never cross: an agent's
-progress and the CLI's list of what is alive (`isTaskFrame` in `events.ts`)
-reach a window folded into `tasks:changed` below, gathered, and nothing in the
-window reads them as events — sent as well, they went to every window at the
-rate the gathering exists to avoid.
+event, seq }`. `seq` counts the conversation's events from 1 since the app
+started, with gaps where a frame below was not sent; a window reading the
+history keeps what it heard numbered past the history's own `seq` (see
+[state](ui/state.md)). A **broadcast**, not a reply to whoever asked: events
+keep arriving long after the call that started them returned, and a second
+window on the same workspace should see the same conversation. Two kinds never
+cross: an agent's progress and the CLI's list of what is alive (`isTaskFrame`
+in `events.ts`) reach a window folded into `tasks:changed` below, gathered, and
+nothing in the window reads them as events — sent as well, they went to every
+window at the rate the gathering exists to avoid.
 
 **`workspaces:status`** carries `{ workspaceId, status }` whenever a workspace starts working, stops, or blocks
 on a question. A stream rather than something the list re-reads for itself:

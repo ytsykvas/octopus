@@ -686,6 +686,17 @@ export interface ChatEvent {
   readonly event: AgentEvent
 }
 
+/** An agent event with `seq`, the count of its conversation's events since the service started. */
+export interface NumberedChatEvent extends ChatEvent {
+  readonly seq: number
+}
+
+/** A conversation's transcript, and the `seq` of the last event it can hold. */
+export interface ChatHistory {
+  readonly entries: ChatEntry[]
+  readonly seq: number
+}
+
 /**
  * A workspace and what it is now doing.
  *
@@ -1664,8 +1675,8 @@ export interface OctopusService {
   reopenChat(chatId: string): Promise<Chat>
   /** Every chat of a workspace, in the order they were opened. */
   listChats(workspaceId: string): readonly Chat[]
-  /** Everything said in a chat on record, closed or not, as it will be redrawn after a restart. */
-  chatHistory(chatId: string): Promise<ChatEntry[]>
+  /** Everything said in a chat on record, closed or not, and the `seq` of the last event it can hold. */
+  chatHistory(chatId: string): Promise<ChatHistory>
   /**
    * Sends a message, starting or resuming the agent session as needed.
    *
@@ -1835,8 +1846,8 @@ export interface OctopusService {
    */
   /** `pressed` says a person asked, which always asks the account; a timer takes a recent reading. */
   refreshSubscriptionUsage(pressed?: boolean): Promise<UsageOutcome>
-  /** Subscribes to agent events; the returned function unsubscribes. */
-  onAgentEvent(handler: (event: ChatEvent) => void): () => void
+  /** Subscribes to agent events, each with its `seq`; the returned function unsubscribes. */
+  onAgentEvent(handler: (event: ChatEvent, seq: number) => void): () => void
   /**
    * Awaited once a removal is agreed and before its cleanup script, for what main runs in the
    * workspace; one that rejects does not stop the removal. The returned function unsubscribes.
@@ -2131,7 +2142,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const autoFromPlan = new Set<string>()
   /** Sessions being started, so a second asker waits for the first. */
   const starts = new Map<string, Promise<AgentSession>>()
-  const listeners = new Set<(event: ChatEvent) => void>()
+  const listeners = new Set<(event: ChatEvent, seq: number) => void>()
   const statusListeners = new Set<(event: WorkspaceStatusEvent) => void>()
   const usageListeners = new Set<(windows: UsageWindows) => void>()
   const chatStatusListeners = new Set<(event: ChatStatusEvent) => void>()
@@ -2912,10 +2923,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   const pluginWrite = oneAtATime()
 
+  const eventSeq = new Map<string, number>()
+
   function emit(event: ChatEvent): void {
+    // Numbered after its append was queued (`record` comes first in `handleEvent`): `chatHistory` relies on it.
+    const seq = (eventSeq.get(event.chatId) ?? 0) + 1
+    eventSeq.set(event.chatId, seq)
     for (const listener of listeners) {
       try {
-        listener(event)
+        listener(event, seq)
       } catch (error) {
         // One listener failing must not cost the others the event.
         onDiagnostic(error)
@@ -7173,7 +7189,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async chatHistory(chatId) {
       requireChat(chatId)
-      return await readTranscript(chatId, dataRoot)
+      // Taken before the read is queued: every event numbered up to here was queued for writing ahead of it.
+      const seq = eventSeq.get(chatId) ?? 0
+      const entries = await transcriptWrites(() => readTranscript(chatId, dataRoot))
+      return { entries, seq }
     },
 
     async sendToChat(chatId, text, sending) {

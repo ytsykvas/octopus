@@ -79,7 +79,7 @@ export function installOctopusStub(): Api {
       closed: vi.fn(() => ok([])),
       reopen: vi.fn(() => ok(chatFixture())),
       rename: vi.fn(() => ok(undefined)),
-      history: vi.fn(() => ok([])),
+      history: vi.fn(() => ok({ entries: [], seq: 0 })),
       rewindPreview: vi.fn(() =>
         ok({
           conversation: true,

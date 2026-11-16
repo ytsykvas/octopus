@@ -351,7 +351,7 @@ export function useChat(
       const history = await window.octopus.chats.history(chatId)
       if (abandoned()) return
 
-      if (history.ok) setEntries(history.value)
+      if (history.ok) setEntries(history.value.entries)
       else setError(describeFailure(history))
       setLoading(false)
 
@@ -415,7 +415,7 @@ export function useChat(
         discardStreaming()
         void window.octopus.chats.history(openChatId).then((history) => {
           if (!listening) return
-          if (history.ok) setEntries(history.value)
+          if (history.ok) setEntries(history.value.entries)
           else setError(describeFailure(history))
         })
         return
@@ -594,7 +594,7 @@ export function useChat(
          * this is.
          */
         const history = await window.octopus.chats.history(target.id)
-        if (history.ok) setEntries(history.value)
+        if (history.ok) setEntries(history.value.entries)
 
         return false
       }

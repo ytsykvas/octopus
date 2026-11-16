@@ -700,18 +700,21 @@ describe('App', () => {
       })
       vi.mocked(window.octopus.chats.history).mockResolvedValue({
         ok: true,
-        value: [
-          {
-            role: 'agent',
-            at: '2026-08-13T09:00:00.000Z',
-            event: { type: 'tool_use', toolUseId: 'c-1', name: 'Bash', input: { command: 'ls' } }
-          },
-          {
-            role: 'agent',
-            at: '2026-08-13T09:00:01.000Z',
-            event: { type: 'text', text: 'Listed.' }
-          }
-        ]
+        value: {
+          entries: [
+            {
+              role: 'agent',
+              at: '2026-08-13T09:00:00.000Z',
+              event: { type: 'tool_use', toolUseId: 'c-1', name: 'Bash', input: { command: 'ls' } }
+            },
+            {
+              role: 'agent',
+              at: '2026-08-13T09:00:01.000Z',
+              event: { type: 'text', text: 'Listed.' }
+            }
+          ],
+          seq: 0
+        }
       })
       givenTwoProjects()
     }
