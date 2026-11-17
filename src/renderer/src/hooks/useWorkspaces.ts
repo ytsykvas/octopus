@@ -6,6 +6,8 @@ import type { Project } from '@core/store.js'
 import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type { KindDetour, WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
+import type { Failure } from '../../../preload/index.js'
+
 /** A conversation as the tab strip knows it: everything but the turn's start. */
 export type TabChat = Omit<WorkspaceChat, 'turnStartedAt'>
 
@@ -91,20 +93,52 @@ export function useWorkspaces(
   // which changes identity on every refresh.
   const latestProjects = useLatest(projects)
 
-  const load = useCallback(async (): Promise<Map<string, readonly WorkspaceView[]>> => {
-    const entries = await Promise.all(
-      latestProjects.current.map(async (project) => {
-        const result = await window.octopus.workspaces.list(project.id)
-        return [project.id, result.ok ? result.value : []] as const
-      })
-    )
+  const held = useLatest(byProject)
+  // Held so a language switch, which changes `describeFailure`, does not re-list every project.
+  const report = useLatest((failure: Failure) => {
+    onError(describeFailure(failure))
+  })
 
-    return new Map(entries)
-  }, [latestProjects])
+  const generation = useRef(0)
+  // Raised only by a listing whose failures hide nothing: dropping an older one for
+  // a newer one that could not read would leave stale rows with nothing to replace them.
+  const applied = useRef(0)
 
-  const refresh = useCallback(async () => {
-    setByProject(await load())
-  }, [load])
+  const list = useCallback(
+    async (projects: readonly Project[], abandoned: () => boolean) => {
+      const attempt = ++generation.current
+      const results = await Promise.all(
+        projects.map(
+          async (project) => [project.id, await window.octopus.workspaces.list(project.id)] as const
+        )
+      )
+      if (abandoned() || attempt < applied.current) return
+
+      // A failure keeps what the project held: emptying it unmounted the open conversation.
+      setByProject(
+        (current) =>
+          new Map<string, readonly WorkspaceView[]>(
+            results.map(([projectId, result]) => [
+              projectId,
+              result.ok ? result.value : (current.get(projectId) ?? [])
+            ])
+          )
+      )
+
+      const hiding = results.find(
+        (entry): entry is readonly [string, Failure] =>
+          !entry[1].ok && (held.current.get(entry[0])?.length ?? 0) > 0
+      )
+      if (hiding === undefined) applied.current = attempt
+      else if (attempt === generation.current) report.current(hiding[1])
+    },
+    [held, report]
+  )
+
+  const refresh = useCallback(
+    () => list(latestProjects.current, () => false),
+    [list, latestProjects]
+  )
 
   /**
    * Applies a change to whichever project holds this workspace.
@@ -319,20 +353,13 @@ export function useWorkspaces(
     void (async () => {
       // Read the current projects directly: the ref update above runs in its
       // own effect, which may not have fired yet on the first pass.
-      const entries = await Promise.all(
-        projects.map(async (project) => {
-          const result = await window.octopus.workspaces.list(project.id)
-          return [project.id, result.ok ? result.value : []] as const
-        })
-      )
-
-      if (!controller.signal.aborted) setByProject(new Map(entries))
+      await list(projects, () => controller.signal.aborted)
     })()
 
     return () => {
       controller.abort()
     }
-  }, [projects])
+  }, [projects, list])
 
   // Done, and still worth a line, as a cleanup that failed is: the branch is
   // not where its kind says, and the reader should not find that out from git.

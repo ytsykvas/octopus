@@ -76,6 +76,17 @@ render-time reset that clears the view clears `creating`, `drafting` and the
 action's error with it, or a refusal about the branch just left is shown against
 the one arrived at.
 
+The counter also settles two reads of one thing that overlap, where the one that
+answers last is not the one asked last. There a reply is dropped only once a
+newer one has been drawn: dropped for a newer read that then fails, it would
+leave nothing drawn at all. `useWorkspaces` numbers every full listing — the one
+a change of projects starts and each `refresh` — so a refresh that read the
+projects from before a removal cannot bring the removed one back. A listing that
+fails for a project keeps the workspaces it had and reports why, since emptying
+it unmounted the open conversation; a project with none, or never listed, stays
+empty and silent, and its failure does not stop the listing counting as drawn.
+Only the newest listing reports a failure.
+
 **A hook that listens to chat events says whose it is listening for.** Events are
 broadcast to every window and cover every conversation, so a subscription that
 takes them all takes another project's too. There are three honest shapes and no

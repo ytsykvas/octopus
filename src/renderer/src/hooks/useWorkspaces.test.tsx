@@ -773,14 +773,16 @@ describe('useWorkspaces', () => {
           : { ok: false, error: 'not a git repository' }
       )
     )
+    const onError = vi.fn<OnError>()
     const projects = [planner, website]
 
-    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
 
     await waitFor(() => {
       expect(result.current.byProject.get('website')).toEqual([])
     })
     expect(result.current.flat).toEqual([anna])
+    expect(onError).not.toHaveBeenCalled()
   })
 
   it('loads the workspaces of a project added after mount', async () => {
@@ -818,7 +820,7 @@ describe('useWorkspaces', () => {
     expect(result.current.flat).toEqual([anna, bob])
   })
 
-  it('empties a project whose workspaces stop being readable', async () => {
+  it('keeps the workspaces it had and says why when a refresh cannot read them', async () => {
     vi.mocked(window.octopus.workspaces.list)
       .mockResolvedValueOnce({ ok: true, value: [anna] })
       .mockResolvedValue({ ok: false, error: 'could not list worktrees' })
@@ -832,10 +834,178 @@ describe('useWorkspaces', () => {
 
     await act(() => result.current.refresh())
 
-    expect(result.current.flat).toEqual([])
-    // Worth knowing: the failure is swallowed here, so the user sees the
-    // workspaces disappear without being told why.
-    expect(onError).not.toHaveBeenCalledWith(expect.any(String))
+    expect(result.current.flat).toEqual([anna])
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not list worktrees'))
+  })
+
+  it('lets the newer of two overlapping refreshes win', async () => {
+    const slow = deferred<Result<WorkspaceView[]>>()
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValue({ ok: true, value: [anna, bob] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    await act(async () => {
+      const older = result.current.refresh()
+      await result.current.refresh()
+      slow.settle({ ok: true, value: [anna] })
+      await older
+    })
+
+    expect(result.current.flat).toEqual([anna, bob])
+  })
+
+  it('keeps a refresh that began after the listing for the projects', async () => {
+    const slow = deferred<Result<WorkspaceView[]>>()
+    vi.mocked(window.octopus.workspaces.list)
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValue({ ok: true, value: [anna, bob] })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await act(() => result.current.refresh())
+    await act(async () => {
+      slow.settle({ ok: true, value: [anna] })
+      await settled()
+    })
+
+    expect(result.current.flat).toEqual([anna, bob])
+  })
+
+  it('drops a refresh that read the projects from before one was removed', async () => {
+    const stale = deferred<Result<WorkspaceView[]>>()
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockResolvedValueOnce({ ok: true, value: [carol] })
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValue({ ok: true, value: [carol] })
+
+    const { result, rerender } = renderHook(
+      ({ projects }: { projects: readonly Project[] }) =>
+        useWorkspaces(projects, accepts(), vi.fn<OnError>()),
+      { initialProps: { projects: [planner, website] as readonly Project[] } }
+    )
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna, carol])
+    })
+
+    const refreshing = result.current.refresh()
+    rerender({ projects: [website] })
+    await waitFor(() => {
+      expect(result.current.byProject.has('planner')).toBe(false)
+    })
+    await act(async () => {
+      stale.settle({ ok: true, value: [anna] })
+      await refreshing
+    })
+
+    expect(result.current.flat).toEqual([carol])
+    expect(result.current.byProject.has('planner')).toBe(false)
+  })
+
+  it('lets an older listing fill in what a newer one failed to read', async () => {
+    const slow = deferred<Result<WorkspaceView[]>>()
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValueOnce({ ok: false, error: 'could not list worktrees' })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    await act(async () => {
+      const older = result.current.refresh()
+      await result.current.refresh()
+      slow.settle({ ok: true, value: [anna, bob] })
+      await older
+    })
+
+    expect(result.current.flat).toEqual([anna, bob])
+  })
+
+  it('still drops an older listing while a project with nothing in it cannot be read', async () => {
+    const slow = deferred<Result<WorkspaceView[]>>()
+    const planned: Promise<Result<WorkspaceView[]>>[] = [
+      Promise.resolve({ ok: true, value: [anna] }),
+      slow.promise,
+      Promise.resolve({ ok: true, value: [anna, bob] })
+    ]
+    vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+      projectId === 'website'
+        ? Promise.resolve({ ok: false, error: 'not a git repository' })
+        : (planned.shift() ?? Promise.resolve({ ok: true, value: [] }))
+    )
+    const projects = [planner, website]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    await act(async () => {
+      const older = result.current.refresh()
+      await result.current.refresh()
+      slow.settle({ ok: true, value: [anna] })
+      await older
+    })
+
+    expect(result.current.flat).toEqual([anna, bob])
+  })
+
+  it('does not report a failed listing that a newer one has overtaken', async () => {
+    const older = deferred<Result<WorkspaceView[]>>()
+    const newer = deferred<Result<WorkspaceView[]>>()
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise)
+    const onError = vi.fn<OnError>()
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    await act(async () => {
+      const first = result.current.refresh()
+      const second = result.current.refresh()
+      older.settle({ ok: false, error: 'could not list worktrees' })
+      await first
+      newer.settle({ ok: true, value: [anna, bob] })
+      await second
+    })
+
+    expect(onError).not.toHaveBeenCalled()
+    expect(result.current.flat).toEqual([anna, bob])
+  })
+
+  it('says once why when several projects with workspaces cannot be read', async () => {
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna] })
+      .mockResolvedValueOnce({ ok: true, value: [carol] })
+      .mockResolvedValue({ ok: false, error: 'could not list worktrees' })
+    const onError = vi.fn<OnError>()
+    const projects = [planner, website]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna, carol])
+    })
+
+    await act(() => result.current.refresh())
+
+    expect(onError).toHaveBeenCalledOnce()
+    expect(result.current.flat).toEqual([anna, carol])
   })
 
   // The same guard that protects an unmounted window also protects a live one:
