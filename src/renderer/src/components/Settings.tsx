@@ -51,6 +51,8 @@ import { Field } from './Field.js'
 import { Mascot } from './Mascot.js'
 import { Modal } from './Modal.js'
 import { useConfirm } from '../hooks/useConfirm.js'
+import { useErrorMessage } from '../hooks/useErrorMessage.js'
+import type { Failure } from '../../../preload/index.js'
 import { SectionRail } from './SectionRail.js'
 import { Segmented } from './Segmented.js'
 import { Switch } from './Switch.js'
@@ -721,10 +723,15 @@ function AboutSection({ config }: { config: Config }): React.JSX.Element {
 function RunningTerminals(): React.JSX.Element {
   const { t } = useTranslation()
   const { confirm, dialog } = useConfirm()
+  const describeFailure = useErrorMessage()
   const [sessions, setSessions] = useState<readonly TerminalSession[] | null>(null)
+  const [failure, setFailure] = useState<Failure | null>(null)
 
-  const read = useCallback(async () => {
+  const read = useCallback(async (signal?: AbortSignal) => {
     const answer = await window.octopus.terminal.list()
+    if (signal?.aborted) return
+
+    setFailure(answer.ok ? null : answer)
     if (answer.ok) setSessions(answer.value)
   }, [])
 
@@ -732,14 +739,13 @@ function RunningTerminals(): React.JSX.Element {
     const controller = new AbortController()
 
     void (async () => {
-      const answer = await window.octopus.terminal.list()
-      if (!controller.signal.aborted && answer.ok) setSessions(answer.value)
+      await read(controller.signal)
     })()
 
     return () => {
       controller.abort()
     }
-  }, [])
+  }, [read])
 
   const end = async (session: TerminalSession): Promise<void> => {
     const { confirmed } = await confirm({
@@ -758,18 +764,20 @@ function RunningTerminals(): React.JSX.Element {
 
   // Nothing until the answer arrives, as the row above it: a list that said
   // "none" and then corrected itself would be worse than one that appears once.
-  if (sessions === null) return <></>
+  if (sessions === null && failure === null) return <></>
 
   return (
     <>
       <div className="flex items-baseline justify-between gap-4">
         <span className="text-ink-soft">{t('settings.terminals')}</span>
-        {sessions.length === 0 && (
+        {sessions?.length === 0 && (
           <span className="text-ink-faint text-[11px]">{t('settings.terminalsNone')}</span>
         )}
       </div>
 
-      {sessions.length > 0 && (
+      {failure !== null && <p className="text-danger mt-1.5">{describeFailure(failure)}</p>}
+
+      {sessions !== null && sessions.length > 0 && (
         <ul className="border-line divide-line mt-1.5 divide-y rounded-[var(--radius-panel)] border">
           {sessions.map((session) => (
             <li key={session.id} className="flex items-center gap-3 px-3 py-1.5">
@@ -808,7 +816,9 @@ function RunningTerminals(): React.JSX.Element {
 function PastedImagesRow(): React.JSX.Element {
   const { t } = useTranslation()
   const { confirm, dialog } = useConfirm()
+  const describeFailure = useErrorMessage()
   const [store, setStore] = useState<AttachmentStore | null>(null)
+  const [failure, setFailure] = useState<Failure | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -835,6 +845,7 @@ function PastedImagesRow(): React.JSX.Element {
     if (!confirmed) return
 
     const answer = await window.octopus.attachments.clear()
+    setFailure(answer.ok ? null : answer)
     if (answer.ok) setStore(answer.value)
   }
 
@@ -867,6 +878,7 @@ function PastedImagesRow(): React.JSX.Element {
           </span>
         )}
       </div>
+      {failure !== null && <p className="text-danger mt-1.5">{describeFailure(failure)}</p>}
       {dialog}
     </>
   )

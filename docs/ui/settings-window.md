@@ -252,7 +252,10 @@ what it is and whose it is, from an `owner` the **renderer** chooses — `main`
 sees a working directory and an argv and cannot tell a dev server from a shell
 tab. Read once when the section opens rather than watched, because nothing
 announces a session starting and a row that quietly went stale would be worse
-than one the reader knows is a snapshot.
+than one the reader knows is a snapshot. A list that cannot be read says why under
+the heading, and so does a re-read after ending one: the rows it had stay, and the
+line goes once a read works. Ending one has nothing to report — `terminal:dispose`
+answers when the session has gone.
 
 **About says how much the pasted images weigh, with a way to empty them.** It is
 the one place octopus quietly uses disk: a path in a sent message is a promise
@@ -266,7 +269,8 @@ the trust digest and the skill stores already use. The row is not
 drawn at all until the measurement comes back — one that said "0 images" and
 then corrected itself to twelve would be worse than one that appears once — and
 emptying asks first, saying plainly that an old message will then point at a
-file that is gone.
+file that is gone. A delete that fails says why under the row and leaves the count
+it had.
 
 `FileEditor` can carry `notes` — a function run against the text on every
 keystroke, whose answers appear under the box. The env block uses it; told on
