@@ -574,10 +574,11 @@ export function App(): React.JSX.Element {
     async (projectId: string) => {
       const count = (workspaces.byProject.get(projectId) ?? []).length
       if (!(await projects.remove(projectId, count))) return
-      forgetWorkspaces(inProject(projectId))
+      const gone = inProject(projectId)
+      forgetWorkspaces(gone)
 
       setSelectedProjectId((current) => (current === projectId ? null : current))
-      setSelectedWorkspaceId(null)
+      setSelectedWorkspaceId((current) => (current !== null && gone(current) ? null : current))
       await workspaces.refresh()
     },
     [projects, workspaces, forgetWorkspaces]
