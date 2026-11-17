@@ -255,6 +255,7 @@ function Code({
   useEffect(() => {
     const node = scroller.current
     const lines = code.current
+    // Both are drawn unconditionally below, so both are attached before effects run.
     /* v8 ignore next */
     if (!node || !lines) return
 

@@ -254,6 +254,7 @@ function WorkspaceTree({
   /** Scrolls just far enough to show a row, as a list moved by keys does. */
   const reveal = (position: number): void => {
     const element = scroller.current
+    // Reached only from the tree's own keys, so the tree is mounted and attached.
     /* v8 ignore next */
     if (!element) return
     const next = scrollFor(position, element.scrollTop, height)

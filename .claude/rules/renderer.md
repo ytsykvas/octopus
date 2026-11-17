@@ -45,3 +45,7 @@ classes and components are listed in the `ui-component` skill.
 - **The renderer has its own vitest config.** Run one file with
   `npx vitest run --config vitest.renderer.config.ts <file>`; without the flag
   the file is "not found", not failing.
+- **An inline coverage ignore needs its reason on the line above** and is
+  counted by `scripts/coverageIgnores.test.ts`; a value the data proves is there
+  goes through `present` from `core/present.ts` instead. See
+  `docs/testing.md#inline-ignores`.
