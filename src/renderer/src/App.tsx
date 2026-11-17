@@ -13,8 +13,9 @@ import { useTranslation } from 'react-i18next'
 import { DEFAULT_EFFORT } from '@core/chats.js'
 import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
+import type { WorkspaceView } from '@core/workspaces.js'
 
-import type { Failure, Result } from '../../preload/index.js'
+import type { Result } from '../../preload/index.js'
 
 import { Button } from './components/Button.js'
 import { MergeMenu } from './components/pr/MergeMenu.js'
@@ -32,6 +33,8 @@ import { Sidebar } from './components/Sidebar.js'
 import { SidebarFooter } from './components/SidebarFooter.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
+import { usePendingIn } from './hooks/usePendingIn.js'
+import { useShownWorkspace } from './hooks/useShownWorkspace.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
 
 import { useAttachedFiles } from './hooks/useAttachedFiles.js'
@@ -862,17 +865,15 @@ export function App(): React.JSX.Element {
    * read again afterwards, since what the pane and the marks on the list show
    * is the next read rather than what the call answered.
    */
-  const [finishing, setFinishing] = useState(false)
+  const finishing = usePendingIn<'finish'>()
+  const onScreen = useShownWorkspace(selectedWorkspaceId)
 
-  const finishRequest = (
-    run: (number: number) => Promise<{ ok: boolean }>,
-    number: number
-  ): void => {
-    setFinishing(true)
+  const finishRequest = (workspace: WorkspaceView, call: () => Promise<Result<void>>): void => {
+    finishing.start(workspace.id, 'finish')
     void (async () => {
-      const result = await run(number)
-      setFinishing(false)
-      if (!result.ok) setError(describeFailure(result as Failure))
+      const result = await call()
+      finishing.finish(workspace.id, 'finish')
+      if (!result.ok) setError(onScreen.describeFailure(workspace, result))
       branchRequests.refresh()
     })()
   }
@@ -957,14 +958,12 @@ export function App(): React.JSX.Element {
                 // Green, like every press that finishes the work.
                 variant="success"
                 onMerge={(method) => {
-                  finishRequest(
-                    (number) =>
-                      window.octopus.workspaces.mergePullRequest(
-                        selectedWorkspace.id,
-                        number,
-                        method
-                      ),
-                    openRequest.number
+                  finishRequest(selectedWorkspace, () =>
+                    window.octopus.workspaces.mergePullRequest(
+                      selectedWorkspace.id,
+                      openRequest.number,
+                      method
+                    )
                   )
                 }}
                 /* The same rule the pane keeps, said in the summary this list
@@ -972,19 +971,22 @@ export function App(): React.JSX.Element {
                    button, and a repository that runs none reports `none` and
                    is merged as it always was. */
                 disabled={
-                  finishing || openRequest.checks === 'failed' || openRequest.checks === 'running'
+                  finishing.isPending(selectedWorkspace.id, 'finish') ||
+                  openRequest.checks === 'failed' ||
+                  openRequest.checks === 'running'
                 }
               />
 
               <Button
                 size="sm"
                 variant="danger"
-                disabled={finishing}
+                disabled={finishing.isPending(selectedWorkspace.id, 'finish')}
                 onClick={() => {
-                  finishRequest(
-                    (number) =>
-                      window.octopus.workspaces.closePullRequest(selectedWorkspace.id, number),
-                    openRequest.number
+                  finishRequest(selectedWorkspace, () =>
+                    window.octopus.workspaces.closePullRequest(
+                      selectedWorkspace.id,
+                      openRequest.number
+                    )
                   )
                 }}
               >

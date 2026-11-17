@@ -2022,6 +2022,7 @@ export const de: Translation = {
     headNotOnBranch:
       'HEAD ist nicht auf dem Branch {{branch}} dieses Workspaces. Es wurde nichts committet oder gepusht – checke ihn zuerst im Terminal aus.',
     closeFailed: 'GitHub hat #{{number}} nicht geschlossen. Meldung: {{reason}}',
+    inWorkspace: 'In {{workspace}}: {{reason}}',
     nothingToRerun: 'Kein GitHub-Actions-Lauf von #{{number}} lässt sich gerade neu starten.',
     rerunFailed: 'GitHub hat die Checks von #{{number}} nicht neu gestartet. Meldung: {{reason}}',
     replyFailed: 'GitHub hat die Antwort nicht gepostet. Meldung: {{reason}}',

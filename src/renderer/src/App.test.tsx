@@ -28,6 +28,7 @@ import { chat, emitAgentEvent, givenChats, TURN_DONE } from './test/chat.js'
 import { disconnectedAccounts } from './test/octopus.js'
 import type { ResolvedScript } from '@core/repoSource.js'
 import { workspaceView } from './test/workspaces.js'
+import { held } from './test/held.js'
 import { App } from './App.js'
 import { chime } from './sound.js'
 import type * as Sound from './sound.js'
@@ -3561,30 +3562,90 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Merge' })).toBeEnabled()
   })
 
-  /** A project whose one workspace has a request open on GitHub. */
-  function givenOpenRequest(checks: 'passed' | 'failed' | 'running' | 'none' = 'passed'): void {
+  it('leaves the next workspace free to finish its own request while a merge is on its way', async () => {
+    givenOpenRequest('passed', ['anna', 'bob'])
+    const merging = held<Result<void>>()
+    vi.mocked(window.octopus.workspaces.mergePullRequest).mockReturnValue(merging.promise)
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Merge' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Squash and merge' }))
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
+
+    await user.click(screen.getByText('bob'))
+    expect(await screen.findByRole('button', { name: 'Merge' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
+
+    await user.click(screen.getByText('anna'))
+    expect(await screen.findByRole('button', { name: 'Close' })).toBeDisabled()
+
+    await act(async () => {
+      merging.resolve({ ok: true, value: undefined })
+      await Promise.resolve()
+    })
+    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
+  })
+
+  it('names the workspace a header refusal belongs to once it has been left', async () => {
+    givenOpenRequest('passed', ['anna', 'bob'])
+    const refusal = {
+      ok: false as const,
+      error: 'refused',
+      code: 'closeFailed',
+      params: { number: '812', reason: 'already merged' }
+    }
+    const late = held<Result<void>>()
+    vi.mocked(window.octopus.workspaces.closePullRequest)
+      .mockResolvedValueOnce(refusal)
+      .mockReturnValueOnce(late.promise)
+    const user = await openApp()
+    await user.click(await screen.findByRole('button', { name: 'PL' }))
+    await user.click(await screen.findByText('anna'))
+
+    await user.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(
+      await screen.findByText('GitHub would not close #812. It said: already merged')
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByText('bob'))
+    await act(async () => {
+      late.resolve(refusal)
+      await Promise.resolve()
+    })
+
+    expect(
+      screen.getByText('In anna: GitHub would not close #812. It said: already merged')
+    ).toBeInTheDocument()
+  })
+
+  /** A project whose workspaces each have a request open on GitHub. */
+  function givenOpenRequest(
+    checks: 'passed' | 'failed' | 'running' | 'none' = 'passed',
+    names: readonly string[] = ['anna']
+  ): void {
     vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
     vi.mocked(window.octopus.workspaces.list).mockResolvedValue({
       ok: true,
-      value: [workspaceView('anna', { ahead: 2 })]
+      value: names.map((name) => workspaceView(name, { ahead: 2 }))
     })
     vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue({
       ok: true,
       value: {
         capped: false,
-        requests: [
-          {
-            branch: 'ytsykvas/anna',
-            number: 812,
-            state: 'open',
-            checks,
-            url: 'https://github.com/o/p/pull/812',
-            draft: false,
-            decision: null,
-            mergeable: 'mergeable',
-            mergeState: 'clean'
-          }
-        ]
+        requests: names.map((name, index) => ({
+          branch: `ytsykvas/${name}`,
+          number: 812 + index,
+          state: 'open',
+          checks,
+          url: `https://github.com/o/p/pull/${String(812 + index)}`,
+          draft: false,
+          decision: null,
+          mergeable: 'mergeable',
+          mergeState: 'clean'
+        }))
       }
     })
   }

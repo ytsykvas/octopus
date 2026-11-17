@@ -11,11 +11,12 @@ import {
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Failure } from '../../../../preload/index.js'
-import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useFocusKeeper } from '../../hooks/useFocusKeeper.js'
+import { usePendingIn } from '../../hooks/usePendingIn.js'
 import { usePullRequest } from '../../hooks/usePullRequest.js'
 import { usePullRequestDetail } from '../../hooks/usePullRequestDetail.js'
 import { type PullRequestQuoteController, toQuote } from '../../hooks/usePullRequestQuotes.js'
+import { useShownWorkspace } from '../../hooks/useShownWorkspace.js'
 import { Button } from '../Button.js'
 import { Notice } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
@@ -74,6 +75,8 @@ interface PullRequestPanelProps {
   readonly onConversation: () => void
 }
 
+type PanelAction = 'send' | 'merge' | 'close' | `rerun:${RerunScope}` | 'commit' | 'push' | 'update'
+
 /**
  * The branch, the request it became, and everything either side of one.
  *
@@ -95,22 +98,15 @@ export function PullRequestPanel({
   onConversation
 }: PullRequestPanelProps): React.JSX.Element {
   const { t } = useTranslation()
-  const describeFailure = useErrorMessage()
 
   const workspaceId = workspace?.id ?? null
+  const onScreen = useShownWorkspace(workspaceId)
   const { view, loading, error, creating, create, drafting, drafted, actionError, draft, refresh } =
     usePullRequest(workspaceId, visible)
   const request = view?.request ?? null
   const detail = usePullRequestDetail(workspaceId, request?.number ?? null, visible)
 
-  /** A prepared message on its way, which the menu's trigger says. */
-  const [sending, setSending] = useState(false)
-  const [merging, setMerging] = useState(false)
-  const [closing, setClosing] = useState(false)
-  const [rerunning, setRerunning] = useState<RerunScope | null>(null)
-  const [committing, setCommitting] = useState(false)
-  const [pushing, setPushing] = useState(false)
-  const [updating, setUpdating] = useState(false)
+  const pending = usePendingIn<PanelAction>()
   /** The view showing, and which request it was settled for — see `shown` below. */
   const [chosen, setChosen] = useState<{ key: string; view: RequestView } | null>(null)
 
@@ -192,8 +188,24 @@ export function PullRequestPanel({
     )
   }
 
+  const sending = pending.isPending(workspace.id, 'send')
+  const merging = pending.isPending(workspace.id, 'merge')
+  const closing = pending.isPending(workspace.id, 'close')
+  const committing = pending.isPending(workspace.id, 'commit')
+  const pushing = pending.isPending(workspace.id, 'push')
+  const updating = pending.isPending(workspace.id, 'update')
+  const rerunning =
+    RERUNS.find(({ scope }) => pending.isPending(workspace.id, `rerun:${scope}`))?.scope ?? null
+
   const report = (failure: Failure): void => {
-    onError(describeFailure(failure))
+    onError(onScreen.describeFailure(workspace, failure))
+  }
+
+  // `refresh` and `detail.refresh` read whichever workspace is shown, so an
+  // answer for one that was left must not call them.
+  const readAgain = (...reads: (() => void)[]): void => {
+    if (!onScreen.isShown(workspace.id)) return
+    for (const read of reads) read()
   }
 
   /* Read once for every part of the pane, beside the detail it is read from, so
@@ -223,12 +235,12 @@ export function PullRequestPanel({
    * than one that says so (§13).
    */
   const prompt = (kind: PromptKind, open: PullRequest, conversation: string): void => {
-    setSending(true)
+    pending.start(workspace.id, 'send')
     onConversation()
     void (async () => {
       const instruction = await window.octopus.workspaces.instruction(workspace.id, kind)
       if (!instruction.ok) {
-        setSending(false)
+        pending.finish(workspace.id, 'send')
         report(instruction)
         return
       }
@@ -266,23 +278,22 @@ export function PullRequestPanel({
         [instruction.value.trim(), context, failures].filter((part) => part !== '').join('\n\n'),
         { instruction: kind }
       )
-      setSending(false)
+      pending.finish(workspace.id, 'send')
       if (!sent.ok) report(sent)
     })()
   }
 
   const merge = (number: number, method: MergeMethod): void => {
-    setMerging(true)
+    pending.start(workspace.id, 'merge')
     void (async () => {
       const result = await window.octopus.workspaces.mergePullRequest(workspace.id, number, method)
-      setMerging(false)
+      pending.finish(workspace.id, 'merge')
       if (!result.ok) report(result)
 
       // Read again either way. `gh` enables auto-merge instead of merging when
       // required checks have not passed, so success is not proof of a merge —
       // and a refusal it could not name is explained by the fresh state.
-      refresh()
-      detail.refresh()
+      readAgain(refresh, detail.refresh)
       onRequestChanged()
     })()
   }
@@ -294,14 +305,13 @@ export function PullRequestPanel({
    * what the pane believes, not what the call answered.
    */
   const close = (number: number): void => {
-    setClosing(true)
+    pending.start(workspace.id, 'close')
     void (async () => {
       const result = await window.octopus.workspaces.closePullRequest(workspace.id, number)
-      setClosing(false)
+      pending.finish(workspace.id, 'close')
       if (!result.ok) report(result)
 
-      refresh()
-      detail.refresh()
+      readAgain(refresh, detail.refresh)
       onRequestChanged()
     })()
   }
@@ -311,33 +321,32 @@ export function PullRequestPanel({
    * believes, and the list's mark goes back to spinning along with the rows.
    */
   const rerun = (number: number, scope: RerunScope): void => {
-    setRerunning(scope)
+    pending.start(workspace.id, `rerun:${scope}`)
     void (async () => {
       const result = await window.octopus.workspaces.rerunChecks(workspace.id, number, scope)
-      setRerunning(null)
+      pending.finish(workspace.id, `rerun:${scope}`)
       if (!result.ok) report(result)
 
-      detail.refresh()
+      readAgain(detail.refresh)
       onRequestChanged()
     })()
   }
 
   const commitAndPush = (message: string): void => {
-    setCommitting(true)
+    pending.start(workspace.id, 'commit')
     void (async () => {
       // An empty message is the field left blank on purpose: fold into the last commit.
       const result =
         message === ''
           ? await window.octopus.workspaces.amendAndPush(workspace.id)
           : await window.octopus.workspaces.commitAndPush(workspace.id, message)
-      setCommitting(false)
+      pending.finish(workspace.id, 'commit')
       if (!result.ok) {
         report(result)
         return
       }
 
-      refresh()
-      detail.refresh()
+      readAgain(refresh, detail.refresh)
     })()
   }
 
@@ -349,14 +358,13 @@ export function PullRequestPanel({
    * request's detail too — pushing is what starts the checks again.
    */
   const push = (): void => {
-    setPushing(true)
+    pending.start(workspace.id, 'push')
     void (async () => {
       const result = await window.octopus.workspaces.push(workspace.id)
-      setPushing(false)
+      pending.finish(workspace.id, 'push')
       if (!result.ok) report(result)
 
-      refresh()
-      detail.refresh()
+      readAgain(refresh, detail.refresh)
     })()
   }
 
@@ -366,13 +374,13 @@ export function PullRequestPanel({
    * ahead is what changed, and the fresh reading is what the pane believes.
    */
   const updateFromBase = (): void => {
-    setUpdating(true)
+    pending.start(workspace.id, 'update')
     void (async () => {
       const result = await window.octopus.workspaces.updateFromBase(workspace.id)
-      setUpdating(false)
+      pending.finish(workspace.id, 'update')
       if (!result.ok) report(result)
 
-      refresh()
+      readAgain(refresh)
     })()
   }
 
