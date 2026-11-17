@@ -732,21 +732,16 @@ export function useChat(
 
       const changed = await send(target.id)
 
-      // Applied to whatever the record has become rather than to the snapshot
-      // taken before the await: two settings changed a moment apart both reach
-      // the core, and the answer that lands last used to carry the other's
-      // field back to what it had been.
-      // The fallback is what the type asks for rather than a state to test:
-      // `current` is null only after the reset, and the guard above returns
-      // whenever that has happened. Ignored for coverage the way `at` in
-      // `core/diff.ts` is, and for the same reason.
       if (!changed.ok) {
         setError(describeFailure(changed))
         return
       }
 
-      /* v8 ignore next */
-      setChat((current) => ({ ...(current ?? target), ...patch }))
+      // Applied to whatever the record has become rather than to the snapshot
+      // taken before the await: two settings changed a moment apart both reach
+      // the core, and the answer that lands last used to carry the other's
+      // field back to what it had been.
+      setChat((current) => current && { ...current, ...patch })
     },
     [ensureChat, describeFailure]
   )

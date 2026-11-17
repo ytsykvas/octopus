@@ -991,6 +991,32 @@ describe('both models written at once', () => {
 
     expect(octopus().chats.setModels).not.toHaveBeenCalled()
   })
+
+  it('drops a setting that lands after the pane let go of its conversation', async () => {
+    givenChat()
+    const model = held<Result<void>>()
+    vi.mocked(octopus().chats.setModels).mockReturnValue(model.promise)
+    const initialProps: { record: Chat | null } = { record: chat() }
+    const { result, rerender } = renderHook(
+      ({ record }) => useChat(record, 'planner/anna', 'idle', describeFailure, noted),
+      { initialProps }
+    )
+    await waitFor(() => {
+      expect(result.current.chat).not.toBeNull()
+    })
+
+    let changing: Promise<void> = Promise.resolve()
+    act(() => {
+      changing = result.current.setModels({ model: 'claude-opus-5' })
+    })
+    rerender({ record: null })
+    await act(async () => {
+      model.resolve({ ok: true, value: undefined })
+      await changing
+    })
+
+    expect(result.current.chat).toBeNull()
+  })
 })
 
 describe('the record the pane creates for itself', () => {
