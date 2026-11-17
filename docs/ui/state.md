@@ -79,8 +79,9 @@ the one arrived at.
 The counter also settles two reads of one thing that overlap, where the one that
 answers last is not the one asked last. There a reply is dropped only where a
 newer one has been drawn: dropped for a newer read that then fails, it would
-leave nothing drawn at all. `useWorkspaces` numbers every listing and keeps, per
-project, the number whose answer is drawn, so an older listing still fills in a
+leave nothing drawn at all. `useWorkspaces` numbers every listing — a change of
+projects, each `refresh`, and the project read when a turn ends in a workspace
+that has gone — and keeps, per project, the number whose answer is drawn, so an older listing still fills in a
 project a newer one failed to read; the projects it draws are the window's, not
 the listing's, so a `refresh` that read them before a removal cannot bring the
 removed one back. A listing that fails for a project keeps the workspaces it had

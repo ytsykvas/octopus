@@ -653,16 +653,44 @@ describe('useWorkspaces', () => {
       .mockResolvedValueOnce({ ok: true, value: [anna] })
       .mockResolvedValue({ ok: false, error: 'could not list worktrees' })
     vi.mocked(window.octopus.workspaces.read).mockResolvedValue({ ok: true, value: null })
+    const onError = vi.fn<OnError>()
     const projects = [planner]
 
-    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), onError))
     await waitFor(() => {
       expect(result.current.flat).toEqual([anna])
     })
 
     emitTurnEnd(anna.id)
     await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not list worktrees'))
+    })
+
+    expect(result.current.flat).toEqual([anna])
+  })
+
+  it('does not bring back a workspace removed while its project was read for a gone one', async () => {
+    const slow = held<Result<WorkspaceView[]>>()
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [anna, bob] })
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValue({ ok: true, value: [anna] })
+    vi.mocked(window.octopus.workspaces.read).mockResolvedValue({ ok: true, value: null })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna, bob])
+    })
+
+    emitTurnEnd(bob.id)
+    await waitFor(() => {
       expect(window.octopus.workspaces.list).toHaveBeenCalledTimes(2)
+    })
+    await act(() => result.current.refresh())
+    await act(async () => {
+      slow.resolve({ ok: true, value: [anna, bob] })
+      await settled()
     })
 
     expect(result.current.flat).toEqual([anna])
