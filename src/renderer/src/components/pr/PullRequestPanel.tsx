@@ -123,13 +123,14 @@ export function PullRequestPanel({
   const pane = useRef<HTMLDivElement>(null)
   useFocusKeeper(pane)
 
+  const projectId = workspace?.projectId ?? null
   useEffect(() => {
-    if (!visible || !workspace) return
+    if (!visible || projectId === null) return
 
     const controller = new AbortController()
 
     void (async () => {
-      const result = await window.octopus.projects.isEnvIgnored(workspace.projectId)
+      const result = await window.octopus.projects.isEnvIgnored(projectId)
       if (controller.signal.aborted) return
       setEnvIgnored(!result.ok || result.value)
     })()
@@ -137,7 +138,7 @@ export function PullRequestPanel({
     return () => {
       controller.abort()
     }
-  }, [visible, workspace, envFile])
+  }, [visible, projectId, envFile])
 
   /*
    * Tell the list when the checks change under it.
