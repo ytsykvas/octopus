@@ -39,3 +39,7 @@ for meeting them is the `core-module` skill.
   anything would notice if it went: put the bug back and the suite must go red
   — and check with `git diff` that it went back, since a scripted revert that
   matches nothing leaves a hollow test looking verified.
+- **An inline coverage ignore needs its reason on the line above** and is
+  counted by `scripts/coverageIgnores.test.ts`; a value the data proves is there
+  goes through `present` from `core/present.ts` instead. See
+  `docs/testing.md#inline-ignores`.

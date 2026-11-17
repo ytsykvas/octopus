@@ -7,6 +7,7 @@ import { chat, emitChatsChanged, emitChatStatus, givenChats } from '../test/chat
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { type ChatTab, useChatTabs } from './useChatTabs.js'
+import { inProject } from './workspaceSlots.js'
 
 const WORKSPACE = 'planner/anna'
 
@@ -70,6 +71,82 @@ describe('a workspace nobody has spoken to', () => {
     })
 
     expect(octopus().chats.closed).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('remembers no tab without a workspace, so removing a project finds none to match', () => {
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), vi.fn()))
+
+    act(() => {
+      result.current.select('first')
+    })
+
+    expect(() => {
+      act(() => {
+        result.current.forget(inProject('planner'))
+      })
+    }).not.toThrow()
+  })
+
+  it('forks nothing without a workspace', async () => {
+    const onError = vi.fn()
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), onError))
+
+    let forked = true
+    await act(async () => {
+      forked = await result.current.fork('chat-1')
+    })
+
+    expect(forked).toBe(false)
+    expect(octopus().chats.fork).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('reads no history without a workspace', async () => {
+    const onError = vi.fn()
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), onError))
+
+    await act(async () => {
+      await result.current.refreshHistory()
+    })
+
+    expect(octopus().chats.closed).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('closes nothing without a workspace', async () => {
+    const onError = vi.fn()
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), onError))
+
+    await act(async () => {
+      await result.current.close('chat-1')
+    })
+
+    expect(octopus().chats.close).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('reopens no chosen conversation without a workspace', async () => {
+    const onError = vi.fn()
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), onError))
+
+    await act(async () => {
+      await result.current.reopen('chat-1')
+    })
+
+    expect(octopus().chats.reopen).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('renames nothing without a workspace', async () => {
+    const onError = vi.fn()
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), onError))
+
+    await act(async () => {
+      await result.current.rename('chat-1', 'Plan')
+    })
+
+    expect(octopus().chats.rename).not.toHaveBeenCalled()
     expect(onError).not.toHaveBeenCalled()
   })
 

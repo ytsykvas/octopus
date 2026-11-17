@@ -9,6 +9,8 @@
  * before — a parser that guessed would turn somebody's prose into a card.
  */
 
+import { present } from '@core/present.js'
+
 /** A reference to lines of a file, inside running text. */
 export interface InlineReference {
   readonly path: string
@@ -61,10 +63,9 @@ export function inlineParts(text: string): Inline[] {
 
   for (const match of text.matchAll(REFERENCE)) {
     const [whole, path, range] = match
-    /* v8 ignore next */
-    if (path === undefined || range === undefined) continue
     if (match.index > from) parts.push(text.slice(from, match.index))
-    parts.push({ path, range })
+    // Neither group of `REFERENCE` is optional, so a match has both.
+    parts.push({ path: present(path, 'a path'), range: present(range, 'a range') })
     from = match.index + whole.length
   }
 

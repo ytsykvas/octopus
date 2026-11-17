@@ -4298,7 +4298,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Every stamp is a registered session's — written with it, taken away
       // with it — so this is for the type, which cannot know that.
       /* v8 ignore next */
-      if (!session || nowMs - since < idleReleaseMs) continue
+      if (!session) continue
+      if (nowMs - since < idleReleaseMs) continue
       const chat = atRest(chatId)
       if (chat) background(chat, releaseSession(chatId, session))
     }
@@ -4387,13 +4388,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
   /**
    * Refuses a message this conversation did not record, or one it has no
-   * session to rewind against.
+   * session to rewind against, and otherwise answers with that session's id.
    *
    * The id comes from the window, and the agent will happily rewind to any it
    * has heard of. A session is what both halves need: the files are put back
    * by it, and the conversation is cut in its history.
    */
-  async function requireRewindable(chat: Chat, messageId: string): Promise<void> {
+  async function requireRewindable(chat: Chat, messageId: string): Promise<string> {
     const known = (await readTranscript(chat.id, dataRoot)).some(
       (entry) => entry.role === 'user' && entry.uuid === messageId
     )
@@ -4404,6 +4405,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         `Chat ${chat.id} cannot be rewound to ${messageId}.`
       )
     }
+    return chat.sessionId
   }
 
   /**
@@ -4441,12 +4443,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   async function previewRewind(chatId: string, messageId: string): Promise<RewindPreview> {
     const chat = requireOpenChat(chatId)
     refuseWhileChatWorks(chat)
-    await requireRewindable(chat, messageId)
+    const sessionId = await requireRewindable(chat, messageId)
 
     const workspace = requireWorkspace(chat.workspaceId)
-    // Checked by `requireRewindable` just above; the guard is for the type.
-    /* v8 ignore next */
-    const sessionId = chat.sessionId ?? ''
     const conversation = (await cutFor(sessionId, workspace, messageId)).kind !== 'missing'
 
     // Asked once, unlike the real thing: a dry run changes nothing, so a turn
@@ -4489,11 +4488,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     rewinding.add(chatId)
     try {
-      await requireRewindable(chat, messageId)
+      const sessionId = await requireRewindable(chat, messageId)
       const workspace = requireWorkspace(chat.workspaceId)
-      // Checked by `requireRewindable` just above; the guard is for the type.
-      /* v8 ignore next */
-      const sessionId = chat.sessionId ?? ''
 
       const cut = rewindsConversation(scope) ? await cutFor(sessionId, workspace, messageId) : null
       if (cut?.kind === 'missing') {

@@ -83,16 +83,9 @@ export function named(text: string): string {
     .join('')
 }
 
-/**
- * `U+202E`, which is how such a character is named everywhere else.
- *
- * The fallback is what the type asks for rather than a state to test: every
- * caller passes a character the regexp above matched, and an empty string is
- * not one. Ignored for coverage the way `at` in `core/diff.ts` is, and for the
- * same reason — a test reaching it would have to model an input the only
- * caller cannot produce.
- */
+/** `U+202E`, which is how such a character is named everywhere else. */
 function codePoint(character: string): string {
+  // Its only caller passes a match of `INVISIBLE`, one character and never empty.
   /* v8 ignore next */
   const code = character.codePointAt(0) ?? 0
   return `U+${code.toString(16).toUpperCase().padStart(4, '0')}`

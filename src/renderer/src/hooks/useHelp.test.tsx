@@ -189,6 +189,18 @@ describe('useHelp', () => {
     expect(report).not.toHaveBeenCalled()
   })
 
+  it('reads nothing and opens nothing with no workspace', () => {
+    const { ask, create, report } = open({ id: null })
+
+    act(() => {
+      ask()('setupScripts')
+    })
+
+    expect(octopus().workspaces.instruction).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+    expect(report).not.toHaveBeenCalled()
+  })
+
   // Main gone, or a channel an older build has not got: the invoke rejects.
   it('says why when a read is rejected, and opens nothing', async () => {
     vi.mocked(octopus().workspaces.helpContext).mockRejectedValue(

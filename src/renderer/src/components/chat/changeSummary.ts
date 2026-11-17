@@ -89,6 +89,7 @@ function toLines(text: string): string[] {
 const common = (table: readonly (readonly number[])[], row: number, column: number): number =>
   table[row]?.[column] ?? 0
 
+// Every call sits in a loop bounded by the length of the array it reads.
 /* v8 ignore next */
 const lineAt = (lines: readonly string[], index: number): string => lines[index] ?? ''
 

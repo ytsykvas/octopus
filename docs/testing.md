@@ -42,7 +42,8 @@ truth.
 A single project with `environmentMatchGlobs` fails differently — `setupFiles`
 applies to every test, and the DOM setup breaks the core suite.
 
-Only bootstrap is excluded: `main/index.ts` and `renderer/src/main.tsx`, which
+Only bootstrap is excluded as a whole file (single lines are under
+[Inline ignores](#inline-ignores)): `main/index.ts` and `renderer/src/main.tsx`, which
 compose the application out of the modules that are tested; the type-only
 `core/types.ts` and `env.d.ts`, which compile to nothing to cover; and the test
 helpers. The list is `bootstrapOnly` in `vitest.shared.ts`, shared by both
@@ -53,6 +54,37 @@ statement than "untested" and the reason to keep them thin. Six channel names
 sat in `main/index.ts` and nowhere else, and a rename passed the whole gate; they
 live in `broadcast.ts` now, which takes its windows as a parameter. Anything in
 those two files with a decision in it belongs in a module beside them.
+
+## Inline ignores
+
+A `/* v8 ignore next */` takes a line out of the 100% the threshold holds, so it
+is allowed for one thing: a guard the type demands on a state the code proves
+cannot happen.
+
+- **The reason is on the line directly above it** and names what guarantees
+  the state — a regexp group that is not optional, the element a handler is
+  attached to. A reason further up does not count.
+- **It covers the guard and nothing else.** A condition with a real branch
+  beside the impossible one is split, so the real one stays measured: the idle
+  sweep in `service.ts` checks `!session` on one line and the time at rest on
+  the next.
+- **A value the data proves is there goes through `present`**
+  (`core/present.ts`) instead — a regexp group, a list never empty. It names
+  what was missing, and its own test covers it. Guards written before it still
+  carry ignores; each one moved to it lowers the count below. A guard on what
+  the runtime guarantees — a ref React has attached, a context its provider
+  supplies, a session registered with its stamp — keeps its ignore: the
+  guarantee is the runtime's rather than this code's, and a throw would turn a
+  slip in it into a crash; so does a fallback that says once what absence means
+  for many indexed reads (`at` in `core/diff.ts`).
+- **A guard a test can reach is tested, not ignored.** A hook's own arguments
+  count: `useChatTabs` is tested with no workspace for each action that guards
+  against it, although only ⌘T, ⌘⇧T and ⌥1 reach that state from the window.
+- **The count only goes down.** `scripts/coverageIgnores.test.ts` reads every
+  file under `src/` except tests and test helpers, and fails on an ignore with
+  no comment above it, on any form but `v8 ignore next` and `v8 ignore next N`
+  (no `v8 ignore start`, `c8`, `istanbul`), and on a count above `MAX_IGNORES`
+  — or below it, so the ceiling is lowered with each ignore that goes.
 
 ## The suite runs in one zone
 

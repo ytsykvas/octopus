@@ -10,6 +10,7 @@ import {
   type WorkingMode
 } from '@core/chats.js'
 import { formatHandoff } from '@core/handoff.js'
+import { present } from '@core/present.js'
 import type { SideExchange } from '@core/sideQuestions.js'
 
 import type { Result } from '../../../preload/index.js'
@@ -421,7 +422,7 @@ export function useChatTabs(
   const select = useCallback(
     (keyOrId: string) => {
       const id = shown.current
-      /* v8 ignore next */
+      // ⌥1 reaches this with no workspace selected.
       if (id === null) return
 
       setActiveByWorkspace((current) => new Map(current).set(id, keyOrId))
@@ -451,12 +452,11 @@ export function useChatTabs(
   // The remembered tab may have been closed since, here or in another window,
   // so a key nothing answers to falls back to the first tab rather than to none
   // — a strip with no current tab draws an empty pane.
-  //
-  // The last fallback answers the type rather than a state: the strip always
-  // holds at least one tab, since an empty list is drawn as the virgin one.
-  const onScreen = tabs.find((tab) => answersTo(tab, remembered)) ?? tabs[0]
-  /* v8 ignore next */
-  const activeKey = onScreen?.key ?? FIRST_TAB
+  // `tabs` is never empty: a workspace with no conversations is drawn as `VIRGIN`.
+  const activeKey = present(
+    tabs.find((tab) => answersTo(tab, remembered)) ?? tabs[0],
+    'a tab on the strip'
+  ).key
 
   /**
    * Opens another conversation, materialising the first if it is still virtual.
@@ -513,7 +513,6 @@ export function useChatTabs(
   const forkThen = useCallback(
     async (make: () => Promise<Result<Chat>>, start?: (chat: Chat) => Promise<Result<unknown>>) => {
       const id = shown.current
-      /* v8 ignore next */
       if (id === null) return false
 
       report.current(null)
@@ -576,7 +575,6 @@ export function useChatTabs(
 
   const refreshHistory = useCallback(async () => {
     const id = shown.current
-    /* v8 ignore next */
     if (id === null) return
 
     const closed = await window.octopus.chats.closed(id)
@@ -595,7 +593,6 @@ export function useChatTabs(
   const close = useCallback(
     async (chatId: string) => {
       const id = shown.current
-      /* v8 ignore next */
       if (id === null) return
 
       report.current(null)
@@ -617,7 +614,6 @@ export function useChatTabs(
   const reopen = useCallback(
     async (chatId: string) => {
       const id = shown.current
-      /* v8 ignore next */
       if (id === null) return
 
       report.current(null)
@@ -657,7 +653,6 @@ export function useChatTabs(
   const rename = useCallback(
     async (chatId: string, title: string) => {
       const id = shown.current
-      /* v8 ignore next */
       if (id === null) return
 
       setEditingKey(null)

@@ -14792,6 +14792,20 @@ describe('the agent chat', () => {
       expect(agent().rewinds()).toEqual([{ messageId, dryRun: true }])
     })
 
+    it("reads the cut from the conversation's own session", async () => {
+      const { service, chatId, messageId } = await spoken()
+      const asked: string[] = []
+      sessionChain = (sessionId) => {
+        asked.push(sessionId)
+        return Promise.resolve(chainOf(messageId))
+      }
+
+      await service.previewRewind(chatId, messageId)
+      await service.rewindChat(chatId, messageId, 'conversation')
+
+      expect(asked).toEqual(['sess-1', 'sess-1'])
+    })
+
     it('puts the files back and records that it did', async () => {
       const { service, chatId, messageId } = await spoken()
 

@@ -44,7 +44,6 @@ export function useHelp(
     (kind: HelpKind) => {
       const id = workspaceId
       // The menu is drawn only inside a workspace; the guard is for the type.
-      /* v8 ignore next */
       if (id === null) return
       if (busy.current) return
       busy.current = true
