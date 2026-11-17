@@ -1546,6 +1546,42 @@ describe('App', () => {
     expect(await screen.findByText('/Users/someone/code/planner')).toBeInTheDocument()
   })
 
+  it('keeps the workspace that is open when another project is removed', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(await screen.findByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [PLANNER] })
+
+    fireEvent.contextMenu(tab('LE'))
+    await user.click(screen.getByRole('menuitem', { name: 'Remove project' }))
+    await user.click(await screen.findByRole('button', { name: 'Remove' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'LE' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('navigation', { name: 'Conversations' })).toBeInTheDocument()
+  })
+
+  it('opens no conversation in a removed project on ⌘T', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(await screen.findByRole('button', { name: /anna/ }))
+    await screen.findByRole('navigation', { name: 'Conversations' })
+    vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: true, value: [LEDGER] })
+
+    fireEvent.contextMenu(tab('PL'))
+    await user.click(screen.getByRole('menuitem', { name: 'Remove project' }))
+    await user.click(await screen.findByRole('button', { name: 'Remove' }))
+    await screen.findByText('Which project today?')
+
+    fireEvent.keyDown(window, { key: 't', metaKey: true })
+
+    expect(window.octopus.chats.open).not.toHaveBeenCalled()
+  })
+
   it('leaves the project in place when the removal is declined', async () => {
     givenTwoProjects()
     const user = await openApp()
@@ -2815,6 +2851,20 @@ describe('App', () => {
     })
     // Not ⌘T's job: reopening is not creating.
     expect(window.octopus.chats.create).not.toHaveBeenCalled()
+  })
+
+  it('does nothing for ⌘T and ⌘⇧T with no workspace open', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await screen.findByRole('button', { name: /anna/ })
+
+    fireEvent.keyDown(window, { key: 't', metaKey: true })
+    fireEvent.keyDown(window, { key: 'T', metaKey: true, shiftKey: true })
+
+    expect(window.octopus.chats.open).not.toHaveBeenCalled()
+    expect(window.octopus.chats.create).not.toHaveBeenCalled()
+    expect(window.octopus.chats.closed).not.toHaveBeenCalled()
   })
 
   /*

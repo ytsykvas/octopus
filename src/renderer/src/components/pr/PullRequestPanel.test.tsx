@@ -106,15 +106,15 @@ function answerDetail(value: PullRequestDetail): void {
   vi.mocked(octopus().workspaces.pullRequestDetail).mockResolvedValue({ ok: true, value })
 }
 
-function renderPanel(
-  overrides: {
-    workspace?: typeof anna | null
-    visible?: boolean
-    chatId?: string | null
-    envFile?: string
-    quotes?: ReturnType<typeof quoteController>
-  } = {}
-): {
+interface PanelProps {
+  readonly workspace?: typeof anna | null
+  readonly visible?: boolean
+  readonly chatId?: string | null
+  readonly envFile?: string
+  readonly quotes?: ReturnType<typeof quoteController>
+}
+
+function renderPanel(overrides: PanelProps = {}): {
   onEditInstructions: ReturnType<typeof vi.fn>
   onError: ReturnType<typeof vi.fn>
   onRequestChanged: ReturnType<typeof vi.fn>
@@ -123,6 +123,7 @@ function renderPanel(
   quotes: ReturnType<typeof quoteController>
   /** Draws the same pane for another workspace, the way the window switches. */
   showWorkspace: (workspace: typeof anna) => void
+  redraw: (changes: Pick<PanelProps, 'visible' | 'envFile'>) => void
 } {
   const onEditInstructions = vi.fn()
   const onError = vi.fn()
@@ -131,13 +132,13 @@ function renderPanel(
   const onConversation = vi.fn()
   const quotes = overrides.quotes ?? quoteController()
 
-  const panel = (workspace: typeof anna | null): React.JSX.Element => (
+  const panel = (props: PanelProps): React.JSX.Element => (
     <PullRequestPanel
-      workspace={workspace}
-      visible={overrides.visible ?? true}
-      chatId={overrides.chatId === undefined ? 'chat-1' : overrides.chatId}
+      workspace={props.workspace === undefined ? anna : props.workspace}
+      visible={props.visible ?? true}
+      chatId={props.chatId === undefined ? 'chat-1' : props.chatId}
       quotes={quotes}
-      envFile={overrides.envFile ?? '.env'}
+      envFile={props.envFile ?? '.env'}
       onRequestChanged={onRequestChanged}
       onEditInstructions={onEditInstructions}
       onError={onError}
@@ -145,7 +146,7 @@ function renderPanel(
       onConversation={onConversation}
     />
   )
-  const { rerender } = render(panel(overrides.workspace === undefined ? anna : overrides.workspace))
+  const { rerender } = render(panel(overrides))
 
   return {
     onEditInstructions,
@@ -155,7 +156,10 @@ function renderPanel(
     onConversation,
     quotes,
     showWorkspace: (workspace) => {
-      rerender(panel(workspace))
+      rerender(panel({ ...overrides, workspace }))
+    },
+    redraw: (changes) => {
+      rerender(panel({ ...overrides, ...changes }))
     }
   }
 }
@@ -704,6 +708,41 @@ describe('the pull request tab', () => {
     renderPanel({ envFile: '.env.local' })
 
     expect(await screen.findByText(/\.env\.local/)).toBeInTheDocument()
+  })
+
+  it('asks whether the env file is ignored once per project, not on every status', () => {
+    const { showWorkspace } = renderPanel()
+
+    showWorkspace({ ...anna, status: 'running' })
+    showWorkspace({ ...anna, status: 'idle' })
+
+    expect(octopus().projects.isEnvIgnored).toHaveBeenCalledExactlyOnceWith('planner')
+  })
+
+  it('asks again for a workspace of another project', () => {
+    const { showWorkspace } = renderPanel()
+
+    showWorkspace(workspaceView('carol', { id: 'ledger/carol', projectId: 'ledger' }))
+
+    expect(octopus().projects.isEnvIgnored).toHaveBeenLastCalledWith('ledger')
+  })
+
+  it('asks again each time the tab is shown', () => {
+    const { redraw } = renderPanel()
+
+    redraw({ visible: false })
+    expect(octopus().projects.isEnvIgnored).toHaveBeenCalledOnce()
+
+    redraw({ visible: true })
+    expect(octopus().projects.isEnvIgnored).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks again when the project names another env file', () => {
+    const { redraw } = renderPanel()
+
+    redraw({ envFile: '.env.local' })
+
+    expect(octopus().projects.isEnvIgnored).toHaveBeenCalledTimes(2)
   })
 
   // Nothing to commit is nothing to warn about: the form opens the request

@@ -127,17 +127,21 @@ live region, so a press that changes it is read out. Three warnings about the
 press below take the line rather than adding a block: the env file git does not
 ignore, while there is work to commit; that the branch has no commit of its own
 to amend, which a disabled button's tooltip could never say; and that an empty
-field would replace a commit already on GitHub. The commit field has no hint
-under it: its placeholder says an empty one amends, and the button beside it
-says _Commit & push_ or _Amend commit & push_. The field sits by its button
-because an empty one amends, and a field kept in another view would amend
-unseen. **The green button is the next step**: committing while there is work to
-commit, else sending the commits that are waiting, else merging. Push and Merge
-stay beside it, quiet, Merge with every reason it has for refusing. Merged, the
-one press left is the red removal; closed, there is no footer at all. A press
-that removes its own button — Push once nothing is left, Merge once merged —
-leaves keyboard focus on the pane rather than at the top of the window
-(`useFocusKeeper`).
+field would replace a commit already on GitHub. Whether git ignores the env file
+is asked of the project's own checkout, so the pane asks when it is shown, when
+the project changes and when the env file changes — not each time the
+workspace's status does. An edit to the checkout's `.gitignore` or
+`.octopus/project.json` is therefore seen the next time the pane is shown. The
+commit field has no hint under it: its placeholder says an empty one amends, and
+the button beside it says _Commit & push_ or _Amend commit & push_. The field
+sits by its button because an empty one amends, and a field kept in another view
+would amend unseen. **The green button is the next step**: committing while
+there is work to commit, else sending the commits that are waiting, else
+merging. Push and Merge stay beside it, quiet, Merge with every reason it has
+for refusing. Merged, the one press left is the red removal; closed, there is no
+footer at all. A press that removes its own button — Push once nothing is left,
+Merge once merged — leaves keyboard focus on the pane rather than at the top of
+the window (`useFocusKeeper`).
 
 **The description fills the room the views leave** above the footer
 (`RequestDescription`). A short view left most of the pane empty, and the

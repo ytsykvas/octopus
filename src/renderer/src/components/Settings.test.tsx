@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -8,6 +8,7 @@ import type { Config } from '@core/config.js'
 import { preview } from '../sound.js'
 import type * as Sound from '../sound.js'
 import { stubDialogElement } from '../test/dialog.js'
+import { held } from '../test/held.js'
 import { disconnectedAccounts, octopus } from '../test/octopus.js'
 import { Settings } from './Settings.js'
 
@@ -1165,6 +1166,32 @@ describe('the pasted images row', () => {
     expect(await screen.findByText('2 images, 39 kB')).toBeInTheDocument()
   })
 
+  it('says why the images could not be deleted, until a delete works', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().attachments.measure).mockResolvedValue({
+      ok: true,
+      value: { files: 2, bytes: 40_000 }
+    })
+    vi.mocked(octopus().attachments.clear)
+      .mockResolvedValueOnce({ ok: false, error: 'the folder is locked' })
+      .mockResolvedValue({ ok: true, value: { files: 0, bytes: 0 } })
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await user.click(await screen.findByRole('button', { name: 'Empty' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete them' }))
+
+    expect(
+      await screen.findByText('Something went wrong: the folder is locked')
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Empty' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete them' }))
+
+    expect(await screen.findByText('None yet')).toBeInTheDocument()
+    expect(screen.queryByText(/the folder is locked/)).not.toBeInTheDocument()
+  })
+
   it('deletes nothing when the question is answered no', async () => {
     const user = userEvent.setup()
     vi.mocked(octopus().attachments.measure).mockResolvedValue({
@@ -1269,6 +1296,43 @@ describe('the running terminals row', () => {
     expect(await screen.findByText(/Dev server/)).toBeInTheDocument()
   })
 
+  it('says why the list could not be read again, until a read works', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().terminal.list)
+      .mockResolvedValueOnce({ ok: true, value: [RUNNING[0]!] })
+      .mockResolvedValueOnce({ ok: false, error: 'the manager is gone' })
+      .mockResolvedValue({ ok: true, value: [] })
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await user.click(await screen.findByRole('button', { name: 'End' }))
+    await user.click(await screen.findByRole('button', { name: 'End it' }))
+
+    expect(await screen.findByText('Something went wrong: the manager is gone')).toBeInTheDocument()
+    expect(screen.getByText(/Dev server/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'End' }))
+    await user.click(await screen.findByRole('button', { name: 'End it' }))
+
+    expect(await screen.findByText('None')).toBeInTheDocument()
+    expect(screen.queryByText(/the manager is gone/)).not.toBeInTheDocument()
+  })
+
+  it('says why the running terminals could not be read', async () => {
+    const user = userEvent.setup()
+    vi.mocked(octopus().terminal.list).mockResolvedValue({
+      ok: false,
+      error: 'the manager is gone'
+    })
+    await renderSettings()
+
+    await openSection(user, 'About')
+
+    expect(await screen.findByText('Something went wrong: the manager is gone')).toBeInTheDocument()
+    expect(screen.getByText('Running terminals')).toBeInTheDocument()
+    expect(screen.queryByText('None')).not.toBeInTheDocument()
+  })
+
   it('ends nothing when the question is answered no', async () => {
     const user = userEvent.setup()
     vi.mocked(octopus().terminal.list).mockResolvedValue({ ok: true, value: RUNNING })
@@ -1281,15 +1345,30 @@ describe('the running terminals row', () => {
     expect(octopus().terminal.dispose).not.toHaveBeenCalled()
   })
 
+  it('drops an answer that arrives after the section has closed', async () => {
+    const user = userEvent.setup()
+    const late = held<{ ok: false; error: string }>()
+    vi.mocked(octopus().terminal.list).mockReturnValueOnce(late.promise)
+    await renderSettings()
+
+    await openSection(user, 'About')
+    await waitFor(() => {
+      expect(octopus().terminal.list).toHaveBeenCalled()
+    })
+    await openSection(user, 'Prompts')
+    await act(async () => {
+      late.resolve({ ok: false, error: 'the manager is gone' })
+      await late.promise
+    })
+
+    expect(screen.queryByText(/the manager is gone/)).not.toBeInTheDocument()
+  })
+
   // A row that said "none" and then corrected itself would be worse than one
   // that appears once.
   it('draws nothing until the answer arrives', async () => {
     const user = userEvent.setup()
-    vi.mocked(octopus().terminal.list).mockResolvedValue({
-      ok: false,
-      error: 'no',
-      code: 'fileUnreadable'
-    })
+    vi.mocked(octopus().terminal.list).mockReturnValue(new Promise(() => undefined))
     await renderSettings()
 
     await openSection(user, 'About')

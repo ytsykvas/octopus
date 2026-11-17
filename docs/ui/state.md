@@ -46,8 +46,10 @@ abandons — its conversation switched away or gone — lets its buffer go at on
 so what the next conversation says is drawn as it arrives.
 
 The split is not all-or-nothing: `useProjects.remove` asks and deletes, while
-`App` clears the selection afterwards — what points at a project is the window's
-business. So is what the window holds per workspace — drafts, review notes,
+`App` clears the selection afterwards — the project if it was the open one, the
+workspace only if it was one of the project's, so removing another project leaves
+the open conversation and its draft alone. What points at a project is the
+window's business. So is what the window holds per workspace — drafts, review notes,
 quotes from a pull request, notes from the viewer, attached files, open files
 and the conversation strip — and workspace ids come back: a removed workspace's
 name returns to the pool, and a project added again gets its old slug. There is
