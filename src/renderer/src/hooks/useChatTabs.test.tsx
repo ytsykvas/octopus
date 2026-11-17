@@ -48,6 +48,31 @@ describe('a workspace nobody has spoken to', () => {
     expect(octopus().chats.list).not.toHaveBeenCalled()
   })
 
+  it('creates nothing without a workspace', async () => {
+    const onError = vi.fn()
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), onError))
+
+    await act(async () => {
+      await result.current.create()
+    })
+
+    expect(octopus().chats.open).not.toHaveBeenCalled()
+    expect(octopus().chats.create).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('reopens nothing without a workspace', async () => {
+    const onError = vi.fn()
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), onError))
+
+    await act(async () => {
+      await result.current.reopenLast()
+    })
+
+    expect(octopus().chats.closed).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
   it('says so when the conversations cannot be read', async () => {
     const onError = vi.fn()
     vi.mocked(octopus().chats.list).mockResolvedValue({ ok: false, error: 'state is corrupt' })

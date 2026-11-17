@@ -2853,6 +2853,20 @@ describe('App', () => {
     expect(window.octopus.chats.create).not.toHaveBeenCalled()
   })
 
+  it('does nothing for ⌘T and ⌘⇧T with no workspace open', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await screen.findByRole('button', { name: /anna/ })
+
+    fireEvent.keyDown(window, { key: 't', metaKey: true })
+    fireEvent.keyDown(window, { key: 'T', metaKey: true, shiftKey: true })
+
+    expect(window.octopus.chats.open).not.toHaveBeenCalled()
+    expect(window.octopus.chats.create).not.toHaveBeenCalled()
+    expect(window.octopus.chats.closed).not.toHaveBeenCalled()
+  })
+
   /*
    * Sent the way macOS actually sends it. Option rewrites the character —
    * Option-2 arrives as `™` — so a handler reading `event.key` cannot work, and

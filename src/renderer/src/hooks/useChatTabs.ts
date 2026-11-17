@@ -469,7 +469,7 @@ export function useChatTabs(
   const create = useCallback(
     async (beforeShown?: (id: string) => void | Promise<void>) => {
       const id = shown.current
-      /* v8 ignore next */
+      // ⌘T reaches this with no workspace selected.
       if (id === null) return
 
       if (tabs.some((tab) => tab.id === null)) {
@@ -637,7 +637,7 @@ export function useChatTabs(
 
   const reopenLast = useCallback(async () => {
     const id = shown.current
-    /* v8 ignore next */
+    // ⌘⇧T reaches this with no workspace selected.
     if (id === null) return
 
     // Asked rather than taken from `history`, which is only as fresh as the
