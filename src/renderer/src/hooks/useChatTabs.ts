@@ -422,7 +422,7 @@ export function useChatTabs(
   const select = useCallback(
     (keyOrId: string) => {
       const id = shown.current
-      /* v8 ignore next */
+      // ⌥1 reaches this with no workspace selected.
       if (id === null) return
 
       setActiveByWorkspace((current) => new Map(current).set(id, keyOrId))

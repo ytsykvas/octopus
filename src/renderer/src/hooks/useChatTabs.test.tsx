@@ -7,6 +7,7 @@ import { chat, emitChatsChanged, emitChatStatus, givenChats } from '../test/chat
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { type ChatTab, useChatTabs } from './useChatTabs.js'
+import { inProject } from './workspaceSlots.js'
 
 const WORKSPACE = 'planner/anna'
 
@@ -71,6 +72,20 @@ describe('a workspace nobody has spoken to', () => {
 
     expect(octopus().chats.closed).not.toHaveBeenCalled()
     expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('remembers no tab without a workspace, so removing a project finds none to match', () => {
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), vi.fn()))
+
+    act(() => {
+      result.current.select('first')
+    })
+
+    expect(() => {
+      act(() => {
+        result.current.forget(inProject('planner'))
+      })
+    }).not.toThrow()
   })
 
   it('says so when the conversations cannot be read', async () => {
