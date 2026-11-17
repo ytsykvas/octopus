@@ -100,9 +100,9 @@ export function useWorkspaces(
   })
 
   const generation = useRef(0)
-  // Raised only by a listing whose failures hide nothing: dropping an older one for
-  // a newer one that could not read would leave stale rows with nothing to replace them.
-  const applied = useRef(0)
+  // Per project, the attempt whose answer is drawn. Kept per project so a newer
+  // listing that failed for one leaves the way open for an older one that did not.
+  const drawn = useRef(new Map<string, number>())
 
   const list = useCallback(
     async (projects: readonly Project[], abandoned: () => boolean) => {
@@ -112,27 +112,39 @@ export function useWorkspaces(
           async (project) => [project.id, await window.octopus.workspaces.list(project.id)] as const
         )
       )
-      if (abandoned() || attempt < applied.current) return
+      if (abandoned()) return
+
+      const fresh = new Map<string, readonly WorkspaceView[]>()
+      for (const [projectId, result] of results) {
+        if (!result.ok || attempt < (drawn.current.get(projectId) ?? 0)) continue
+        fresh.set(projectId, result.value)
+        drawn.current.set(projectId, attempt)
+      }
+      const read = new Set(results.map(([projectId]) => projectId))
+      // The window's projects, not the listing's: a listing that read them before a
+      // removal would otherwise bring the removed one back.
+      const shown = latestProjects.current.map((project) => project.id)
 
       // A failure keeps what the project held: emptying it unmounted the open conversation.
       setByProject(
         (current) =>
-          new Map<string, readonly WorkspaceView[]>(
-            results.map(([projectId, result]) => [
-              projectId,
-              result.ok ? result.value : (current.get(projectId) ?? [])
-            ])
+          new Map(
+            shown.flatMap((projectId) => {
+              const workspaces =
+                fresh.get(projectId) ?? current.get(projectId) ?? (read.has(projectId) ? [] : null)
+              return workspaces === null ? [] : [[projectId, workspaces] as const]
+            })
           )
       )
 
+      if (attempt !== generation.current) return
       const hiding = results.find(
         (entry): entry is readonly [string, Failure] =>
           !entry[1].ok && (held.current.get(entry[0])?.length ?? 0) > 0
       )
-      if (hiding === undefined) applied.current = attempt
-      else if (attempt === generation.current) report.current(hiding[1])
+      if (hiding !== undefined) report.current(hiding[1])
     },
-    [held, report]
+    [held, latestProjects, report]
   )
 
   const refresh = useCallback(

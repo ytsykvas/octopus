@@ -948,6 +948,61 @@ describe('useWorkspaces', () => {
     expect(result.current.flat).toEqual([anna, bob])
   })
 
+  it('lets an older listing bring in a first workspace a newer one failed to read', async () => {
+    const slow = held<Result<WorkspaceView[]>>()
+    vi.mocked(window.octopus.workspaces.list)
+      .mockResolvedValueOnce({ ok: true, value: [] })
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValueOnce({ ok: false, error: 'could not list worktrees' })
+    const projects = [planner]
+
+    const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
+    await waitFor(() => {
+      expect(result.current.byProject.get('planner')).toEqual([])
+    })
+
+    await act(async () => {
+      const older = result.current.refresh()
+      await result.current.refresh()
+      slow.resolve({ ok: true, value: [anna] })
+      await older
+    })
+
+    expect(result.current.flat).toEqual([anna])
+  })
+
+  it('leaves out a project added after a listing that never asked about it', async () => {
+    const slow = held<Result<WorkspaceView[]>>()
+    const planned: Promise<Result<WorkspaceView[]>>[] = [
+      Promise.resolve({ ok: true, value: [anna] }),
+      slow.promise
+    ]
+    vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+      projectId === 'website'
+        ? new Promise(() => undefined)
+        : (planned.shift() ?? Promise.resolve({ ok: true, value: [anna] }))
+    )
+
+    const { result, rerender } = renderHook(
+      ({ projects }: { projects: readonly Project[] }) =>
+        useWorkspaces(projects, accepts(), vi.fn<OnError>()),
+      { initialProps: { projects: [planner] as readonly Project[] } }
+    )
+    await waitFor(() => {
+      expect(result.current.flat).toEqual([anna])
+    })
+
+    const refreshing = result.current.refresh()
+    rerender({ projects: [planner, website] })
+    await act(async () => {
+      slow.resolve({ ok: true, value: [anna, bob] })
+      await refreshing
+    })
+
+    expect(result.current.flat).toEqual([anna, bob])
+    expect(result.current.byProject.has('website')).toBe(false)
+  })
+
   it('does not report a failed listing that a newer one has overtaken', async () => {
     const older = held<Result<WorkspaceView[]>>()
     const newer = held<Result<WorkspaceView[]>>()
