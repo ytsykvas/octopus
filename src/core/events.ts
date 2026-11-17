@@ -903,3 +903,10 @@ export function turnOutcome(reason: string | null): TurnOutcome {
   if (reason === null) return 'completed'
   return OUTCOMES[reason] ?? 'failed'
 }
+
+/** A turn's end worth a red mark: an interrupted one is not, though the CLI flags it `is_error`. */
+export function endedInError(
+  result: Pick<Extract<AgentEvent, { type: 'result' }>, 'ok' | 'terminalReason'>
+): boolean {
+  return !result.ok && turnOutcome(result.terminalReason) !== 'interrupted'
+}

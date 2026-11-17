@@ -4,6 +4,7 @@ import {
   type AgentEvent,
   AgentEventSchema,
   countLines,
+  endedInError,
   forTranscript,
   isEphemeral,
   isTaskBoundary,
@@ -439,6 +440,27 @@ describe('how a turn ended', () => {
   it('treats anything it does not know as a failure', () => {
     expect(turnOutcome('model_error')).toBe('failed')
     expect(turnOutcome('some_reason_invented_next_year')).toBe('failed')
+  })
+})
+
+describe('whether a turn ended in error', () => {
+  it('does not count a stop the user asked for', () => {
+    expect(endedInError({ ok: false, terminalReason: 'aborted_streaming' })).toBe(false)
+    expect(endedInError({ ok: false, terminalReason: 'aborted_tools' })).toBe(false)
+    expect(endedInError({ ok: false, terminalReason: 'background_requested' })).toBe(false)
+  })
+
+  it('counts any other unsuccessful end', () => {
+    expect(endedInError({ ok: false, terminalReason: 'model_error' })).toBe(true)
+    expect(endedInError({ ok: false, terminalReason: 'max_turns' })).toBe(true)
+    expect(endedInError({ ok: false, terminalReason: 'prompt_too_long' })).toBe(true)
+    expect(endedInError({ ok: false, terminalReason: 'hook_stopped' })).toBe(true)
+    expect(endedInError({ ok: false, terminalReason: null })).toBe(true)
+  })
+
+  it('never counts a successful one', () => {
+    expect(endedInError({ ok: true, terminalReason: 'completed' })).toBe(false)
+    expect(endedInError({ ok: true, terminalReason: 'model_error' })).toBe(false)
   })
 })
 

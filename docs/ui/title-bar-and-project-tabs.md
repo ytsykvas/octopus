@@ -61,13 +61,15 @@ them.
 
 **The same news is a toast in the bottom-right corner**, up to three, newest
 first, each saying what happened — finished, ended with an error, has a
-question, a plan to review, or the tool it wants — and where. **Show** opens the
-project, the workspace and the very conversation the news is about (`selectIn`),
-not whichever tab that workspace last had; × takes the toast down and leaves the
-tile's dot until the workspace is opened. No timer removes one: news that
-vanishes while somebody is reading something else was never delivered. It is a
-`fixed` block drawn into the body, as the menus are, not a `<dialog>` — an open
-dialog switches off the window's own keys.
+question, a plan to review, or the tool it wants — and where. A turn the user
+stopped is not news of an error, though the CLI flags it as one: `noticeFrom`
+asks `endedInError` (`events.ts`), the rule the conversation's status follows.
+**Show** opens the project, the workspace and the very conversation the news is
+about (`selectIn`), not whichever tab that workspace last had; × takes the toast
+down and leaves the tile's dot until the workspace is opened. No timer removes
+one: news that vanishes while somebody is reading something else was never
+delivered. It is a `fixed` block drawn into the body, as the menus are, not a
+`<dialog>` — an open dialog switches off the window's own keys.
 
 A quiet sound goes with it (`sound.ts`), no more than once in 1.5s, so several
 agents finishing together ring once. The default is a chime synthesised with Web

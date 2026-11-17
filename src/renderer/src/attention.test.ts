@@ -59,6 +59,10 @@ describe('the notice an event amounts to', () => {
     expect(from(TURN_DONE)).toBeNull()
   })
 
+  it('is nothing for a turn the user stopped', () => {
+    expect(from({ ...TURN_DONE, ok: false, terminalReason: 'aborted_tools' })).toBeNull()
+  })
+
   it('names the project from the workspace it happened in', () => {
     expect(from({ type: 'finished' }, OTHER.id)?.projectId).toBe('tracker')
   })

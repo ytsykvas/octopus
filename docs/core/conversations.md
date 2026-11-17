@@ -255,7 +255,17 @@ once — and a foreground subagent of the main agent ends with the turn, which i
 holds. Either way the end is written to the transcript, so a reopened
 conversation reads how it ended. A frame from an earlier run of a resumed task
 (`run_id`) ends nothing. A conversation's Stop leaves its agents running
-(`perTaskStopAffordance`), so it rests the same way.
+(`perTaskStopAffordance`), so it rests the same way. A turn the user stopped is
+not a failure either, though the CLI says it is: measured on SDK 0.3.308, a Stop
+before the reply's first word, half way through it, or while a tool waits for
+permission ends the turn with `is_error: true` and `terminal_reason`
+`aborted_streaming` or `aborted_tools` — in every case measured, the turn's last
+message was not finished text. `endedInError` (`events.ts`) reads the reason as
+well as the flag, and counts every reason `turnOutcome` calls `interrupted`
+(`background_requested` too) as no failure. Such a turn rests like one that
+finished, so a Stop with nothing else running is announced `finished` as well,
+and one with a message queued behind it goes on to that turn without turning red
+first.
 
 **Which conversations a workspace has leaves here too**, as `chats:changed`, and
 its reading is the ordered ids and titles — not the statuses. Every status move

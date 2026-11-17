@@ -12,6 +12,7 @@
  */
 
 import { type ChatStatus, EXIT_PLAN_MODE } from '@core/chats.js'
+import { endedInError } from '@core/events.js'
 import { readQuestions } from '@core/questions.js'
 import type { ChatEvent } from '@core/service.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -53,7 +54,7 @@ export function noticeFrom(
   // turn of its own to hand over each finished agent's report, and a chime for
   // every one of those would say "done" over work still going.
   if (event.type === 'finished') return { ...notice, kind: 'done' }
-  if (event.type === 'result') return event.ok ? null : { ...notice, kind: 'error' }
+  if (event.type === 'result') return endedInError(event) ? { ...notice, kind: 'error' } : null
   if (event.type === 'error') return { ...notice, kind: 'error' }
   // An MCP server's form is a question to the user like any other.
   if (event.type === 'elicitation_request') return { ...notice, kind: 'question' }
