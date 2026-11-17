@@ -513,7 +513,6 @@ export function useChatTabs(
   const forkThen = useCallback(
     async (make: () => Promise<Result<Chat>>, start?: (chat: Chat) => Promise<Result<unknown>>) => {
       const id = shown.current
-      /* v8 ignore next */
       if (id === null) return false
 
       report.current(null)
@@ -576,7 +575,6 @@ export function useChatTabs(
 
   const refreshHistory = useCallback(async () => {
     const id = shown.current
-    /* v8 ignore next */
     if (id === null) return
 
     const closed = await window.octopus.chats.closed(id)
@@ -595,7 +593,6 @@ export function useChatTabs(
   const close = useCallback(
     async (chatId: string) => {
       const id = shown.current
-      /* v8 ignore next */
       if (id === null) return
 
       report.current(null)
@@ -617,7 +614,6 @@ export function useChatTabs(
   const reopen = useCallback(
     async (chatId: string) => {
       const id = shown.current
-      /* v8 ignore next */
       if (id === null) return
 
       report.current(null)
@@ -657,7 +653,6 @@ export function useChatTabs(
   const rename = useCallback(
     async (chatId: string, title: string) => {
       const id = shown.current
-      /* v8 ignore next */
       if (id === null) return
 
       setEditingKey(null)
