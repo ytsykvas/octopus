@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Chat, ClosedChat } from '@core/chats.js'
 
 import { chat, emitChatsChanged, emitChatStatus, givenChats } from '../test/chat.js'
+import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { type ChatTab, useChatTabs } from './useChatTabs.js'
 
@@ -27,15 +28,6 @@ function open(
     ({ id }: Shown) => useChatTabs(id, options.onChats ?? vi.fn(), options.onError ?? vi.fn()),
     { initialProps }
   )
-}
-
-/** A promise the test settles by hand, to answer after something has moved on. */
-function held<T>(): { promise: Promise<T>; settle: (value: T) => void } {
-  let settle: ((value: T) => void) | null = null
-  const promise = new Promise<T>((resolve) => {
-    settle = resolve
-  })
-  return { promise, settle: (value) => settle?.(value) }
 }
 
 describe('a workspace nobody has spoken to', () => {
@@ -102,6 +94,48 @@ describe('the conversations a workspace already has', () => {
     await waitFor(() => {
       expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1', 'chat-2'])
     })
+  })
+
+  it('keeps an older read when the newer one fails', async () => {
+    const mounted = held<{ ok: true; value: Chat[] }>()
+    vi.mocked(octopus().chats.list)
+      .mockReturnValueOnce(mounted.promise)
+      .mockResolvedValue({ ok: false, error: 'state is corrupt' })
+
+    const { result } = open()
+    emitChatsChanged()
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalledTimes(2)
+    })
+    await act(async () => {
+      mounted.resolve({ ok: true, value: [chat()] })
+      await mounted.promise
+    })
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1'])
+  })
+
+  it('does not report a failed read that a newer one has overtaken', async () => {
+    const onError = vi.fn()
+    const mounted = held<{ ok: false; error: string }>()
+    const announced = held<{ ok: true; value: Chat[] }>()
+    vi.mocked(octopus().chats.list)
+      .mockReturnValueOnce(mounted.promise)
+      .mockReturnValueOnce(announced.promise)
+
+    const { result } = open({ onError })
+    emitChatsChanged()
+    await act(async () => {
+      mounted.resolve({ ok: false, error: 'state is corrupt' })
+      await mounted.promise
+    })
+    await act(async () => {
+      announced.resolve({ ok: true, value: [chat()] })
+      await announced.promise
+    })
+
+    expect(onError).not.toHaveBeenCalled()
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1'])
   })
 
   it('stops drawing a conversation another window closed', async () => {
@@ -258,6 +292,27 @@ describe('opening another conversation', () => {
     expect(result.current.activeKey).toBe('chat-2')
   })
 
+  it('keeps the new conversation when an older read answers last', async () => {
+    const mounted = held<{ ok: true; value: Chat[] }>()
+    vi.mocked(octopus().chats.list)
+      .mockReturnValueOnce(mounted.promise)
+      .mockResolvedValue({ ok: true, value: [chat(), chat({ id: 'chat-2' })] })
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: chat() })
+    vi.mocked(octopus().chats.create).mockResolvedValue({ ok: true, value: chat({ id: 'chat-2' }) })
+
+    const { result } = open()
+    await act(async () => {
+      await result.current.create()
+    })
+    await act(async () => {
+      mounted.resolve({ ok: true, value: [chat()] })
+      await mounted.promise
+    })
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1', 'chat-2'])
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
   // Help sends its message from here; the pane drawn before the send landed
   // would read a history without it.
   it('draws the new conversation only once what it was handed has finished', async () => {
@@ -281,7 +336,7 @@ describe('opening another conversation', () => {
     expect(octopus().chats.list).toHaveBeenCalledTimes(listed)
 
     await act(async () => {
-      sending.settle(undefined)
+      sending.resolve(undefined)
       await adding
     })
     expect(vi.mocked(octopus().chats.list).mock.calls.length).toBeGreaterThan(listed)
@@ -620,7 +675,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     unmount()
 
     await act(async () => {
-      list.settle({ ok: true, value: [chat()] })
+      list.resolve({ ok: true, value: [chat()] })
       await list.promise
     })
 
@@ -636,7 +691,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     rerender({ id: 'planner/bob' })
 
     await act(async () => {
-      opening.settle({ ok: true, value: chat() })
+      opening.resolve({ ok: true, value: chat() })
       await creating
     })
 
@@ -659,7 +714,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     onChats.mockClear()
 
     await act(async () => {
-      creating.settle({ ok: true, value: chat({ id: 'chat-2' }) })
+      creating.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
       await adding
     })
 
@@ -683,7 +738,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     rerender({ id: 'planner/bob' })
 
     await act(async () => {
-      creating.settle({ ok: true, value: chat({ id: 'chat-2' }) })
+      creating.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
       await adding
     })
 
@@ -704,7 +759,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     rerender({ id: 'planner/bob' })
 
     await act(async () => {
-      forking.settle({ ok: true, value: chat({ id: 'chat-2' }) })
+      forking.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
       await expect(forked).resolves.toBe(false)
     })
 
@@ -727,7 +782,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     onChats.mockClear()
 
     await act(async () => {
-      closing.settle({ ok: true, value: undefined })
+      closing.resolve({ ok: true, value: undefined })
       await closed
     })
 
@@ -1467,7 +1522,7 @@ describe('carrying a plan out in a new tab', () => {
     rerender({ id: 'planner/bob' })
 
     await act(async () => {
-      sending.settle({ ok: true, value: null })
+      sending.resolve({ ok: true, value: null })
       await expect(started).resolves.toBe(false)
     })
 

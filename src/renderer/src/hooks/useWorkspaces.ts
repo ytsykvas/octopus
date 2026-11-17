@@ -6,6 +6,8 @@ import type { Project } from '@core/store.js'
 import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type { KindDetour, WorkspaceChat, WorkspaceView } from '@core/workspaces.js'
 
+import type { Failure } from '../../../preload/index.js'
+
 /** A conversation as the tab strip knows it: everything but the turn's start. */
 export type TabChat = Omit<WorkspaceChat, 'turnStartedAt'>
 
@@ -91,20 +93,64 @@ export function useWorkspaces(
   // which changes identity on every refresh.
   const latestProjects = useLatest(projects)
 
-  const load = useCallback(async (): Promise<Map<string, readonly WorkspaceView[]>> => {
-    const entries = await Promise.all(
-      latestProjects.current.map(async (project) => {
-        const result = await window.octopus.workspaces.list(project.id)
-        return [project.id, result.ok ? result.value : []] as const
-      })
-    )
+  const held = useLatest(byProject)
+  // Held so a language switch, which changes `describeFailure`, does not re-list every project.
+  const report = useLatest((failure: Failure) => {
+    onError(describeFailure(failure))
+  })
 
-    return new Map(entries)
-  }, [latestProjects])
+  const generation = useRef(0)
+  // Per project, the attempt whose answer is drawn. Kept per project so a newer
+  // listing that failed for one leaves the way open for an older one that did not.
+  const drawn = useRef(new Map<string, number>())
 
-  const refresh = useCallback(async () => {
-    setByProject(await load())
-  }, [load])
+  const list = useCallback(
+    async (projects: readonly Project[], abandoned: () => boolean) => {
+      const attempt = ++generation.current
+      const results = await Promise.all(
+        projects.map(
+          async (project) => [project.id, await window.octopus.workspaces.list(project.id)] as const
+        )
+      )
+      if (abandoned()) return
+
+      const fresh = new Map<string, readonly WorkspaceView[]>()
+      for (const [projectId, result] of results) {
+        if (!result.ok || attempt < (drawn.current.get(projectId) ?? 0)) continue
+        fresh.set(projectId, result.value)
+        drawn.current.set(projectId, attempt)
+      }
+      const read = new Set(results.map(([projectId]) => projectId))
+      // The window's projects, not the listing's: a listing that read them before a
+      // removal would otherwise bring the removed one back.
+      const shown = latestProjects.current.map((project) => project.id)
+
+      // A failure keeps what the project held: emptying it unmounted the open conversation.
+      setByProject(
+        (current) =>
+          new Map(
+            shown.flatMap((projectId) => {
+              const workspaces =
+                fresh.get(projectId) ?? current.get(projectId) ?? (read.has(projectId) ? [] : null)
+              return workspaces === null ? [] : [[projectId, workspaces] as const]
+            })
+          )
+      )
+
+      if (attempt !== generation.current) return
+      const hiding = results.find(
+        (entry): entry is readonly [string, Failure] =>
+          !entry[1].ok && (held.current.get(entry[0])?.length ?? 0) > 0
+      )
+      if (hiding !== undefined) report.current(hiding[1])
+    },
+    [held, latestProjects, report]
+  )
+
+  const refresh = useCallback(
+    () => list(latestProjects.current, () => false),
+    [list, latestProjects]
+  )
 
   /**
    * Applies a change to whichever project holds this workspace.
@@ -175,7 +221,7 @@ export function useWorkspaces(
    * Nobody can see the row then, and an agent's turns go on ending while the
    * window is in the background — which is when somebody leaves agents to it.
    */
-  const unseen = useRef(new Map<string, string>())
+  const unseen = useRef(new Map<string, Project>())
 
   /*
    * The changed-file count, re-read when the work that changes it stops.
@@ -197,10 +243,10 @@ export function useWorkspaces(
     const timers = settle.current
     const hidden = unseen.current
 
-    const projectOf = (workspaceId: string): string | undefined =>
-      latestProjects.current.find((project) => workspaceId.startsWith(`${project.id}/`))?.id
+    const projectOf = (workspaceId: string): Project | undefined =>
+      latestProjects.current.find((project) => workspaceId.startsWith(`${project.id}/`))
 
-    const reread = async (workspaceId: string, projectId: string): Promise<void> => {
+    const reread = async (workspaceId: string, project: Project): Promise<void> => {
       const result = await window.octopus.workspaces.read(workspaceId)
       if (!result.ok) return
 
@@ -215,8 +261,7 @@ export function useWorkspaces(
       }
 
       // Gone — the one thing a single read cannot draw. The project's list can.
-      const listed = await window.octopus.workspaces.list(projectId)
-      if (listed.ok) setByProject((current) => new Map(current).set(projectId, listed.value))
+      await list([project], () => false)
     }
 
     const unsubscribe = onChatEvent((announced) => {
@@ -225,8 +270,8 @@ export function useWorkspaces(
       if (announced.event.type !== 'result' && announced.event.type !== 'error') return
 
       const { workspaceId } = announced
-      const projectId = projectOf(workspaceId)
-      if (projectId === undefined) return
+      const project = projectOf(workspaceId)
+      if (project === undefined) return
 
       const pending = timers.get(workspaceId)
       if (pending !== undefined) clearTimeout(pending)
@@ -237,15 +282,15 @@ export function useWorkspaces(
           timers.delete(workspaceId)
           // Asked when the timer fires rather than when the turn ended, so a
           // window hidden within the settle window is held too.
-          if (document.hidden) hidden.set(workspaceId, projectId)
-          else void reread(workspaceId, projectId)
+          if (document.hidden) hidden.set(workspaceId, project)
+          else void reread(workspaceId, project)
         }, SETTLE_MS)
       )
     })
 
     const onVisibility = (): void => {
       if (document.hidden) return
-      for (const [workspaceId, projectId] of hidden) void reread(workspaceId, projectId)
+      for (const [workspaceId, project] of hidden) void reread(workspaceId, project)
       hidden.clear()
     }
     document.addEventListener('visibilitychange', onVisibility)
@@ -256,7 +301,7 @@ export function useWorkspaces(
       for (const pending of timers.values()) clearTimeout(pending)
       timers.clear()
     }
-  }, [patchWorkspace, latestProjects])
+  }, [patchWorkspace, latestProjects, list])
 
   /*
    * What a workspace is doing, patched in as the core says so.
@@ -319,20 +364,13 @@ export function useWorkspaces(
     void (async () => {
       // Read the current projects directly: the ref update above runs in its
       // own effect, which may not have fired yet on the first pass.
-      const entries = await Promise.all(
-        projects.map(async (project) => {
-          const result = await window.octopus.workspaces.list(project.id)
-          return [project.id, result.ok ? result.value : []] as const
-        })
-      )
-
-      if (!controller.signal.aborted) setByProject(new Map(entries))
+      await list(projects, () => controller.signal.aborted)
     })()
 
     return () => {
       controller.abort()
     }
-  }, [projects])
+  }, [projects, list])
 
   // Done, and still worth a line, as a cleanup that failed is: the branch is
   // not where its kind says, and the reader should not find that out from git.
