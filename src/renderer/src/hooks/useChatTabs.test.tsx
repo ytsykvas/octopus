@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Chat, ClosedChat } from '@core/chats.js'
 
 import { chat, emitChatsChanged, emitChatStatus, givenChats } from '../test/chat.js'
+import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
 import { type ChatTab, useChatTabs } from './useChatTabs.js'
 
@@ -27,15 +28,6 @@ function open(
     ({ id }: Shown) => useChatTabs(id, options.onChats ?? vi.fn(), options.onError ?? vi.fn()),
     { initialProps }
   )
-}
-
-/** A promise the test settles by hand, to answer after something has moved on. */
-function held<T>(): { promise: Promise<T>; settle: (value: T) => void } {
-  let settle: ((value: T) => void) | null = null
-  const promise = new Promise<T>((resolve) => {
-    settle = resolve
-  })
-  return { promise, settle: (value) => settle?.(value) }
 }
 
 describe('a workspace nobody has spoken to', () => {
@@ -116,7 +108,7 @@ describe('the conversations a workspace already has', () => {
       expect(octopus().chats.list).toHaveBeenCalledTimes(2)
     })
     await act(async () => {
-      mounted.settle({ ok: true, value: [chat()] })
+      mounted.resolve({ ok: true, value: [chat()] })
       await mounted.promise
     })
 
@@ -134,11 +126,11 @@ describe('the conversations a workspace already has', () => {
     const { result } = open({ onError })
     emitChatsChanged()
     await act(async () => {
-      mounted.settle({ ok: false, error: 'state is corrupt' })
+      mounted.resolve({ ok: false, error: 'state is corrupt' })
       await mounted.promise
     })
     await act(async () => {
-      announced.settle({ ok: true, value: [chat()] })
+      announced.resolve({ ok: true, value: [chat()] })
       await announced.promise
     })
 
@@ -313,7 +305,7 @@ describe('opening another conversation', () => {
       await result.current.create()
     })
     await act(async () => {
-      mounted.settle({ ok: true, value: [chat()] })
+      mounted.resolve({ ok: true, value: [chat()] })
       await mounted.promise
     })
 
@@ -344,7 +336,7 @@ describe('opening another conversation', () => {
     expect(octopus().chats.list).toHaveBeenCalledTimes(listed)
 
     await act(async () => {
-      sending.settle(undefined)
+      sending.resolve(undefined)
       await adding
     })
     expect(vi.mocked(octopus().chats.list).mock.calls.length).toBeGreaterThan(listed)
@@ -683,7 +675,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     unmount()
 
     await act(async () => {
-      list.settle({ ok: true, value: [chat()] })
+      list.resolve({ ok: true, value: [chat()] })
       await list.promise
     })
 
@@ -699,7 +691,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     rerender({ id: 'planner/bob' })
 
     await act(async () => {
-      opening.settle({ ok: true, value: chat() })
+      opening.resolve({ ok: true, value: chat() })
       await creating
     })
 
@@ -722,7 +714,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     onChats.mockClear()
 
     await act(async () => {
-      creating.settle({ ok: true, value: chat({ id: 'chat-2' }) })
+      creating.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
       await adding
     })
 
@@ -746,7 +738,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     rerender({ id: 'planner/bob' })
 
     await act(async () => {
-      creating.settle({ ok: true, value: chat({ id: 'chat-2' }) })
+      creating.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
       await adding
     })
 
@@ -767,7 +759,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     rerender({ id: 'planner/bob' })
 
     await act(async () => {
-      forking.settle({ ok: true, value: chat({ id: 'chat-2' }) })
+      forking.resolve({ ok: true, value: chat({ id: 'chat-2' }) })
       await expect(forked).resolves.toBe(false)
     })
 
@@ -790,7 +782,7 @@ describe('an answer that arrives after the workspace has been left', () => {
     onChats.mockClear()
 
     await act(async () => {
-      closing.settle({ ok: true, value: undefined })
+      closing.resolve({ ok: true, value: undefined })
       await closed
     })
 
@@ -1530,7 +1522,7 @@ describe('carrying a plan out in a new tab', () => {
     rerender({ id: 'planner/bob' })
 
     await act(async () => {
-      sending.settle({ ok: true, value: null })
+      sending.resolve({ ok: true, value: null })
       await expect(started).resolves.toBe(false)
     })
 

@@ -8,6 +8,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import type { Result } from '../../../preload/index.js'
 import i18n, { DEFAULT_LANGUAGE } from '../i18n/index.js'
 import { refuseSilence } from '../test/chat.js'
+import { held } from '../test/held.js'
 import { workspaceView } from '../test/workspaces.js'
 import type { ConfirmRequest, ConfirmResult } from './useConfirm.js'
 import { useWorkspaces } from './useWorkspaces.js'
@@ -59,20 +60,6 @@ const after = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 /** Lets every promise already queued run before the assertion that follows. */
 const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
-
-/** A promise the test settles by hand, so it can look at the state while it is pending. */
-const deferred = <T,>(): { promise: Promise<T>; settle: (value: T) => void } => {
-  let resolve: (value: T) => void = () => undefined
-  const promise = new Promise<T>((settle) => {
-    resolve = settle
-  })
-  return {
-    promise,
-    settle: (value) => {
-      resolve(value)
-    }
-  }
-}
 
 /**
  * Delivers a status the way main broadcasts it.
@@ -839,7 +826,7 @@ describe('useWorkspaces', () => {
   })
 
   it('lets the newer of two overlapping refreshes win', async () => {
-    const slow = deferred<Result<WorkspaceView[]>>()
+    const slow = held<Result<WorkspaceView[]>>()
     vi.mocked(window.octopus.workspaces.list)
       .mockResolvedValueOnce({ ok: true, value: [anna] })
       .mockReturnValueOnce(slow.promise)
@@ -854,7 +841,7 @@ describe('useWorkspaces', () => {
     await act(async () => {
       const older = result.current.refresh()
       await result.current.refresh()
-      slow.settle({ ok: true, value: [anna] })
+      slow.resolve({ ok: true, value: [anna] })
       await older
     })
 
@@ -862,7 +849,7 @@ describe('useWorkspaces', () => {
   })
 
   it('keeps a refresh that began after the listing for the projects', async () => {
-    const slow = deferred<Result<WorkspaceView[]>>()
+    const slow = held<Result<WorkspaceView[]>>()
     vi.mocked(window.octopus.workspaces.list)
       .mockReturnValueOnce(slow.promise)
       .mockResolvedValue({ ok: true, value: [anna, bob] })
@@ -871,7 +858,7 @@ describe('useWorkspaces', () => {
     const { result } = renderHook(() => useWorkspaces(projects, accepts(), vi.fn<OnError>()))
     await act(() => result.current.refresh())
     await act(async () => {
-      slow.settle({ ok: true, value: [anna] })
+      slow.resolve({ ok: true, value: [anna] })
       await settled()
     })
 
@@ -879,7 +866,7 @@ describe('useWorkspaces', () => {
   })
 
   it('drops a refresh that read the projects from before one was removed', async () => {
-    const stale = deferred<Result<WorkspaceView[]>>()
+    const stale = held<Result<WorkspaceView[]>>()
     vi.mocked(window.octopus.workspaces.list)
       .mockResolvedValueOnce({ ok: true, value: [anna] })
       .mockResolvedValueOnce({ ok: true, value: [carol] })
@@ -901,7 +888,7 @@ describe('useWorkspaces', () => {
       expect(result.current.byProject.has('planner')).toBe(false)
     })
     await act(async () => {
-      stale.settle({ ok: true, value: [anna] })
+      stale.resolve({ ok: true, value: [anna] })
       await refreshing
     })
 
@@ -910,7 +897,7 @@ describe('useWorkspaces', () => {
   })
 
   it('lets an older listing fill in what a newer one failed to read', async () => {
-    const slow = deferred<Result<WorkspaceView[]>>()
+    const slow = held<Result<WorkspaceView[]>>()
     vi.mocked(window.octopus.workspaces.list)
       .mockResolvedValueOnce({ ok: true, value: [anna] })
       .mockReturnValueOnce(slow.promise)
@@ -925,7 +912,7 @@ describe('useWorkspaces', () => {
     await act(async () => {
       const older = result.current.refresh()
       await result.current.refresh()
-      slow.settle({ ok: true, value: [anna, bob] })
+      slow.resolve({ ok: true, value: [anna, bob] })
       await older
     })
 
@@ -933,7 +920,7 @@ describe('useWorkspaces', () => {
   })
 
   it('still drops an older listing while a project with nothing in it cannot be read', async () => {
-    const slow = deferred<Result<WorkspaceView[]>>()
+    const slow = held<Result<WorkspaceView[]>>()
     const planned: Promise<Result<WorkspaceView[]>>[] = [
       Promise.resolve({ ok: true, value: [anna] }),
       slow.promise,
@@ -954,7 +941,7 @@ describe('useWorkspaces', () => {
     await act(async () => {
       const older = result.current.refresh()
       await result.current.refresh()
-      slow.settle({ ok: true, value: [anna] })
+      slow.resolve({ ok: true, value: [anna] })
       await older
     })
 
@@ -962,8 +949,8 @@ describe('useWorkspaces', () => {
   })
 
   it('does not report a failed listing that a newer one has overtaken', async () => {
-    const older = deferred<Result<WorkspaceView[]>>()
-    const newer = deferred<Result<WorkspaceView[]>>()
+    const older = held<Result<WorkspaceView[]>>()
+    const newer = held<Result<WorkspaceView[]>>()
     vi.mocked(window.octopus.workspaces.list)
       .mockResolvedValueOnce({ ok: true, value: [anna] })
       .mockReturnValueOnce(older.promise)
@@ -979,9 +966,9 @@ describe('useWorkspaces', () => {
     await act(async () => {
       const first = result.current.refresh()
       const second = result.current.refresh()
-      older.settle({ ok: false, error: 'could not list worktrees' })
+      older.resolve({ ok: false, error: 'could not list worktrees' })
       await first
-      newer.settle({ ok: true, value: [anna, bob] })
+      newer.resolve({ ok: true, value: [anna, bob] })
       await second
     })
 
@@ -1012,7 +999,7 @@ describe('useWorkspaces', () => {
   // the projects can change while a listing is still in flight, and the answer
   // to the older question must not overwrite the newer list.
   it('ignores a listing that arrives after the projects have changed', async () => {
-    const slow = deferred<Result<WorkspaceView[]>>()
+    const slow = held<Result<WorkspaceView[]>>()
     vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
       projectId === 'planner' ? slow.promise : Promise.resolve({ ok: true, value: [carol] })
     )
@@ -1029,7 +1016,7 @@ describe('useWorkspaces', () => {
     })
 
     await act(async () => {
-      slow.settle({ ok: true, value: [anna] })
+      slow.resolve({ ok: true, value: [anna] })
       await settled()
     })
 
