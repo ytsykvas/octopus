@@ -266,6 +266,10 @@ export function useChatTabs(
 
   const firstChatByWorkspace = useRef(new Map<string, string>())
   const bindCount = useRef(0)
+  const generation = useRef(0)
+  // Raised only by a read that is drawn: dropping an older one for a newer one
+  // that failed would leave the strip with nothing to replace it.
+  const applied = useRef(0)
 
   /*
    * The two callbacks out, held rather than depended on.
@@ -315,12 +319,13 @@ export function useChatTabs(
 
   const load = useCallback(
     async (id: string, abandoned: () => boolean) => {
+      const attempt = ++generation.current
       const before = bindCount.current
       const found = await window.octopus.chats.list(id)
-      if (abandoned()) return
+      if (abandoned() || attempt < applied.current) return
 
       if (!found.ok) {
-        report.current(describeFailure(found))
+        if (attempt === generation.current) report.current(describeFailure(found))
         return
       }
 
@@ -328,6 +333,7 @@ export function useChatTabs(
       // it would take that tab back to untouched, mid-turn.
       if (found.value.length === 0 && bindCount.current !== before) return
 
+      applied.current = attempt
       // Otherwise empty is a workspace with no conversations, perhaps one made anew
       // under a removed one's id, which must inherit neither its owner nor its strip.
       if (found.value.length === 0) firstChatByWorkspace.current.delete(id)

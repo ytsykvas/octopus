@@ -104,6 +104,48 @@ describe('the conversations a workspace already has', () => {
     })
   })
 
+  it('keeps an older read when the newer one fails', async () => {
+    const mounted = held<{ ok: true; value: Chat[] }>()
+    vi.mocked(octopus().chats.list)
+      .mockReturnValueOnce(mounted.promise)
+      .mockResolvedValue({ ok: false, error: 'state is corrupt' })
+
+    const { result } = open()
+    emitChatsChanged()
+    await waitFor(() => {
+      expect(octopus().chats.list).toHaveBeenCalledTimes(2)
+    })
+    await act(async () => {
+      mounted.settle({ ok: true, value: [chat()] })
+      await mounted.promise
+    })
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1'])
+  })
+
+  it('does not report a failed read that a newer one has overtaken', async () => {
+    const onError = vi.fn()
+    const mounted = held<{ ok: false; error: string }>()
+    const announced = held<{ ok: true; value: Chat[] }>()
+    vi.mocked(octopus().chats.list)
+      .mockReturnValueOnce(mounted.promise)
+      .mockReturnValueOnce(announced.promise)
+
+    const { result } = open({ onError })
+    emitChatsChanged()
+    await act(async () => {
+      mounted.settle({ ok: false, error: 'state is corrupt' })
+      await mounted.promise
+    })
+    await act(async () => {
+      announced.settle({ ok: true, value: [chat()] })
+      await announced.promise
+    })
+
+    expect(onError).not.toHaveBeenCalled()
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1'])
+  })
+
   it('stops drawing a conversation another window closed', async () => {
     givenChats([chat(), chat({ id: 'chat-2' })])
     const { result } = open()
@@ -255,6 +297,27 @@ describe('opening another conversation', () => {
       .mocked(octopus().chats.list)
       .mock.invocationCallOrder.find((order) => order > created)
     expect(beforeShown.mock.invocationCallOrder[0]).toBeLessThan(drawn ?? 0)
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
+  it('keeps the new conversation when an older read answers last', async () => {
+    const mounted = held<{ ok: true; value: Chat[] }>()
+    vi.mocked(octopus().chats.list)
+      .mockReturnValueOnce(mounted.promise)
+      .mockResolvedValue({ ok: true, value: [chat(), chat({ id: 'chat-2' })] })
+    vi.mocked(octopus().chats.open).mockResolvedValue({ ok: true, value: chat() })
+    vi.mocked(octopus().chats.create).mockResolvedValue({ ok: true, value: chat({ id: 'chat-2' }) })
+
+    const { result } = open()
+    await act(async () => {
+      await result.current.create()
+    })
+    await act(async () => {
+      mounted.settle({ ok: true, value: [chat()] })
+      await mounted.promise
+    })
+
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['chat-1', 'chat-2'])
     expect(result.current.activeKey).toBe('chat-2')
   })
 

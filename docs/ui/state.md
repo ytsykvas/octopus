@@ -85,7 +85,9 @@ projects from before a removal cannot bring the removed one back. A listing that
 fails for a project keeps the workspaces it had and reports why, since emptying
 it unmounted the open conversation; a project with none, or never listed, stays
 empty and silent, and its failure does not stop the listing counting as drawn.
-Only the newest listing reports a failure.
+`useChatTabs.load` numbers every read of the strip, so a read started before
+`create` cannot take the new tab away. In both, only the newest read reports a
+failure.
 
 **A hook that listens to chat events says whose it is listening for.** Events are
 broadcast to every window and cover every conversation, so a subscription that
