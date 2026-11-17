@@ -2477,6 +2477,7 @@ export const en = {
     headNotOnBranch:
       'HEAD is not on this workspace\u2019s branch {{branch}}. Nothing was committed or pushed \u2014 check it out in the terminal first.',
     closeFailed: 'GitHub would not close #{{number}}. It said: {{reason}}',
+    inWorkspace: 'In {{workspace}}: {{reason}}',
     nothingToRerun: 'No GitHub Actions run of #{{number}} can be re-run right now.',
     rerunFailed: 'GitHub would not re-run the checks of #{{number}}. It said: {{reason}}',
     /* No number on either: a reply and a resolve are addressed to a thread, and

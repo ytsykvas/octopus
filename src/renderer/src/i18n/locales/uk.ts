@@ -1992,6 +1992,7 @@ export const uk: Translation = {
     headNotOnBranch:
       'HEAD не на гілці {{branch}} цього воркспейсу. Нічого не закомічено й не запушено — спершу перемкніться на неї в терміналі.',
     closeFailed: 'GitHub не закрив #{{number}}. Каже: {{reason}}',
+    inWorkspace: 'У {{workspace}}: {{reason}}',
     nothingToRerun: 'Зараз немає запуску GitHub Actions у #{{number}}, який можна перезапустити.',
     rerunFailed: 'GitHub не перезапустив перевірки #{{number}}. Каже: {{reason}}',
     replyFailed: 'GitHub не опублікував відповідь. Каже: {{reason}}',

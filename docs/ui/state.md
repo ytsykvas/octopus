@@ -76,6 +76,18 @@ render-time reset that clears the view clears `creating`, `drafting` and the
 action's error with it, or a refusal about the branch just left is shown against
 the one arrived at.
 
+An action already on its way is not reset, because it is still running, so it
+is held per workspace instead. `usePendingIn` keeps a set of
+workspace-and-action pairs. `PullRequestPanel` holds its actions in it, and
+`App` the header's Merge and Close. A merge in one workspace disables nothing in
+the next, and coming back finds `Merging…` still drawn. Each pair goes when its
+own call answers, so the set needs no `forget`. What runs after the answer asks
+`useShownWorkspace` what is on screen by then. A refusal for a workspace that
+was left reaches the banner named for it (`errors.inWorkspace`). The pane does
+not read again (`readAgain`), because `refresh` reads whichever workspace is
+showing, and coming back reads anyway. The project's list of requests is read
+either way: it marks every branch, not the one on screen.
+
 The counter also settles two reads of one thing that overlap, where the one that
 answers last is not the one asked last. There a reply is dropped only where a
 newer one has been drawn: dropped for a newer read that then fails, it would

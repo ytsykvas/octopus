@@ -2089,6 +2089,168 @@ describe('what the tab can do about a request', () => {
     expect(await within(await nextStep()).findByRole('button', { name: 'Push' })).toBeEnabled()
   })
 
+  it('leaves the next workspace free while a merge is on its way', async () => {
+    const user = userEvent.setup()
+    const merging = held<{ ok: true; value: undefined }>()
+    vi.mocked(octopus().workspaces.mergePullRequest).mockReturnValue(merging.promise)
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    const { showWorkspace } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Merge' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Squash and merge' }))
+    expect(within(await nextStep()).getByRole('button', { name: 'Merging…' })).toBeDisabled()
+
+    showWorkspace(workspaceView('bruno', { projectId: 'atlas' }))
+    expect(await within(await nextStep()).findByRole('button', { name: 'Merge' })).toBeEnabled()
+    const merge = await showView(user, 'Merge')
+    expect(within(merge).getByRole('button', { name: 'Close pull request' })).toBeEnabled()
+
+    showWorkspace(anna)
+    expect(await within(await nextStep()).findByRole('button', { name: 'Merging…' })).toBeDisabled()
+  })
+
+  it('names the workspace a refusal belongs to once it has been left', async () => {
+    const user = userEvent.setup()
+    const refusal = {
+      ok: false as const,
+      error: 'not mergeable',
+      code: 'mergeFailed',
+      params: { number: '7', reason: 'not mergeable' }
+    }
+    const late = held<typeof refusal>()
+    vi.mocked(octopus().workspaces.mergePullRequest)
+      .mockResolvedValueOnce(refusal)
+      .mockReturnValueOnce(late.promise)
+    answer(view({ request: request() }))
+    answerDetail(detail())
+    const { onError, showWorkspace } = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: 'Merge' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Merge commit' }))
+    await waitFor(() => {
+      expect(onError).toHaveBeenLastCalledWith('GitHub would not merge #7. It said: not mergeable')
+    })
+
+    await user.click(await screen.findByRole('button', { name: 'Merge' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Merge commit' }))
+    showWorkspace(workspaceView('bruno', { projectId: 'atlas' }))
+    await act(async () => {
+      late.resolve(refusal)
+      await Promise.resolve()
+    })
+
+    expect(onError).toHaveBeenLastCalledWith(
+      'In anna: GitHub would not merge #7. It said: not mergeable'
+    )
+  })
+
+  const LATE: readonly {
+    readonly action: string
+    readonly given: PullRequestView
+    readonly read?: PullRequestDetail
+    readonly hold: (answer: Promise<{ ok: true; value: undefined }>) => void
+    readonly press: (user: User) => Promise<void>
+    readonly drawn: () => Promise<unknown>
+  }[] = [
+    {
+      action: 'a merge',
+      given: view({ request: request() }),
+      hold: (answer) => vi.mocked(octopus().workspaces.mergePullRequest).mockReturnValue(answer),
+      press: async (user) => {
+        await user.click(await screen.findByRole('button', { name: 'Merge' }))
+        await user.click(screen.getByRole('menuitem', { name: 'Squash and merge' }))
+      },
+      drawn: nextStep
+    },
+    {
+      action: 'a close',
+      given: view({ request: request() }),
+      hold: (answer) => vi.mocked(octopus().workspaces.closePullRequest).mockReturnValue(answer),
+      press: async (user) => {
+        await user.click(await screen.findByRole('button', { name: 'Close pull request' }))
+      },
+      drawn: nextStep
+    },
+    {
+      action: 'a re-run',
+      given: view({ request: request() }),
+      read: detail({ checks: [failing()] }),
+      hold: (answer) => vi.mocked(octopus().workspaces.rerunChecks).mockReturnValue(answer),
+      press: async (user) => {
+        await user.click(await screen.findByRole('button', { name: 'Failed' }))
+      },
+      drawn: nextStep
+    },
+    {
+      action: 'a commit',
+      given: view({ request: request(), dirty: true }),
+      hold: (answer) => vi.mocked(octopus().workspaces.commitAndPush).mockReturnValue(answer),
+      press: async (user) => {
+        await user.type(await screen.findByRole('textbox', { name: 'Commit message' }), 'Widen')
+        await user.click(screen.getByRole('button', { name: 'Commit & push' }))
+      },
+      drawn: nextStep
+    },
+    {
+      action: 'a push',
+      given: view({ request: request(), unpushedCommits: 1 }),
+      hold: (answer) => vi.mocked(octopus().workspaces.push).mockReturnValue(answer),
+      press: async (user) => {
+        await user.click(within(await nextStep()).getByRole('button', { name: 'Push' }))
+      },
+      drawn: nextStep
+    },
+    {
+      action: 'an update from the base',
+      given: view({
+        previous: {
+          number: 238,
+          state: 'merged',
+          url: 'https://github.com/o/p/pull/238',
+          needsBase: true
+        }
+      }),
+      hold: (answer) => vi.mocked(octopus().workspaces.updateFromBase).mockReturnValue(answer),
+      press: async (user) => {
+        await user.click(await screen.findByRole('button', { name: 'Update from main' }))
+      },
+      drawn: () => screen.findByRole('button', { name: 'Update from main' })
+    }
+  ]
+
+  it.each(LATE)(
+    'does not read again for a workspace left before $action answered',
+    async ({ given, read, hold, press, drawn }) => {
+      const user = userEvent.setup()
+      const late = held<{ ok: true; value: undefined }>()
+      hold(late.promise)
+      answer(given)
+      answerDetail(read ?? detail())
+      const { showWorkspace } = renderPanel()
+
+      await press(user)
+      showWorkspace(workspaceView('bruno', { projectId: 'atlas' }))
+      await drawn()
+      const reads = vi.mocked(octopus().workspaces.pullRequest).mock.calls.length
+      const detailReads = vi.mocked(octopus().workspaces.pullRequestDetail).mock.calls.length
+
+      await act(async () => {
+        late.resolve({ ok: true, value: undefined })
+        await Promise.resolve()
+      })
+
+      expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(reads)
+      expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(detailReads)
+
+      showWorkspace(anna)
+      await waitFor(() => {
+        expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(reads + 1)
+      })
+      expect(octopus().workspaces.pullRequest).toHaveBeenLastCalledWith(anna.id)
+    }
+  )
+
   it('says why GitHub would not merge', async () => {
     const user = userEvent.setup()
     answer(view({ request: request() }))
