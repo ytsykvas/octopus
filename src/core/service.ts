@@ -4298,7 +4298,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // Every stamp is a registered session's — written with it, taken away
       // with it — so this is for the type, which cannot know that.
       /* v8 ignore next */
-      if (!session || nowMs - since < idleReleaseMs) continue
+      if (!session) continue
+      if (nowMs - since < idleReleaseMs) continue
       const chat = atRest(chatId)
       if (chat) background(chat, releaseSession(chatId, session))
     }
