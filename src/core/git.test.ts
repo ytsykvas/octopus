@@ -653,10 +653,13 @@ describe('toSlug', () => {
   it('collapses repeated dashes and dots', () => {
     expect(toSlug('a   b')).toBe('a-b')
     expect(toSlug('a..b')).toBe('a.b')
+    expect(toSlug('a--b')).toBe('a-b')
   })
 
   it('drops the .lock suffix that git reserves', () => {
     expect(toSlug('branch.lock')).toBe('branch')
+    expect(toSlug('x.lock.lock')).toBe('x')
+    expect(toSlug('x.lock-')).toBe('x')
   })
 
   it('strips control characters', () => {
@@ -666,6 +669,19 @@ describe('toSlug', () => {
   it('falls back to a usable name when nothing valid remains', () => {
     expect(toSlug('~~~')).toBe('project')
     expect(toSlug('')).toBe('project')
+  })
+
+  it('cleans each part between slashes, as git checks each, and keeps the slashes', () => {
+    expect(toSlug('fix/')).toBe('fix')
+    expect(toSlug('/fix')).toBe('fix')
+    expect(toSlug('a//b')).toBe('a/b')
+    expect(toSlug('x/.hidden')).toBe('x/hidden')
+    expect(toSlug('x.lock/y')).toBe('x/y')
+    expect(toSlug('a-/b')).toBe('a/b')
+    expect(toSlug('///')).toBe('project')
+    expect(toSlug('Fix/Login')).toBe('fix/login')
+    expect(toSlug('fix/~')).toBe('fix')
+    expect(toSlug('a/../b')).toBe('a/b')
   })
 })
 
@@ -693,7 +709,15 @@ describe('toSlug produces something git will accept as a branch', () => {
     'CAPS',
     '...',
     '@',
-    'ім’я з апострофом'
+    'ім’я з апострофом',
+    'fix/',
+    '/fix',
+    'a//b',
+    'x/.hidden',
+    'x.lock/y',
+    'x.lock.lock',
+    'a/../b',
+    '///'
   ]
 
   for (const input of HOSTILE) {

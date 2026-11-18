@@ -567,24 +567,27 @@ export function repositoryName(repoRoot: string): string {
   return basename(repoRoot)
 }
 
-/**
- * Turns an arbitrary string into a slug safe for directories and branches.
- *
- * Unicode is deliberately preserved: git accepts UTF-8 in branch names, and
- * non-Latin names should stay readable. Only what git actually rejects is
- * stripped (`git check-ref-format`): whitespace, `~^:?*[\`, control
- * characters, double dots, leading/trailing dots and dashes, `.lock` suffix.
- */
+// `/` stays so a name can nest, and git checks each part between slashes on its own.
 export function toSlug(value: string): string {
   const slug = value
     .toLowerCase()
-    // eslint-disable-next-line no-control-regex -- control characters are exactly what git rejects
-    .replace(/[\u0000-\u001f\u007f]+/g, '')
-    .replace(/[\s~^:?*[\]\\@{}]+/g, '-')
-    .replace(/\.{2,}/g, '.')
-    .replace(/-{2,}/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
-    .replace(/\.lock$/, '')
+    .split('/')
+    .map(slugSegment)
+    .filter((segment) => segment !== '')
+    .join('/')
 
   return slug || 'project'
+}
+
+function slugSegment(segment: string): string {
+  return (
+    segment
+      // eslint-disable-next-line no-control-regex -- control characters are exactly what git rejects
+      .replace(/[\u0000-\u001f\u007f]+/g, '')
+      .replace(/[\s~^:?*[\]\\@{}]+/g, '-')
+      .replace(/\.{2,}/g, '.')
+      .replace(/-{2,}/g, '-')
+      .replace(/^[-.]+|[-.]+$/g, '')
+      .replace(/(\.lock)+$/, '')
+  )
 }
