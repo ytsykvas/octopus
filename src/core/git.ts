@@ -13,6 +13,7 @@ import { promisify } from 'node:util'
 
 import { DEFAULT_REMOTE } from './branches.js'
 import { describeError } from './persist.js'
+import { gitCommand } from './shellCommand.js'
 
 const run = promisify(execFile)
 
@@ -123,6 +124,25 @@ export interface GitOptions {
   readonly env?: Readonly<Record<string, string>>
 }
 
+// Empty rather than `false`: before git 2.36 the value names a program, and `false` would run.
+const READ_HARDENING = ['-c', 'core.fsmonitor=', '-c', 'core.hooksPath=/dev/null'] as const
+
+// Writes read the index too and stay out, for the user's hooks; a new index read belongs here.
+// `update-index` writes, but only ever to the kept copy (`keptIndexCopies`).
+const INDEX_READERS: ReadonlySet<string> = new Set([
+  'status',
+  'diff',
+  'ls-files',
+  'check-ignore',
+  'update-index'
+])
+
+export function hardenedArgs(args: readonly string[]): readonly string[] {
+  return INDEX_READERS.has(gitCommand(['git', ...args])?.command ?? '')
+    ? [...READ_HARDENING, ...args]
+    : args
+}
+
 /**
  * Creates an executor bound to a repository directory.
  *
@@ -135,7 +155,7 @@ export function gitIn(cwd: string, options: GitOptions = {}): GitExec {
 
   return async (args) => {
     try {
-      const { stdout } = await run('git', [...args], {
+      const { stdout } = await run('git', [...hardenedArgs(args)], {
         cwd,
         maxBuffer,
         timeout,
