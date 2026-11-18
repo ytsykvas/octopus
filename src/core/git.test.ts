@@ -6,7 +6,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -36,7 +36,8 @@ import {
   resolveRef,
   toSlug,
   reasonFrom,
-  keptIndexCopies
+  keptIndexCopies,
+  hardenedArgs
 } from './git.js'
 
 const run = promisify(execFile)
@@ -52,6 +53,20 @@ async function initRepo(path: string): Promise<void> {
   await writeFile(join(path, 'README.md'), '# test\n', 'utf8')
   await run('git', ['add', '.'], { cwd: path })
   await run('git', ['commit', '-q', '-m', 'first'], { cwd: path })
+}
+
+async function logRepositoryHooks(path: string): Promise<() => Promise<string>> {
+  const log = join(path, '.git', 'ran.log')
+  const logs = (name: string): string => `#!/bin/sh\necho ${name} >> "${log}"\nexit 1\n`
+  const monitor = join(path, '.git', 'fsmonitor-hook')
+
+  await writeFile(monitor, logs('fsmonitor'), { mode: 0o755 })
+  await writeFile(join(path, '.git', 'hooks', 'post-index-change'), logs('post-index-change'), {
+    mode: 0o755
+  })
+  await run('git', ['config', 'core.fsmonitor', monitor], { cwd: path })
+
+  return () => readFile(log, 'utf8').catch(() => '')
 }
 
 let remoteDir: string | null = null
@@ -150,6 +165,72 @@ describe('gitIn', () => {
   it('leaves the inherited environment alone when given none', async () => {
     await initRepo(dir)
     await expect(exec(['var', 'GIT_AUTHOR_IDENT'])).resolves.toContain('test@example.com')
+  })
+
+  it('asks no fsmonitor the repository set when a command reads the index', async () => {
+    await initRepo(dir)
+    const ran = await logRepositoryHooks(dir)
+
+    await exec(['ls-files'])
+    expect(await ran()).toBe('')
+
+    await exec(['add', 'README.md'])
+    expect(await ran()).toContain('fsmonitor')
+  })
+
+  it('names the command as it was given, not as git ran it', async () => {
+    await initRepo(dir)
+
+    await expect(exec(['ls-files', '--no-such-flag'])).rejects.toMatchObject({
+      args: ['ls-files', '--no-such-flag']
+    })
+  })
+
+  it('runs no hook the repository installed when a read writes the index back', async () => {
+    await initRepo(dir)
+    const ran = await logRepositoryHooks(dir)
+    const later = new Date(Date.now() + 60_000)
+    await utimes(join(dir, 'README.md'), later, later)
+
+    await exec(['status', '--porcelain'])
+    expect(await ran()).toBe('')
+
+    await exec(['add', 'README.md'])
+    expect(await ran()).toContain('post-index-change')
+  })
+})
+
+describe('hardenedArgs', () => {
+  it.each([
+    [['status', '--porcelain']],
+    [['--no-optional-locks', 'status', '--porcelain', '-uall']],
+    [['-c', 'core.quotePath=false', 'diff', '--numstat', '-z']],
+    [['ls-files', '-z', '--stage']],
+    [['check-ignore', '-q', '--', './.env']],
+    [['update-index', '-q', '--unmerged', '--refresh', '--force-write-index']]
+  ])('leaves fsmonitor and hooks out of %j, which reads the index', (args) => {
+    expect(hardenedArgs(args)).toEqual([
+      '-c',
+      'core.fsmonitor=',
+      '-c',
+      'core.hooksPath=/dev/null',
+      ...args
+    ])
+  })
+
+  it.each([
+    [['add', '-A']],
+    [['commit', '-m', 'x']],
+    [['push', '-u', 'origin', 'main']],
+    [['merge', '--no-edit', 'main']],
+    [['checkout', 'main', '--', 'a.txt']],
+    [['worktree', 'add', '--no-track', '-b', 'b', '../b', 'main']],
+    [['fetch', 'origin']],
+    [['branch', '-m', 'a', 'b']],
+    [['rev-parse', '--git-path', 'index']],
+    [['--version']]
+  ])('hands %j to git as it is', (args) => {
+    expect(hardenedArgs(args)).toBe(args)
   })
 })
 
@@ -903,6 +984,20 @@ describe('keptIndexCopies', () => {
     const staged = await withIndexCopy(dir, gitIn, stagedFiles)
 
     expect(staged.trim()).toBe('staged.txt')
+  })
+
+  it("makes and reads the copy with none of the repository's fsmonitor or hooks", async () => {
+    const ran = await logRepositoryHooks(dir)
+    const later = new Date(Date.now() + 60_000)
+    await utimes(join(dir, 'README.md'), later, later)
+
+    const sides = await withIndexCopy(dir, gitIn, async (copy) => {
+      const afterCopy = await ran()
+      await copy(['status', '--porcelain'])
+      return { afterCopy, afterRead: await ran() }
+    })
+
+    expect(sides).toEqual({ afterCopy: '', afterRead: '' })
   })
 
   it('leaves the real index alone while git refreshes', async () => {

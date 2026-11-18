@@ -177,6 +177,36 @@ the file sides at once, and each resolved the base on its own. Nothing is ever
 answered from an older resolution, so the callers that act on the answer use it
 too.
 
+## A background read runs no fsmonitor and no hook
+
+The app reads every worktree on its own — the Changes pane, the Files tab, the
+counts, the pull request pane — as a turn ends and when the window comes back.
+On such a read git would run two things a repository configures for itself: the
+program in `core.fsmonitor`, asked whenever the index is read, and the
+`post-index-change` hook, whenever a read writes the index back. A repository
+added from disk brings its own `.git/config` and `.git/hooks`, and every
+worktree of the project shares them, so either would run on the app's next read
+of any of them, which nobody has to ask for.
+
+So `gitIn` puts `-c core.fsmonitor= -c core.hooksPath=/dev/null` in front of
+the commands that read the index — `status`, `diff`, `ls-files`, `check-ignore`,
+and `update-index`, which runs only on the kept index copy (`hardenedArgs` in
+`git.ts`). The value is empty rather than `false` because before git 2.36 it is
+a program's path, and `false` would be run. Commands that never open the index
+(`rev-parse`, `rev-list`, `merge-base`) ask neither and are left alone. Writes
+are left alone on purpose — `add`, `commit`, `push`, `merge`, `checkout`,
+`worktree add` — because the user's pre-commit and pre-push hooks belong there,
+as they do in the terminal. With the built-in monitor running, a read without it
+measured about the same on 20,000 files: 32 ms for `status` where the monitor
+took 29, and 22 ms for a diff where it took 34.
+
+Still the repository's to run on a read: a clean filter named in
+`.gitattributes` and defined in the local config, `git lfs` among them, which
+`status` and `diff` run for a file whose times moved — its name is the
+repository's, so no single flag turns every one off — and, on the reads of
+`origin`, the `core.sshCommand`, `remote.origin.uploadpack` and credential
+helper its config names.
+
 ## An operation that fails cleans up after itself
 
 Creating a workspace makes a directory, a branch and a record. If the record

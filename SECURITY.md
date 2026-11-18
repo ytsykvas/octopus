@@ -90,6 +90,15 @@ service of its own — so most of the usual surface does not exist. What does:
   repository copy in a file from elsewhere on the machine, one a commit would
   publish, or any file without trust, is as serious as the items above.
 
+- **A repository's git configuration on the app's own reads.** The app reads
+  every worktree in the background, and git runs the repository's
+  `core.fsmonitor` program and `post-index-change` hook on reads of the index —
+  from `.git/config` and `.git/hooks`, which a checkout added from disk brings
+  with it. Both are turned off on every read the app makes itself; one that
+  still runs on such a read is worth reporting. Writes keep the user's hooks on
+  purpose, and a clean filter still runs on a read — see
+  [docs/core/workspaces-and-git.md](docs/core/workspaces-and-git.md).
+
 - **Anything reaching a process argument.** External commands go through
   `execFile` with an argument array, and values crossing IPC are parsed with zod
   at the boundary. A path that reaches an argument unvalidated — branch names
