@@ -729,6 +729,15 @@ describe('renameWorkspace', () => {
     )
   })
 
+  it('renames onto a branch git accepts when the name ends in a slash', async () => {
+    const workspace = await create()
+
+    const renamed = await renameWorkspace(workspace, project, 'fix/', exec)
+
+    expect(renamed).toMatchObject({ name: 'fix/', branch: 'ytsykvas/feature/fix' })
+    await expect(exec(['branch', '--list', 'ytsykvas/feature/fix'])).resolves.toContain('fix')
+  })
+
   // The directory is fixed at creation because `git worktree move` fails
   // whenever something is running inside it.
   it('leaves the directory where it was', async () => {

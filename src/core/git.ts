@@ -207,7 +207,9 @@ async function stampOf(path: string): Promise<string> {
  * rather than an empty answer: pointed at a copy that is not there, git would
  * call every tracked file deleted.
  */
-export function keptIndexCopies(): IndexCopyReader {
+export function keptIndexCopies(
+  readStamp: (path: string) => Promise<string> = stampOf
+): IndexCopyReader {
   const kept = new Map<string, KeptCopy>()
 
   async function makeCopy(
@@ -252,17 +254,23 @@ export function keptIndexCopies(): IndexCopyReader {
     kept.set(index, held)
 
     for (;;) {
+      // Asked each time round rather than once: a read that waited out a copy
+      // compares the copy with the index as it is now, not as it was.
+      const present = await exists(copy)
+      const stamp = await readStamp(index)
+      // After the awaits, not before: a copy another read started meanwhile
+      // would be read half made, or made a second time.
       if (held.copying !== null) {
         await held.copying
         continue
       }
-      // Asked each time round rather than once: a read that waited out a copy
-      // compares the copy with the index as it is now, not as it was.
-      const stamp = await stampOf(index)
-      if (held.stamp === stamp && (await exists(copy))) break
+      if (present && held.stamp === stamp) break
       held.copying = makeCopy(cwd, makeExec, index, copy, held, stamp).finally(() => {
         held.copying = null
       })
+      // Awaited at once: the awaits atop the loop can outlast a failed copy,
+      // leaving its rejection unheard and the copy made again.
+      await held.copying
     }
 
     const reading = read(makeExec(cwd, { env: { GIT_INDEX_FILE: copy } }))
@@ -567,24 +575,27 @@ export function repositoryName(repoRoot: string): string {
   return basename(repoRoot)
 }
 
-/**
- * Turns an arbitrary string into a slug safe for directories and branches.
- *
- * Unicode is deliberately preserved: git accepts UTF-8 in branch names, and
- * non-Latin names should stay readable. Only what git actually rejects is
- * stripped (`git check-ref-format`): whitespace, `~^:?*[\`, control
- * characters, double dots, leading/trailing dots and dashes, `.lock` suffix.
- */
+// `/` stays so a name can nest, and git checks each part between slashes on its own.
 export function toSlug(value: string): string {
   const slug = value
     .toLowerCase()
-    // eslint-disable-next-line no-control-regex -- control characters are exactly what git rejects
-    .replace(/[\u0000-\u001f\u007f]+/g, '')
-    .replace(/[\s~^:?*[\]\\@{}]+/g, '-')
-    .replace(/\.{2,}/g, '.')
-    .replace(/-{2,}/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
-    .replace(/\.lock$/, '')
+    .split('/')
+    .map(slugSegment)
+    .filter((segment) => segment !== '')
+    .join('/')
 
   return slug || 'project'
+}
+
+function slugSegment(segment: string): string {
+  return (
+    segment
+      // eslint-disable-next-line no-control-regex -- control characters are exactly what git rejects
+      .replace(/[\u0000-\u001f\u007f]+/g, '')
+      .replace(/[\s~^:?*[\]\\@{}]+/g, '-')
+      .replace(/\.{2,}/g, '.')
+      .replace(/-{2,}/g, '-')
+      .replace(/^[-.]+|[-.]+$/g, '')
+      .replace(/(\.lock)+$/, '')
+  )
 }

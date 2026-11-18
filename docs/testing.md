@@ -161,7 +161,9 @@ Questions worth asking, from the audit that found the above:
 | Ask                                          | Because                                                                                                             |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | what does a hostile name become              | `toSlug` output goes straight into `git branch`, which rejects `.lock`, `..`, leading `-`, `@{`, control characters |
+| what does a slash in a name become           | git checks every part between slashes: `fix/`, `a//b`, `x/.hidden` and `x.lock/y` are all refused                   |
 | what happens on collision                    | the pool is twenty blocks, and the port a probe finds free can be taken by the time a server binds                  |
+| what do two reads arriving together do       | a check made before an `await` is stale after it: another read may have started the work                            |
 | what does a half-written file look like      | a crash between temp-write and rename leaves the temp behind                                                        |
 | what does the tool print about a stale entry | `prunable`, `locked` and `bare` lines the parser had never seen                                                     |
 
