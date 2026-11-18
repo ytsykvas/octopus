@@ -853,6 +853,45 @@ describe('keptIndexCopies', () => {
 
   const stagedFiles = (copy: GitExec): Promise<string> => copy(['diff', '--cached', '--name-only'])
 
+  // keptIndexCopies awaits readStamp just before it checks `copying`, so a released read checks it
+  // before the copy's git process can exit: no test here waits on the clock.
+  function heldStamps(): {
+    readStamp: (path: string) => Promise<string>
+    hold: () => { asked: Promise<void>; release: () => void }
+  } {
+    let next: (() => Promise<void>) | null = null
+    const readStamp = async (path: string): Promise<string> => {
+      const stamp = await stampOf(path)
+      const wait = next
+      next = null
+      if (wait !== null) await wait()
+      return stamp
+    }
+    const hold = (): { asked: Promise<void>; release: () => void } => {
+      let release = (): void => undefined
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let ask = (): void => undefined
+      const asked = new Promise<void>((resolve) => {
+        ask = resolve
+      })
+      next = () => {
+        ask()
+        return released
+      }
+      return { asked, release }
+    }
+    return { readStamp, hold }
+  }
+
+  function aroundWrites(write: (git: () => Promise<string>) => Promise<string>): typeof gitIn {
+    return (cwd, options) => {
+      const exec = gitIn(cwd, options)
+      return (args) => (args.includes('--force-write-index') ? write(() => exec(args)) : exec(args))
+    }
+  }
+
   beforeEach(async () => {
     await initRepo(dir)
   })
@@ -974,6 +1013,108 @@ describe('keptIndexCopies', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+
+  it('makes one copy when two reads find the index changed at once', async () => {
+    const { readStamp, hold } = heldStamps()
+    const keeper = keptIndexCopies(readStamp)
+    await writeFile(join(dir, 'staged.txt'), 'staged\n', 'utf8')
+    await run('git', ['add', 'staged.txt'], { cwd: dir })
+    const { release } = hold()
+    let writes = 0
+    const make = aroundWrites((git) => {
+      writes += 1
+      release()
+      return git()
+    })
+
+    const reads = await Promise.allSettled([
+      keeper(dir, make, stagedFiles),
+      keeper(dir, make, stagedFiles)
+    ])
+
+    expect(writes).toBe(1)
+    expect(reads).toEqual([
+      { status: 'fulfilled', value: 'staged.txt\n' },
+      { status: 'fulfilled', value: 'staged.txt\n' }
+    ])
+  })
+
+  it('reads no copy that another read has started making again', async () => {
+    const { readStamp, hold } = heldStamps()
+    const keeper = keptIndexCopies(readStamp)
+    await keeper(dir, gitIn, stagedFiles)
+    const { asked, release } = hold()
+    const events: string[] = []
+    const make = aroundWrites(async (git) => {
+      events.push('copy starts')
+      release()
+      const written = await git()
+      events.push('copy ends')
+      return written
+    })
+
+    const first = keeper(dir, make, (copy) => {
+      events.push('read')
+      return stagedFiles(copy)
+    })
+    await asked
+    await writeFile(join(dir, 'staged.txt'), 'staged\n', 'utf8')
+    await run('git', ['add', 'staged.txt'], { cwd: dir })
+    const reads = await Promise.allSettled([first, keeper(dir, make, stagedFiles)])
+
+    expect(events).toEqual(['copy starts', 'copy ends', 'read'])
+    expect(reads).toEqual([
+      { status: 'fulfilled', value: 'staged.txt\n' },
+      { status: 'fulfilled', value: 'staged.txt\n' }
+    ])
+  })
+
+  it('compares a copy it waited out with the index as it is now', async () => {
+    const { readStamp, hold } = heldStamps()
+    const keeper = keptIndexCopies(readStamp)
+    let writing = (): void => undefined
+    const written = new Promise<void>((resolve) => {
+      writing = resolve
+    })
+    let open = (): void => undefined
+    const gate = new Promise<void>((resolve) => {
+      open = resolve
+    })
+    const make = aroundWrites(async (git) => {
+      writing()
+      await gate
+      return git()
+    })
+
+    const first = keeper(dir, make, stagedFiles)
+    await written
+    const { asked, release } = hold()
+    const second = keeper(dir, make, stagedFiles)
+    await asked
+    release()
+    await writeFile(join(dir, 'staged.txt'), 'staged\n', 'utf8')
+    await run('git', ['add', 'staged.txt'], { cwd: dir })
+    open()
+    const reads = await Promise.allSettled([first, second])
+
+    expect(reads).toEqual([
+      { status: 'fulfilled', value: 'staged.txt\n' },
+      { status: 'fulfilled', value: 'staged.txt\n' }
+    ])
+  })
+
+  it('hands a failed copy to the read that started it', async () => {
+    let asked = 0
+    const keeper = keptIndexCopies(async (path) => {
+      asked += 1
+      if (asked > 1) throw new Error('looked again before the copy settled')
+      return stampOf(path)
+    })
+    const failure = new Error('the copy gave up')
+    const make = aroundWrites(() => Promise.reject(failure))
+
+    await expect(keeper(dir, make, stagedFiles)).rejects.toBe(failure)
   })
 
   // The read's own failure is the one reported, and it holds nothing up.
