@@ -135,6 +135,14 @@ window started, and the inspector is a console with `window.octopus` in it.
 `webPreferencesFor` in `windows.ts` turns the inspector off as well, so ⌥⌘I
 does nothing either; `npm run dev` keeps both.
 
+`permissions.ts` answers what the page may ask Chromium for. Electron grants
+everything by default — the microphone, notifications, the location — to any
+content in the window. Measured over startup, a terminal and the copy buttons,
+the page asks for one thing: `clipboard-sanitized-write`, behind
+`navigator.clipboard.writeText`. That is granted to the application's own
+document (`isAppDocument`, the rule navigation uses) and every other request
+and check is refused; the sounds need no permission and still play.
+
 `files:open` hands a path to `shell.openPath`, which starts as readily as it
 shows: LaunchServices runs an `.app`, a `.command` or an executable, and a file
 the agent wrote carries no quarantine for Gatekeeper to ask about.

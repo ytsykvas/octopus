@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron'
 
 import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
@@ -30,6 +30,7 @@ import { focusExisting, webPreferencesFor } from './windows.js'
 import { menuTemplate } from './menu.js'
 import { openInBrowser } from './externalLinks.js'
 import { guardNavigation } from './navigation.js'
+import { guardPermissions } from './permissions.js'
 import { quitAfter } from './quit.js'
 import { reportLoadFailure, reportRejection, watchRendererCrash } from './crash.js'
 
@@ -242,6 +243,7 @@ async function start(): Promise<void> {
     openPath: (path) => shell.openPath(path)
   })
   watchSystemTheme(service)
+  guardPermissions(session.defaultSession, appUrl)
   registerMenu()
   createWindow(resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors), terminals)
 
