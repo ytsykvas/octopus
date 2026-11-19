@@ -30,6 +30,15 @@ asarUnpack:
   - node_modules/node-pty/**
   - node_modules/@anthropic-ai/claude-agent-sdk-*/**
 
+# Without the ad hoc re-sign after the flip an unsigned build does not start (docs/releasing.md).
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  resetAdHocDarwinSignature: true
+
 mac:
   category: public.app-category.developer-tools
   icon: build/icon.icns
@@ -43,7 +52,8 @@ mac:
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
+  # The helpers, node-pty's spawn-helper and the bundled claude binary.
+  entitlementsInherit: build/entitlements.mac.inherit.plist
   # macOS 15 refuses an unsigned download outright rather than warning, so an
   # unsigned build needs the instructions in docs/releasing.md.
   minimumSystemVersion: '13.0'

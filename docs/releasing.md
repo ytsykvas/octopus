@@ -94,6 +94,16 @@ If either stops being unpacked, the app still starts and still looks fine. The
 terminal fails to open, or chat fails on the first message. Neither shows up in
 `npm run dev`, which is why the checklist below exists.
 
+The binary refuses to run anything but the app it carries. Electron's fuses are
+flipped as it is packaged (`electronFuses` in `electron-builder.yml`, pinned
+with both entitlement files by `scripts/buildHardening.test.ts`):
+`ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS` and `--inspect` do nothing, and the app
+loads only from `app.asar`, whose hash is checked against `Info.plist`. Without
+them any local process could start the binary as plain Node and run its own
+code under this app's name. Flipping them edits the binary, so it is re-signed
+ad hoc straight after (`resetAdHocDarwinSignature`) — measured: without that an
+unsigned build fails `codesign --verify` and does not start.
+
 ## Why nobody downloads this
 
 A build you made yourself opens with no prompt of any kind — verified, and easy
@@ -161,6 +171,20 @@ Signatures carry a trusted timestamp, so builds already shipped keep working
 after the certificate expires or the membership lapses. Only new builds need a
 live membership.
 
+A signed build runs under the hardened runtime, and its entitlements are what it
+may still do: `build/entitlements.mac.plist` for the app,
+`build/entitlements.mac.inherit.plist` for what runs inside the bundle — the
+helpers, node-pty's `spawn-helper` and the `claude` binary. Both hold the two
+keys a JIT needs; `claude`, a Bun binary, crashes without them. The app keeps
+library validation, since everything it loads is signed by one team. The
+inherit file turns it off: `claude` carries its voice and computer-use modules
+(`audio-capture.node`, `libComputerUseSwift.dylib`) signed only ad hoc and loads
+them when they are used — Anthropic's own signature disables it for the same
+reason. None of this has been run on a real certificate: an ad hoc signature
+has no team, so library validation refuses Electron's own framework there. An
+unsigned `npm run dist` applies neither file — its binary carries no hardened
+runtime at all.
+
 Verify the result:
 
 ```bash
@@ -185,7 +209,12 @@ whole section exists for.
 - [ ] a terminal opens — `node-pty` survived the asar;
 - [ ] a chat gets a reply — the bundled agent binary is reachable;
 - [ ] the icon is right in Finder, the Dock and the menu bar, and the menu
-      reads "Octopus".
+      reads "Octopus";
+- [ ] `npx @electron/fuses read --app dist/mac-arm64/Octopus.app` shows RunAsNode,
+      EnableNodeOptionsEnvironmentVariable and EnableNodeCliInspectArguments
+      Disabled, EnableEmbeddedAsarIntegrityValidation and OnlyLoadAppFromAsar
+      Enabled;
+- [ ] `codesign --verify --deep --strict dist/mac-arm64/Octopus.app` prints nothing.
 
 The PATH item deserves the suspicion. A GUI launch inherits launchd's
 environment, where PATH is roughly `/usr/bin:/bin:/usr/sbin:/sbin` — Homebrew
