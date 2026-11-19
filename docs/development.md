@@ -60,11 +60,13 @@ names the worktree).
 
 ## The environment an agent inherits
 
-An agent run by a dev copy also inherits `ELECTRON_RENDERER_URL`. Anything it
-launches — a built app, a Playwright driver — then loads the _running_ dev
-server's renderer: the main checkout's window over this worktree's core, every
-change to `src/renderer` invisible and nothing reporting why. Strip the
-`ELECTRON_*` variables from the environment of anything you launch.
+An agent run by a dev copy also inherits `ELECTRON_RENDERER_URL`. A packaged
+app ignores it (`rendererUrl` in `src/main/rendererSource.ts`) and `npm run dev`
+sets its own, but an unpackaged build it launches — `npm run preview`, a
+Playwright driver — loads the _running_ dev server's renderer: the main
+checkout's window over this worktree's core, every change to `src/renderer`
+invisible and nothing reporting why. Strip the `ELECTRON_*` variables from the
+environment of anything you launch.
 
 ## The running app holds the state in memory
 

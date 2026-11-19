@@ -1,5 +1,4 @@
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron'
 
@@ -31,13 +30,16 @@ import { menuTemplate } from './menu.js'
 import { openInBrowser } from './externalLinks.js'
 import { guardNavigation } from './navigation.js'
 import { guardPermissions } from './permissions.js'
+import { rendererUrl } from './rendererSource.js'
 import { quitAfter } from './quit.js'
 import { reportLoadFailure, reportRejection, watchRendererCrash } from './crash.js'
 
-const rendererFile = join(import.meta.dirname, '../renderer/index.html')
-const devServer = process.env.ELECTRON_RENDERER_URL
-/** The one document a window may show — what it loads, and what `guardNavigation` compares against. */
-const appUrl = devServer ?? pathToFileURL(rendererFile).href
+/** The one document a window may show — what it loads, and what the guards compare against. */
+const appUrl = rendererUrl(
+  process.env,
+  app.isPackaged,
+  join(import.meta.dirname, '../renderer/index.html')
+)
 
 /** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
 

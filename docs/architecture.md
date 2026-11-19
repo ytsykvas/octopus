@@ -106,11 +106,14 @@ navigation anywhere else — a script setting `location`, a link without
 `target="_blank"`, a form, a server redirect — is refused, with the decision in
 `core/appNavigation.ts`. It is attached through `web-contents-created`, so a
 window added later is covered too, and `index.ts` computes the document's URL
-once, for loading it and for comparing against it. A file or link dropped on
-the window never navigates in the first place: `navigateOnDragDrop` is off
-(Electron's default, written out in `webPreferencesFor` in `windows.ts` so that
-turning it on is a visible decision), and a drop then starts no navigation at all — checked by
-hand, with the renderer's own drop handlers out of the way.
+once, for loading it and for comparing against it — `rendererUrl` in
+`rendererSource.ts`, which takes the dev server only outside a packaged app, so
+an inherited `ELECTRON_RENDERER_URL` cannot hand a built app another page. A
+file or link dropped on the window never navigates in the first place:
+`navigateOnDragDrop` is off (Electron's default, written out in
+`webPreferencesFor` in `windows.ts` so that turning it on is a visible
+decision), and a drop then starts no navigation at all — checked by hand, with
+the renderer's own drop handlers out of the way.
 
 `externalLinks.ts` answers the other way out of the document: a
 `target="_blank"` link or `window.open`. `openInBrowser` always refuses the
