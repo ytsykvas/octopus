@@ -33,3 +33,10 @@ export function resolveTheme(preference: ThemePreference, prefersDark: boolean):
 export function canvasColor(theme: ThemeName): string {
   return theme === 'dark' ? CANVAS_DARK : CANVAS_LIGHT
 }
+
+export function themeOnSystemChange(
+  preference: ThemePreference,
+  prefersDark: boolean
+): ThemeName | null {
+  return preference === 'system' ? resolveTheme(preference, prefersDark) : null
+}

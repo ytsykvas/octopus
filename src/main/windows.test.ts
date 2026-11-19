@@ -1,6 +1,12 @@
 import { describe, expect, it, type Mock, vi } from 'vitest'
 
-import { focusExisting, type FocusableWindow } from './windows.js'
+import {
+  focusExisting,
+  type FocusableWindow,
+  needsWindowOnActivate,
+  quitsWhenAllClosed,
+  webPreferencesFor
+} from './windows.js'
 
 interface FakeWindow extends FocusableWindow {
   readonly restore: Mock<() => void>
@@ -53,5 +59,39 @@ describe('focusExisting', () => {
 
     expect(first.focus).toHaveBeenCalled()
     expect(second.focus).not.toHaveBeenCalled()
+  })
+})
+
+describe('webPreferencesFor', () => {
+  it('keeps the inspector and Node out of a packaged window', () => {
+    expect(webPreferencesFor('/app/out/main', true)).toEqual({
+      preload: '/app/out/preload/index.mjs',
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      navigateOnDragDrop: false,
+      devTools: false
+    })
+  })
+
+  it('keeps the inspector outside a packaged app', () => {
+    expect(webPreferencesFor('/app/out/main', false)).toMatchObject({ devTools: true })
+  })
+})
+
+describe('needsWindowOnActivate', () => {
+  it('makes a window when the Dock icon is clicked with none open', () => {
+    expect(needsWindowOnActivate([])).toBe(true)
+  })
+
+  it('leaves an open one to be raised', () => {
+    expect(needsWindowOnActivate([fakeWindow()])).toBe(false)
+  })
+})
+
+describe('quitsWhenAllClosed', () => {
+  it('stays in the Dock on macOS and quits elsewhere', () => {
+    expect(quitsWhenAllClosed('darwin')).toBe(false)
+    expect(quitsWhenAllClosed('linux')).toBe(true)
   })
 })

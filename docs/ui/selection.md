@@ -105,9 +105,10 @@ paint before the config arrives agrees with `DEFAULT_LANGUAGE`; nothing in the
 suite loads that file, so only the effect is under test.
 
 This has nothing to do with spellchecking, which is worth saying because it
-reads like it should: `main/index.ts` never sets `webPreferences.spellcheck` and
-nothing calls `setSpellCheckerLanguages`, so Electron takes those languages from
-the session and the system locale rather than from the document.
+reads like it should: `webPreferencesFor` in `main/windows.ts` never sets
+`spellcheck` and nothing calls `setSpellCheckerLanguages`, so Electron takes
+those languages from the session and the system locale rather than from the
+document.
 
 ## The one place colours are read as values
 

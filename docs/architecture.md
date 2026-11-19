@@ -82,9 +82,8 @@ never called from a test.
 
 `main/index.ts` is bootstrap: create the service, create the window, register
 the menu, hand Electron to the IPC layer. Everything with a decision in it was
-moved out, which is why `ipc.ts`, `result.ts`, `theme.ts` and `loginPath.ts`
-exist as separate files — an entry point that grew to hold them could only be
-tested by mocking half of Electron.
+moved out into the modules beside it — an entry point that grew to hold them
+could only be tested by mocking half of Electron.
 
 `index.ts` is the one file the coverage threshold does not apply to
 (`bootstrapOnly` in `vitest.shared.ts`), which makes it the easiest place in the
@@ -106,11 +105,14 @@ navigation anywhere else — a script setting `location`, a link without
 `target="_blank"`, a form, a server redirect — is refused, with the decision in
 `core/appNavigation.ts`. It is attached through `web-contents-created`, so a
 window added later is covered too, and `index.ts` computes the document's URL
-once, for loading it and for comparing against it. A file or link dropped on
-the window never navigates in the first place: `navigateOnDragDrop` is off
-(Electron's default, written out in `createWindow` so that turning it on is a
-visible decision), and a drop then starts no navigation at all — checked by
-hand, with the renderer's own drop handlers out of the way.
+once, for loading it and for comparing against it — `rendererUrl` in
+`rendererSource.ts`, which takes the dev server only outside a packaged app, so
+an inherited `ELECTRON_RENDERER_URL` cannot hand a built app another page. A
+file or link dropped on the window never navigates in the first place:
+`navigateOnDragDrop` is off (Electron's default, written out in
+`webPreferencesFor` in `windows.ts` so that turning it on is a visible
+decision), and a drop then starts no navigation at all — checked by hand, with
+the renderer's own drop handlers out of the way.
 
 `externalLinks.ts` answers the other way out of the document: a
 `target="_blank"` link or `window.open`. `openInBrowser` always refuses the
@@ -128,6 +130,34 @@ over it; the schemes that start programs are what is refused. It is attached in
 load fails, and when a promise fails with nobody waiting on it. Each takes what
 it acts on as parameters — the contents, the disposal and the dialogs — so the
 decisions are tested without Electron, and `index.ts` passes in the real ones.
+
+`electronHost.ts` is the part of `IpcHost` that needs a cast to meet Electron's
+types: the handler table and the folder picker, with `windowFor`, whose answer
+is the picker's parent. The two casts live there, where a test reaches them,
+rather than in `index.ts`. `windows.ts` answers what the Dock and the last closed window do,
+`theme.ts` what a change of the OS appearance does under each preference, and
+`core/paths.ts` where a copy with its own data root keeps Electron's folder.
+
+`menu.ts` builds the native menu. A packaged app's View menu keeps zoom and
+full screen and has no Reload or inspector: a reload ends every terminal the
+window started, and the inspector is a console with `window.octopus` in it.
+`webPreferencesFor` in `windows.ts` turns the inspector off as well, so ⌥⌘I
+does nothing either; `npm run dev` keeps both.
+
+`permissions.ts` answers what the page may ask Chromium for. Electron grants
+everything by default — the microphone, notifications, the location — to any
+content in the window. Measured over startup, a terminal and the copy buttons,
+the page asks for one thing: `clipboard-sanitized-write`, behind
+`navigator.clipboard.writeText`. That is granted to the application's own
+document (`isAppDocument`, the rule navigation uses) and every other request
+and check is refused; the sounds need no permission and still play.
+
+The page's own policy is the `<meta>` in `src/renderer/index.html`, pinned by
+`scripts/csp.test.ts`: everything from the window's own files, no `<object>`, no
+`<base>`, no form that submits anywhere. `frame-ancestors` is absent on purpose
+— a `<meta>` policy ignores it, and nothing frames a top-level window. The one
+violation it reports, `script-src eval`, is zod asking whether it may compile;
+it falls back and works.
 
 `files:open` hands a path to `shell.openPath`, which starts as readily as it
 shows: LaunchServices runs an `.app`, a `.command` or an executable, and a file

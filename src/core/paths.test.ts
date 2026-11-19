@@ -2,13 +2,14 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   chatsDir,
   chatTranscript,
   configFile,
   dataRootOverride,
+  electronUserDataDir,
   globalPromptsFile,
   globalSkillsRoot,
   insideWorktree,
@@ -61,6 +62,27 @@ describe('dataRootOverride', () => {
 
   it('refuses a relative path instead of falling back to the real data', () => {
     expect(() => dataRootOverride({ OCTOPUS_DATA_DIR: 'octopus-dev' })).toThrow(/absolute/)
+  })
+})
+
+describe('electronUserDataDir', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it("puts Electron's own folder inside a copy's data root", () => {
+    expect(electronUserDataDir({ OCTOPUS_DATA_DIR: '/tmp/octopus-dev' })).toBe(
+      '/tmp/octopus-dev/electron'
+    )
+  })
+
+  it("leaves Electron's default alone without one", () => {
+    expect(electronUserDataDir({})).toBeNull()
+  })
+
+  it('reads the process environment by default', () => {
+    vi.stubEnv('OCTOPUS_DATA_DIR', '/tmp/octopus-dev')
+    expect(electronUserDataDir()).toBe('/tmp/octopus-dev/electron')
   })
 })
 

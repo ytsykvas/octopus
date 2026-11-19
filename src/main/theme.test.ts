@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canvasColor, resolveTheme } from './theme.js'
+import { canvasColor, resolveTheme, themeOnSystemChange } from './theme.js'
 
 describe('resolveTheme', () => {
   it('follows the system when the preference is system', () => {
@@ -26,5 +26,17 @@ describe('canvasColor', () => {
   it('is a colour the window can use', () => {
     expect(canvasColor('dark')).toMatch(/^#[0-9a-f]{6}$/)
     expect(canvasColor('light')).toMatch(/^#[0-9a-f]{6}$/)
+  })
+})
+
+describe('themeOnSystemChange', () => {
+  it('follows the system while the preference is system', () => {
+    expect(themeOnSystemChange('system', true)).toBe('dark')
+    expect(themeOnSystemChange('system', false)).toBe('light')
+  })
+
+  it('leaves an explicit choice alone', () => {
+    expect(themeOnSystemChange('light', true)).toBeNull()
+    expect(themeOnSystemChange('dark', false)).toBeNull()
   })
 })

@@ -1,10 +1,6 @@
-/**
- * What a second launch does to the window already open.
- *
- * The window arrives as a parameter rather than being fetched from
- * `BrowserWindow` here, so the decision is testable without Electron — the same
- * split `theme.ts` makes, for the same reason.
- */
+import { join } from 'node:path'
+
+import type { WebPreferences } from 'electron'
 
 /** The slice of a window this needs, which is all a test has to provide. */
 export interface FocusableWindow {
@@ -33,4 +29,25 @@ export function focusExisting(windows: readonly FocusableWindow[]): void {
 
   if (window.isMinimized()) window.restore()
   window.focus()
+}
+
+export function webPreferencesFor(mainDir: string, packaged: boolean): WebPreferences {
+  return {
+    preload: join(mainDir, '../preload/index.mjs'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: false,
+    // Electron's default, written out: with it on, a file or link dropped
+    // anywhere but the composer would replace the application with that page.
+    navigateOnDragDrop: false,
+    devTools: !packaged
+  }
+}
+
+export function needsWindowOnActivate(windows: readonly unknown[]): boolean {
+  return windows.length === 0
+}
+
+export function quitsWhenAllClosed(platform: NodeJS.Platform): boolean {
+  return platform !== 'darwin'
 }

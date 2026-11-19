@@ -43,6 +43,11 @@ export function rootDir(home?: string, env: NodeJS.ProcessEnv = process.env): st
   return dataRootOverride(env) ?? join(homedir(), ROOT_DIR_NAME)
 }
 
+export function electronUserDataDir(env: NodeJS.ProcessEnv = process.env): string | null {
+  const root = dataRootOverride(env)
+  return root === null ? null : join(root, 'electron')
+}
+
 /** Global settings: `~/.octopus/config.json`. */
 export function configFile(root: string = rootDir()): string {
   return join(root, 'config.json')
