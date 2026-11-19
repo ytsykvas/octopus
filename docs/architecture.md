@@ -82,9 +82,8 @@ never called from a test.
 
 `main/index.ts` is bootstrap: create the service, create the window, register
 the menu, hand Electron to the IPC layer. Everything with a decision in it was
-moved out, which is why `ipc.ts`, `result.ts`, `theme.ts` and `loginPath.ts`
-exist as separate files — an entry point that grew to hold them could only be
-tested by mocking half of Electron.
+moved out into the modules beside it — an entry point that grew to hold them
+could only be tested by mocking half of Electron.
 
 `index.ts` is the one file the coverage threshold does not apply to
 (`bootstrapOnly` in `vitest.shared.ts`), which makes it the easiest place in the
@@ -131,6 +130,13 @@ over it; the schemes that start programs are what is refused. It is attached in
 load fails, and when a promise fails with nobody waiting on it. Each takes what
 it acts on as parameters — the contents, the disposal and the dialogs — so the
 decisions are tested without Electron, and `index.ts` passes in the real ones.
+
+`electronHost.ts` is the part of `IpcHost` that needs a cast to meet Electron's
+types: the handler table and the folder picker, with `windowFor`, whose answer
+is the picker's parent. The two casts live there, where a test reaches them,
+rather than in `index.ts`. `windows.ts` answers what the Dock and the last closed window do,
+`theme.ts` what a change of the OS appearance does under each preference, and
+`core/paths.ts` where a copy with its own data root keeps Electron's folder.
 
 `menu.ts` builds the native menu. A packaged app's View menu keeps zoom and
 full screen and has no Reload or inspector: a reload ends every terminal the

@@ -1,11 +1,3 @@
-/**
- * The application's window: how it is made, and what a second launch does to it.
- *
- * The window arrives as a parameter rather than being fetched from
- * `BrowserWindow` here, so the decision is testable without Electron — the same
- * split `theme.ts` makes, for the same reason.
- */
-
 import { join } from 'node:path'
 
 import type { WebPreferences } from 'electron'
@@ -50,4 +42,12 @@ export function webPreferencesFor(mainDir: string, packaged: boolean): WebPrefer
     navigateOnDragDrop: false,
     devTools: !packaged
   }
+}
+
+export function needsWindowOnActivate(windows: readonly unknown[]): boolean {
+  return windows.length === 0
+}
+
+export function quitsWhenAllClosed(platform: NodeJS.Platform): boolean {
+  return platform !== 'darwin'
 }

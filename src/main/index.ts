@@ -4,7 +4,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell 
 
 import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
-import { dataRootOverride, rootDir } from '../core/paths.js'
+import { electronUserDataDir, rootDir } from '../core/paths.js'
 import { diagnosticLog } from '../core/diagnostics.js'
 import { createService, type OctopusService } from '../core/service.js'
 import type { ThemeName } from '../core/types.js'
@@ -23,10 +23,16 @@ import {
 } from './broadcast.js'
 import { registerIpc } from './ipc.js'
 import { applyLoginShellPath } from './loginPath.js'
-import { canvasColor, resolveTheme } from './theme.js'
+import { canvasColor, resolveTheme, themeOnSystemChange } from './theme.js'
 import { TerminalManager } from './terminals.js'
-import { focusExisting, webPreferencesFor } from './windows.js'
+import {
+  focusExisting,
+  needsWindowOnActivate,
+  quitsWhenAllClosed,
+  webPreferencesFor
+} from './windows.js'
 import { menuTemplate } from './menu.js'
+import { electronIpcHost } from './electronHost.js'
 import { openInBrowser } from './externalLinks.js'
 import { guardNavigation } from './navigation.js'
 import { guardPermissions } from './permissions.js'
@@ -40,8 +46,6 @@ const appUrl = rendererUrl(
   app.isPackaged,
   join(import.meta.dirname, '../renderer/index.html')
 )
-
-/** Canvas colours from the design system (§10) — so the window does not flash white on launch. */
 
 function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWindow {
   const window = new BrowserWindow({
@@ -117,8 +121,8 @@ function registerMenu(): void {
  */
 function watchSystemTheme(service: OctopusService): void {
   nativeTheme.on('updated', () => {
-    if (service.getConfig().theme !== 'system') return
-    pushTheme(BrowserWindow.getAllWindows(), nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+    const theme = themeOnSystemChange(service.getConfig().theme, nativeTheme.shouldUseDarkColors)
+    if (theme !== null) pushTheme(BrowserWindow.getAllWindows(), theme)
   })
 }
 
@@ -139,7 +143,7 @@ async function start(): Promise<void> {
   /*
    * The data root, not Electron's directory.
    *
-   * `requestSingleInstanceLock` above is keyed on **userData**, which is not
+   * `requestSingleInstanceLock` below is keyed on **userData**, which is not
    * the scope two copies actually share: two builds resolving that name
    * differently each take their own and both start, then both write
    * `state.json` whole and the last one wins. This is keyed on `~/.octopus`
@@ -198,17 +202,11 @@ async function start(): Promise<void> {
   )
 
   registerIpc(service, terminals, {
-    // The cast goes through `unknown`: the injected signature is deliberately
-    // narrower than Electron's, which types its arguments as `any`.
-    handle: (channel, handler) => {
-      ipcMain.handle(channel, handler as unknown as Parameters<typeof ipcMain.handle>[1])
-    },
-    showOpenDialog: async (options, parent) =>
-      parent
-        ? dialog.showOpenDialog(parent as BrowserWindow, options)
-        : dialog.showOpenDialog(options),
-    windowFor: (event) =>
-      BrowserWindow.fromWebContents((event as Electron.IpcMainInvokeEvent).sender),
+    ...electronIpcHost({
+      ipcMain,
+      dialog,
+      fromWebContents: (sender) => BrowserWindow.fromWebContents(sender)
+    }),
     prefersDark: () => nativeTheme.shouldUseDarkColors,
     // Each one hands `broadcast.ts` the windows to reach. The channel names
     // live there, where a test can name them; here is only the window list.
@@ -250,7 +248,7 @@ async function start(): Promise<void> {
   createWindow(resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors), terminals)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (needsWindowOnActivate(BrowserWindow.getAllWindows())) {
       createWindow(
         resolveTheme(service.getConfig().theme, nativeTheme.shouldUseDarkColors),
         terminals
@@ -281,9 +279,8 @@ async function start(): Promise<void> {
  * would still be the shared one and the lock would refuse the second copy even
  * though the two no longer share any data.
  */
-if (dataRootOverride() !== null) {
-  app.setPath('userData', join(rootDir(), 'electron'))
-}
+const userData = electronUserDataDir()
+if (userData !== null) app.setPath('userData', userData)
 
 // Electron shows a modal for an uncaught exception but only a stderr warning for a
 // rejection. Never `uncaughtException`: a listener of ours would remove that modal.
@@ -312,7 +309,5 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  if (quitsWhenAllClosed(process.platform)) app.quit()
 })
