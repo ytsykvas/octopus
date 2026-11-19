@@ -143,6 +143,13 @@ the page asks for one thing: `clipboard-sanitized-write`, behind
 document (`isAppDocument`, the rule navigation uses) and every other request
 and check is refused; the sounds need no permission and still play.
 
+The page's own policy is the `<meta>` in `src/renderer/index.html`, pinned by
+`scripts/csp.test.ts`: everything from the window's own files, no `<object>`, no
+`<base>`, no form that submits anywhere. `frame-ancestors` is absent on purpose
+— a `<meta>` policy ignores it, and nothing frames a top-level window. The one
+violation it reports, `script-src eval`, is zod asking whether it may compile;
+it falls back and works.
+
 `files:open` hands a path to `shell.openPath`, which starts as readily as it
 shows: LaunchServices runs an `.app`, a `.command` or an executable, and a file
 the agent wrote carries no quarantine for Gatekeeper to ask about.
