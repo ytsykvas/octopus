@@ -26,7 +26,8 @@ import { registerIpc } from './ipc.js'
 import { applyLoginShellPath } from './loginPath.js'
 import { canvasColor, resolveTheme } from './theme.js'
 import { TerminalManager } from './terminals.js'
-import { focusExisting } from './windows.js'
+import { focusExisting, webPreferencesFor } from './windows.js'
+import { menuTemplate } from './menu.js'
 import { openInBrowser } from './externalLinks.js'
 import { guardNavigation } from './navigation.js'
 import { quitAfter } from './quit.js'
@@ -51,16 +52,7 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
     // materials make dense text harder to read.
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 18 },
-    webPreferences: {
-      preload: join(import.meta.dirname, '../preload/index.mjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-      // Electron's default, written out: with it on, a file or link dropped
-      // anywhere but the composer would replace the application with that
-      // page, preload and `window.octopus` included.
-      navigateOnDragDrop: false
-    }
+    webPreferences: webPreferencesFor(import.meta.dirname, app.isPackaged)
   })
 
   window.on('ready-to-show', () => {
@@ -104,41 +96,13 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
   return window
 }
 
-/**
- * Native menu.
- *
- * Exists mainly for ⌘, — on macOS that is where users expect settings, and
- * an app without it feels foreign.
- */
 function registerMenu(): void {
-  const template: Electron.MenuItemConstructorOptions[] = [
-    {
-      role: 'appMenu',
-      submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        {
-          label: 'Settings…',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => {
-            pushSettingsOpen(BrowserWindow.getFocusedWindow())
-          }
-        },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' }
-      ]
-    },
-    { role: 'editMenu' },
-    { role: 'viewMenu' },
-    { role: 'windowMenu' }
-  ]
-
+  const template = menuTemplate({
+    packaged: app.isPackaged,
+    openSettings: () => {
+      pushSettingsOpen(BrowserWindow.getFocusedWindow())
+    }
+  })
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, type Mock, vi } from 'vitest'
 
-import { focusExisting, type FocusableWindow } from './windows.js'
+import { focusExisting, type FocusableWindow, webPreferencesFor } from './windows.js'
 
 interface FakeWindow extends FocusableWindow {
   readonly restore: Mock<() => void>
@@ -53,5 +53,22 @@ describe('focusExisting', () => {
 
     expect(first.focus).toHaveBeenCalled()
     expect(second.focus).not.toHaveBeenCalled()
+  })
+})
+
+describe('webPreferencesFor', () => {
+  it('keeps the inspector and Node out of a packaged window', () => {
+    expect(webPreferencesFor('/app/out/main', true)).toEqual({
+      preload: '/app/out/preload/index.mjs',
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      navigateOnDragDrop: false,
+      devTools: false
+    })
+  })
+
+  it('keeps the inspector outside a packaged app', () => {
+    expect(webPreferencesFor('/app/out/main', false)).toMatchObject({ devTools: true })
   })
 })

@@ -108,8 +108,8 @@ navigation anywhere else — a script setting `location`, a link without
 window added later is covered too, and `index.ts` computes the document's URL
 once, for loading it and for comparing against it. A file or link dropped on
 the window never navigates in the first place: `navigateOnDragDrop` is off
-(Electron's default, written out in `createWindow` so that turning it on is a
-visible decision), and a drop then starts no navigation at all — checked by
+(Electron's default, written out in `webPreferencesFor` in `windows.ts` so that
+turning it on is a visible decision), and a drop then starts no navigation at all — checked by
 hand, with the renderer's own drop handlers out of the way.
 
 `externalLinks.ts` answers the other way out of the document: a
@@ -128,6 +128,12 @@ over it; the schemes that start programs are what is refused. It is attached in
 load fails, and when a promise fails with nobody waiting on it. Each takes what
 it acts on as parameters — the contents, the disposal and the dialogs — so the
 decisions are tested without Electron, and `index.ts` passes in the real ones.
+
+`menu.ts` builds the native menu. A packaged app's View menu keeps zoom and
+full screen and has no Reload or inspector: a reload ends every terminal the
+window started, and the inspector is a console with `window.octopus` in it.
+`webPreferencesFor` in `windows.ts` turns the inspector off as well, so ⌥⌘I
+does nothing either; `npm run dev` keeps both.
 
 `files:open` hands a path to `shell.openPath`, which starts as readily as it
 shows: LaunchServices runs an `.app`, a `.command` or an executable, and a file
