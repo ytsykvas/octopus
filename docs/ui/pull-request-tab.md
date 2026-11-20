@@ -179,7 +179,9 @@ again.
 caught up.** Every push this checkout makes — the agent's, the built-in
 terminal's, the one opening a request makes — ends with git rewriting
 `refs/remotes/<remote>/<branch>`, and `remoteRefs.ts` watches `refs/` in the
-project's common git dir for exactly that. A workspace's branch moving arrives
+project's common git dir for exactly that — the checkout the project points at
+now: one moved to another clone in Project settings is watched there from the
+next sync, and a search for the old one's git dir still under way is dropped. A workspace's branch moving arrives
 as `workspaces:pushed` with the commit it moved to, and the tab reads at once.
 What GitHub says straight after is worse than nothing: for a few seconds it has
 not taken the commit in, and reports the one before with its checks finished —

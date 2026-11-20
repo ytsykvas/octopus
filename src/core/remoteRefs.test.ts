@@ -328,6 +328,65 @@ describe('createRemoteRefWatch', () => {
     expect(fake.paths).toEqual([])
   })
 
+  // Project settings can point a project with no workspace at another clone,
+  // and the pushes worth hearing are then the new clone's.
+  it('moves to the new checkout when a project is pointed elsewhere', async () => {
+    const { fake, commonDirOf, refs } = setUp()
+    commonDirOf.mockImplementation((repoPath) => Promise.resolve(join(repoPath, '.git')))
+
+    await refs.sync([{ id: 'planner', repoPath: '/old' }])
+    await refs.sync([{ id: 'planner', repoPath: '/new' }])
+
+    expect(fake.closed).toEqual([join('/old', '.git', 'refs')])
+    expect(fake.paths).toEqual([join('/old', '.git', 'refs'), join('/new', '.git', 'refs')])
+  })
+
+  it('drops a start for a checkout the project has since left', async () => {
+    const { fake, commonDirOf, refs } = setUp()
+    let answer: (dir: string) => void = () => undefined
+    commonDirOf.mockImplementation((repoPath) =>
+      repoPath === '/old'
+        ? new Promise((settle) => {
+            answer = settle
+          })
+        : Promise.resolve(join(repoPath, '.git'))
+    )
+
+    const first = refs.sync([{ id: 'planner', repoPath: '/old' }])
+    await refs.sync([{ id: 'planner', repoPath: '/new' }])
+    answer(join('/old', '.git'))
+    await first
+
+    expect(fake.paths).toEqual([join('/new', '.git', 'refs')])
+    expect(fake.closed).toEqual([])
+  })
+
+  it('keeps the new checkout’s start its own when the old one’s ends first', async () => {
+    const { fake, commonDirOf, refs } = setUp()
+    const answers: { readonly repoPath: string; readonly settle: (dir: string) => void }[] = []
+    commonDirOf.mockImplementation(
+      (repoPath) =>
+        new Promise((settle) => {
+          answers.push({ repoPath, settle })
+        })
+    )
+    /** Settles every search still waiting for one checkout. */
+    const answer = (repoPath: string): void => {
+      for (const one of answers) if (one.repoPath === repoPath) one.settle(join(repoPath, '.git'))
+    }
+
+    const old = refs.sync([{ id: 'planner', repoPath: '/old' }])
+    const moved = refs.sync([{ id: 'planner', repoPath: '/new' }])
+    answer('/old')
+    await old
+    const again = refs.sync([{ id: 'planner', repoPath: '/new' }])
+    answer('/new')
+    await Promise.all([moved, again])
+
+    expect(commonDirOf).toHaveBeenCalledTimes(2)
+    expect(fake.paths).toEqual([join('/new', '.git', 'refs')])
+  })
+
   it('does not start one twice when two syncs overlap', async () => {
     const { fake, refs } = setUp()
 

@@ -18472,10 +18472,13 @@ describe('a branch the remote moved', () => {
     readonly make: (deps: RemoteRefWatchDeps) => RemoteRefWatch
     readonly deps: () => RemoteRefWatchDeps
     readonly synced: string[][]
+    /** The checkout of each project, per sync — what a watcher keys its git dir on. */
+    readonly checkouts: string[][]
     readonly closed: () => number
   } {
     let given: RemoteRefWatchDeps | null = null
     const synced: string[][] = []
+    const checkouts: string[][] = []
     let closes = 0
 
     return {
@@ -18484,6 +18487,7 @@ describe('a branch the remote moved', () => {
         return {
           sync: (projects) => {
             synced.push(projects.map((project) => project.id))
+            checkouts.push(projects.map((project) => project.repoPath))
             return Promise.resolve()
           },
           close: () => {
@@ -18496,6 +18500,7 @@ describe('a branch the remote moved', () => {
         return given
       },
       synced,
+      checkouts,
       closed: () => closes
     }
   }
@@ -18513,6 +18518,24 @@ describe('a branch the remote moved', () => {
 
     await watching.removeProjectById(project.id)
     expect(watch.synced.at(-1)).toEqual([])
+  })
+
+  // What the watcher's re-watch on a move rests on: the service hands it the new
+  // checkout, under the same project id.
+  it('hands the watch a project pointed at another checkout', async () => {
+    const repo = join(dir, 'planner')
+    const other = join(dir, 'planner-clone')
+    await initRepo(repo)
+    await initRepo(other)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+
+    await watching.updateProjectById(project.id, { repoPath: other })
+
+    expect(watch.synced.at(-1)).toEqual([project.id])
+    expect(watch.checkouts.at(-1)).toEqual([watching.listProjects()[0]?.repoPath])
+    expect(watch.checkouts.at(-2)).not.toEqual(watch.checkouts.at(-1))
   })
 
   // A write that leaves the projects as they were is most writes: a turn, a

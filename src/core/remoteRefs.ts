@@ -88,6 +88,8 @@ interface Watched {
   readonly watcher: RefWatcher
   readonly pending: Map<string, ReturnType<typeof setTimeout>>
   readonly seen: Map<string, string>
+  /** The checkout it watches — a project pointed at another clone is watched again. */
+  readonly repoPath: string
 }
 
 const defaultWatch: NonNullable<RemoteRefWatchDeps['watch']> = (path, options, listener) =>
@@ -103,10 +105,13 @@ export function createRemoteRefWatch(deps: RemoteRefWatchDeps): RemoteRefWatch {
   const debounceMs = deps.debounceMs ?? REF_DEBOUNCE_MS
 
   const watched = new Map<string, Watched>()
-  /** Projects whose git dir is being found, so an overlapping sync does not start them twice. */
-  const starting = new Set<string>()
-  /** The set the latest sync asked for — what a start finishing after an await checks against. */
-  let wanted = new Set<string>()
+  /**
+   * Projects whose git dir is being found, with the checkout it is found for, so an
+   * overlapping sync does not start one twice — and does start one pointed elsewhere.
+   */
+  const starting = new Map<string, string>()
+  /** What the latest sync asked for, id to checkout — what a start after an await checks. */
+  let wanted = new Map<string, string>()
 
   function stop(id: string): void {
     const one = watched.get(id)
@@ -149,7 +154,7 @@ export function createRemoteRefWatch(deps: RemoteRefWatchDeps): RemoteRefWatch {
   }
 
   async function start(id: string, repoPath: string): Promise<void> {
-    starting.add(id)
+    starting.set(id, repoPath)
     let common: string
     try {
       common = await deps.commonDirOf(repoPath)
@@ -158,10 +163,12 @@ export function createRemoteRefWatch(deps: RemoteRefWatchDeps): RemoteRefWatch {
       // without it. The next sync tries again.
       return
     } finally {
-      starting.delete(id)
+      // Only our own mark: a start for the checkout the project moved to may hold it now.
+      if (starting.get(id) === repoPath) starting.delete(id)
     }
 
-    if (!wanted.has(id)) return
+    // Removed, or pointed at another checkout, while the git dir was being found.
+    if (wanted.get(id) !== repoPath) return
 
     const refs = join(common, 'refs')
     const pending = new Map<string, ReturnType<typeof setTimeout>>()
@@ -195,24 +202,27 @@ export function createRemoteRefWatch(deps: RemoteRefWatchDeps): RemoteRefWatch {
     watcher.on('error', () => {
       stop(id)
     })
-    watched.set(id, { watcher, pending, seen })
+    watched.set(id, { watcher, pending, seen, repoPath })
   }
 
   return {
     async sync(projects) {
-      wanted = new Set(projects.map((project) => project.id))
+      wanted = new Map(projects.map((project) => [project.id, project.repoPath]))
 
-      for (const id of [...watched.keys()]) if (!wanted.has(id)) stop(id)
+      // Gone, or pointed at another checkout: either way this watcher hears the wrong refs.
+      for (const [id, one] of [...watched]) if (wanted.get(id) !== one.repoPath) stop(id)
 
       await Promise.all(
         projects
-          .filter((project) => !watched.has(project.id) && !starting.has(project.id))
+          .filter(
+            (project) => !watched.has(project.id) && starting.get(project.id) !== project.repoPath
+          )
           .map((project) => start(project.id, project.repoPath))
       )
     },
 
     close() {
-      wanted = new Set()
+      wanted = new Map()
       for (const id of [...watched.keys()]) stop(id)
     }
   }
