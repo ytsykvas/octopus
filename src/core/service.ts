@@ -1922,6 +1922,21 @@ export interface OctopusService {
  */
 export const SHUTDOWN_GRACE_MS = 1_000
 
+/** Where the state lives for these options — one rule, so startup recovery looks where the service writes. */
+export function statePathsFor(options: ServiceOptions = {}): {
+  readonly statePath: string
+  readonly stateTempPath: string
+  readonly stateBackupPath: string
+} {
+  const statePath = options.stateFilePath ?? stateFile()
+  return {
+    statePath,
+    stateTempPath: options.stateTempFilePath ?? stateTempFile(),
+    // Beside the state given, so a copy pointed elsewhere never backs up into the real root.
+    stateBackupPath: options.stateBackupFilePath ?? `${statePath}.bak`
+  }
+}
+
 /**
  * Creates the service, reading state and config from disk.
  *
@@ -1929,9 +1944,7 @@ export const SHUTDOWN_GRACE_MS = 1_000
  * against a temporary directory without touching real data.
  */
 export async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
-  const statePath = options.stateFilePath ?? stateFile()
-  const stateTempPath = options.stateTempFilePath ?? stateTempFile()
-  const stateBackupPath = options.stateBackupFilePath ?? `${statePath}.bak`
+  const { statePath, stateTempPath, stateBackupPath } = statePathsFor(options)
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
   // One keeper for the service's life: a copy is reused across reads and

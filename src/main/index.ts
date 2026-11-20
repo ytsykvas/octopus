@@ -4,9 +4,14 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell 
 
 import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
-import { electronUserDataDir, rootDir, stateBackupFile, stateFile } from '../core/paths.js'
+import { electronUserDataDir, rootDir } from '../core/paths.js'
 import { diagnosticLog } from '../core/diagnostics.js'
-import { createService, type OctopusService, type ServiceOptions } from '../core/service.js'
+import {
+  createService,
+  type OctopusService,
+  type ServiceOptions,
+  statePathsFor
+} from '../core/service.js'
 import { recoveryFor, restoreStateBackup, type StateRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
 import {
@@ -149,15 +154,24 @@ function askRestore(recovery: Extract<StateRecovery, { kind: 'backup' }>, error:
  * Opens the service; a damaged state.json with a good backup beside it is offered back.
  *
  * Only with a yes — `stateRecovery.ts` holds why never silently. A second failure
- * throws to the caller like the first.
+ * throws to the caller like the first; a restore that fails says so beside the
+ * failure that asked for it, rather than in its place.
  */
 async function openService(options: ServiceOptions): Promise<OctopusService> {
   try {
     return await createService(options)
   } catch (error) {
-    const recovery = await recoveryFor(error)
+    const { statePath, stateBackupPath } = statePathsFor(options)
+    const recovery = await recoveryFor(error, statePath, stateBackupPath)
     if (recovery.kind === 'none' || !askRestore(recovery, error)) throw error
-    await restoreStateBackup(stateFile(), stateBackupFile())
+    try {
+      await restoreStateBackup(statePath, stateBackupPath)
+    } catch (restoreError) {
+      throw new Error(
+        `${describeError(error)}\n\nRestoring the backup failed as well: ${describeError(restoreError)}`,
+        { cause: restoreError }
+      )
+    }
     return await createService(options)
   }
 }

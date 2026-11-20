@@ -58,6 +58,7 @@ import {
   type ListSessionsFn,
   sameWindows,
   SHUTDOWN_GRACE_MS,
+  statePathsFor,
   type OctopusService,
   type ServiceOptions,
   type UsageOutcome,
@@ -231,6 +232,41 @@ afterEach(async () => {
   // can still land after it — the same `ENOTEMPTY`, in the MCP question tests
   // twice in a row. The write is real and finishing; the removal just waits.
   await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+})
+
+describe('statePathsFor', () => {
+  it('puts everything in the data root when given nothing', () => {
+    vi.stubEnv('OCTOPUS_DATA_DIR', dir)
+    try {
+      expect(statePathsFor()).toEqual({
+        statePath: join(dir, 'state.json'),
+        stateTempPath: join(dir, 'state.json.tmp'),
+        stateBackupPath: join(dir, 'state.json.bak')
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('keeps the backup beside a state pointed elsewhere', () => {
+    expect(statePathsFor({ stateFilePath: join(dir, 'copy.json') }).stateBackupPath).toBe(
+      join(dir, 'copy.json.bak')
+    )
+  })
+
+  it('takes every path it is given', () => {
+    expect(
+      statePathsFor({
+        stateFilePath: join(dir, 's.json'),
+        stateTempFilePath: join(dir, 's.tmp'),
+        stateBackupFilePath: join(dir, 's.bak')
+      })
+    ).toEqual({
+      statePath: join(dir, 's.json'),
+      stateTempPath: join(dir, 's.tmp'),
+      stateBackupPath: join(dir, 's.bak')
+    })
+  })
 })
 
 describe('default paths', () => {
