@@ -1228,6 +1228,9 @@ export const en = {
       'Claude Code stopped with an error (code {{code}}). Send a message to try again; the conversation is kept.',
     processEnded:
       'Claude Code ended before finishing its work. Send a message to carry on; the conversation is kept.',
+    /* Said once per conversation, not per failed write (`report`). */
+    diskFull:
+      'The disk is full, so this conversation is not being saved. Free some space — until then, anything new here will be missing when the conversation is reopened.',
     messageSkipped:
       'One message from Claude Code could not be handled and was skipped. The conversation goes on.',
     compactedBy:

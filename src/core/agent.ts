@@ -715,8 +715,10 @@ export const GUARD_FAILED = 'Octopus could not check this call, so it was not ru
 /**
  * A hook that denies when `guard` names a reason — and when `guard` throws.
  *
- * An exception escaping a hook is not a decision the SDK promises to treat as a
- * refusal, and a guard that fails open is not a guard.
+ * Caught here as well as blocked by `onFailure: 'block'` on the matcher: the SDK
+ * would refuse a throwing hook too, but only this way does the agent read why.
+ * The matcher's setting covers what this cannot: an answer that fails on the
+ * way back. A guard that fails open is not a guard.
  */
 function denying(guard: (input: unknown) => string | null): HookCallback {
   return (input) => {
@@ -755,6 +757,7 @@ export function toolGuards(
     PreToolUse: [
       {
         matcher: SHELL_TOOLS,
+        onFailure: 'block',
         hooks: [
           denying((input) => {
             const call = ShellCallSchema.safeParse(input)
@@ -769,6 +772,7 @@ export function toolGuards(
       },
       {
         matcher: '^mcp__',
+        onFailure: 'block',
         hooks: [
           denying((input) => {
             const call = McpCallSchema.safeParse(input)
@@ -779,6 +783,7 @@ export function toolGuards(
       {
         // A subagent in the cloud runs where none of these layers reach.
         matcher: 'Agent',
+        onFailure: 'block',
         hooks: [
           denying((input) => {
             const call = AgentCallSchema.safeParse(input)

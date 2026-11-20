@@ -68,7 +68,8 @@ import type { CliOutput, PluginCli } from './plugins.js'
 import { POOL_START } from './ports.js'
 import type { DraftState } from './pullRequestDraft.js'
 import type { RecordedRun } from './runLog.js'
-import { type ChatEntry, readTranscript } from './transcript.js'
+import { type AgentEvent } from './events.js'
+import { appendEntry, type ChatEntry, readTranscript } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
@@ -6074,6 +6075,99 @@ describe('the agent chat', () => {
    * message. Nothing took the file back: it outlived the conversation, the
    * workspace and the project, and only a button in Settings emptied the lot.
    */
+  /*
+   * Every event appends to the transcript, so on a full disk each one failed on
+   * its own and the log filled with the same raw ENOSPC line. One line in words
+   * per conversation, and once more only after a write has gone through since.
+   */
+  describe('a full disk', () => {
+    const noSpace = (): Error =>
+      Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' })
+
+    async function filling(): Promise<{
+      events: ChatEvent[]
+      setFull: (full: boolean) => void
+      written: () => number
+    }> {
+      let full = false
+      let written = 0
+      const { service, workspaceId, events } = await withWorkspace({
+        // `full` is read when the write's turn in the line comes, not when the event arrives.
+        appendEntry: async (...args) => {
+          if (full) throw noSpace()
+          await appendEntry(...args)
+          written += 1
+        }
+      })
+      const chat = await service.openChat(workspaceId)
+      // The user's message is written first, and must go through: a failed write fails the send.
+      await service.sendToChat(chat.id, 'work')
+      return {
+        events,
+        setFull: (next) => {
+          full = next
+        },
+        written: () => written
+      }
+    }
+
+    const diskLines = (events: ChatEvent[]): AgentEvent[] =>
+      events
+        .map(({ event }) => event)
+        .filter((event) => event.type === 'error' && event.diskFull === true)
+
+    const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+
+    it('is said once, however many writes fail', async () => {
+      const { events, setFull } = await filling()
+      setFull(true)
+      agent().emit(initMessage)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(diskLines(events)).toHaveLength(1)
+      })
+      await settled()
+
+      expect(diskLines(events)).toEqual([
+        {
+          type: 'error',
+          message: 'ENOSPC: no space left on device, write',
+          code: 'background',
+          diskFull: true
+        }
+      ])
+      // Nor as the raw line beside it.
+      expect(
+        events.filter(({ event }) => event.type === 'error' && event.diskFull !== true)
+      ).toEqual([])
+    })
+
+    it('is said again once a write has gone through since', async () => {
+      const { events, setFull, written } = await filling()
+      setFull(true)
+      agent().emit(initMessage)
+      await vi.waitFor(() => {
+        expect(diskLines(events)).toHaveLength(1)
+      })
+
+      // Space freed: wait until the write has really landed — it is real disk IO, slower
+      // than a tick — before the disk fills again.
+      const before = written()
+      setFull(false)
+      agent().emit(resultMessage)
+      await vi.waitFor(() => {
+        expect(written()).toBe(before + 1)
+      })
+      setFull(true)
+      agent().emit(resultMessage)
+
+      await vi.waitFor(() => {
+        expect(diskLines(events)).toHaveLength(2)
+      })
+    })
+  })
+
   describe('pasted images', () => {
     it('go with the last conversation that sent them', async () => {
       const { service, projectId, workspaceId } = await withWorkspace()

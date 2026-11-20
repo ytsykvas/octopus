@@ -59,6 +59,16 @@ export function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
 }
 
+/** Whether a filesystem failure ran out of room: the disk is full, or the user's quota is. */
+export function isDiskFull(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error.code === 'ENOSPC' || error.code === 'EDQUOT')
+  )
+}
+
 /**
  * Reads JSON and validates it against a schema.
  *
