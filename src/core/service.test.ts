@@ -71,7 +71,7 @@ import { type ChatEntry, readTranscript } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
-import type { Workspace } from './store.js'
+import { loadState, type Workspace } from './store.js'
 import { listWorktrees } from './worktree.js'
 import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
 import { type RemovalRequest, WorkspaceError } from './workspaces.js'
@@ -2162,6 +2162,29 @@ describe('projects', () => {
 
   it('starts with an empty list', () => {
     expect(service.listProjects()).toHaveLength(0)
+  })
+
+  // Beside the state it was given, never in the real root.
+  it('keeps the state before the last change beside the state file', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    await service.updateProjectById(project.id, { name: 'renamed' })
+
+    const backup = await loadState(join(dir, 'state.json.bak'))
+    expect(backup.projects.map((one) => one.name)).toEqual(['planner'])
+  })
+
+  it('keeps the backup where it is told to', async () => {
+    const backupPath = join(dir, 'elsewhere.bak')
+    const told = await createService({ ...paths(dir), stateBackupFilePath: backupPath })
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await told.addProjectFromPath(repo)
+    await told.updateProjectById(project.id, { name: 'renamed' })
+
+    const backup = await loadState(backupPath)
+    expect(backup.projects.map((one) => one.name)).toEqual(['planner'])
   })
 
   it('shows an added project in the list', async () => {
@@ -5151,8 +5174,10 @@ describe('the port a workspace serves on', () => {
     await rm(join(dir, 'state.json'))
     await mkdir(join(dir, 'state.json'))
 
+    // Refused at the backup, before the rename gets its turn: a directory takes
+    // no hard link (EPERM) and no copy (ENOTSUP).
     await expect(service.createWorkspaceIn(project?.id ?? '')).rejects.toMatchObject({
-      code: 'EISDIR'
+      code: 'ENOTSUP'
     })
 
     await rm(join(dir, 'state.json'), { recursive: true })

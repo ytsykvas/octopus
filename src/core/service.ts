@@ -541,6 +541,8 @@ export interface ProjectRemoval {
 export interface ServiceOptions {
   readonly stateFilePath?: string
   readonly stateTempFilePath?: string
+  /** Where the state before each save is kept; beside `stateFilePath` unless given. */
+  readonly stateBackupFilePath?: string
   readonly configFilePath?: string
   /**
    * Root for workspace directories.
@@ -1929,6 +1931,7 @@ export const SHUTDOWN_GRACE_MS = 1_000
 export async function createService(options: ServiceOptions = {}): Promise<OctopusService> {
   const statePath = options.stateFilePath ?? stateFile()
   const stateTempPath = options.stateTempFilePath ?? stateTempFile()
+  const stateBackupPath = options.stateBackupFilePath ?? `${statePath}.bak`
   const configPath = options.configFilePath ?? configFile()
   const makeExec = options.makeExec ?? gitIn
   // One keeper for the service's life: a copy is reused across reads and
@@ -2370,7 +2373,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return stateWrites(async () => {
       const next = change(state)
       if (next === state) return
-      await saveState(next, statePath, stateTempPath)
+      await saveState(next, statePath, stateTempPath, stateBackupPath)
       const moved = next.projects !== state.projects
       state = next
       // Added or removed is what matters, and a write that leaves the list

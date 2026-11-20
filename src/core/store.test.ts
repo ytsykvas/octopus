@@ -145,6 +145,23 @@ describe('load and save', () => {
     await expect(loadState(file)).resolves.toEqual(state)
   })
 
+  it('keeps the state before the last save beside the file', async () => {
+    const state = addWorkspace(withProject, makeWorkspace())
+    await saveState(withProject, file, `${file}.tmp`)
+    await saveState(state, file, `${file}.tmp`)
+
+    await expect(loadState(`${file}.bak`)).resolves.toEqual(withProject)
+    await expect(loadState(file)).resolves.toEqual(state)
+  })
+
+  it('takes a backup path when one is given', async () => {
+    const backup = `${file}.elsewhere`
+    await saveState(withProject, file, `${file}.tmp`, backup)
+    await saveState(EMPTY_STATE, file, `${file}.tmp`, backup)
+
+    await expect(loadState(backup)).resolves.toEqual(withProject)
+  })
+
   it('reads a chosen icon back', async () => {
     const marked = updateProject(withProject, 'planner', { icon: 'rocket' })
     await saveState(marked, file, `${file}.tmp`)
