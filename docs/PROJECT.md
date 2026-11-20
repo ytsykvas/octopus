@@ -173,7 +173,7 @@ Versions below are **actually installed and verified** (`npm run check` and `ele
 | typescript                     | 5.9.3        | language                |
 | electron-vite                  | 6.0.0-beta.1 | build                   |
 | vite                           | 8.3.4        | bundler (Rolldown)      |
-| @anthropic-ai/claude-agent-sdk | 0.3.308      | agent integration       |
+| @anthropic-ai/claude-agent-sdk | 0.3.329      | agent integration       |
 | zod                            | 4.6.7        | on-disk data validation |
 | vitest                         | 4.1.12       | core tests              |
 | eslint                         | 10.8.0       | linting                 |
