@@ -55,7 +55,7 @@ callers serialise writes on that path; it lives in the data root, and whatever
 a crash left there is removed with `rm` — which takes a link, never its target
 — before the exclusive create.
 
-**Every file core writes goes through `persist.ts`**, not only the two stores:
+**Every file core replaces goes through `persist.ts`**, not only the two stores:
 the project's scripts and carry list, the instructions, skills and library
 entries, and what an export writes into a repository's `.octopus/`. A script
 matters most — `sh` reads it as it runs, so one rewritten in place goes on with
@@ -73,6 +73,13 @@ The rule holds by lint, not by memory: `no-restricted-imports` in
 `src/core/` and `src/main/` except `persist.ts` itself and the tests, which
 build their fixtures with it.
 
+Two writers append rather than replace, and stay outside it on purpose: a
+transcript gains one line per entry (`appendFile` in `transcript.ts`), and the
+diagnostics log one line per swallowed error (`diagnostics.ts`, synchronous
+because it runs inside `catch`). An append never shows a reader half of the
+old file. The lint rule names `writeFile` from `fs/promises` only, so it does
+not see the diagnostics log's synchronous trim either.
+
 Reading validates with zod and **fails loudly** on a corrupt file rather than
 falling back to defaults. Silently resetting someone's projects because a byte
 went wrong is worse than refusing to start.
@@ -81,8 +88,10 @@ went wrong is worse than refusing to start.
 
 `saveState` keeps the version each save replaces as `state.json.bak`, beside
 the file. The step sits inside `replaceThrough`, after the new contents are
-synced and before the rename (`keepBackup` in `persist.ts`): the old `.bak` is
-removed and `state.json` is **hard-linked** to it. A link copies nothing, so it
+synced and before the rename (`keepBackup` in `persist.ts`): `state.json` is
+**hard-linked** under a temporary name, which is then renamed over the old
+`.bak` — so the previous backup goes only as the new one takes its place, and a
+failure in between leaves it as it was. A link copies nothing, so it
 costs the same whatever the file's size, and once the rename puts a new inode at
 `state.json` the old one — synced when it was written — lives on under `.bak`.
 A filesystem without hard links (`EPERM`, `ENOTSUP`) gets a copy instead. A
