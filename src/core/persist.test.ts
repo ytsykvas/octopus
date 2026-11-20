@@ -21,6 +21,7 @@ import { z } from 'zod'
 import {
   describeError,
   InvalidFileError,
+  isDiskFull,
   readJsonFile,
   writeJsonFile,
   writeTextFile
@@ -71,6 +72,22 @@ describe('describeError', () => {
     expect(describeError('plain string')).toBe('plain string')
     expect(describeError(42)).toBe('42')
     expect(describeError(null)).toBe('null')
+  })
+})
+
+describe('isDiskFull', () => {
+  const failure = (code: string): Error => Object.assign(new Error(code), { code })
+
+  it('recognises a full disk and a used-up quota', () => {
+    expect(isDiskFull(failure('ENOSPC'))).toBe(true)
+    expect(isDiskFull(failure('EDQUOT'))).toBe(true)
+  })
+
+  it('leaves every other failure alone', () => {
+    expect(isDiskFull(failure('ENOENT'))).toBe(false)
+    expect(isDiskFull(new Error('ENOSPC'))).toBe(false)
+    expect(isDiskFull('ENOSPC')).toBe(false)
+    expect(isDiskFull(null)).toBe(false)
   })
 })
 

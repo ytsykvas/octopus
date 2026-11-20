@@ -288,7 +288,7 @@ import { formatAside, parseBtw, type SideAnswer, type SideExchange } from './sid
 import { type OwnSkillScope, skillKey } from './skillNames.js'
 import type { Store } from './stores.js'
 import { type QuestionAnswer, readQuestions, withAnswers } from './questions.js'
-import { describeError } from './persist.js'
+import { describeError, isDiskFull } from './persist.js'
 import {
   catalog,
   connectOfficialMarketplace,
@@ -620,6 +620,11 @@ export interface ServiceOptions {
   /** The SDK's session listing and deletion, injected for the reason `forkSession` is. */
   readonly listSessions?: ListSessionsFn
   readonly deleteSession?: DeleteSessionFn
+  /**
+   * How an entry is added to a transcript, injected so a test can make the
+   * disk fill up: a real one cannot be told to answer ENOSPC.
+   */
+  readonly appendEntry?: typeof appendEntry
   /** How long a side question may run; a parameter so the deadline can be tested. */
   readonly sideQuestionTimeoutMs?: number
   readonly uuid?: () => string
@@ -1962,6 +1967,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const runSessionMessages = options.sessionMessages ?? defaultSessionMessages
   const runListSessions = options.listSessions ?? defaultListSessions
   const runDeleteSession = options.deleteSession ?? defaultDeleteSession
+  const writeEntry = options.appendEntry ?? appendEntry
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
   const onDiagnostic = options.onDiagnostic ?? ((): void => undefined)
@@ -2977,7 +2983,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       // A closing session goes on emitting for a moment after its workspace was
       // removed. Without this a late event would write the transcript back
       // after it had been deleted, leaving a file nothing points at.
-      if (findChat(state, chat.id)) await appendEntry(chat.id, entry, dataRoot)
+      if (findChat(state, chat.id)) {
+        await writeEntry(chat.id, entry, dataRoot)
+        toldDiskFull.delete(chat.id)
+      }
     }
 
     transcriptWrites(append).catch((error: unknown) => {
@@ -3047,8 +3056,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   function appendAside(chat: Chat, aside: SideExchange): Promise<void> {
     return transcriptWrites(async () => {
       const at = now()
-      await appendEntry(chat.id, { role: 'user', at, text: aside.question }, dataRoot)
-      await appendEntry(
+      await writeEntry(chat.id, { role: 'user', at, text: aside.question }, dataRoot)
+      await writeEntry(
         chat.id,
         { role: 'agent', at, event: { type: 'text', text: aside.response } },
         dataRoot
@@ -3097,11 +3106,29 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * reason to stop answering. Announced straight to the listeners rather than
    * through `record`, which would try to write the failure down and fail again.
    */
+  /*
+   * The conversations already told their disk is full. On a full disk every
+   * event's append fails, and one line per event buried the conversation in the
+   * same raw error. Taken back when a write for the conversation succeeds, so a
+   * disk that fills again is said again.
+   */
+  const toldDiskFull = new Set<string>()
+
   function report(chat: Chat, error: unknown): void {
+    const diskFull = isDiskFull(error)
+    if (diskFull) {
+      if (toldDiskFull.has(chat.id)) return
+      toldDiskFull.add(chat.id)
+    }
     emit({
       chatId: chat.id,
       workspaceId: chat.workspaceId,
-      event: { type: 'error', message: describeError(error), code: 'background' }
+      event: {
+        type: 'error',
+        message: describeError(error),
+        code: 'background',
+        ...(diskFull ? { diskFull: true as const } : {})
+      }
     })
   }
 
@@ -7276,7 +7303,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         text,
         ...(reachesAgent && { uuid: messageId })
       }
-      await transcriptWrites(() => appendEntry(chatId, prompt, dataRoot))
+      await transcriptWrites(() => writeEntry(chatId, prompt, dataRoot))
       noteTurn(chatId, prompt)
 
       /*

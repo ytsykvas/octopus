@@ -1493,10 +1493,19 @@ function RefusalRow({
   )
 }
 
-/* A death the SDK names — an exit code or a signal — is worded, its line kept under it to search
-   for. An `endedQuietly` has no SDK line — its message is core's own — so the words stand alone. */
+/* A death the SDK names — an exit code or a signal — and a full disk are worded, the raw line kept
+   under them to search for. An `endedQuietly` has no SDK line — its message is core's own — so the
+   words stand alone. */
 function ErrorRow({ event }: { event: Extract<AgentEvent, { type: 'error' }> }): React.JSX.Element {
   const { t } = useTranslation()
+  if (event.diskFull === true) {
+    return (
+      <div className="error-box">
+        <p>{t('chat.diskFull')}</p>
+        <p className="text-ink-faint mt-1 font-mono text-[11px]">{shown(event.message)}</p>
+      </div>
+    )
+  }
   if (event.code === 'endedQuietly') {
     return (
       <div className="error-box">

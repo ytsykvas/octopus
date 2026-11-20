@@ -1394,6 +1394,26 @@ describe('what the log shows', () => {
     ).toBeVisible()
     expect(screen.queryByText('Claude Code ended without a result or an error')).toBeNull()
   })
+
+  it('says a full disk in words, with the raw line under it', () => {
+    renderLog({
+      entries: [
+        fromAgent({
+          type: 'error',
+          message: 'ENOSPC: no space left on device, write',
+          code: 'background',
+          diskFull: true
+        })
+      ]
+    })
+
+    expect(
+      screen.getByText(
+        'The disk is full, so this conversation is not being saved. Free some space — until then, anything new here will be missing when the conversation is reopened.'
+      )
+    ).toBeVisible()
+    expect(screen.getByText('ENOSPC: no space left on device, write')).toBeVisible()
+  })
   it('says a process killed by a signal was stopped from outside, with its line under it', () => {
     renderLog({
       entries: [

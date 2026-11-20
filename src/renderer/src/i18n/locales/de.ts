@@ -973,6 +973,8 @@ export const de: Translation = {
       'Claude Code wurde mit einem Fehler beendet (Code {{code}}). Schick eine Nachricht, um es erneut zu versuchen; der Chat bleibt erhalten.',
     processEnded:
       'Claude Code wurde beendet, bevor die Arbeit fertig war. Schick eine Nachricht, um weiterzumachen; der Chat bleibt erhalten.',
+    diskFull:
+      'Der Datenträger ist voll, daher wird dieser Chat nicht gespeichert. Gib Speicher frei – bis dahin fehlt alles Neue hier, wenn der Chat wieder geöffnet wird.',
     messageSkipped:
       'Eine Nachricht von Claude Code konnte nicht verarbeitet werden und wurde übersprungen. Der Chat geht weiter.',
     compactedBy:
