@@ -12,12 +12,12 @@
  * diverge.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { readFile } from 'node:fs/promises'
 
 import { z } from 'zod'
 
 import { globalInstruction, projectInstruction } from './paths.js'
+import { writeTextFile } from './persist.js'
 import type { ProjectId } from './types.js'
 
 /**
@@ -413,8 +413,5 @@ export async function writeInstruction(
   contents: string,
   root?: string
 ): Promise<void> {
-  const path = instructionPath(kind, scope, root)
-
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, contents, 'utf8')
+  await writeTextFile(instructionPath(kind, scope, root), contents)
 }

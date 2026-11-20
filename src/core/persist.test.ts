@@ -23,6 +23,7 @@ import {
   InvalidFileError,
   readJsonFile,
   writeJsonFile,
+  writeNewFile,
   writeTextFile
 } from './persist.js'
 
@@ -174,6 +175,34 @@ describe('writeJsonFile', () => {
     await writeJsonFile(file, Schema, FALLBACK)
 
     expect(sync).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('writeNewFile', () => {
+  it('writes the bytes it is given', async () => {
+    const path = join(dir, 'paste.png')
+    await writeNewFile(path, Uint8Array.from([137, 80, 78, 71]))
+
+    expect([...(await readFile(path))]).toEqual([137, 80, 78, 71])
+  })
+
+  // A fresh name, never a replacement: landing on a file means two names
+  // collided, and the one already there is somebody's.
+  it('refuses a path that already holds a file', async () => {
+    const path = join(dir, 'paste.png')
+    await writeFile(path, 'first')
+
+    await expect(writeNewFile(path, Uint8Array.from([1]))).rejects.toMatchObject({
+      code: 'EEXIST'
+    })
+    await expect(readFile(path, 'utf8')).resolves.toBe('first')
+  })
+
+  it('creates the directory it needs', async () => {
+    const path = join(dir, 'attachments', 'paste.png')
+    await writeNewFile(path, Uint8Array.from([1]))
+
+    expect([...(await readFile(path))]).toEqual([1])
   })
 })
 

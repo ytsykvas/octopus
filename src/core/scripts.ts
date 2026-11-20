@@ -15,12 +15,12 @@
  * app, which is the point of not owning the workflow (§4).
  */
 
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { readFile } from 'node:fs/promises'
 
 import { z } from 'zod'
 
 import { projectScript, projectScriptsDir } from './paths.js'
+import { writeTextFile } from './persist.js'
 import { PORT_VARIABLE, ROOT_VARIABLE, SLUG_VARIABLE, WORKSPACE_VARIABLE } from './scriptEnv.js'
 import type { ProjectId } from './types.js'
 
@@ -136,11 +136,9 @@ export async function writeScript(
   contents: string,
   root?: string
 ): Promise<void> {
-  const path = scriptPath(kind, projectId, root)
-
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, contents, 'utf8')
-  await chmod(path, 0o755)
+  // Replaced rather than rewritten: `sh` reads a script as it runs, so one
+  // changed in place goes on with the new file's bytes from where it had got to.
+  await writeTextFile(scriptPath(kind, projectId, root), contents, 0o755)
 }
 
 /** Whether a script has been written for this project. */

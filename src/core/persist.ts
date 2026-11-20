@@ -10,7 +10,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
+import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import type { z } from 'zod'
@@ -141,6 +141,17 @@ export async function writeTextFile(
 ): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
   await replaceThrough(`${filePath}.${suffix()}.tmp`, filePath, contents, mode)
+}
+
+/**
+ * Writes bytes to a path that must not exist yet — a fresh name, never a replacement.
+ *
+ * Nothing to make atomic: no reader knows the name before this returns. `wx` turns two
+ * names colliding into a failure rather than one file silently replacing another.
+ */
+export async function writeNewFile(filePath: string, bytes: Uint8Array): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true })
+  await writeFile(filePath, bytes, { flag: 'wx' })
 }
 
 /**

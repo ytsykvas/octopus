@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -11,6 +11,7 @@ import {
   type CarryReport,
   carryPath,
   readCarryList,
+  storedCarryList,
   writeCarryList
 } from './carry.js'
 
@@ -52,6 +53,28 @@ describe('readCarryList', () => {
   it('creates the project directory on the way', async () => {
     await writeCarryList('never-seen', '.env\n', root)
     await expect(readFile(carryPath('never-seen', root), 'utf8')).resolves.toBe('.env\n')
+  })
+
+  // Taking it for absent would create the workspace with the starting list
+  // instead of the one the project chose.
+  it('fails rather than pretend an unreadable list is absent', async () => {
+    await mkdir(carryPath('planner', root), { recursive: true })
+
+    await expect(storedCarryList('planner', root)).rejects.toMatchObject({ code: 'EISDIR' })
+    await expect(readCarryList('planner', root)).rejects.toMatchObject({ code: 'EISDIR' })
+  })
+
+  it('reads a list that was never written as none', async () => {
+    await expect(storedCarryList('planner', root)).resolves.toBeNull()
+  })
+
+  it('replaces the list rather than rewriting it in place', async () => {
+    await writeCarryList('planner', '.env\n', root)
+    const before = (await stat(carryPath('planner', root))).ino
+
+    await writeCarryList('planner', 'config/master.key\n', root)
+
+    expect((await stat(carryPath('planner', root))).ino).not.toBe(before)
   })
 })
 

@@ -55,6 +55,19 @@ callers serialise writes on that path; it lives in the data root, and whatever
 a crash left there is removed with `rm` — which takes a link, never its target
 — before the exclusive create.
 
+**Every file core writes goes through `persist.ts`**, not only the two stores:
+the project's scripts and carry list, the instructions, skills and library
+entries, and what an export writes into a repository's `.octopus/`. A script
+matters most — `sh` reads it as it runs, so one rewritten in place goes on with
+the new file's bytes from wherever it had got to, while a replaced one keeps
+the inode it opened. `writeScript` and the repository's `script.*` pass
+`0o755`, so the executable bit comes through the replacement.
+
+A file written once under a fresh name — a pasted image — has nothing to make
+atomic, because nobody knows the name before the write returns. It goes through
+`writeNewFile`, which creates it with `wx`, so two names colliding fail rather
+than one picture silently replacing another.
+
 Reading validates with zod and **fails loudly** on a corrupt file rather than
 falling back to defaults. Silently resetting someone's projects because a byte
 went wrong is worse than refusing to start.

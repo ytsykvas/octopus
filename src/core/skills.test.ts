@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -253,6 +253,15 @@ describe('readSkill', () => {
 })
 
 describe('writeSkill', () => {
+  it('replaces the document rather than rewriting it in place', async () => {
+    await writeSkill(root, 'review', { description: 'First.', body: '# One\n' })
+    const before = (await stat(join(root, 'review', 'SKILL.md'))).ino
+
+    await writeSkill(root, 'review', { description: 'Second.', body: '# Two\n' })
+
+    expect((await stat(join(root, 'review', 'SKILL.md'))).ino).not.toBe(before)
+  })
+
   it('writes a document the reader can parse back', async () => {
     await writeSkill(root, 'review', { description: 'When reviewing.', body: '# Review\n' })
 
@@ -334,6 +343,15 @@ describe('writeSkill', () => {
 })
 
 describe('writeRawSkill', () => {
+  it('replaces the document rather than rewriting it in place', async () => {
+    await writeRawSkill(root, 'review', document('review', 'First.'))
+    const before = (await stat(join(root, 'review', 'SKILL.md'))).ino
+
+    await writeRawSkill(root, 'review', document('review', 'Second.'))
+
+    expect((await stat(join(root, 'review', 'SKILL.md'))).ino).not.toBe(before)
+  })
+
   it('writes exactly what it was given', async () => {
     const raw = document('review', 'When reviewing.')
     await writeRawSkill(root, 'review', raw)
@@ -469,6 +487,15 @@ describe('removeSkill', () => {
 })
 
 describe('renameSkill', () => {
+  it('writes the moved document whole rather than over the one it moved', async () => {
+    await place(root, 'review', document('review', 'Reviews code.', '# How\n'))
+    const before = (await stat(join(root, 'review', 'SKILL.md'))).ino
+
+    await renameSkill(root, 'review', 'reviewer')
+
+    expect((await stat(join(root, 'reviewer', 'SKILL.md'))).ino).not.toBe(before)
+  })
+
   /*
    * The name **is** the directory, so this moves it — and the frontmatter with
    * it, or the file claims to be a skill the store has filed under another

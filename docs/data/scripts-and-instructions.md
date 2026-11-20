@@ -45,4 +45,6 @@ about rather than found months later. Removing a whole project names every works
 not finish, in one line.
 
 Scripts are saved executable. Without the bit, running one fails with
-"permission denied", which says nothing about what to do.
+"permission denied", which says nothing about what to do. A save replaces the
+file rather than rewriting it, so a script already running reads on in its own
+version instead of continuing mid-line into the new one.
