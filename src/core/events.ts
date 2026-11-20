@@ -761,7 +761,12 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     type: z.literal('error'),
     message: z.string(),
     /** Core's own: `endedQuietly` closed the turn; `background` failed as the session went on. */
-    code: z.enum(['endedQuietly', 'background']).optional()
+    code: z.enum(['endedQuietly', 'background']).optional(),
+    /**
+     * Set only beside `background`: the write failed because the disk or the
+     * quota is full. The log says that in words rather than as the raw line.
+     */
+    diskFull: z.literal(true).optional()
   })
 ])
 

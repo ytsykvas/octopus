@@ -54,6 +54,15 @@ returns. Two are announced without being written — a background failure
 (`report`) and the `result` closing a cleared turn — and a read can drop them,
 as a restart would.
 
+A background failure that ran out of room — `ENOSPC` or `EDQUOT` (`isDiskFull`,
+`persist.ts`) — is announced once per conversation, carrying `diskFull`, and
+the log words it instead of showing the raw line alone. On a full disk every
+event's append fails, and one line each buried the conversation. A write for
+the conversation that later succeeds takes the mark back, so a disk that
+fills again is said again. The SDK's own `session_writes_lost` never arrives
+here: the CLI sends it only when it exits with status 0, and every session
+Octopus ends is ended with SIGTERM.
+
 All three are a `oneAtATime` line (`parallel.ts`), not three hand-written copies
 of `tail.then(apply, apply)` and a settled tail. Another file written from
 handlers nobody awaits, or read, decided on and written back, takes a line of

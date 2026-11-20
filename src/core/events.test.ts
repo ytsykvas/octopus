@@ -186,6 +186,16 @@ describe('the event schema', () => {
     expect(AgentEventSchema.safeParse({ type: 'applause', volume: 11 }).success).toBe(false)
   })
 
+  it('reads a background failure that ran out of disk', () => {
+    const event = {
+      type: 'error',
+      message: 'ENOSPC: no space left on device, write',
+      code: 'background',
+      diskFull: true
+    }
+    expect(AgentEventSchema.parse(event)).toEqual(event)
+  })
+
   it('accepts a null cost, which is what a crashed turn reports', () => {
     expect(
       AgentEventSchema.safeParse({
