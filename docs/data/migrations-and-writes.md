@@ -94,3 +94,16 @@ The path follows the state's own — `<state>.bak`, which for the default is
 writes a backup into the real root. Saves are serialised (`commit`), so two
 never race for the `.bak`, and the data-root lock covers it with the rest.
 `config.json` and the transcripts get no backup.
+
+The backup is offered, never taken silently. When the service fails to start
+because `state.json` itself does not read (`InvalidFileError` on that path) and
+`.bak` parses as a state, `main` asks before any window exists: Restore or
+Quit, with when the copy was saved and how many projects it holds. Restore
+copies the damaged file aside as `state.json.broken-<time>`, writes the backup
+over `state.json` atomically and starts again; a second failure ends in the same
+error box as before. Without a good backup the start fails exactly as it always
+has. The damaged file is **copied** aside rather than renamed: until the backup
+has landed `state.json` stays where it is, because a moment with no file at all
+is a moment in which a start reads "first run" — the silent reset this whole
+section refuses. The decisions are in `stateRecovery.ts`; `main/index.ts`
+(`openService`) only shows the question.

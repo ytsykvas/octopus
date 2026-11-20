@@ -9,6 +9,7 @@ else joins a home directory by hand.
   config.json                        settings
   state.json                         projects, workspaces and chats
   state.json.bak                     the state before the last save, offered back if state.json cannot be read
+  state.json.broken-<time>           a damaged state.json, kept when the backup was restored over it
   chats/<chatId>.jsonl               one conversation each, append-only
   instructions/*.md                  the prompts every project falls back to
   prompts.json                       saved prompts, offered to every project
