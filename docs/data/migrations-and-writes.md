@@ -68,6 +68,11 @@ atomic, because nobody knows the name before the write returns. It goes through
 `writeNewFile`, which creates it with `wx`, so two names colliding fail rather
 than one picture silently replacing another.
 
+The rule holds by lint, not by memory: `no-restricted-imports` in
+`eslint.config.js` refuses `writeFile` from `fs/promises` anywhere in
+`src/core/` and `src/main/` except `persist.ts` itself and the tests, which
+build their fixtures with it.
+
 Reading validates with zod and **fails loudly** on a corrupt file rather than
 falling back to defaults. Silently resetting someone's projects because a byte
 went wrong is worse than refusing to start.
