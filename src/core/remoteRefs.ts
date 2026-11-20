@@ -167,8 +167,9 @@ export function createRemoteRefWatch(deps: RemoteRefWatchDeps): RemoteRefWatch {
       if (starting.get(id) === repoPath) starting.delete(id)
     }
 
-    // Removed, or pointed at another checkout, while the git dir was being found.
-    if (wanted.get(id) !== repoPath) return
+    // Removed, or pointed at another checkout, while the git dir was being found — or
+    // pointed away and back, so an earlier start for this same checkout already watches.
+    if (wanted.get(id) !== repoPath || watched.has(id)) return
 
     const refs = join(common, 'refs')
     const pending = new Map<string, ReturnType<typeof setTimeout>>()

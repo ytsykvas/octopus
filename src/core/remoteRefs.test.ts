@@ -387,6 +387,28 @@ describe('createRemoteRefWatch', () => {
     expect(fake.paths).toEqual([join('/new', '.git', 'refs')])
   })
 
+  // A → B → A while the first search is out: two starts for A, and the second
+  // must not replace the first's watcher without closing it.
+  it('watches a checkout once when the project comes back to it mid-search', async () => {
+    const { fake, commonDirOf, refs } = setUp()
+    const answers: { readonly repoPath: string; readonly settle: (dir: string) => void }[] = []
+    commonDirOf.mockImplementation(
+      (repoPath) =>
+        new Promise((settle) => {
+          answers.push({ repoPath, settle })
+        })
+    )
+
+    const first = refs.sync([{ id: 'planner', repoPath: '/a' }])
+    const away = refs.sync([{ id: 'planner', repoPath: '/b' }])
+    const back = refs.sync([{ id: 'planner', repoPath: '/a' }])
+    for (const one of answers) one.settle(join(one.repoPath, '.git'))
+    await Promise.all([first, away, back])
+
+    expect(fake.paths).toEqual([join('/a', '.git', 'refs')])
+    expect(fake.closed).toEqual([])
+  })
+
   it('does not start one twice when two syncs overlap', async () => {
     const { fake, refs } = setUp()
 
