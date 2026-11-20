@@ -99,7 +99,6 @@ export async function spawnInGroup(
   return new Promise((resolve, reject) => {
     let tail = Buffer.alloc(0)
     let timedOut = false
-    let grace: ReturnType<typeof setTimeout> | undefined
     let settled = false
 
     const signalGroup = (signal: NodeJS.Signals): void => {
@@ -113,7 +112,8 @@ export async function spawnInGroup(
     const deadline = setTimeout(() => {
       timedOut = true
       signalGroup('SIGTERM')
-      grace = setTimeout(() => {
+      // Never cleared: see `settle`.
+      setTimeout(() => {
         signalGroup('SIGKILL')
       }, graceMs)
     }, options.timeout)
@@ -127,7 +127,8 @@ export async function spawnInGroup(
       if (settled) return
       settled = true
       clearTimeout(deadline)
-      clearTimeout(grace)
+      // The SIGKILL is not called off: past the deadline the script usually dies of
+      // SIGTERM at once, and what it started that ignores SIGTERM still has it coming.
       stderr.destroy()
       if (error === null) resolve()
       else reject(error)

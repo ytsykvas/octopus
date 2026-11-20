@@ -227,6 +227,20 @@ describe('spawnInGroup', () => {
     })
   })
 
+  // The common case: the script dies of SIGTERM at once, and what it started
+  // ignores it. The leader's exit must not call off the SIGKILL.
+  it('kills what the script started even after the script itself has died', async () => {
+    const file = await script(`sh -c "trap '' TERM; sleep 30" & echo $! > child.pid; wait`)
+
+    await expect(
+      spawnInGroup(file, { cwd: dir, env: {}, timeout: 1_500 }, { graceMs: 50 })
+    ).rejects.toThrow('timed out')
+    const child = await pidIn('child.pid')
+    await vi.waitFor(() => {
+      expect(alive(child)).toBe(false)
+    })
+  })
+
   it('tolerates a group that is gone before it is signalled', async () => {
     const file = await script('sleep 30')
     const kill = (pid: number, signal?: string | number): true => {

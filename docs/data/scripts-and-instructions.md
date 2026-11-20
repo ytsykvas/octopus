@@ -46,7 +46,7 @@ not finish, in one line.
 
 It runs as the leader of a process group of its own (`spawnInGroup` in
 `archive.ts`). The 30-second deadline signals the whole group — SIGTERM, then
-SIGKILL two seconds later — so the `docker compose` or `psql` it started does
+SIGKILL two seconds later, even when the script itself died of the first — so the `docker compose` or `psql` it started does
 not live on under init. Its output has no ceiling: stdout goes nowhere, since a
 success shows nothing, and only the last 64 KB of stderr are kept for the
 report, so a cleanup that succeeds noisily is no longer reported as failed. The
