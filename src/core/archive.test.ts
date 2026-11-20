@@ -204,8 +204,9 @@ describe('spawnInGroup', () => {
   it('stops the whole group at the deadline', async () => {
     const file = await script('sleep 30 & echo $! > child.pid; wait')
 
-    await expect(spawnInGroup(file, { cwd: dir, env: {}, timeout: 200 })).rejects.toThrow(
-      `Command failed: ${file} (timed out after 0.2 s)`
+    // Long enough for a loaded machine to start `sh` and write the pid first.
+    await expect(spawnInGroup(file, { cwd: dir, env: {}, timeout: 1_500 })).rejects.toThrow(
+      `Command failed: ${file} (timed out after 1.5 s)`
     )
     const child = await pidIn('child.pid')
     await vi.waitFor(() => {
@@ -218,7 +219,7 @@ describe('spawnInGroup', () => {
     const file = await script("trap '' TERM; sleep 30 & echo $! > child.pid; wait")
 
     await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 200 }, { graceMs: 50 })
+      spawnInGroup(file, { cwd: dir, env: {}, timeout: 1_500 }, { graceMs: 50 })
     ).rejects.toThrow('timed out')
     const child = await pidIn('child.pid')
     await vi.waitFor(() => {
