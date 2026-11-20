@@ -2463,6 +2463,12 @@ describe('a session that will not close', () => {
 })
 
 describe('cwdWatch', () => {
+  // A watcher that fails has nothing to guard: blocking the agent's call over it
+  // would turn a lost log line into a refused tool.
+  it('lets the action go ahead when it fails', () => {
+    expect(cwdWatch(() => undefined).CwdChanged?.[0]?.onFailure).toBeUndefined()
+  })
+
   /** Fires the hook the way the SDK does, on what a `cd` reports. */
   function moved(onMove: (event: AgentEvent) => void, input: unknown): Promise<unknown> {
     const [hook] = cwdWatch(onMove).CwdChanged?.[0]?.hooks ?? []
@@ -2524,6 +2530,11 @@ describe('cwdWatch', () => {
 })
 
 describe('compactionWatch', () => {
+  // As `cwdWatch`: a failed watcher costs a log line, never the agent's call.
+  it('lets the action go ahead when it fails', () => {
+    expect(compactionWatch(() => undefined).PostCompact?.[0]?.onFailure).toBeUndefined()
+  })
+
   /** Fires the hook the way the SDK does, on what a compaction reports. */
   function compacted(onEvent: (event: AgentEvent) => void, input: unknown): Promise<unknown> {
     const [hook] = compactionWatch(onEvent).PostCompact?.[0]?.hooks ?? []
@@ -2686,6 +2697,16 @@ describe('toolGuards', () => {
     await expect(
       decide(toolGuards(broken), 'Bash|Monitor|PowerShell', shell('ls'))
     ).resolves.toEqual(denied(GUARD_FAILED))
+  })
+
+  // A guard that throws is caught by `denying`; this covers what fails outside it,
+  // such as an answer the SDK cannot read. With 'continue' (the default) the call would run.
+  it('blocks the call when a guard fails in a way it cannot catch itself', () => {
+    expect(toolGuards().PreToolUse?.map((matcher) => matcher.onFailure)).toEqual([
+      'block',
+      'block',
+      'block'
+    ])
   })
 
   it('refuses an MCP tool that would open a pull request, and lets one that reads', async () => {
