@@ -167,20 +167,30 @@ function codeOf(error: unknown): unknown {
  * A hard link rather than a copy: O(1) whatever the size, and once the rename puts a new
  * inode at `filePath`, the old one — already synced when it was written — lives on here.
  * A filesystem without hard links gets a copy instead.
+ *
+ * Made under a temporary name and renamed over the old backup, so the old one goes only as
+ * the new one takes its place: a failure in between leaves the previous backup as it was.
  */
 export async function keepBackup(
   filePath: string,
   backupPath: string,
   linkFile: (existing: string, created: string) => Promise<void> = link
 ): Promise<void> {
-  await rm(backupPath, { force: true })
+  const tempPath = `${backupPath}.${randomSuffix()}.tmp`
   try {
-    await linkFile(filePath, backupPath)
+    try {
+      await linkFile(filePath, tempPath)
+    } catch (error) {
+      if (isNotFound(error)) return
+      const code = codeOf(error)
+      if (code !== 'EPERM' && code !== 'ENOTSUP') throw error
+      await copyFile(filePath, tempPath)
+    }
+    await rename(tempPath, backupPath)
   } catch (error) {
-    if (isNotFound(error)) return
-    const code = codeOf(error)
-    if (code !== 'EPERM' && code !== 'ENOTSUP') throw error
-    await copyFile(filePath, backupPath)
+    // Settled, as in `replaceThrough`: a cleanup that throws must not replace the error.
+    await Promise.allSettled([rm(tempPath, { force: true })])
+    throw error
   }
 }
 

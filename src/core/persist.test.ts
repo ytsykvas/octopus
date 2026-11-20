@@ -270,6 +270,19 @@ describe('keepBackup', () => {
     })
   })
 
+  // The old one goes only as the new one takes its name.
+  it('keeps the previous backup when a new one cannot be made', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await writeFile(`${file}.bak`, 'older', 'utf8')
+
+    await expect(keepBackup(file, `${file}.bak`, refusing('EIO'))).rejects.toMatchObject({
+      code: 'EIO'
+    })
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('older')
+    expect(await temporaries()).toEqual([])
+  })
+
   it('passes on a failure that carries no code', async () => {
     await writeFile(file, 'old', 'utf8')
 
