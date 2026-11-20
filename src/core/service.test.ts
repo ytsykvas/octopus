@@ -401,7 +401,8 @@ const oneRequest =
       state: 'MERGED',
       url: 'https://x/pull/7',
       createdAt,
-      headRefOid: head()
+      headRefOid: head(),
+      isCrossRepository: false
     }
     return Promise.resolve(
       JSON.stringify([

@@ -1985,6 +1985,8 @@ export const uk: Translation = {
     mergeFailed: 'GitHub не влив #{{number}}. Каже: {{reason}}',
     requestNotOnBranch:
       'Запит #{{number}} у гілці {{head}}, а не в {{branch}} цього воркспейсу. Нічого не зроблено.',
+    requestFromFork:
+      'Запит #{{number}} іде з однойменної гілки в іншому репозиторії, а не з цього воркспейсу. Нічого не зроблено.',
     updateFailed:
       'Не вдалося влити {{base}} у {{branch}}, тож нічого не змінено. Git каже: {{reason}}',
     updateLeftMerging:

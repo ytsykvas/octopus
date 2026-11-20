@@ -146,6 +146,8 @@ export type GitHubErrorCode =
   // the repository rather than against the branch it is standing in, so a stale
   // number would merge whatever it names.
   | 'requestNotOnBranch'
+  // Refused before `gh` acts: a fork's request can share this branch's name.
+  | 'requestFromFork'
   // Bringing the base into a branch before a second request: undone when it
   // fails, so the worktree is not left mid-merge — and said so when it cannot be.
   | 'updateFailed'

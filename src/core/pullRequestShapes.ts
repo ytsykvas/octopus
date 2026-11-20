@@ -271,6 +271,7 @@ export function runsToRerun(checks: readonly PullRequestCheck[], scope: RerunSco
 /** What `gh pr view --json headRefName,statusCheckRollup` sends before a re-run. */
 export const RerunPayloadSchema = z.object({
   headRefName: z.string().min(1),
+  isCrossRepository: z.boolean(),
   /** The request's own page, which says which repository a run must be in. */
   url: z.string(),
   statusCheckRollup: RollupSchema
@@ -287,12 +288,14 @@ export const RerunPayloadSchema = z.object({
  */
 export function toRerunPayload(payload: z.infer<typeof RerunPayloadSchema>): {
   readonly headRefName: string
+  readonly isCrossRepository: boolean
   readonly checks: PullRequestCheck[]
 } {
   const repository = payload.url.replace(/\/pull\/\d+$/u, '')
 
   return {
     headRefName: payload.headRefName,
+    isCrossRepository: payload.isCrossRepository,
     checks: toChecks(payload.statusCheckRollup).map((check) =>
       check.url?.startsWith(`${repository}/actions/runs/`) === true
         ? check
@@ -654,7 +657,9 @@ export const BranchListSchema = z.array(
     // `""` where there is none, as in the detail.
     reviewDecision: z.string(),
     // The request's last commit: what a branch that moved on has moved past.
-    headRefOid: z.string().min(1)
+    headRefOid: z.string().min(1),
+    // Opened from a fork, whose branch may carry a workspace's name.
+    isCrossRepository: z.boolean()
   })
 )
 
@@ -677,6 +682,17 @@ const CLOCK_SKEW_MS = 5 * 60_000
 export function openedFor(request: { readonly createdAt: string }, owner: BranchOwner): boolean {
   const since = Date.parse(owner.branchSince ?? owner.createdAt)
   return Date.parse(request.createdAt) >= since - CLOCK_SKEW_MS
+}
+
+/**
+ * Drops requests opened from another repository.
+ *
+ * The list is the whole repository's, and a fork's branch may carry a
+ * workspace's name — the names are a short list — so its request would be
+ * marked as that workspace's.
+ */
+export function sameRepository(payload: BranchListPayload): BranchListPayload {
+  return payload.filter((entry) => !entry.isCrossRepository)
 }
 
 /** Drops requests opened before their branch's workspace came onto it; branches with no workspace pass. */

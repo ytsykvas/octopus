@@ -361,6 +361,19 @@ so it asks about uncommitted work and about the branch exactly as the list does.
 A **closed** request is not a finished one — it is reopened, or the branch is
 reworked and opened again — so only a merge draws this.
 
+**A request from a fork is never the workspace's.** `gh pr list --head`
+matches the branch by _name_, and lists a fork's request for a branch called
+`octopus/feature/anna` beside ours — the names come from a short list, so in a
+public repository that is a matter of time. Every read asks for
+`isCrossRepository` and drops what is true: the pane's lookup (which asks for
+ten rather than one, so our older request is still found under a fork's newer
+one), and the project-wide list behind the sidebar's marks (`sameRepository`,
+before the workspace's own are picked, while `capped` still counts what GitHub
+sent). Merge, Close and Re-run ask again before they act and refuse a fork's
+request as `requestFromFork`, ahead of the branch-name check that would let it
+through. octopus opens its own requests with `--head <branch>`, in the same
+repository, so nothing it made is ever cross-repository.
+
 **A request that is no longer open is current only until the branch moves past
 it.** GitHub keeps a branch's newest request as its newest until another is
 opened, so a branch merged and then committed to went on reading as merged: the

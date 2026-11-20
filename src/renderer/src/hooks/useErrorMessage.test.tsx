@@ -152,6 +152,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   resolveFailed: { reason: 'not found' },
   mergeFailed: { number: '42', reason: 'checks failing' },
   requestNotOnBranch: { number: '42', head: 'octopus/bo', branch: 'octopus/anna' },
+  requestFromFork: { number: '42' },
   updateFailed: {
     base: 'origin/main',
     branch: 'octopus/anna',

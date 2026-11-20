@@ -2466,6 +2466,8 @@ export const en = {
        the number alone cannot answer it. */
     requestNotOnBranch:
       'Pull request #{{number}} is on {{head}}, not on this workspace\u2019s {{branch}}. Nothing was done.',
+    requestFromFork:
+      'Pull request #{{number}} comes from a branch of the same name in another repository, not from this workspace. Nothing was done.',
     // Undone rather than left mid-merge, and said so where it could not be.
     updateFailed:
       '{{base}} could not be merged into {{branch}}, so nothing was changed. Git said: {{reason}}',

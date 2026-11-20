@@ -2015,6 +2015,8 @@ export const de: Translation = {
     mergeFailed: 'GitHub hat #{{number}} nicht gemergt. Meldung: {{reason}}',
     requestNotOnBranch:
       'Pull Request #{{number}} liegt auf {{head}}, nicht auf {{branch}} dieses Workspaces. Es wurde nichts getan.',
+    requestFromFork:
+      'Pull Request #{{number}} kommt aus einem gleichnamigen Branch eines anderen Repositorys, nicht aus diesem Workspace. Es wurde nichts getan.',
     updateFailed:
       '{{base}} ließ sich nicht in {{branch}} mergen, daher wurde nichts geändert. Git meldet: {{reason}}',
     updateLeftMerging:

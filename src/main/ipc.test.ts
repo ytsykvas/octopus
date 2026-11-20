@@ -2522,7 +2522,11 @@ describe('workspaces of a real project', () => {
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve(args[1] === 'view' ? JSON.stringify({ headRefName: branch }) : '')
+        return Promise.resolve(
+          args[1] === 'view'
+            ? JSON.stringify({ headRefName: branch, isCrossRepository: false })
+            : ''
+        )
       }
     })
     const workspace = await createWorkspace(projectId)
@@ -2550,6 +2554,7 @@ describe('workspaces of a real project', () => {
           args[1] === 'view'
             ? JSON.stringify({
                 headRefName: branch,
+                isCrossRepository: false,
                 url: 'https://github.com/o/p/pull/7',
                 statusCheckRollup: [
                   {
@@ -2639,7 +2644,11 @@ describe('workspaces of a real project', () => {
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve(args[1] === 'view' ? JSON.stringify({ headRefName: branch }) : '')
+        return Promise.resolve(
+          args[1] === 'view'
+            ? JSON.stringify({ headRefName: branch, isCrossRepository: false })
+            : ''
+        )
       }
     })
     const workspace = await createWorkspace(projectId)
@@ -2672,7 +2681,9 @@ describe('workspaces of a real project', () => {
       makeGh: () => (args) => {
         asked.push([...args])
         return Promise.resolve(
-          args[1] === 'view' ? JSON.stringify({ headRefName: 'someone/else' }) : ''
+          args[1] === 'view'
+            ? JSON.stringify({ headRefName: 'someone/else', isCrossRepository: false })
+            : ''
         )
       }
     })
@@ -2702,7 +2713,8 @@ describe('workspaces of a real project', () => {
               mergeable: 'MERGEABLE',
               mergeStateStatus: 'CLEAN',
               reviewDecision: '',
-              headRefOid: 'abc123'
+              headRefOid: 'abc123',
+              isCrossRepository: false
             }
           ])
         )
