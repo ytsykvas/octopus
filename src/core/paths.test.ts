@@ -23,6 +23,7 @@ import {
   unlinkedInside,
   skillsDirOf,
   backupFileOf,
+  fileStamp,
   stateFile,
   stateTempFile,
   workspacePath,
@@ -98,6 +99,10 @@ describe('top-level files', () => {
 
   it('puts the temp file next to state, otherwise rename would not be atomic', () => {
     expect(stateTempFile(ROOT)).toBe(join(ROOT, 'state.json.tmp'))
+  })
+
+  it('writes a moment the way a file name can hold it', () => {
+    expect(fileStamp(new Date('2026-11-20T10:11:12.345Z'))).toBe('2026-11-20T10-11-12-345Z')
   })
 
   it('keeps the backup beside the state, so the hard link stays on one filesystem', () => {

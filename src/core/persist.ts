@@ -54,19 +54,20 @@ export function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** Whether a filesystem failure found nothing at the path — narrowed, never cast. */
+/** The `code` a failure carries — narrowed, never cast. */
+export function codeOf(error: unknown): unknown {
+  return typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+}
+
+/** Whether a filesystem failure found nothing at the path. */
 export function isNotFound(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
+  return codeOf(error) === 'ENOENT'
 }
 
 /** Whether a filesystem failure ran out of room: the disk is full, or the user's quota is. */
 export function isDiskFull(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error.code === 'ENOSPC' || error.code === 'EDQUOT')
-  )
+  const code = codeOf(error)
+  return code === 'ENOSPC' || code === 'EDQUOT'
 }
 
 /**
@@ -117,8 +118,10 @@ async function replaceThrough(
   tempPath: string,
   filePath: string,
   contents: string,
-  mode?: number,
-  beforeRename?: () => Promise<void>
+  {
+    mode,
+    beforeRename
+  }: { readonly mode?: number | undefined; readonly beforeRename?: () => Promise<void> } = {}
 ): Promise<void> {
   // `wx` (O_EXCL) never follows a link planted at the name. Outside the try: when `open`
   // fails, EEXIST included, the path is not ours to remove.
@@ -152,7 +155,7 @@ export async function writeTextFile(
   suffix: () => string = randomSuffix
 ): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
-  await replaceThrough(`${filePath}.${suffix()}.tmp`, filePath, contents, mode)
+  await replaceThrough(`${filePath}.${suffix()}.tmp`, filePath, contents, { mode })
 }
 
 /**
@@ -164,11 +167,6 @@ export async function writeTextFile(
 export async function writeNewFile(filePath: string, bytes: Uint8Array): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
   await writeFile(filePath, bytes, { flag: 'wx' })
-}
-
-/** The `code` a filesystem failure carries, narrowed — never cast. */
-function codeOf(error: unknown): unknown {
-  return typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
 }
 
 /**
@@ -218,8 +216,10 @@ export async function writeJsonFile<T>(
   filePath: string,
   schema: z.ZodType<T>,
   value: T,
-  tempPath = `${filePath}.tmp`,
-  backupPath?: string
+  {
+    tempPath = `${filePath}.tmp`,
+    backupPath
+  }: { readonly tempPath?: string; readonly backupPath?: string } = {}
 ): Promise<void> {
   const result = schema.safeParse(value)
   if (!result.success) {
@@ -237,7 +237,6 @@ export async function writeJsonFile<T>(
     tempPath,
     filePath,
     `${JSON.stringify(result.data, null, 2)}\n`,
-    undefined,
-    backupPath === undefined ? undefined : () => keepBackup(filePath, backupPath)
+    backupPath === undefined ? {} : { beforeRename: () => keepBackup(filePath, backupPath) }
   )
 }

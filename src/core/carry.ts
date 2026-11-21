@@ -30,7 +30,7 @@ import { dirname, isAbsolute, join, normalize } from 'node:path'
 import { z } from 'zod'
 
 import { insideWorktree, projectCarry, unlinkedInside } from './paths.js'
-import { isNotFound, writeTextFile } from './persist.js'
+import { codeOf, isNotFound, writeTextFile } from './persist.js'
 import type { ProjectId } from './types.js'
 
 /** The list as accepted from the renderer: one path per line. */
@@ -243,7 +243,7 @@ export interface PreparedWorkspace extends CarryReport {
  * and `git.ts` use — `unknown` questioned, never cast.
  */
 function alreadyThere(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST'
+  return codeOf(error) === 'EEXIST'
 }
 
 /**

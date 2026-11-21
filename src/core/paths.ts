@@ -67,6 +67,10 @@ export function stateTempFile(root: string = rootDir()): string {
   return join(root, 'state.json.tmp')
 }
 
+export function fileStamp(at: Date): string {
+  return at.toISOString().replaceAll(/[:.]/gu, '-')
+}
+
 /** Beside the state, because the backup is a hard link, and a hard link cannot cross filesystems. */
 export function backupFileOf(statePath: string): string {
   return `${statePath}.bak`

@@ -16,7 +16,7 @@ import { readdir, readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { CodedError } from './codedError.js'
-import { attachmentsDir } from './paths.js'
+import { attachmentsDir, fileStamp } from './paths.js'
 import { writeNewFile } from './persist.js'
 
 /** Machine-readable reason a paste was refused; the renderer localises it. */
@@ -74,8 +74,7 @@ export async function writePastedImage(
   }
 
   const dir = attachmentsDir(root)
-  const stamp = now.toISOString().replaceAll(/[:.]/gu, '-')
-  const path = join(dir, `paste-${stamp}-${suffix()}.${extension}`)
+  const path = join(dir, `paste-${fileStamp(now)}-${suffix()}.${extension}`)
   await writeNewFile(path, bytes)
 
   return path

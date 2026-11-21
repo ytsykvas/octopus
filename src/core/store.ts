@@ -477,7 +477,7 @@ export async function saveState(
   tempPath: string = stateTempFile(),
   backupPath = backupFileOf(filePath)
 ): Promise<void> {
-  await writeJsonFile(filePath, StateSchema, state, tempPath, backupPath)
+  await writeJsonFile(filePath, StateSchema, state, { tempPath, backupPath })
 }
 
 export function findProject(state: State, projectId: string): Project | undefined {

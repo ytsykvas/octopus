@@ -10,6 +10,7 @@
 
 import { constants, copyFile, readFile, stat } from 'node:fs/promises'
 
+import { fileStamp } from './paths.js'
 import { describeError, InvalidFileError, readJsonFile, writeTextFile } from './persist.js'
 import { StateSchema } from './store.js'
 
@@ -59,7 +60,7 @@ export async function restoreStateBackup(
   now: () => Date = () => new Date()
 ): Promise<void> {
   const contents = await readFile(backupPath, 'utf8')
-  const kept = `${statePath}.broken-${now().toISOString().replaceAll(':', '-')}`
+  const kept = `${statePath}.broken-${fileStamp(now())}`
   await copyFile(statePath, kept, constants.COPYFILE_EXCL)
   await writeTextFile(statePath, contents)
 }

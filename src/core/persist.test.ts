@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } fr
 import { z } from 'zod'
 
 import {
+  codeOf,
   describeError,
   InvalidFileError,
   isDiskFull,
@@ -74,6 +75,18 @@ describe('describeError', () => {
     expect(describeError('plain string')).toBe('plain string')
     expect(describeError(42)).toBe('42')
     expect(describeError(null)).toBe('null')
+  })
+})
+
+describe('codeOf', () => {
+  it('reads the code a failure carries', () => {
+    expect(codeOf(Object.assign(new Error('x'), { code: 'EEXIST' }))).toBe('EEXIST')
+  })
+
+  it('answers with nothing for what carries no code', () => {
+    expect(codeOf(new Error('x'))).toBeUndefined()
+    expect(codeOf('EEXIST')).toBeUndefined()
+    expect(codeOf(null)).toBeUndefined()
   })
 })
 
@@ -158,7 +171,7 @@ describe('writeJsonFile', () => {
 
   it('accepts a custom temporary path', async () => {
     const temp = join(dir, 'custom.tmp')
-    await writeJsonFile(file, Schema, FALLBACK, temp)
+    await writeJsonFile(file, Schema, FALLBACK, { tempPath: temp })
     await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual(FALLBACK)
   })
 
@@ -197,8 +210,8 @@ describe('writeJsonFile', () => {
 
   it('keeps the previous version as the backup', async () => {
     const backup = `${file}.bak`
-    await writeJsonFile(file, Schema, { name: 'first', count: 1 }, `${file}.tmp`, backup)
-    await writeJsonFile(file, Schema, { name: 'second', count: 2 }, `${file}.tmp`, backup)
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 }, { backupPath: backup })
+    await writeJsonFile(file, Schema, { name: 'second', count: 2 }, { backupPath: backup })
 
     await expect(readJsonFile(backup, Schema, FALLBACK)).resolves.toEqual({
       name: 'first',
@@ -212,7 +225,7 @@ describe('writeJsonFile', () => {
 
   it('writes no backup on the first write', async () => {
     const backup = `${file}.bak`
-    await writeJsonFile(file, Schema, FALLBACK, `${file}.tmp`, backup)
+    await writeJsonFile(file, Schema, FALLBACK, { backupPath: backup })
 
     await expect(stat(backup)).rejects.toMatchObject({ code: 'ENOENT' })
   })
@@ -232,7 +245,7 @@ describe('writeJsonFile', () => {
     await mkdir(backup)
 
     await expect(
-      writeJsonFile(file, Schema, { name: 'second', count: 2 }, `${file}.tmp`, backup)
+      writeJsonFile(file, Schema, { name: 'second', count: 2 }, { backupPath: backup })
     ).rejects.toThrow()
     await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({
       name: 'first',
@@ -532,7 +545,7 @@ describe('surviving a bad file', () => {
 
   it('creates missing parent directories rather than failing', async () => {
     const nested = join(dir, 'deep', 'nested', 'f.json')
-    await writeJsonFile(nested, Shape, { a: 'x' }, `${nested}.tmp`)
+    await writeJsonFile(nested, Shape, { a: 'x' }, { tempPath: `${nested}.tmp` })
 
     await expect(readJsonFile(nested, Shape, { a: '' })).resolves.toEqual({ a: 'x' })
   })
@@ -558,13 +571,13 @@ describe('surviving a bad file', () => {
     const temp = `${file}.tmp`
     await writeFile(temp, 'garbage from last time', 'utf8')
 
-    await writeJsonFile(file, Shape, { a: 'fresh' }, temp)
+    await writeJsonFile(file, Shape, { a: 'fresh' }, { tempPath: temp })
     await expect(readJsonFile(file, Shape, { a: '' })).resolves.toEqual({ a: 'fresh' })
   })
 
   it('leaves no temp file behind once the write lands', async () => {
     const file = join(dir, 'f.json')
-    await writeJsonFile(file, Shape, { a: 'x' }, `${file}.tmp`)
+    await writeJsonFile(file, Shape, { a: 'x' }, { tempPath: `${file}.tmp` })
 
     await expect(readFile(`${file}.tmp`, 'utf8')).rejects.toThrow()
   })

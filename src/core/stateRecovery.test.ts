@@ -121,7 +121,7 @@ describe('restoreStateBackup', () => {
     await restoreStateBackup(statePath, backupPath, () => new Date('2026-11-20T10:11:12.000Z'))
 
     await expect(
-      readFile(join(dir, 'state.json.broken-2026-11-20T10-11-12.000Z'), 'utf8')
+      readFile(join(dir, 'state.json.broken-2026-11-20T10-11-12-000Z'), 'utf8')
     ).resolves.toBe('{ damaged')
     await expect(readFile(statePath, 'utf8')).resolves.toBe(await readFile(backupPath, 'utf8'))
   })
@@ -138,7 +138,7 @@ describe('restoreStateBackup', () => {
     await restoreStateBackup(statePath, backupPath)
 
     expect((await readdir(dir)).filter((name) => name.startsWith('state.json.broken-'))).toEqual([
-      expect.stringMatching(/^state\.json\.broken-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z$/u)
+      expect.stringMatching(/^state\.json\.broken-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z$/u)
     ])
   })
 
