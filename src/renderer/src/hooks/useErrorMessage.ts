@@ -139,6 +139,10 @@ export function useErrorMessage(): (failure: Failure) => string {
             head: failure.params?.head ?? '',
             branch: failure.params?.branch ?? ''
           })
+        case 'requestFromFork':
+          return t('errors.requestFromFork', { number: failure.params?.number ?? '' })
+        case 'requestBehind':
+          return t('errors.requestBehind', { number: failure.params?.number ?? '' })
         case 'headNotOnBranch':
           return t('errors.headNotOnBranch', { branch: failure.params?.branch ?? '' })
         case 'updateFailed':

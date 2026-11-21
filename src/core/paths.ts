@@ -67,6 +67,16 @@ export function stateTempFile(root: string = rootDir()): string {
   return join(root, 'state.json.tmp')
 }
 
+/**
+ * The state before the last save: `~/.octopus/state.json.bak`.
+ *
+ * Beside the file, because it is a hard link to the inode the save replaced, and a
+ * hard link cannot cross filesystems.
+ */
+export function stateBackupFile(root: string = rootDir()): string {
+  return join(root, 'state.json.bak')
+}
+
 /** Where every project's own directory sits: `~/.octopus/projects`. */
 /**
  * Where an image pasted into the composer is written.

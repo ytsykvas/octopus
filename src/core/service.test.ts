@@ -58,6 +58,7 @@ import {
   type ListSessionsFn,
   sameWindows,
   SHUTDOWN_GRACE_MS,
+  statePathsFor,
   type OctopusService,
   type ServiceOptions,
   type UsageOutcome,
@@ -72,7 +73,7 @@ import { appendEntry, type ChatEntry, readTranscript } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
-import type { Workspace } from './store.js'
+import { loadState, type Workspace } from './store.js'
 import { listWorktrees } from './worktree.js'
 import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
 import { type RemovalRequest, WorkspaceError } from './workspaces.js'
@@ -232,6 +233,41 @@ afterEach(async () => {
   // can still land after it — the same `ENOTEMPTY`, in the MCP question tests
   // twice in a row. The write is real and finishing; the removal just waits.
   await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+})
+
+describe('statePathsFor', () => {
+  it('puts everything in the data root when given nothing', () => {
+    vi.stubEnv('OCTOPUS_DATA_DIR', dir)
+    try {
+      expect(statePathsFor()).toEqual({
+        statePath: join(dir, 'state.json'),
+        stateTempPath: join(dir, 'state.json.tmp'),
+        stateBackupPath: join(dir, 'state.json.bak')
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('keeps the backup beside a state pointed elsewhere', () => {
+    expect(statePathsFor({ stateFilePath: join(dir, 'copy.json') }).stateBackupPath).toBe(
+      join(dir, 'copy.json.bak')
+    )
+  })
+
+  it('takes every path it is given', () => {
+    expect(
+      statePathsFor({
+        stateFilePath: join(dir, 's.json'),
+        stateTempFilePath: join(dir, 's.tmp'),
+        stateBackupFilePath: join(dir, 's.bak')
+      })
+    ).toEqual({
+      statePath: join(dir, 's.json'),
+      stateTempPath: join(dir, 's.tmp'),
+      stateBackupPath: join(dir, 's.bak')
+    })
+  })
 })
 
 describe('default paths', () => {
@@ -402,7 +438,8 @@ const oneRequest =
       state: 'MERGED',
       url: 'https://x/pull/7',
       createdAt,
-      headRefOid: head()
+      headRefOid: head(),
+      isCrossRepository: false
     }
     return Promise.resolve(
       JSON.stringify([
@@ -2163,6 +2200,29 @@ describe('projects', () => {
 
   it('starts with an empty list', () => {
     expect(service.listProjects()).toHaveLength(0)
+  })
+
+  // Beside the state it was given, never in the real root.
+  it('keeps the state before the last change beside the state file', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    await service.updateProjectById(project.id, { name: 'renamed' })
+
+    const backup = await loadState(join(dir, 'state.json.bak'))
+    expect(backup.projects.map((one) => one.name)).toEqual(['planner'])
+  })
+
+  it('keeps the backup where it is told to', async () => {
+    const backupPath = join(dir, 'elsewhere.bak')
+    const told = await createService({ ...paths(dir), stateBackupFilePath: backupPath })
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await told.addProjectFromPath(repo)
+    await told.updateProjectById(project.id, { name: 'renamed' })
+
+    const backup = await loadState(backupPath)
+    expect(backup.projects.map((one) => one.name)).toEqual(['planner'])
   })
 
   it('shows an added project in the list', async () => {
@@ -5152,8 +5212,10 @@ describe('the port a workspace serves on', () => {
     await rm(join(dir, 'state.json'))
     await mkdir(join(dir, 'state.json'))
 
+    // Refused at the backup, before the rename gets its turn: a directory takes
+    // no hard link (EPERM) and no copy (ENOTSUP).
     await expect(service.createWorkspaceIn(project?.id ?? '')).rejects.toMatchObject({
-      code: 'EISDIR'
+      code: 'ENOTSUP'
     })
 
     await rm(join(dir, 'state.json'), { recursive: true })
@@ -18541,10 +18603,13 @@ describe('a branch the remote moved', () => {
     readonly make: (deps: RemoteRefWatchDeps) => RemoteRefWatch
     readonly deps: () => RemoteRefWatchDeps
     readonly synced: string[][]
+    /** The checkout of each project, per sync — what a watcher keys its git dir on. */
+    readonly checkouts: string[][]
     readonly closed: () => number
   } {
     let given: RemoteRefWatchDeps | null = null
     const synced: string[][] = []
+    const checkouts: string[][] = []
     let closes = 0
 
     return {
@@ -18553,6 +18618,7 @@ describe('a branch the remote moved', () => {
         return {
           sync: (projects) => {
             synced.push(projects.map((project) => project.id))
+            checkouts.push(projects.map((project) => project.repoPath))
             return Promise.resolve()
           },
           close: () => {
@@ -18565,6 +18631,7 @@ describe('a branch the remote moved', () => {
         return given
       },
       synced,
+      checkouts,
       closed: () => closes
     }
   }
@@ -18582,6 +18649,24 @@ describe('a branch the remote moved', () => {
 
     await watching.removeProjectById(project.id)
     expect(watch.synced.at(-1)).toEqual([])
+  })
+
+  // What the watcher's re-watch on a move rests on: the service hands it the new
+  // checkout, under the same project id.
+  it('hands the watch a project pointed at another checkout', async () => {
+    const repo = join(dir, 'planner')
+    const other = join(dir, 'planner-clone')
+    await initRepo(repo)
+    await initRepo(other)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+
+    await watching.updateProjectById(project.id, { repoPath: other })
+
+    expect(watch.synced.at(-1)).toEqual([project.id])
+    expect(watch.checkouts.at(-1)).toEqual([watching.listProjects()[0]?.repoPath])
+    expect(watch.checkouts.at(-2)).not.toEqual(watch.checkouts.at(-1))
   })
 
   // A write that leaves the projects as they were is most writes: a turn, a

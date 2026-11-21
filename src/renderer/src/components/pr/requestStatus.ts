@@ -44,13 +44,15 @@ export type ChecksVerdict = 'failed' | 'running' | 'passed' | 'skipped' | 'none'
  * Whether the request would merge, as one answer, most decisive first.
  *
  * - `conflict`, `draft`, `checks` hold the button;
- * - `held` is GitHub refusing for a reason of its own (a required review, a
- *   branch behind its base), and `settling` is GitHub not having worked it out
- *   yet — both still take a press, since `gh` turns one into auto-merge;
+ * - `behind` is a branch GitHub will merge only once the base is brought in,
+ *   which the pane offers; `gh` refuses it outright, so it holds the button too;
+ * - `held` is GitHub refusing for a reason of its own (a required review), and
+ *   `settling` is GitHub not having worked it out yet — both still take a
+ *   press, since `gh` turns one into auto-merge;
  * - `ready` is the only one that says so.
  */
 export type MergeVerdict =
-  'merged' | 'closed' | 'conflict' | 'draft' | 'checks' | 'held' | 'settling' | 'ready'
+  'merged' | 'closed' | 'conflict' | 'draft' | 'checks' | 'behind' | 'held' | 'settling' | 'ready'
 
 /**
  * One thing about an open request that wants doing, or waiting for.
@@ -144,7 +146,8 @@ export function requestStatus(
   const waiting = checks === 'failed' || checks === 'running'
   const conflicting = detail.mergeable === 'conflicting'
   const settling = detail.mergeable === 'unknown' || detail.mergeState === 'unknown'
-  const held = detail.mergeState === 'blocked' || detail.mergeState === 'behind'
+  const behind = detail.mergeState === 'behind'
+  const held = detail.mergeState === 'blocked'
   const reviewed = detail.decision === 'changesRequested' || hasRemarks(detail)
 
   /* A conflict and a draft are refusals GitHub would make anyway. A red or
@@ -160,11 +163,13 @@ export function requestStatus(
           ? 'draft'
           : waiting
             ? 'checks'
-            : held
-              ? 'held'
-              : settling
-                ? 'settling'
-                : 'ready'
+            : behind
+              ? 'behind'
+              : held
+                ? 'held'
+                : settling
+                  ? 'settling'
+                  : 'ready'
 
   const offered: PromptKind[] = []
   /* A request that is merged or closed has nothing left to do to it. The

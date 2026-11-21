@@ -10,7 +10,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
+import { copyFile, link, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import type { z } from 'zod'
@@ -117,7 +117,8 @@ async function replaceThrough(
   tempPath: string,
   filePath: string,
   contents: string,
-  mode?: number
+  mode?: number,
+  beforeRename?: () => Promise<void>
 ): Promise<void> {
   // `wx` (O_EXCL) never follows a link planted at the name. Outside the try: when `open`
   // fails, EEXIST included, the path is not ours to remove.
@@ -132,6 +133,7 @@ async function replaceThrough(
     } finally {
       await handle.close()
     }
+    await beforeRename?.()
     await rename(tempPath, filePath)
   } catch (error) {
     // Settled, not awaited bare: a cleanup that throws would replace the error reported.
@@ -154,16 +156,69 @@ export async function writeTextFile(
 }
 
 /**
+ * Writes bytes to a path that must not exist yet — a fresh name, never a replacement.
+ *
+ * Nothing to make atomic: no reader knows the name before this returns. `wx` turns two
+ * names colliding into a failure rather than one file silently replacing another.
+ */
+export async function writeNewFile(filePath: string, bytes: Uint8Array): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true })
+  await writeFile(filePath, bytes, { flag: 'wx' })
+}
+
+/** The `code` a filesystem failure carries, narrowed — never cast. */
+function codeOf(error: unknown): unknown {
+  return typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+}
+
+/**
+ * Points `backupPath` at what `filePath` holds now; nothing to point at is a first write.
+ *
+ * A hard link rather than a copy: O(1) whatever the size, and once the rename puts a new
+ * inode at `filePath`, the old one — already synced when it was written — lives on here.
+ * A filesystem without hard links gets a copy instead.
+ *
+ * Made under a temporary name and renamed over the old backup, so the old one goes only as
+ * the new one takes its place: a failure in between leaves the previous backup as it was.
+ */
+export async function keepBackup(
+  filePath: string,
+  backupPath: string,
+  linkFile: (existing: string, created: string) => Promise<void> = link
+): Promise<void> {
+  const tempPath = `${backupPath}.${randomSuffix()}.tmp`
+  try {
+    try {
+      await linkFile(filePath, tempPath)
+    } catch (error) {
+      if (isNotFound(error)) return
+      const code = codeOf(error)
+      if (code !== 'EPERM' && code !== 'ENOTSUP') throw error
+      await copyFile(filePath, tempPath)
+    }
+    await rename(tempPath, backupPath)
+  } catch (error) {
+    // Settled, as in `replaceThrough`: a cleanup that throws must not replace the error.
+    await Promise.allSettled([rm(tempPath, { force: true })])
+    throw error
+  }
+}
+
+/**
  * Writes JSON atomically.
  *
  * Validating before the write is deliberate: better to fail here than to put
  * data on disk that cannot be read back.
+ *
+ * With `backupPath`, the version being replaced stays there (`keepBackup`), taken after
+ * the new contents are synced and before they land — a backup that fails stops the write.
  */
 export async function writeJsonFile<T>(
   filePath: string,
   schema: z.ZodType<T>,
   value: T,
-  tempPath = `${filePath}.tmp`
+  tempPath = `${filePath}.tmp`,
+  backupPath?: string
 ): Promise<void> {
   const result = schema.safeParse(value)
   if (!result.success) {
@@ -177,5 +232,11 @@ export async function writeJsonFile<T>(
   // Fixed path, as callers serialise on it: this clears only a crash leftover or a planted
   // link, and `rm` removes a link itself, never its target.
   await rm(tempPath, { force: true })
-  await replaceThrough(tempPath, filePath, `${JSON.stringify(result.data, null, 2)}\n`)
+  await replaceThrough(
+    tempPath,
+    filePath,
+    `${JSON.stringify(result.data, null, 2)}\n`,
+    undefined,
+    backupPath === undefined ? undefined : () => keepBackup(filePath, backupPath)
+  )
 }

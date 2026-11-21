@@ -81,6 +81,17 @@ describe('writeScript', () => {
     await writeScript('run', 'planner', '', root)
     await expect(readScript('run', 'planner', root)).resolves.toBe('')
   })
+
+  // `sh` reads a script as it goes, so one rewritten in place carries on with
+  // the bytes of the new file from wherever it had got to.
+  it('replaces the file rather than rewriting it in place, so a running script keeps its bytes', async () => {
+    await writeScript('run', 'planner', 'first\n', root)
+    const before = (await stat(scriptPath('run', 'planner', root))).ino
+
+    await writeScript('run', 'planner', 'second\n', root)
+
+    expect((await stat(scriptPath('run', 'planner', root))).ino).not.toBe(before)
+  })
 })
 
 describe('scriptExists', () => {

@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next'
-import { AlertTriangle, Check, Circle, MessageSquare, Minus, X } from 'lucide-react'
+import { AlertTriangle, Check, Circle, GitMerge, MessageSquare, Minus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { PullRequestDetail } from '@core/pullRequestShapes.js'
@@ -138,6 +138,7 @@ function mergeFace(verdict: MergeVerdict): {
   readonly labelKey:
     | (typeof FACES)['merged' | 'closed' | 'draft']['labelKey']
     | 'pullRequest.tileMergeConflict'
+    | 'pullRequest.tileMergeBehind'
     | 'pullRequest.tileMergeReady'
     | 'pullRequest.tileMergeWaiting'
 } {
@@ -152,6 +153,12 @@ function mergeFace(verdict: MergeVerdict): {
       return {
         mark: <AlertTriangle aria-hidden size={12} className="text-warning" />,
         labelKey: 'pullRequest.tileMergeConflict'
+      }
+    // Not "Waiting": nothing comes of waiting until the base is brought in.
+    case 'behind':
+      return {
+        mark: <GitMerge aria-hidden size={12} className="text-warning" />,
+        labelKey: 'pullRequest.tileMergeBehind'
       }
     case 'ready':
       return {

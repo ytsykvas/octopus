@@ -12,11 +12,12 @@
  * it becomes one.
  */
 
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { CodedError } from './codedError.js'
 import { attachmentsDir } from './paths.js'
+import { writeNewFile } from './persist.js'
 
 /** Machine-readable reason a paste was refused; the renderer localises it. */
 export type AttachmentErrorCode = 'attachmentTooLarge' | 'attachmentType'
@@ -73,11 +74,9 @@ export async function writePastedImage(
   }
 
   const dir = attachmentsDir(root)
-  await mkdir(dir, { recursive: true })
-
   const stamp = now.toISOString().replaceAll(/[:.]/gu, '-')
   const path = join(dir, `paste-${stamp}-${suffix()}.${extension}`)
-  await writeFile(path, bytes)
+  await writeNewFile(path, bytes)
 
   return path
 }

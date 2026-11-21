@@ -1135,6 +1135,58 @@ describe('a pull request that exists', () => {
     expect(within(await nextStep()).getByText(/main has moved on/)).toBeInTheDocument()
   })
 
+  /* GitHub refuses a branch behind its base outright when protection wants it up
+     to date, so Merge would only fail: the press that helps is bringing main in,
+     and it goes out at once so the request on GitHub moves. */
+  it('offers to bring the base in when GitHub merges only an up-to-date branch', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ mergeState: 'behind' }))
+    renderPanel()
+
+    const footer = await nextStep()
+    expect(within(footer).getByRole('button', { name: 'Merge' })).toBeDisabled()
+    await user.click(within(footer).getByRole('button', { name: 'Update from main' }))
+
+    expect(octopus().workspaces.updateFromBase).toHaveBeenCalledWith(anna.id)
+    await waitFor(() => {
+      expect(octopus().workspaces.push).toHaveBeenCalledWith(anna.id)
+    })
+  })
+
+  it('does not push when bringing the base in failed', async () => {
+    const user = userEvent.setup()
+    answer(view({ request: request() }))
+    answerDetail(detail({ mergeState: 'behind' }))
+    vi.mocked(octopus().workspaces.updateFromBase).mockResolvedValue({
+      ok: false,
+      code: 'updateFailed',
+      params: { base: 'origin/main', branch: 'octopus/anna', reason: 'CONFLICT (content): a.txt' },
+      error: 'Could not merge origin/main.'
+    })
+    const { onError } = renderPanel()
+
+    await user.click(within(await nextStep()).getByRole('button', { name: 'Update from main' }))
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(
+        expect.stringContaining('could not be merged into octopus/anna')
+      )
+    })
+    expect(octopus().workspaces.push).not.toHaveBeenCalled()
+  })
+
+  // git refuses to merge into a dirty tree; the footer's line says to commit first.
+  it('waits for uncommitted work before bringing the base in', async () => {
+    answer(view({ request: request(), dirty: true }))
+    answerDetail(detail({ mergeState: 'behind' }))
+    renderPanel()
+
+    expect(
+      within(await nextStep()).getByRole('button', { name: 'Update from main' })
+    ).toBeDisabled()
+  })
+
   /* Mergeable and worth a word: nothing is stopping the merge, but a check has
      not passed and pressing it anyway should be a decision rather than a slip. */
   it('says when a check has not passed without standing in the way', async () => {
@@ -2583,6 +2635,8 @@ describe('the shape of a request on screen', () => {
     ['a draft', detail({ draft: true }), ['Merge: Draft']],
     // GitHub holding it, or not having decided yet, is not "ready".
     ['GitHub’s hold', detail({ mergeState: 'blocked' }), ['Merge: Waiting']],
+    // Not waiting: nothing comes of waiting until the base is brought in.
+    ['a branch behind its base', detail({ mergeState: 'behind' }), ['Merge: Out of date']],
     ['GitHub still deciding', detail({ mergeable: 'unknown' }), ['Merge: Waiting']],
     ['a merged request', detail({ state: 'merged' }), ['Merge: Merged']],
     ['a closed request', detail({ state: 'closed' }), ['Merge: Closed']]

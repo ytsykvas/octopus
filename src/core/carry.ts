@@ -23,13 +23,14 @@
  * what is taken from it and why so little.
  */
 
-import { constants, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { constants, copyFile, mkdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, normalize } from 'node:path'
 
 import { z } from 'zod'
 
 import { insideWorktree, projectCarry, unlinkedInside } from './paths.js'
+import { isNotFound, writeTextFile } from './persist.js'
 import type { ProjectId } from './types.js'
 
 /** The list as accepted from the renderer: one path per line. */
@@ -67,8 +68,11 @@ export function carryPath(projectId: ProjectId, root?: string): string {
 export async function storedCarryList(projectId: ProjectId, root?: string): Promise<string | null> {
   try {
     return await readFile(carryPath(projectId, root), 'utf8')
-  } catch {
-    return null
+  } catch (error) {
+    // Only absence is "nothing written". An unreadable list taken for none would
+    // create the workspace with the starting list instead of the chosen one.
+    if (isNotFound(error)) return null
+    throw error
   }
 }
 
@@ -82,10 +86,7 @@ export async function writeCarryList(
   contents: string,
   root?: string
 ): Promise<void> {
-  const path = carryPath(projectId, root)
-
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, contents, 'utf8')
+  await writeTextFile(carryPath(projectId, root), contents)
 }
 
 /**

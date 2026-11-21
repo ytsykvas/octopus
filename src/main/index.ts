@@ -6,7 +6,13 @@ import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
 import { electronUserDataDir, rootDir } from '../core/paths.js'
 import { diagnosticLog } from '../core/diagnostics.js'
-import { createService, type OctopusService } from '../core/service.js'
+import {
+  createService,
+  type OctopusService,
+  type ServiceOptions,
+  statePathsFor
+} from '../core/service.js'
+import { recoveryFor, restoreStateBackup, type StateRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
 import {
   pushChatEvent,
@@ -126,6 +132,50 @@ function watchSystemTheme(service: OctopusService): void {
   })
 }
 
+/** Asks whether to put the backup in place of a state that cannot be read. */
+function askRestore(recovery: Extract<StateRecovery, { kind: 'backup' }>, error: unknown): boolean {
+  // Before any window exists, so no sheet and no i18n: English, as the other startup boxes.
+  const response = dialog.showMessageBoxSync({
+    type: 'warning',
+    buttons: ['Restore', 'Quit'],
+    defaultId: 0,
+    cancelId: 1,
+    message: 'octopus could not read its saved state',
+    detail:
+      `${describeError(error)}\n\n` +
+      `A copy from ${recovery.savedAt.toLocaleString()} with ${String(recovery.projects)} ` +
+      'project(s) is beside it. Restoring keeps the damaged file next to it as ' +
+      'state.json.broken-….'
+  })
+  return response === 0
+}
+
+/**
+ * Opens the service; a damaged state.json with a good backup beside it is offered back.
+ *
+ * Only with a yes — `stateRecovery.ts` holds why never silently. A second failure
+ * throws to the caller like the first; a restore that fails says so beside the
+ * failure that asked for it, rather than in its place.
+ */
+async function openService(options: ServiceOptions): Promise<OctopusService> {
+  try {
+    return await createService(options)
+  } catch (error) {
+    const { statePath, stateBackupPath } = statePathsFor(options)
+    const recovery = await recoveryFor(error, statePath, stateBackupPath)
+    if (recovery.kind === 'none' || !askRestore(recovery, error)) throw error
+    try {
+      await restoreStateBackup(statePath, stateBackupPath)
+    } catch (restoreError) {
+      throw new Error(
+        `${describeError(error)}\n\nRestoring the backup failed as well: ${describeError(restoreError)}`,
+        { cause: restoreError }
+      )
+    }
+    return await createService(options)
+  }
+}
+
 /**
  * Startup failures must be visible.
  *
@@ -177,7 +227,7 @@ async function start(): Promise<void> {
   let service: OctopusService
 
   try {
-    service = await createService({
+    service = await openService({
       onDiagnostic: diagnosticLog(join(app.getPath('logs'), 'main.log'))
     })
   } catch (error) {

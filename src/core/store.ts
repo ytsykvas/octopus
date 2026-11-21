@@ -470,12 +470,20 @@ export function migrate(state: StoredState): State {
   return { ...state, projects, workspaces }
 }
 
+/**
+ * Writes the state, keeping the one it replaces at `backupPath`.
+ *
+ * The backup follows `filePath` rather than defaulting to the data root's, so a caller
+ * that points the state elsewhere — a test, a second copy — never writes a backup into
+ * the real root. For the default path the two agree: `stateBackupFile()`.
+ */
 export async function saveState(
   state: State,
   filePath: string = stateFile(),
-  tempPath: string = stateTempFile()
+  tempPath: string = stateTempFile(),
+  backupPath = `${filePath}.bak`
 ): Promise<void> {
-  await writeJsonFile(filePath, StateSchema, state, tempPath)
+  await writeJsonFile(filePath, StateSchema, state, tempPath, backupPath)
 }
 
 export function findProject(state: State, projectId: string): Project | undefined {

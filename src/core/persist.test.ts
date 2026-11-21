@@ -22,8 +22,10 @@ import {
   describeError,
   InvalidFileError,
   isDiskFull,
+  keepBackup,
   readJsonFile,
   writeJsonFile,
+  writeNewFile,
   writeTextFile
 } from './persist.js'
 
@@ -191,6 +193,153 @@ describe('writeJsonFile', () => {
     await writeJsonFile(file, Schema, FALLBACK)
 
     expect(sync).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the previous version as the backup', async () => {
+    const backup = `${file}.bak`
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 }, `${file}.tmp`, backup)
+    await writeJsonFile(file, Schema, { name: 'second', count: 2 }, `${file}.tmp`, backup)
+
+    await expect(readJsonFile(backup, Schema, FALLBACK)).resolves.toEqual({
+      name: 'first',
+      count: 1
+    })
+    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({
+      name: 'second',
+      count: 2
+    })
+  })
+
+  it('writes no backup on the first write', async () => {
+    const backup = `${file}.bak`
+    await writeJsonFile(file, Schema, FALLBACK, `${file}.tmp`, backup)
+
+    await expect(stat(backup)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('writes no backup unless asked', async () => {
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 })
+    await writeJsonFile(file, Schema, { name: 'second', count: 2 })
+
+    expect((await readdir(dir)).sort()).toEqual(['data.json'])
+  })
+
+  // The new contents never land when the old ones could not be kept.
+  it('leaves the file as it was when the backup fails', async () => {
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 })
+    // A directory where the backup goes: `rm` without `recursive` refuses it.
+    const backup = join(dir, 'taken')
+    await mkdir(backup)
+
+    await expect(
+      writeJsonFile(file, Schema, { name: 'second', count: 2 }, `${file}.tmp`, backup)
+    ).rejects.toThrow()
+    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({
+      name: 'first',
+      count: 1
+    })
+    expect(await temporaries()).toEqual([])
+  })
+})
+
+describe('keepBackup', () => {
+  /** A link that fails the way a filesystem without hard links does. */
+  function refusing(code: string): () => Promise<void> {
+    return () => Promise.reject(Object.assign(new Error(code), { code }))
+  }
+
+  it('uses a real hard link by default', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await keepBackup(file, `${file}.bak`)
+
+    expect((await stat(`${file}.bak`)).ino).toBe((await stat(file)).ino)
+  })
+
+  it('replaces a backup already there', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await writeFile(`${file}.bak`, 'older', 'utf8')
+
+    await keepBackup(file, `${file}.bak`)
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
+  })
+
+  it('copies when the filesystem has no hard links', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await keepBackup(file, `${file}.bak`, refusing('ENOTSUP'))
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
+    expect((await stat(`${file}.bak`)).ino).not.toBe((await stat(file)).ino)
+  })
+
+  it('copies when the filesystem refuses a link', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await keepBackup(file, `${file}.bak`, refusing('EPERM'))
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
+  })
+
+  it('passes on any other failure', async () => {
+    await writeFile(file, 'old', 'utf8')
+
+    await expect(keepBackup(file, `${file}.bak`, refusing('EIO'))).rejects.toMatchObject({
+      code: 'EIO'
+    })
+  })
+
+  // The old one goes only as the new one takes its name.
+  it('keeps the previous backup when a new one cannot be made', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await writeFile(`${file}.bak`, 'older', 'utf8')
+
+    await expect(keepBackup(file, `${file}.bak`, refusing('EIO'))).rejects.toMatchObject({
+      code: 'EIO'
+    })
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('older')
+    expect(await temporaries()).toEqual([])
+  })
+
+  it('passes on a failure that carries no code', async () => {
+    await writeFile(file, 'old', 'utf8')
+
+    await expect(
+      keepBackup(file, `${file}.bak`, () => Promise.reject(new Error('odd')))
+    ).rejects.toThrow('odd')
+  })
+
+  it('does nothing when there is nothing yet to keep', async () => {
+    await keepBackup(file, `${file}.bak`)
+
+    await expect(stat(`${file}.bak`)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})
+
+describe('writeNewFile', () => {
+  it('writes the bytes it is given', async () => {
+    const path = join(dir, 'paste.png')
+    await writeNewFile(path, Uint8Array.from([137, 80, 78, 71]))
+
+    expect([...(await readFile(path))]).toEqual([137, 80, 78, 71])
+  })
+
+  // A fresh name, never a replacement: landing on a file means two names
+  // collided, and the one already there is somebody's.
+  it('refuses a path that already holds a file', async () => {
+    const path = join(dir, 'paste.png')
+    await writeFile(path, 'first')
+
+    await expect(writeNewFile(path, Uint8Array.from([1]))).rejects.toMatchObject({
+      code: 'EEXIST'
+    })
+    await expect(readFile(path, 'utf8')).resolves.toBe('first')
+  })
+
+  it('creates the directory it needs', async () => {
+    const path = join(dir, 'attachments', 'paste.png')
+    await writeNewFile(path, Uint8Array.from([1]))
+
+    expect([...(await readFile(path))]).toEqual([1])
   })
 })
 

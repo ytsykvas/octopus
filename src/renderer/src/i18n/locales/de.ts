@@ -682,6 +682,7 @@ export const de: Translation = {
     tileMergeReady: 'Bereit',
     tileMergeWaiting: 'Wartet',
     tileMergeConflict: 'Konflikt',
+    tileMergeBehind: 'Veraltet',
     checksPassedAll: 'Alle Checks sind bestanden.',
     noConflicts: 'Keine Konflikte mit {{base}}.',
     readyToMerge: 'Bereit zum Merge in {{base}}.',
@@ -733,7 +734,8 @@ export const de: Translation = {
     methodRebase: 'Rebase and merge',
     conflicting: 'Dieser Branch kollidiert mit {{base}}.',
     mergeBlocked: 'GitHub mergt das noch nicht – ein erforderliches Review oder ein Check fehlt.',
-    mergeBehind: '{{base}} hat sich weiterentwickelt, seit dieser Branch abgezweigt wurde.',
+    mergeBehind:
+      '{{base}} hat sich weiterentwickelt, und GitHub mergt diesen Branch erst, wenn er auf dem aktuellen Stand ist. Übernimm zuerst {{base}}.',
     mergeUnstable: 'Ein Check ist nicht bestanden, aber Mergen ist trotzdem erlaubt.',
     mergeSettling: 'GitHub prüft noch, ob sich das mergen lässt.',
     mergeDraft: 'Ein Entwurf kann nicht gemergt werden. Markiere ihn zuerst auf GitHub als bereit.',
@@ -2017,6 +2019,10 @@ export const de: Translation = {
     mergeFailed: 'GitHub hat #{{number}} nicht gemergt. Meldung: {{reason}}',
     requestNotOnBranch:
       'Pull Request #{{number}} liegt auf {{head}}, nicht auf {{branch}} dieses Workspaces. Es wurde nichts getan.',
+    requestFromFork:
+      'Pull Request #{{number}} kommt aus einem gleichnamigen Branch eines anderen Repositorys, nicht aus diesem Workspace. Es wurde nichts getan.',
+    requestBehind:
+      'GitHub mergt #{{number}} erst, wenn der Branch mit seinem Basis-Branch gleichauf ist. Übernimm die Basis mit „Von … aktualisieren“ im Pull-Request-Tab und merge dann.',
     updateFailed:
       '{{base}} ließ sich nicht in {{branch}} mergen, daher wurde nichts geändert. Git meldet: {{reason}}',
     updateLeftMerging:
