@@ -2641,7 +2641,6 @@ describe('the shape of a request on screen', () => {
     ['a draft', detail({ draft: true }), ['Merge: Draft']],
     // GitHub holding it, or not having decided yet, is not "ready".
     ['GitHub’s hold', detail({ mergeState: 'blocked' }), ['Merge: Waiting']],
-    // Not waiting: nothing comes of waiting until the base is brought in.
     ['a branch behind its base', detail({ mergeState: 'behind' }), ['Merge: Out of date']],
     ['GitHub still deciding', detail({ mergeable: 'unknown' }), ['Merge: Waiting']],
     ['a merged request', detail({ state: 'merged' }), ['Merge: Merged']],

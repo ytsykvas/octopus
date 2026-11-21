@@ -12,32 +12,19 @@ import {
   recoveryFor,
   restoreStateBackup
 } from './stateRecovery.js'
-import { addProject, EMPTY_STATE, type Project, saveState } from './store.js'
+import { addProject, EMPTY_STATE, saveState } from './store.js'
+import { makeProject } from './test/projects.js'
 
-function project(id: string): Project {
-  return {
-    id,
-    name: id,
-    repoPath: `/repos/${id}`,
-    baseBranch: 'main',
-    branchPrefix: 'ytsykvas',
-    envFile: '.env',
-    approvedSettings: [],
-    approvedScripts: [],
-    envProfile: 'default',
-    trustRepoScripts: false,
-    trustRepository: false,
-    preferLocal: [],
-    disabledSkillDefaults: [],
-    color: 'blue'
-  }
-}
-
-const TWO = addProject(addProject(EMPTY_STATE, project('planner')), project('esl'))
+const TWO = addProject(addProject(EMPTY_STATE, makeProject('planner')), makeProject('esl'))
 
 let dir: string
 let statePath: string
 let backupPath: string
+
+/** A backup holding two projects, written the way a save writes one. */
+async function writeGoodBackup(): Promise<void> {
+  await saveState(TWO, backupPath, `${backupPath}.tmp`)
+}
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'octopus-recovery-'))
@@ -71,7 +58,7 @@ describe('inspectStateBackup', () => {
   })
 
   it('offers a good backup, with when it was saved and how many projects it holds', async () => {
-    await saveState(TWO, backupPath, `${backupPath}.tmp`, join(dir, 'unused.bak'))
+    await writeGoodBackup()
     const savedAt = new Date('2026-11-19T08:30:00.000Z')
     await utimes(backupPath, savedAt, savedAt)
 
@@ -85,7 +72,7 @@ describe('inspectStateBackup', () => {
 
 describe('recoveryFor', () => {
   beforeEach(async () => {
-    await saveState(TWO, backupPath, `${backupPath}.tmp`, join(dir, 'unused.bak'))
+    await writeGoodBackup()
   })
 
   it('offers nothing for a failure that is not a damaged file', async () => {
@@ -113,7 +100,7 @@ describe('recoveryFor', () => {
 
 describe('restoreStateBackup', () => {
   beforeEach(async () => {
-    await saveState(TWO, backupPath, `${backupPath}.tmp`, join(dir, 'unused.bak'))
+    await writeGoodBackup()
     await writeFile(statePath, '{ damaged', 'utf8')
   })
 
@@ -162,7 +149,7 @@ describe('openWithRecovery', () => {
     new InvalidFileError(statePath, 'Unexpected end of JSON input')
 
   beforeEach(async () => {
-    await saveState(TWO, backupPath, `${backupPath}.tmp`, join(dir, 'unused.bak'))
+    await writeGoodBackup()
     await writeFile(statePath, '{ damaged', 'utf8')
   })
 

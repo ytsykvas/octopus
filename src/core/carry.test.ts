@@ -55,8 +55,6 @@ describe('readCarryList', () => {
     await expect(readFile(carryPath('never-seen', root), 'utf8')).resolves.toBe('.env\n')
   })
 
-  // Taking it for absent would create the workspace with the starting list
-  // instead of the one the project chose.
   it('fails rather than pretend an unreadable list is absent', async () => {
     await mkdir(carryPath('planner', root), { recursive: true })
 

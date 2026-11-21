@@ -144,6 +144,21 @@ function recordingGit(): { git: GitExec; asked: string[] } {
   return { git, asked }
 }
 
+/** What `gh pr view` answers about a request's head: its branch, and whether a fork's. */
+const head = (branch: string, fork = false): string =>
+  JSON.stringify({ headRefName: branch, isCrossRepository: fork })
+
+/** One open request as `gh pr list --head` answers, from this repository or a fork. */
+const entry = (number: number, isCrossRepository: boolean): Record<string, unknown> => ({
+  number,
+  state: 'OPEN',
+  title: 't',
+  url: `u${String(number)}`,
+  createdAt: OPENED,
+  headRefOid: ABSENT,
+  isCrossRepository
+})
+
 /** One request on the branch, as `gh pr list` answers, ending at `headRefOid`. */
 const listed = (state: string, headRefOid: string): string =>
   JSON.stringify([
@@ -236,26 +251,7 @@ describe('reading a branch', () => {
   it('ignores a request from a fork that reuses the branch name', async () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh({
-      list: JSON.stringify([
-        {
-          number: 9,
-          state: 'OPEN',
-          title: 'fork',
-          url: 'u9',
-          createdAt: OPENED,
-          headRefOid: ABSENT,
-          isCrossRepository: true
-        },
-        {
-          number: 4,
-          state: 'OPEN',
-          title: 'ours',
-          url: 'u4',
-          createdAt: OPENED,
-          headRefOid: ABSENT,
-          isCrossRepository: false
-        }
-      ])
+      list: JSON.stringify([entry(9, true), entry(4, false)])
     })
 
     const view = await readPullRequest(owner(branch), 'main', gh, workExec())
@@ -266,17 +262,7 @@ describe('reading a branch', () => {
   it('reads as having no request when only a fork has one', async () => {
     const branch = await branchWithCommit()
     const { gh } = fakeGh({
-      list: JSON.stringify([
-        {
-          number: 9,
-          state: 'OPEN',
-          title: 'fork',
-          url: 'u9',
-          createdAt: OPENED,
-          headRefOid: ABSENT,
-          isCrossRepository: true
-        }
-      ])
+      list: JSON.stringify([entry(9, true)])
     })
 
     const view = await readPullRequest(owner(branch), 'main', gh, workExec())
@@ -1572,7 +1558,7 @@ describe('pushing what is already committed', () => {
 describe('merging one', () => {
   it('merges by the method it was given', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       merge: ''
     })
 
@@ -1583,7 +1569,7 @@ describe('merging one', () => {
 
   it('has a flag for each of the three ways', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       merge: ''
     })
 
@@ -1603,7 +1589,7 @@ describe('merging one', () => {
    */
   it('leaves the branch alone', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       merge: ''
     })
 
@@ -1623,7 +1609,7 @@ describe('merging one', () => {
    */
   it('refuses a number that belongs to another branch, without asking gh to merge', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/bo","isCrossRepository":false}',
+      view: head('octopus/bo'),
       merge: ''
     })
 
@@ -1638,7 +1624,7 @@ describe('merging one', () => {
   // Same name, other repository: the name check alone would let it through.
   it('refuses a request that comes from a fork, without asking gh to merge', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":true}',
+      view: head('octopus/anna', true),
       merge: ''
     })
 
@@ -1652,7 +1638,7 @@ describe('merging one', () => {
 
   it('refuses to close one belonging to another branch too', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/bo","isCrossRepository":false}',
+      view: head('octopus/bo'),
       close: ''
     })
 
@@ -1663,11 +1649,11 @@ describe('merging one', () => {
     expect(calls.map((call) => call[1])).toEqual(['view'])
   })
 
-  // One field, not the fourteen `readPullRequestDetail` asks for — which would
+  // Two fields, not the fourteen `readPullRequestDetail` asks for — which would
   // also cost a GraphQL round trip for threads nobody is about to read.
-  it('asks GitHub only which branch the request is on', async () => {
+  it('asks GitHub only which branch, and which repository, the request is on', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       merge: ''
     })
 
@@ -1679,7 +1665,7 @@ describe('merging one', () => {
   // An answer of the wrong shape is refused rather than compared against
   // `undefined`, which would make every merge look like the wrong branch.
   it('refuses an answer that does not say which branch it is', async () => {
-    const { gh } = fakeGh({ view: '{"headRefName":"","isCrossRepository":false}', merge: '' })
+    const { gh } = fakeGh({ view: head(''), merge: '' })
 
     await expect(mergePullRequest(7, 'merge', 'octopus/anna', gh)).rejects.toMatchObject({
       code: 'listFailed'
@@ -1688,7 +1674,7 @@ describe('merging one', () => {
 
   it('says GitHub would not merge rather than swallowing it', async () => {
     const { gh } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       merge: new Error('not mergeable')
     })
 
@@ -1701,7 +1687,7 @@ describe('merging one', () => {
   // GitHub's own wording when branch protection wants the branch up to date first.
   it('says the branch is behind its base when GitHub refuses for that', async () => {
     const { gh } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       merge: refusal(
         'X Pull request o/p#7 is not mergeable: the head branch is not up to date with the base branch.\n'
       )
@@ -1717,7 +1703,7 @@ describe('merging one', () => {
 describe('closing one', () => {
   it('refuses a request that comes from a fork, without asking gh to close', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":true}',
+      view: head('octopus/anna', true),
       close: ''
     })
 
@@ -1730,7 +1716,7 @@ describe('closing one', () => {
 
   it('closes by number', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       close: ''
     })
 
@@ -1746,7 +1732,7 @@ describe('closing one', () => {
    */
   it('leaves the branch alone', async () => {
     const { gh, calls } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       close: ''
     })
 
@@ -1757,7 +1743,7 @@ describe('closing one', () => {
 
   it('carries what gh said about refusing', async () => {
     const { gh } = fakeGh({
-      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      view: head('octopus/anna'),
       close: Object.assign(new Error('failed'), { stderr: 'could not close: already merged' })
     })
 
@@ -2397,6 +2383,20 @@ describe('whether the branch list was all of them', () => {
    * below drops requests this list has no use for, and a count taken after it
    * would call a full answer short whenever it dropped one.
    */
+  it('counts what GitHub answered, not what came through the filtering', async () => {
+    const { gh } = fakeGh({
+      list: JSON.stringify([
+        { headRefName: 'a', number: 7, state: 'OPEN', url: 'https://e.test/7', ...REVIEW_FIELDS },
+        { headRefName: 'a', number: 8, state: 'CLOSED', url: 'https://e.test/8', ...REVIEW_FIELDS }
+      ])
+    })
+
+    const answer = await readBranchRequests([], gh, workExec(), 2)
+
+    expect(answer.requests).toHaveLength(1)
+    expect(answer.capped).toBe(true)
+  })
+
   it('leaves forks out of the marks', async () => {
     const { gh } = fakeGh({
       list: JSON.stringify([
@@ -2435,20 +2435,6 @@ describe('whether the branch list was all of them', () => {
           ...REVIEW_FIELDS,
           isCrossRepository: true
         }
-      ])
-    })
-
-    const answer = await readBranchRequests([], gh, workExec(), 2)
-
-    expect(answer.requests).toHaveLength(1)
-    expect(answer.capped).toBe(true)
-  })
-
-  it('counts what GitHub answered, not what came through the filtering', async () => {
-    const { gh } = fakeGh({
-      list: JSON.stringify([
-        { headRefName: 'a', number: 7, state: 'OPEN', url: 'https://e.test/7', ...REVIEW_FIELDS },
-        { headRefName: 'a', number: 8, state: 'CLOSED', url: 'https://e.test/8', ...REVIEW_FIELDS }
       ])
     })
 

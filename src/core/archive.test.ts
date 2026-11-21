@@ -180,6 +180,8 @@ describe('spawnInGroup', () => {
   })
 
   it('keeps only the end of a long stderr', async () => {
+    /** "Command failed: ", the newline and room to spare around the tail. */
+    const PREFIX_SLACK = 100
     const file = await script('yes x | head -c 200000 >&2; echo last >&2; exit 1')
 
     const error: unknown = await spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }).catch(
@@ -189,7 +191,7 @@ describe('spawnInGroup', () => {
     expect(error).toBeInstanceOf(Error)
     const message = error instanceof Error ? error.message : ''
     expect(message.endsWith('\nlast')).toBe(true)
-    expect(message.length).toBeLessThan(ARCHIVE_OUTPUT_TAIL_BYTES + file.length + 100)
+    expect(message.length).toBeLessThan(ARCHIVE_OUTPUT_TAIL_BYTES + file.length + PREFIX_SLACK)
   })
 
   it('hands the script its environment over the process’s own', async () => {

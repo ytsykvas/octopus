@@ -223,6 +223,10 @@ delivery, the fake has to record what it was told.
 Not a mock. Each test builds a repository in a temporary directory and runs
 actual commands.
 
+A record the store holds comes from one place: `makeProject(id)` in
+[`src/core/test/projects.ts`](../src/core/test/projects.ts), so a field added to
+`Project` is added to the fixtures once.
+
 This has caught bugs no mock would have:
 
 - a slug that destroyed Cyrillic;

@@ -240,7 +240,7 @@ describe('writeJsonFile', () => {
   // The new contents never land when the old ones could not be kept.
   it('leaves the file as it was when the backup fails', async () => {
     await writeJsonFile(file, Schema, { name: 'first', count: 1 })
-    // A directory where the backup goes: `rm` without `recursive` refuses it.
+    // A directory where the backup goes: a file cannot be renamed over it.
     const backup = join(dir, 'taken')
     await mkdir(backup)
 
@@ -256,7 +256,7 @@ describe('writeJsonFile', () => {
 })
 
 describe('keepBackup', () => {
-  /** A link that fails the way a filesystem without hard links does. */
+  /** A link that fails with `code`. */
   function refusing(code: string): () => Promise<void> {
     return () => Promise.reject(Object.assign(new Error(code), { code }))
   }

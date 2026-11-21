@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { NotesBodySchema } from './notes.js'
 
 import { InvalidFileError } from './persist.js'
+import { makeProject } from './test/projects.js'
 import {
   addChat,
   type AgentCommand,
@@ -52,22 +53,7 @@ import {
   workspaceStatusFrom
 } from './store.js'
 
-const project: Project = {
-  id: 'planner',
-  name: 'planner',
-  repoPath: '/repos/planner',
-  baseBranch: 'main',
-  branchPrefix: 'ytsykvas',
-  envFile: '.env',
-  approvedSettings: [],
-  approvedScripts: [],
-  envProfile: 'default',
-  trustRepoScripts: false,
-  trustRepository: false,
-  preferLocal: [],
-  disabledSkillDefaults: [],
-  color: 'blue'
-}
+const project: Project = makeProject('planner')
 
 function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
