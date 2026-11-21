@@ -61,7 +61,10 @@ entries, and what an export writes into a repository's `.octopus/`. A script
 matters most — `sh` reads it as it runs, so one rewritten in place goes on with
 the new file's bytes from wherever it had got to, while a replaced one keeps
 the inode it opened. `writeScript` and the repository's `script.*` pass
-`0o755`, so the executable bit comes through the replacement.
+`0o755`, so the executable bit comes through the replacement. A replacement is a
+new file: a symlink at the path — an instruction kept in dotfiles, say — becomes
+a plain file, a hard link is cut, and anything but a script gets `0o666` less the
+umask rather than the mode the old file had.
 
 A file written once under a fresh name — a pasted image — has nothing to make
 atomic, because nobody knows the name before the write returns. It goes through
