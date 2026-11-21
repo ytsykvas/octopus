@@ -67,6 +67,7 @@ export function stateTempFile(root: string = rootDir()): string {
   return join(root, 'state.json.tmp')
 }
 
+/** A moment as it can sit in a file name: no `:` and no `.`. */
 export function fileStamp(at: Date): string {
   return at.toISOString().replaceAll(/[:.]/gu, '-')
 }

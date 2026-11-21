@@ -772,6 +772,9 @@ export type MergeMethod = z.infer<typeof MergeMethodSchema>
 /** Which checks a re-run restarts; the type itself lives with the pure half. */
 export const RerunScopeSchema = z.enum(['failed', 'all']) satisfies z.ZodType<RerunScope>
 
+/** `gh`'s wording when branch protection wants the branch level with its base first. */
+const BEHIND_BASE = /not up to date with the base branch/iu
+
 const MERGE_FLAGS: Record<MergeMethod, string> = {
   merge: '--merge',
   squash: '--squash',
@@ -854,14 +857,11 @@ function assertOnBranch(
  * that branch, so git refuses to delete it and the merge reports a failure the
  * app caused itself. Removing the workspace is how the branch goes.
  *
- * Answers with nothing, and that is deliberate rather than lazy: `gh` enables
- * auto-merge instead of merging when required checks have not passed, so a
- * zero exit is not proof of a merge. The caller reads the request again, which
- * is also what turns a refusal we cannot name into a visible reason.
+ * Answers with nothing, and that is deliberate rather than lazy: on a branch with
+ * a merge queue `gh` adds the request to the queue instead of merging, so a zero
+ * exit is not proof of a merge. The caller reads the request again, which is
+ * also what turns a refusal we cannot name into a visible reason.
  */
-/** `gh`'s wording when branch protection wants the branch level with its base first. */
-const BEHIND_BASE = /not up to date with the base branch/iu
-
 export async function mergePullRequest(
   number: number,
   method: MergeMethod,

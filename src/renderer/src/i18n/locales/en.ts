@@ -909,9 +909,9 @@ export const en = {
     mergeDraft: 'A draft cannot be merged. Mark it ready on GitHub first.',
     /* Not a refusal GitHub would make — it merges over a check that is not
        required — so this one says outright that the app is the one refusing. */
-    /* Waited for rather than merged past. `gh` would take the press and turn it
-       into auto-merge, which is a fair thing for `gh` to do and the wrong thing
-       to offer beside a list that says "running". */
+    /* Waited for rather than merged past: a check nobody marked required does
+       not stop GitHub, and merging beside a list that says "running" should not
+       be one press away. */
     mergeChecksRunning_one: '{{count}} check is still running.',
     mergeChecksRunning_few: '{{count}} checks are still running.',
     mergeChecksRunning_many: '{{count}} checks are still running.',

@@ -328,6 +328,26 @@ describe('spawnInGroup', () => {
     ).rejects.toThrow('late line')
   })
 
+  // The deadline can fall while stderr is still being read after a clean exit.
+  it('does not call a script that exited in time late because its stderr was slow', async () => {
+    const file = await script('exit 0')
+    const stderr = new PassThrough()
+    const child = Object.assign(new EventEmitter(), { pid: 1, stderr })
+    const kill = vi.fn()
+    const spawn = (() => {
+      setImmediate(() => {
+        child.emit('exit', 0, null)
+        setTimeout(() => stderr.end(), 100)
+      })
+      return child
+    }) as unknown as NonNullable<SpawnInGroupDeps['spawn']>
+
+    await expect(
+      spawnInGroup(file, { cwd: dir, env: {}, timeout: 30 }, { spawn, kill })
+    ).resolves.toBeUndefined()
+    expect(kill).not.toHaveBeenCalled()
+  })
+
   it('reports at once when stderr had already ended at the exit', async () => {
     const file = await script('exit 0')
     const stderr = new PassThrough()
@@ -342,8 +362,9 @@ describe('spawnInGroup', () => {
       return child
     }) as unknown as NonNullable<SpawnInGroupDeps['spawn']>
 
+    // A drain longer than the test's own deadline: only finishing at once passes.
     await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }, { spawn })
+      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }, { spawn, drainMs: 60_000 })
     ).rejects.toThrow('early line')
   })
 

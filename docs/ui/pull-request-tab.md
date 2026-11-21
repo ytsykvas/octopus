@@ -104,8 +104,9 @@ when GitHub has said the request merges: one it holds back for a required review
 is `held`, and one it has not worked out yet — the first read after every push —
 is `settling`, with its own line saying GitHub is still checking. Both read
 _Waiting_ on the tile, and _No conflicts_ waits for GitHub to say so too. The
-button still takes a press in both: a branch with a merge queue takes it into
-the queue, and elsewhere `gh` refuses a held one and says why.
+button still takes a press in both: a held one goes into the queue where the
+branch has one and elsewhere comes back with GitHub's reason; a settling one goes
+to GitHub, which decides.
 
 **A branch behind its base is held, and offered the way out.** Branch protection
 that wants a branch up to date with its base makes GitHub answer `BEHIND`, and
@@ -118,8 +119,11 @@ press is one call, `workspaces:catchUp`: core asks GitHub for the base again,
 merges it in the way `updateFromBase` does — undone if it fails, refused over
 uncommitted work — and pushes, as one task in the workspace's `branchWork`
 queue, so a push or a rename cannot land between the merge and the push. The
-request on GitHub then moves and is read again; the header names the same base. It is ranked after the checks: while one of ours runs, GitHub's note
-is not said, and the verdict must not name a reason the list leaves out. A
+request on GitHub then moves and is read again; the header names the same base.
+
+The `behind` verdict is ranked after the checks: while one of ours runs,
+GitHub's note is not said, and the verdict must not name a reason the list
+leaves out. A
 conflict is not this case: with commits on the base that clash, GitHub answers
 `CONFLICTING`, and the pane offers the agent's _Resolve conflicts_ prompt; a
 merge that clashes only because the base moved since the last read is undone
@@ -276,10 +280,10 @@ hard, and the way past it is to fix the check or to merge in the browser, where
 nobody does it by reflex. The window header's own merge button has always
 refused on this, and until now the two disagreed about the same request.
 
-**A check still running holds it too.** `gh` would take the press and turn it
-into auto-merge, which is a fair thing for `gh` to do and the wrong thing to
-offer beside a list that says "running" — the reader is looking at work in
-progress and a button that would merge past it.
+**A check still running holds it too.** One nobody marked required does not
+stop GitHub, and merging beside a list that says "running" is the wrong thing to
+offer — the reader is looking at work in progress and a button that would merge
+past it.
 
 Counted from the list rather than from `mergeStateStatus`, which is GitHub's
 summary of whether _required_ checks are settled: a repository that marks none

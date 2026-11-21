@@ -5,6 +5,7 @@ import {
   openSync,
   readSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync
 } from 'node:fs'
@@ -56,6 +57,7 @@ function trim(file: string, keepBytes: number): number {
     renameSync(`${file}.tmp`, file)
     return kept.length
   } catch {
+    rmSync(`${file}.tmp`, { force: true })
     return 0
   }
 }

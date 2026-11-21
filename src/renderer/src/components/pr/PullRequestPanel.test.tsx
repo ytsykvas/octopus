@@ -1230,9 +1230,9 @@ describe('a pull request that exists', () => {
     expect(screen.queryByText(/before merging/)).not.toBeInTheDocument()
   })
 
-  /* Waited for rather than merged past. `gh` would take the press and turn it
-     into auto-merge — a fair thing for `gh` to do, and the wrong thing to offer
-     beside a list that says "running". */
+  /* Waited for rather than merged past: a check nobody marked required does not
+     stop GitHub, and merging beside a list that says "running" should not be
+     one press away. */
   it('waits for a check that is still running', async () => {
     answer(view({ request: request() }))
     answerDetail(detail({ checks: [failing({ state: 'pending', completedAt: null })] }))
@@ -2122,8 +2122,8 @@ describe('what the tab can do about a request', () => {
     await user.click(screen.getByRole('menuitem', { name: label }))
 
     expect(octopus().workspaces.mergePullRequest).toHaveBeenCalledWith(anna.id, 7, method)
-    // `gh` enables auto-merge rather than merging when a required check has not
-    // passed, so success is not proof of a merge.
+    // With a merge queue `gh` queues rather than merges, so success is not proof
+    // of a merge.
     await waitFor(() => {
       expect(octopus().workspaces.pullRequestDetail).toHaveBeenCalledTimes(2)
       expect(octopus().workspaces.pullRequest).toHaveBeenCalledTimes(2)
@@ -2681,7 +2681,7 @@ describe('the shape of a request on screen', () => {
     const footer = await nextStep()
     expect(within(footer).getByText(/GitHub will not merge this yet/)).toBeInTheDocument()
     expect(within(footer).queryByText('Ready to merge into main.')).not.toBeInTheDocument()
-    // Still a press: `gh` turns it into auto-merge.
+    // Still a press: a merge queue takes it.
     expect(within(footer).getByRole('button', { name: 'Merge' })).toBeEnabled()
   })
 

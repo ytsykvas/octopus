@@ -53,6 +53,7 @@ export interface SpawnInGroupDeps {
   readonly spawn?: typeof spawnProcess
   readonly kill?: Kill
   readonly graceMs?: number
+  readonly drainMs?: number
 }
 
 /**
@@ -77,6 +78,7 @@ export async function spawnInGroup(
   const spawn = deps.spawn ?? spawnProcess
   const kill = deps.kill ?? killProcess
   const graceMs = deps.graceMs ?? ARCHIVE_KILL_GRACE_MS
+  const drainMs = deps.drainMs ?? ARCHIVE_STDERR_DRAIN_MS
 
   try {
     await stat(options.cwd)
@@ -132,6 +134,8 @@ export async function spawnInGroup(
 
     child.on('error', settle)
     child.on('exit', (code) => {
+      // Exited before the deadline is in time, however long stderr then takes.
+      clearTimeout(deadline)
       const finish = (): void => {
         if (code === 0 && !timedOut) {
           settle(null)
@@ -145,7 +149,7 @@ export async function spawnInGroup(
         finish()
         return
       }
-      const drained = setTimeout(finish, ARCHIVE_STDERR_DRAIN_MS)
+      const drained = setTimeout(finish, drainMs)
       stderr.once('end', () => {
         clearTimeout(drained)
         finish()

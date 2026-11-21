@@ -51,8 +51,6 @@ export class StrayError extends CodedError<StrayErrorCode> {
 /** Runs `lsof` with these arguments and answers with what it printed. */
 export type Lsof = (args: readonly string[]) => Promise<string>
 
-/** How a signal is sent — `process.kill`'s shape, injected so a test kills nothing. */
-
 export interface StrayDeps {
   readonly lsof: Lsof
   readonly kill: (pid: number, signal: NodeJS.Signals) => void

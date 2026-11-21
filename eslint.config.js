@@ -9,13 +9,13 @@ const noElectron = {
 }
 
 const noBareWrite = [
-  ['node:fs/promises', 'writeFile'],
-  ['fs/promises', 'writeFile'],
-  ['node:fs', 'writeFileSync'],
-  ['fs', 'writeFileSync']
-].map(([name, importName]) => ({
+  ['node:fs/promises', ['writeFile']],
+  ['fs/promises', ['writeFile']],
+  ['node:fs', ['writeFile', 'writeFileSync', 'promises']],
+  ['fs', ['writeFile', 'writeFileSync', 'promises']]
+].map(([name, importNames]) => ({
   name,
-  importNames: [importName],
+  importNames,
   message:
     'Write through persist.ts (writeTextFile / writeJsonFile / writeNewFile) — see docs/data/migrations-and-writes.md.'
 }))

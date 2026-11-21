@@ -46,10 +46,11 @@ export type ChecksVerdict = 'failed' | 'running' | 'passed' | 'skipped' | 'none'
  * - `conflict`, `draft`, `checks` hold the button;
  * - `behind` is a branch GitHub will merge only once the base is brought in,
  *   which the pane offers; `gh` refuses it outright, so it holds the button too;
- * - `held` is GitHub refusing for a reason of its own (a required review), and
- *   `settling` is GitHub not having worked it out yet — both still take a
- *   press: a branch with a merge queue takes it into the queue, and elsewhere
- *   GitHub refuses with its reason;
+ * - `held` is GitHub refusing for a reason of its own (a required review): the
+ *   press still goes, into the queue where the branch has one, and elsewhere
+ *   comes back with GitHub's reason;
+ * - `settling` is GitHub not having worked it out yet, and the press goes to
+ *   GitHub, which decides;
  * - `ready` is the only one that says so.
  */
 export type MergeVerdict =
@@ -152,9 +153,8 @@ export function requestStatus(
   const reviewed = detail.decision === 'changesRequested' || hasRemarks(detail)
 
   /* A conflict and a draft are refusals GitHub would make anyway. A red or
-     running check is not — GitHub merges over one nobody marked required, and
-     turns a press during a run into auto-merge — so that one is a policy
-     octopus keeps rather than a refusal it is predicting. */
+     running check is not — GitHub merges over one nobody marked required — so
+     that one is a policy octopus keeps rather than a refusal it is predicting. */
   const merge: MergeVerdict =
     detail.state !== 'open'
       ? detail.state

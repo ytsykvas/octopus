@@ -291,9 +291,9 @@ export function PullRequestPanel({
       pending.finish(workspace.id, 'merge')
       if (!result.ok) report(result)
 
-      // Read again either way. `gh` enables auto-merge instead of merging when
-      // required checks have not passed, so success is not proof of a merge —
-      // and a refusal it could not name is explained by the fresh state.
+      // Read again either way. With a merge queue `gh` queues the request rather
+      // than merging it, so success is not proof of a merge — and a refusal it
+      // could not name is explained by the fresh state.
       readAgain(refresh, detail.refresh)
       onRequestChanged()
     })()
