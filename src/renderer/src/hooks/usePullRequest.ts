@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { DraftedPullRequest } from '@core/pullRequestDraft.js'
 import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
@@ -6,6 +6,7 @@ import type { PullRequestDraft, PullRequestView } from '@core/pullRequests.js'
 import { useDraftState } from './pullRequestDrafts.js'
 import { useBranchMoved } from './useBranchMoved.js'
 import { useErrorMessage } from './useErrorMessage.js'
+import { useLatest } from './useLatest.js'
 import { useTurnSettled } from './useTurnSettled.js'
 
 export interface PullRequestController {
@@ -97,15 +98,21 @@ export function usePullRequest(
   /** Bumped to ask again, which is the whole of what `refresh` does. */
   const [nonce, setNonce] = useState(0)
 
-  /** Rejects a reply that arrived after the workspace changed under it. */
-  const generation = useRef(0)
+  /** The workspace on screen as of the last commit, for an answer that comes back late. */
+  const shown = useLatest(workspaceId)
 
-  const apply = useCallback(
-    (
-      result: Awaited<ReturnType<typeof window.octopus.workspaces.pullRequest>>,
-      attempt: number
-    ) => {
-      if (attempt !== generation.current) return
+  // Read inline rather than through a callback, so nothing sets state until the
+  // first await has passed. The abort is what drops a reply that arrived after
+  // the workspace changed under it, and a read superseded by a newer one: this
+  // effect is the only place the pane is read, so nothing else can race it.
+  useEffect(() => {
+    if (workspaceId === null || !enabled) return
+
+    const controller = new AbortController()
+
+    void (async () => {
+      const result = await window.octopus.workspaces.pullRequest(workspaceId)
+      if (controller.signal.aborted) return
 
       if (result.ok) {
         setView(result.value)
@@ -115,46 +122,38 @@ export function usePullRequest(
 
       setView(null)
       setError(describeFailure(result))
-    },
-    [describeFailure]
-  )
-
-  // Read inline rather than through a callback, so nothing sets state until the
-  // first await has passed.
-  useEffect(() => {
-    if (workspaceId === null || !enabled) return
-
-    const controller = new AbortController()
-    const attempt = ++generation.current
-
-    void (async () => {
-      const result = await window.octopus.workspaces.pullRequest(workspaceId)
-      if (!controller.signal.aborted) apply(result, attempt)
     })()
 
     return () => {
       controller.abort()
     }
     // `nonce` is not read in here; it is what makes a refresh re-run the effect.
-  }, [workspaceId, enabled, nonce, apply])
+  }, [workspaceId, enabled, nonce, describeFailure])
+
+  const refresh = useCallback(() => {
+    setNonce((count) => count + 1)
+  }, [])
 
   const create = useCallback(
     async (draft: PullRequestDraft): Promise<string | null> => {
       if (workspaceId === null) return null
 
-      // Claimed before the await, not after it, and that is the whole of the
-      // guard. Claimed afterwards it beat the effect of the workspace opened
-      // in the meantime — this call bumped the counter past the number that
-      // effect had just taken — and wrote this workspace's request into a pane
-      // drawing another's branch. `PullRequestPanel` then sent the workspace on
-      // screen together with the number it was showing, so Merge would have run
-      // against the wrong branch, which GitHub does not undo.
-      const attempt = ++generation.current
-
       setCreating(true)
       setActionError(null)
       const result = await window.octopus.workspaces.createPullRequest(workspaceId, draft)
-      if (attempt !== generation.current) return null
+
+      // Dropped when the workspace on screen is another one: written there, this
+      // workspace's request would sit in a pane drawing another's branch, and
+      // `PullRequestPanel` sends the workspace on screen together with the
+      // number it is showing — so Merge would run against the wrong branch,
+      // which GitHub does not undo.
+      //
+      // The workspace is compared, not a count of reads. The push this call
+      // makes moves the branch on the remote, and that reads the pane again
+      // while `gh pr create` is still running; a counter bumped by that read
+      // dropped the very request it was waiting for, and left the pane on the
+      // form saying "Opening…".
+      if (shown.current !== workspaceId) return null
 
       setCreating(false)
 
@@ -166,11 +165,11 @@ export function usePullRequest(
       // Read again rather than assembling the new state here: what came back is
       // a URL, and the number, the title and whether the branch is now pushed
       // are all things the next read knows and this reply does not.
-      apply(await window.octopus.workspaces.pullRequest(workspaceId), attempt)
+      refresh()
 
       return result.value
     },
-    [workspaceId, apply, describeFailure]
+    [workspaceId, shown, refresh, describeFailure]
   )
 
   const draft = useCallback(() => {
@@ -184,10 +183,6 @@ export function usePullRequest(
       if (!result.ok) setActionError(describeFailure(result))
     })
   }, [workspaceId, describeFailure])
-
-  const refresh = useCallback(() => {
-    setNonce((count) => count + 1)
-  }, [])
 
   // Behind a hidden tab nothing fires; the effect above reads when it is shown.
   useTurnSettled(workspaceId, enabled, refresh)
