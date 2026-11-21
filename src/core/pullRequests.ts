@@ -259,6 +259,9 @@ async function previousOf(
   }
 }
 
+/** Room for forks reusing the branch name: the newest by that name may be theirs. */
+const PULL_REQUEST_LOOKUP_LIMIT = 10
+
 async function listPullRequests(
   branch: string,
   gh: GhExec
@@ -272,9 +275,8 @@ async function listPullRequests(
       branch,
       '--state',
       'all',
-      // Room for forks that reuse the name: the newest by that name may be theirs.
       '--limit',
-      '10',
+      String(PULL_REQUEST_LOOKUP_LIMIT),
       '--json',
       'number,state,title,url,createdAt,headRefOid,isCrossRepository'
     ])
@@ -294,9 +296,7 @@ async function listPullRequests(
     throw new GitHubError('listFailed', {}, 'GitHub returned an unexpected response.')
   }
 
-  // `--head` matches the branch name, and a fork may push a branch of the same
-  // name: its request is somebody else's work, never this workspace's.
-  return result.data.filter((request) => !request.isCrossRepository)
+  return sameRepository(result.data)
 }
 
 /**
@@ -787,7 +787,7 @@ const HeadRefSchema = z.object({
 const BaseRefSchema = HeadRefSchema.extend({ baseRefName: z.string().min(1) })
 
 /**
- * Refuses a number that belongs to some other branch of the same repository.
+ * Refuses a number that belongs to another branch, or to a fork's branch of the same name.
  *
  * `gh pr merge 7` resolves 7 against the **repository**, not against the branch
  * the working directory happens to be on, so a stale number drawn beside one
@@ -801,7 +801,7 @@ const BaseRefSchema = HeadRefSchema.extend({ baseRefName: z.string().min(1) })
  * `RevertPathSchema` rejects at the boundary. One `gh` call, on something
  * somebody does a few times a day, and merging does not come back.
  *
- * Its own one-field view rather than `readPullRequestDetail`, which asks for
+ * Its own two-field view rather than `readPullRequestDetail`, which asks for
  * fourteen fields and then a GraphQL round trip for the threads.
  */
 async function refuseAnotherBranch(number: number, branch: string, gh: GhExec): Promise<void> {
@@ -859,6 +859,9 @@ function assertOnBranch(
  * zero exit is not proof of a merge. The caller reads the request again, which
  * is also what turns a refusal we cannot name into a visible reason.
  */
+/** `gh`'s wording when branch protection wants the branch level with its base first. */
+const BEHIND_BASE = /not up to date with the base branch/iu
+
 export async function mergePullRequest(
   number: number,
   method: MergeMethod,
@@ -871,8 +874,7 @@ export async function mergePullRequest(
     await gh(['pr', 'merge', String(number), MERGE_FLAGS[method]])
   } catch (error) {
     const reason = reasonFrom(error)
-    // What branch protection's "up to date" rule refuses with; the pane can do something about it.
-    if (/not up to date with the base branch/iu.test(reason)) {
+    if (BEHIND_BASE.test(reason)) {
       throw new GitHubError(
         'requestBehind',
         { number: String(number) },

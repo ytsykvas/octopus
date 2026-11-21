@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   type BranchRequest,
-  type BranchListPayload,
   BranchListSchema,
   commentKey,
   openedFor,
@@ -901,29 +900,22 @@ describe('where an open request stands', () => {
 })
 
 describe('sameRepository', () => {
-  const entry = (number: number, isCrossRepository: boolean): BranchListPayload[number] => ({
-    headRefName: 'octopus/anna',
-    number,
-    state: 'OPEN',
-    url: `https://github.com/o/p/pull/${String(number)}`,
-    createdAt: '2026-10-21T12:38:54Z',
-    statusCheckRollup: [],
-    isDraft: false,
-    mergeable: 'MERGEABLE',
-    mergeStateStatus: 'CLEAN',
-    reviewDecision: '',
-    headRefOid: 'a'.repeat(40),
+  const entry = (
+    id: number,
+    isCrossRepository: boolean
+  ): { id: number; isCrossRepository: boolean } => ({
+    id,
     isCrossRepository
   })
 
-  it('keeps the requests opened from this repository, in order', () => {
+  it('keeps the entries opened from this repository, in order', () => {
     expect(sameRepository([entry(9, true), entry(4, false), entry(3, false)])).toEqual([
       entry(4, false),
       entry(3, false)
     ])
   })
 
-  it('answers with nothing when every request came from a fork', () => {
+  it('answers with nothing when every entry came from a fork', () => {
     expect(sameRepository([entry(9, true)])).toEqual([])
   })
 })

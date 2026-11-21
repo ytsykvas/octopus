@@ -104,7 +104,8 @@ when GitHub has said the request merges: one it holds back for a required review
 is `held`, and one it has not worked out yet — the first read after every push —
 is `settling`, with its own line saying GitHub is still checking. Both read
 _Waiting_ on the tile, and _No conflicts_ waits for GitHub to say so too. The
-button still takes a press in both, as before: `gh` turns one into auto-merge.
+button still takes a press in both: a branch with a merge queue takes it into
+the queue, and elsewhere `gh` refuses a held one and says why.
 
 **A branch behind its base is held, and offered the way out.** Branch protection
 that wants a branch up to date with its base makes GitHub answer `BEHIND`, and

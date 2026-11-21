@@ -268,7 +268,7 @@ export function runsToRerun(checks: readonly PullRequestCheck[], scope: RerunSco
     .map(([run]) => run)
 }
 
-/** What `gh pr view --json headRefName,statusCheckRollup` sends before a re-run. */
+/** What `gh pr view` sends before a re-run: the head, its repository, the page and the checks. */
 export const RerunPayloadSchema = z.object({
   headRefName: z.string().min(1),
   isCrossRepository: z.boolean(),
@@ -689,14 +689,14 @@ export function openedFor(request: { readonly createdAt: string }, owner: Branch
 }
 
 /**
- * Drops requests opened from another repository.
- *
- * The list is the whole repository's, and a fork's branch may carry a
- * workspace's name — the names are a short list — so its request would be
- * marked as that workspace's.
+ * Drops requests opened from another repository: a fork's branch may carry a
+ * workspace's name — the names are a short list — and its request is never that
+ * workspace's.
  */
-export function sameRepository(payload: BranchListPayload): BranchListPayload {
-  return payload.filter((entry) => !entry.isCrossRepository)
+export function sameRepository<T extends { readonly isCrossRepository: boolean }>(
+  entries: readonly T[]
+): T[] {
+  return entries.filter((entry) => !entry.isCrossRepository)
 }
 
 /** Drops requests opened before their branch's workspace came onto it; branches with no workspace pass. */

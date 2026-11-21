@@ -228,7 +228,7 @@ describe('the status of a request', () => {
 
     expect(status.attention).toEqual([{ kind: 'githubNote', note: mergeState }])
     expect(status.merge).toBe(verdict)
-    // A hold is GitHub's to make; the press still goes through, as auto-merge.
+    // A hold is GitHub's to make; a merge queue takes the press.
     expect(status.canMerge).toBe(true)
   })
 

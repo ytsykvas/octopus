@@ -48,7 +48,8 @@ export type ChecksVerdict = 'failed' | 'running' | 'passed' | 'skipped' | 'none'
  *   which the pane offers; `gh` refuses it outright, so it holds the button too;
  * - `held` is GitHub refusing for a reason of its own (a required review), and
  *   `settling` is GitHub not having worked it out yet — both still take a
- *   press, since `gh` turns one into auto-merge;
+ *   press: a branch with a merge queue takes it into the queue, and elsewhere
+ *   GitHub refuses with its reason;
  * - `ready` is the only one that says so.
  */
 export type MergeVerdict =
