@@ -469,6 +469,7 @@ describe('channel table', () => {
     'workspaces:amendAndPush',
     'workspaces:push',
     'workspaces:updateFromBase',
+    'workspaces:catchUp',
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
     'workspaces:closePullRequest',
@@ -2444,6 +2445,45 @@ describe('workspaces of a real project', () => {
     })
   })
 
+  it('refuses to bring a base in for a request number that is not one', async () => {
+    const projectId = await addProject('catching')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:catchUp', workspace.id, '7')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('asks GitHub which base the request has before bringing it in', async () => {
+    const projectId = await addProject('caught')
+    const workspace = await createWorkspace(projectId)
+    const asked: string[][] = []
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve(
+          JSON.stringify({
+            headRefName: 'someone/else',
+            isCrossRepository: false,
+            baseRefName: 'main'
+          })
+        )
+      }
+    })
+
+    await expect(invoke('workspaces:catchUp', workspace.id, 7)).resolves.toMatchObject({
+      ok: false,
+      code: 'requestNotOnBranch'
+    })
+    expect(asked[0]).toEqual([
+      'pr',
+      'view',
+      '7',
+      '--json',
+      'headRefName,isCrossRepository,baseRefName'
+    ])
+  })
+
   it('says why a push failed rather than swallowing it', async () => {
     const projectId = await addProject('unsendable')
     const workspace = await createWorkspace(projectId)
@@ -2483,6 +2523,7 @@ describe('workspaces of a real project', () => {
                 reviewDecision: 'CHANGES_REQUESTED',
                 statusCheckRollup: [],
                 headRefOid: 'a'.repeat(40),
+                baseRefName: 'main',
                 comments: [],
                 reviews: []
               })

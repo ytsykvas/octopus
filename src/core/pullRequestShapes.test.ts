@@ -81,6 +81,7 @@ function view(overrides: Record<string, unknown> = {}): DetailPayload {
     reviewDecision: '',
     statusCheckRollup: [],
     headRefOid: 'c0ffee'.padEnd(40, '0'),
+    baseRefName: 'main',
     comments: [],
     reviews: [],
     ...overrides
@@ -693,6 +694,10 @@ describe('where a pull request stands', () => {
     expect(toPullRequestDetail(view({ headRefOid: 'f'.repeat(40) }), NO_THREADS).head).toBe(
       'f'.repeat(40)
     )
+  })
+
+  it('carries the branch the request is to merge into', () => {
+    expect(toPullRequestDetail(view({ baseRefName: 'develop' }), NO_THREADS).base).toBe('develop')
   })
 
   it("carries the author's description as written", () => {

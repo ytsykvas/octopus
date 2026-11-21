@@ -200,7 +200,8 @@ import {
   pushUrl,
   readPullRequest,
   readPullRequestDetail,
-  updateFromBase
+  updateFromBase,
+  catchUpWithBase
 } from './pullRequests.js'
 import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, keptIndexCopies } from './git.js'
@@ -1528,6 +1529,9 @@ export interface OctopusService {
    * commits the base took as one, and a second request would show them again.
    */
   updateWorkspaceFromBase(workspaceId: string): Promise<void>
+
+  /** Brings an open request's own base in and pushes, for a request GitHub holds until the branch is level with it. */
+  catchUpWorkspace(workspaceId: string, number: number): Promise<void>
 
   /** Merges it. Answers with nothing — see `mergePullRequest` for why. */
   mergePullRequest(workspaceId: string, number: number, method: MergeMethod): Promise<void>
@@ -6933,15 +6937,30 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       })
     },
 
-    async updateWorkspaceFromBase(workspaceId) {
-      const workspace = requireWorkspace(workspaceId)
-      const project = requireProject(workspace.projectId)
-      return updateFromBase(
-        workspace.branch,
-        await baseRefOf(project),
-        makeExec(workspace.path),
-        makeExec(workspace.path, FETCH_OPTIONS)
-      )
+    updateWorkspaceFromBase(workspaceId) {
+      return branchWork(workspaceId, async () => {
+        const workspace = requireWorkspace(workspaceId)
+        const project = requireProject(workspace.projectId)
+        return updateFromBase(
+          workspace.branch,
+          await baseRefOf(project),
+          makeExec(workspace.path),
+          makeExec(workspace.path, FETCH_OPTIONS)
+        )
+      })
+    },
+
+    catchUpWorkspace(workspaceId, number) {
+      return branchWork(workspaceId, () => {
+        const workspace = requireWorkspace(workspaceId)
+        return catchUpWithBase(
+          number,
+          workspace.branch,
+          makeExec(workspace.path, PUSH_OPTIONS),
+          makeExec(workspace.path, FETCH_OPTIONS),
+          makeGh(workspace.path)
+        )
+      })
     },
 
     readPullRequestDetail(workspaceId, number) {

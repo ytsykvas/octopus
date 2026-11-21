@@ -411,6 +411,8 @@ export interface PullRequestDetail {
    * they say there is nothing left to wait for at exactly the moment there is.
    */
   readonly head: string
+  /** The branch the request is to merge into — GitHub's, which can differ from the project's. */
+  readonly base: string
   readonly checks: readonly PullRequestCheck[]
   /** All three kinds in one reading order, oldest first. */
   readonly comments: readonly PullRequestComment[]
@@ -456,6 +458,7 @@ export const DetailPayloadSchema = z.object({
   reviewDecision: z.string(),
   statusCheckRollup: RollupSchema,
   headRefOid: z.string().min(1),
+  baseRefName: z.string().min(1),
   comments: z.array(
     z.object({
       id: z.string(),
@@ -601,6 +604,7 @@ export function toPullRequestDetail(
     url: view.url,
     draft: view.isDraft,
     head: view.headRefOid,
+    base: view.baseRefName,
     checks: toChecks(view.statusCheckRollup),
     comments: comments(view, threads),
     decision: DECISIONS[view.reviewDecision] ?? null,

@@ -385,17 +385,12 @@ export function PullRequestPanel({
     })()
   }
 
-  /* For a request GitHub holds until the branch is level with its base: the base
-     comes in here, as for a second request, and goes straight out, so the
-     request on GitHub moves. A merge that fails is undone by core and said,
-     and nothing is pushed. */
-  const catchUp = (): void => {
+  const catchUp = (number: number): void => {
     pending.start(workspace.id, 'update')
     void (async () => {
-      const updated = await window.octopus.workspaces.updateFromBase(workspace.id)
-      const pushed = updated.ok ? await window.octopus.workspaces.push(workspace.id) : updated
+      const result = await window.octopus.workspaces.catchUp(workspace.id, number)
       pending.finish(workspace.id, 'update')
-      if (!pushed.ok) report(pushed)
+      if (!result.ok) report(result)
 
       readAgain(refresh, detail.refresh)
     })()
@@ -414,7 +409,7 @@ export function PullRequestPanel({
         detail.refresh()
       }}
       branch={workspace.branch}
-      base={view.base}
+      base={detail.detail?.base ?? view.base}
     />
   )
 
@@ -616,7 +611,7 @@ export function PullRequestPanel({
               <MergeConditions
                 number={request.number}
                 status={read.status}
-                base={view.base}
+                base={read.detail.base}
                 onClose={() => {
                   close(request.number)
                 }}
@@ -630,7 +625,7 @@ export function PullRequestPanel({
 
           <PullRequestFooter
             status={read.status}
-            base={view.base}
+            base={read.detail.base}
             dirty={view.dirty}
             exposedEnvFile={exposedEnvFile}
             onPrompt={onPrompt}
@@ -646,7 +641,9 @@ export function PullRequestPanel({
             unpushedCommits={view.unpushedCommits}
             onPush={push}
             pushing={pushing}
-            onCatchUp={catchUp}
+            onCatchUp={() => {
+              catchUp(request.number)
+            }}
             catchingUp={updating}
             onRemoveWorkspace={() => {
               onRemoveWorkspace(workspace.id)

@@ -132,6 +132,13 @@ export function PullRequestFooter({
      worktree — an env file git does not ignore included, which committing
      would stage. */
   const pushable = unpushedCommits !== null && unpushedCommits > 0
+  const next = dirty
+    ? 'commit'
+    : pushable
+      ? 'push'
+      : status.merge === 'behind'
+        ? 'catchUp'
+        : 'merge'
 
   /* An empty field amends, and where the last commit is already on GitHub the
      amended one replaces it there. That is the one consequence of this press
@@ -210,7 +217,7 @@ export function PullRequestFooter({
         {pushable && (
           <Button
             size="sm"
-            variant={dirty ? 'quiet' : 'success'}
+            variant={next === 'push' ? 'success' : 'quiet'}
             onClick={onPush}
             disabled={pushing}
             className="whitespace-nowrap"
@@ -226,7 +233,7 @@ export function PullRequestFooter({
         {status.merge === 'behind' && (
           <Button
             size="sm"
-            variant={dirty || pushable ? 'quiet' : 'success'}
+            variant={next === 'catchUp' ? 'success' : 'quiet'}
             onClick={onCatchUp}
             disabled={dirty || catchingUp}
             className="whitespace-nowrap"
@@ -242,7 +249,7 @@ export function PullRequestFooter({
             a push or bringing the base in it stays quiet, so one green button
             says what comes first. */}
         <MergeMenu
-          variant={dirty || pushable || status.merge === 'behind' ? 'quiet' : 'success'}
+          variant={next === 'merge' ? 'success' : 'quiet'}
           onMerge={onMerge}
           merging={merging}
           disabled={!status.canMerge}

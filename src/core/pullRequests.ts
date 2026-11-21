@@ -15,7 +15,7 @@ import { promisify } from 'node:util'
 
 import { z } from 'zod'
 
-import { shortBranchName } from './branches.js'
+import { DEFAULT_REMOTE, shortBranchName } from './branches.js'
 import { ghFailure, GitHubError } from './github.js'
 import { countAhead, currentBranch, type GitExec, MAX_OUTPUT_BYTES, reasonFrom } from './git.js'
 import {
@@ -524,6 +524,27 @@ async function abortMerge(git: GitExec): Promise<boolean> {
   }
 }
 
+/** Brings the request's own base in and pushes — GitHub's base, which a retargeted request no longer shares with the project. */
+export async function catchUpWithBase(
+  number: number,
+  branch: string,
+  git: GitExec,
+  fetchGit: GitExec,
+  gh: GhExec
+): Promise<void> {
+  const { baseRefName, ...head } = shaped(
+    BaseRefSchema,
+    parsed(
+      await asked(() =>
+        gh(['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository,baseRefName'])
+      )
+    )
+  )
+  assertOnBranch(number, branch, head)
+  await updateFromBase(branch, `${DEFAULT_REMOTE}/${baseRefName}`, git, fetchGit)
+  await pushBranch(branch, git)
+}
+
 /**
  * Sends the branch to the remote.
  *
@@ -763,6 +784,8 @@ const HeadRefSchema = z.object({
   isCrossRepository: z.boolean()
 })
 
+const BaseRefSchema = HeadRefSchema.extend({ baseRefName: z.string().min(1) })
+
 /**
  * Refuses a number that belongs to some other branch of the same repository.
  *
@@ -957,6 +980,7 @@ const DETAIL_FIELDS = [
   'reviewDecision',
   'statusCheckRollup',
   'headRefOid',
+  'baseRefName',
   'comments',
   'reviews'
 ].join(',')

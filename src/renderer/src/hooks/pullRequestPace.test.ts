@@ -25,6 +25,7 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
     url: 'https://github.com/o/p/pull/7',
     draft: false,
     head: NEW,
+    base: 'main',
     checks: [],
     comments: [],
     decision: null,

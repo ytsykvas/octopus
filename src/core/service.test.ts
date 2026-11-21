@@ -726,7 +726,10 @@ describe('workspaces', () => {
    * that skipped the line is seen at its first command, a few milliseconds in,
    * rather than only if it reached the move or the removal inside the window.
    */
-  async function lined(hold: 'push' | 'move' | 'remove'): Promise<{
+  async function lined(
+    hold: 'push' | 'move' | 'remove',
+    gh: (args: readonly string[]) => Promise<string> = () => Promise.resolve('https://x/pull/8\n')
+  ): Promise<{
     service: OctopusService
     projectId: string
     workspaceId: string
@@ -759,7 +762,7 @@ describe('workspaces', () => {
 
     const service = await createService({
       ...paths(dir),
-      makeGh: () => () => Promise.resolve('https://x/pull/8\n'),
+      makeGh: () => gh,
       makeExec: (cwd, options) => {
         const git = gitIn(cwd, options)
         return async (args) => {
@@ -916,6 +919,41 @@ describe('workspaces', () => {
     const asks = asked.filter(({ ref }) => ref === `refs/heads/${workspace.branch}`)
     expect(asks).not.toHaveLength(0)
     expect(asks.map(({ options }) => options)).toEqual(asks.map(() => DEADLINED))
+  })
+
+  it('lines bringing the base in up behind a push', async () => {
+    let branch = ''
+    const lining = await lined('push', () =>
+      Promise.resolve(
+        JSON.stringify({ headRefName: branch, isCrossRepository: false, baseRefName: 'main' })
+      )
+    )
+    branch = lining.branch
+    const { service, workspaceId, events, stray, holding, release } = lining
+
+    const pushed = service.pushWorkspace(workspaceId)
+    await holding
+    const caught = service.catchUpWorkspace(workspaceId, 8)
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+
+    expect(stray).toEqual([])
+    release()
+    await Promise.allSettled([pushed, caught])
+    expect(events.slice(0, 2)).toEqual(['push', 'push done'])
+  })
+
+  it('lines bringing the base in for a second request up behind a push', async () => {
+    const { service, workspaceId, events, stray, holding, release } = await lined('push')
+
+    const pushed = service.pushWorkspace(workspaceId)
+    await holding
+    const updated = service.updateWorkspaceFromBase(workspaceId)
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+
+    expect(stray).toEqual([])
+    release()
+    await Promise.allSettled([pushed, updated])
+    expect(events.slice(0, 2)).toEqual(['push', 'push done'])
   })
 
   it('lines a rename up behind a push', async () => {

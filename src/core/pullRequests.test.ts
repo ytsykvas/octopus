@@ -17,6 +17,7 @@ import {
   pushUrl,
   createPullRequest,
   type GhExec,
+  catchUpWithBase,
   ghIn,
   updateFromBase,
   closePullRequest,
@@ -1473,6 +1474,54 @@ describe('pushBranchTo', () => {
   })
 })
 
+describe('bringing the request’s base in', () => {
+  /** A `gh` answering which branch, repository and base the request has. */
+  const viewing = (headRefName: string, baseRefName = 'main'): ReturnType<typeof fakeGh> =>
+    fakeGh({ view: JSON.stringify({ headRefName, isCrossRepository: false, baseRefName }) })
+
+  async function onOrigin(branch: string): Promise<string> {
+    return (
+      await run('git', ['ls-remote', '--heads', 'origin', branch], { cwd: join(dir, 'work') })
+    ).stdout.trim()
+  }
+
+  it('merges the base the request names, then pushes', async () => {
+    const work = join(dir, 'work')
+    const branch = await branchWithCommit()
+    await run('git', ['checkout', '-q', '-b', 'develop', 'main'], { cwd: work })
+    await commitOn('develop.txt')
+    await run('git', ['push', '-q', 'origin', 'develop'], { cwd: work })
+    await run('git', ['checkout', '-q', branch], { cwd: work })
+
+    await catchUpWithBase(7, branch, workExec(), workExec(), viewing(branch, 'develop').gh)
+
+    await run('git', ['merge-base', '--is-ancestor', 'origin/develop', branch], { cwd: work })
+    expect(await onOrigin(branch)).toContain(await tipOf(branch))
+  })
+
+  it('refuses a request on another branch before touching git', async () => {
+    const branch = await branchWithCommit()
+    const { git, asked } = recordingGit()
+
+    await expect(
+      catchUpWithBase(7, branch, git, git, viewing('octopus/bo').gh)
+    ).rejects.toMatchObject({ code: 'requestNotOnBranch' })
+
+    expect(asked).toEqual([])
+  })
+
+  it('pushes nothing when the base does not come in', async () => {
+    const branch = await branchWithCommit()
+    await writeFile(join(dir, 'work', 'a.txt'), 'changed\n', 'utf8')
+
+    await expect(
+      catchUpWithBase(7, branch, workExec(), workExec(), viewing(branch).gh)
+    ).rejects.toMatchObject({ code: 'uncommittedChanges' })
+
+    expect(await onOrigin(branch)).toBe('')
+  })
+})
+
 describe('pushing what is already committed', () => {
   /*
    * The half of the pair above that was missing. Work the agent committed, or
@@ -1989,6 +2038,7 @@ describe('reading one request in full', () => {
     reviewDecision: '',
     statusCheckRollup: [],
     headRefOid: 'c0ffee'.padEnd(40, '0'),
+    baseRefName: 'main',
     comments: [],
     reviews: []
   })

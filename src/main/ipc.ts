@@ -984,6 +984,11 @@ export function registerIpc(
     attempt(() => service.updateWorkspaceFromBase(workspaceId))
   )
 
+  // The base is asked of GitHub by number, so the number is proved one first.
+  host.handle('workspaces:catchUp', (_event, workspaceId: string, number: unknown) =>
+    attempt(() => service.catchUpWorkspace(workspaceId, PullRequestNumberSchema.parse(number)))
+  )
+
   // The number becomes an argument to `gh`, so it is proved to be one before it
   // gets there rather than trusted because the renderer read it from us.
   host.handle('workspaces:pullRequestDetail', (_event, workspaceId: string, number: unknown) =>

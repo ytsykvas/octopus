@@ -3311,6 +3311,7 @@ describe('App', () => {
           url: 'https://github.com/o/p/pull/7',
           draft: false,
           head: 'a'.repeat(40),
+          base: 'main',
           checks: [],
           comments: [
             {
@@ -3422,6 +3423,7 @@ describe('App', () => {
         url: 'https://github.com/o/p/pull/7',
         draft: false,
         head: 'a'.repeat(40),
+        base: 'main',
         checks: [],
         comments: [],
         decision: null,

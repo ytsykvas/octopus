@@ -111,10 +111,13 @@ that wants a branch up to date with its base makes GitHub answer `BEHIND`, and
 `gh pr merge` then refuses outright — no auto-merge — so a press could only fail
 with GitHub's raw sentence. The verdict is `behind`: Merge is off, the tile reads
 _Out of date_, the line says the base has to come in first, and the footer
-offers _Update from {{base}}_. That press is the `updateFromBase` a second
-request uses — fetch the base, merge it in, undone if it fails, refused over
-uncommitted work — followed by a push, so the request on GitHub moves and is
-read again. It is ranked after the checks: while one of ours runs, GitHub's note
+offers _Update from {{base}}_ — the request's own base, `baseRefName` from the
+detail, which a retargeted request no longer shares with the project. That
+press is one call, `workspaces:catchUp`: core asks GitHub for the base again,
+merges it in the way `updateFromBase` does — undone if it fails, refused over
+uncommitted work — and pushes, as one task in the workspace's `branchWork`
+queue, so a push or a rename cannot land between the merge and the push. The
+request on GitHub then moves and is read again; the header names the same base. It is ranked after the checks: while one of ours runs, GitHub's note
 is not said, and the verdict must not name a reason the list leaves out. A
 conflict is not this case: with commits on the base that clash, GitHub answers
 `CONFLICTING`, and the pane offers the agent's _Resolve conflicts_ prompt; a

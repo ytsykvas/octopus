@@ -50,6 +50,7 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
     url: 'https://github.com/o/p/pull/7',
     draft: false,
     head: 'a'.repeat(40),
+    base: 'main',
     checks: [],
     comments: [],
     decision: null,
@@ -1148,17 +1149,24 @@ describe('a pull request that exists', () => {
     expect(within(footer).getByRole('button', { name: 'Merge' })).toBeDisabled()
     await user.click(within(footer).getByRole('button', { name: 'Update from main' }))
 
-    expect(octopus().workspaces.updateFromBase).toHaveBeenCalledWith(anna.id)
-    await waitFor(() => {
-      expect(octopus().workspaces.push).toHaveBeenCalledWith(anna.id)
-    })
+    expect(octopus().workspaces.catchUp).toHaveBeenCalledWith(anna.id, 7)
   })
 
-  it('does not push when bringing the base in failed', async () => {
+  it('names the request’s own base on the button', async () => {
+    answer(view({ request: request() }))
+    answerDetail(detail({ mergeState: 'behind', base: 'develop' }))
+    renderPanel()
+
+    expect(
+      within(await nextStep()).getByRole('button', { name: 'Update from develop' })
+    ).toBeInTheDocument()
+  })
+
+  it('says why the base did not come in', async () => {
     const user = userEvent.setup()
     answer(view({ request: request() }))
     answerDetail(detail({ mergeState: 'behind' }))
-    vi.mocked(octopus().workspaces.updateFromBase).mockResolvedValue({
+    vi.mocked(octopus().workspaces.catchUp).mockResolvedValue({
       ok: false,
       code: 'updateFailed',
       params: { base: 'origin/main', branch: 'octopus/anna', reason: 'CONFLICT (content): a.txt' },
@@ -1173,10 +1181,8 @@ describe('a pull request that exists', () => {
         expect.stringContaining('could not be merged into octopus/anna')
       )
     })
-    expect(octopus().workspaces.push).not.toHaveBeenCalled()
   })
 
-  // git refuses to merge into a dirty tree; the footer's line says to commit first.
   it('waits for uncommitted work before bringing the base in', async () => {
     answer(view({ request: request(), dirty: true }))
     answerDetail(detail({ mergeState: 'behind' }))
