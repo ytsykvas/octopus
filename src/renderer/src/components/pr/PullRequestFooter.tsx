@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUpFromLine, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, ArrowUpFromLine, GitMerge, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -51,6 +51,9 @@ interface PullRequestFooterProps {
   /** Sends what is already committed, without committing anything else. */
   readonly onPush: () => void
   readonly pushing: boolean
+  /** Brings the base in and pushes, for a branch GitHub will merge only once it is level with its base. */
+  readonly onCatchUp: () => void
+  readonly catchingUp: boolean
   /**
    * Removes the workspace, asking first — the sidebar's own flow.
    *
@@ -91,6 +94,8 @@ export function PullRequestFooter({
   unpushedCommits,
   onPush,
   pushing,
+  onCatchUp,
+  catchingUp,
   onRemoveWorkspace
 }: PullRequestFooterProps): React.JSX.Element | null {
   const { t } = useTranslation()
@@ -215,11 +220,29 @@ export function PullRequestFooter({
           </Button>
         )}
 
-        {/* The finishing press only when it is the next one: beside a commit
-            or a push it stays quiet, so one green button says what comes
-            first. */}
+        {/* Where Merge would only be refused, the press that helps. Held over
+            uncommitted work, which git will not merge into; the line above
+            says to commit first. */}
+        {status.merge === 'behind' && (
+          <Button
+            size="sm"
+            variant={dirty || pushable ? 'quiet' : 'success'}
+            onClick={onCatchUp}
+            disabled={dirty || catchingUp}
+            className="whitespace-nowrap"
+          >
+            <GitMerge aria-hidden size={12} />
+            {t(catchingUp ? 'pullRequest.updatingFromBase' : 'pullRequest.updateFromBase', {
+              base
+            })}
+          </Button>
+        )}
+
+        {/* The finishing press only when it is the next one: beside a commit,
+            a push or bringing the base in it stays quiet, so one green button
+            says what comes first. */}
         <MergeMenu
-          variant={dirty || pushable ? 'quiet' : 'success'}
+          variant={dirty || pushable || status.merge === 'behind' ? 'quiet' : 'success'}
           onMerge={onMerge}
           merging={merging}
           disabled={!status.canMerge}

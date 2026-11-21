@@ -101,11 +101,27 @@ policy while the footer said GitHub would not merge it.
 
 **_Ready_ is GitHub's word, not the app's.** The merge verdict is `ready` only
 when GitHub has said the request merges: one it holds back for a required review
-or a branch behind its base is `held`, and one it has not worked out yet — the
-first read after every push — is `settling`, with its own line saying GitHub is
-still checking. Both read _Waiting_ on the tile, and _No conflicts_ waits for
-GitHub to say so too. The button still takes a press in both, as before: `gh`
-turns one into auto-merge.
+is `held`, and one it has not worked out yet — the first read after every push —
+is `settling`, with its own line saying GitHub is still checking. Both read
+_Waiting_ on the tile, and _No conflicts_ waits for GitHub to say so too. The
+button still takes a press in both, as before: `gh` turns one into auto-merge.
+
+**A branch behind its base is held, and offered the way out.** Branch protection
+that wants a branch up to date with its base makes GitHub answer `BEHIND`, and
+`gh pr merge` then refuses outright — no auto-merge — so a press could only fail
+with GitHub's raw sentence. The verdict is `behind`: Merge is off, the tile reads
+_Out of date_, the line says the base has to come in first, and the footer
+offers _Update from {{base}}_. That press is the `updateFromBase` a second
+request uses — fetch the base, merge it in, undone if it fails, refused over
+uncommitted work — followed by a push, so the request on GitHub moves and is
+read again. It is ranked after the checks: while one of ours runs, GitHub's note
+is not said, and the verdict must not name a reason the list leaves out. A
+conflict is not this case: with commits on the base that clash, GitHub answers
+`CONFLICTING`, and the pane offers the agent's _Resolve conflicts_ prompt; a
+merge that clashes only because the base moved since the last read is undone
+and said, and the next read shows the conflict. Merge pressed anyway — from the
+window header, which reads a slower list — comes back as `requestBehind`, which
+says what to press.
 
 **The pane opens on the view that answers the question the request is asking**:
 Checks while one is red or running, Review once there is a review or an open

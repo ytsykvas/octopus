@@ -1648,6 +1648,21 @@ describe('merging one', () => {
       params: { number: '7' }
     })
   })
+
+  // GitHub's own wording when branch protection wants the branch up to date first.
+  it('says the branch is behind its base when GitHub refuses for that', async () => {
+    const { gh } = fakeGh({
+      view: '{"headRefName":"octopus/anna","isCrossRepository":false}',
+      merge: refusal(
+        'X Pull request o/p#7 is not mergeable: the head branch is not up to date with the base branch.\n'
+      )
+    })
+
+    await expect(mergePullRequest(7, 'merge', 'octopus/anna', gh)).rejects.toMatchObject({
+      code: 'requestBehind',
+      params: { number: '7' }
+    })
+  })
 })
 
 describe('closing one', () => {

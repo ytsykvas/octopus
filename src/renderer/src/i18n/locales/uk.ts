@@ -669,6 +669,7 @@ export const uk: Translation = {
     tileMergeReady: 'Готово',
     tileMergeWaiting: 'Чекає',
     tileMergeConflict: 'Конфлікт',
+    tileMergeBehind: 'Відстає',
     checksPassedAll: 'Усі перевірки пройшли.',
     noConflicts: 'Конфліктів з {{base}} немає.',
     readyToMerge: 'Можна влити в {{base}}.',
@@ -720,7 +721,8 @@ export const uk: Translation = {
     methodRebase: 'Rebase і влити',
     conflicting: 'Ця гілка конфліктує з {{base}}.',
     mergeBlocked: 'GitHub поки не вливає — бракує обовʼязкового ревю або перевірки.',
-    mergeBehind: '{{base}} пішла вперед, відколи ця гілка від неї відділилася.',
+    mergeBehind:
+      '{{base}} пішла вперед, а GitHub вливає цю гілку лише тоді, коли вона з нею зрівняна. Спершу підтягніть {{base}}.',
     mergeUnstable: 'Перевірка не пройшла, але вливати все одно дозволено.',
     mergeSettling: 'GitHub ще перевіряє, чи можна це влити.',
     mergeDraft: 'Чернетку не влити. Спершу позначте її готовою на GitHub.',
@@ -1989,6 +1991,8 @@ export const uk: Translation = {
       'Запит #{{number}} у гілці {{head}}, а не в {{branch}} цього воркспейсу. Нічого не зроблено.',
     requestFromFork:
       'Запит #{{number}} іде з однойменної гілки в іншому репозиторії, а не з цього воркспейсу. Нічого не зроблено.',
+    requestBehind:
+      'GitHub не вливатиме #{{number}}, доки гілка не зрівняється з базовою. Підтягніть базову гілку кнопкою «Оновити з» у вкладці Pull request, тоді влийте.',
     updateFailed:
       'Не вдалося влити {{base}} у {{branch}}, тож нічого не змінено. Git каже: {{reason}}',
     updateLeftMerging:

@@ -148,6 +148,8 @@ export type GitHubErrorCode =
   | 'requestNotOnBranch'
   // Refused before `gh` acts: a fork's request can share this branch's name.
   | 'requestFromFork'
+  // Refused by GitHub: the base moved on and protection wants the branch level with it first.
+  | 'requestBehind'
   // Bringing the base into a branch before a second request: undone when it
   // fails, so the worktree is not left mid-merge — and said so when it cannot be.
   | 'updateFailed'

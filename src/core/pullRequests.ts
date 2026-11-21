@@ -847,9 +847,18 @@ export async function mergePullRequest(
   try {
     await gh(['pr', 'merge', String(number), MERGE_FLAGS[method]])
   } catch (error) {
+    const reason = reasonFrom(error)
+    // What branch protection's "up to date" rule refuses with; the pane can do something about it.
+    if (/not up to date with the base branch/iu.test(reason)) {
+      throw new GitHubError(
+        'requestBehind',
+        { number: String(number) },
+        `Pull request #${String(number)} is behind its base branch.`
+      )
+    }
     throw new GitHubError(
       'mergeFailed',
-      { number: String(number), reason: reasonFrom(error) },
+      { number: String(number), reason },
       'GitHub would not merge the pull request.'
     )
   }

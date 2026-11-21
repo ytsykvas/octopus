@@ -385,6 +385,22 @@ export function PullRequestPanel({
     })()
   }
 
+  /* For a request GitHub holds until the branch is level with its base: the base
+     comes in here, as for a second request, and goes straight out, so the
+     request on GitHub moves. A merge that fails is undone by core and said,
+     and nothing is pushed. */
+  const catchUp = (): void => {
+    pending.start(workspace.id, 'update')
+    void (async () => {
+      const updated = await window.octopus.workspaces.updateFromBase(workspace.id)
+      const pushed = updated.ok ? await window.octopus.workspaces.push(workspace.id) : updated
+      pending.finish(workspace.id, 'update')
+      if (!pushed.ok) report(pushed)
+
+      readAgain(refresh, detail.refresh)
+    })()
+  }
+
   const attached = new Set(quotes.pending.map((quote) => quote.key))
   const exposedEnvFile = envIgnored ? null : envFile
 
@@ -630,6 +646,8 @@ export function PullRequestPanel({
             unpushedCommits={view.unpushedCommits}
             onPush={push}
             pushing={pushing}
+            onCatchUp={catchUp}
+            catchingUp={updating}
             onRemoveWorkspace={() => {
               onRemoveWorkspace(workspace.id)
             }}
