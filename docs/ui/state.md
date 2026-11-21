@@ -65,13 +65,20 @@ new store keyed by workspace returns `ForgetsWorkspaces` and gets a line in
 
 **A reply is claimed before its await, never after.** A hook that reads for the
 workspace on screen has to drop what comes back for one that has been left, and
-the guard is a counter bumped per read: `useWorkspaceDiff` and `usePullRequest`
-both keep one. Where the number is taken decides whether it works. Taken
-**before** the call, a workspace opened in the meantime bumps the counter and
-the late reply is dropped. Taken **after**, the late reply bumps it past the
-number the new workspace's own read had just claimed, and wins — which is how
-the pull request pane came to draw one workspace's branch over another's request
-number, with Merge sending exactly that pair.
+`useWorkspaceDiff` guards it with a counter bumped per read. Where the number is
+taken decides whether it works. Taken **before** the call, a workspace opened in
+the meantime bumps the counter and the late reply is dropped. Taken **after**,
+the late reply bumps it past the number the new workspace's own read had just
+claimed, and wins — which is how the pull request pane came to draw one
+workspace's branch over another's request number, with Merge sending exactly
+that pair. `usePullRequest` reads in a single effect, so its abort is the guard.
+
+An _action_ is not a read, and is dropped only when the workspace on screen is
+no longer the one it was made for — compared through `useLatest`, never through
+a read counter. Opening a pull request pushes first, the push moves the branch,
+and that reads the pane again while `gh pr create` is still running; a counter
+bumped by that read dropped the request just opened and left the pane on the
+form saying "Opening…".
 
 The same applies to whatever a pane is _doing_, not only to what it reads: the
 render-time reset that clears the view clears `creating`, `drafting` and the

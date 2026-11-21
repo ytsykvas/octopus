@@ -292,6 +292,51 @@ describe('the pull request of a workspace', () => {
   })
 
   /*
+   * `createPullRequest` pushes before `gh pr create` runs, and the push moves
+   * the branch on the remote — which reads the pane again while the request
+   * does not exist yet. That read once counted as newer than the create, so
+   * the create's answer was dropped: the pane stayed on the form saying
+   * "Opening…" until another tab was clicked and this one clicked back.
+   */
+  it('draws the request it opened when its own push moved the branch on the way', async () => {
+    vi.useFakeTimers()
+    const created = held<{ ok: true; value: string }>()
+    answering(VIEW)
+    vi.mocked(octopus().workspaces.createPullRequest).mockReturnValue(created.promise)
+
+    const { result } = renderHook(() => usePullRequest(WORKSPACE, true))
+    await vi.waitFor(() => {
+      expect(result.current.view).not.toBeNull()
+    })
+
+    let opening: Promise<string | null> = Promise.resolve(null)
+    act(() => {
+      opening = result.current.create(DRAFT)
+    })
+
+    // The push, read while `gh pr create` is still out.
+    answering({ ...VIEW, ahead: 2 })
+    emitBranchMoved(WORKSPACE, 'a'.repeat(40))
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect(result.current.view?.ahead).toBe(2)
+
+    // The request exists by now.
+    answering({ ...VIEW, ahead: 3 })
+    let url: string | null = null
+    await act(async () => {
+      created.resolve({ ok: true, value: 'https://github.com/o/p/pull/1' })
+      url = await opening
+      await vi.runAllTimersAsync()
+    })
+
+    expect(url).toBe('https://github.com/o/p/pull/1')
+    expect(result.current.creating).toBe(false)
+    expect(result.current.view?.ahead).toBe(3)
+  })
+
+  /*
    * Asking the agent to describe a branch takes a turn, which is long enough to
    * open another workspace in. The description belongs to the branch it was
    * asked about: not drawn on the one opened meanwhile, and not lost either —
