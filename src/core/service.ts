@@ -222,6 +222,7 @@ import {
 import {
   attachmentsDir,
   chatTranscript,
+  backupFileOf,
   configFile,
   globalPromptsFile,
   globalSkillsRoot,
@@ -1941,8 +1942,7 @@ export function statePathsFor(options: ServiceOptions = {}): {
   return {
     statePath,
     stateTempPath: options.stateTempFilePath ?? stateTempFile(),
-    // Beside the state given, so a copy pointed elsewhere never backs up into the real root.
-    stateBackupPath: options.stateBackupFilePath ?? `${statePath}.bak`
+    stateBackupPath: options.stateBackupFilePath ?? backupFileOf(statePath)
   }
 }
 

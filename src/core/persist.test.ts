@@ -300,6 +300,16 @@ describe('keepBackup', () => {
     expect(await temporaries()).toEqual([])
   })
 
+  it('clears a temporary backup a crash left behind', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await writeFile(`${file}.bak.tmp`, 'left by a crash', 'utf8')
+
+    await keepBackup(file, `${file}.bak`)
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
+    expect(await temporaries()).toEqual([])
+  })
+
   it('passes on a failure that carries no code', async () => {
     await writeFile(file, 'old', 'utf8')
 

@@ -13,7 +13,7 @@
 
 import { constants, copyFile, readFile, stat } from 'node:fs/promises'
 
-import { stateBackupFile, stateFile } from './paths.js'
+import { backupFileOf, stateFile } from './paths.js'
 import { InvalidFileError, readJsonFile, writeTextFile } from './persist.js'
 import { StateSchema } from './store.js'
 
@@ -41,7 +41,7 @@ export async function inspectStateBackup(backupPath: string): Promise<StateRecov
 export async function recoveryFor(
   error: unknown,
   statePath: string = stateFile(),
-  backupPath: string = stateBackupFile()
+  backupPath: string = backupFileOf(statePath)
 ): Promise<StateRecovery> {
   if (!(error instanceof InvalidFileError) || error.filePath !== statePath) return NONE
   return inspectStateBackup(backupPath)

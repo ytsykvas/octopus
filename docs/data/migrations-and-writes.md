@@ -89,7 +89,8 @@ went wrong is worse than refusing to start.
 `saveState` keeps the version each save replaces as `state.json.bak`, beside
 the file. The step sits inside `replaceThrough`, after the new contents are
 synced and before the rename (`keepBackup` in `persist.ts`): `state.json` is
-**hard-linked** under a temporary name, which is then renamed over the old
+**hard-linked** as `state.json.bak.tmp` — cleared first, so a crash leaves
+nothing to pile up — which is then renamed over the old
 `.bak` — so the previous backup goes only as the new one takes its place, and a
 failure in between leaves it as it was. A link copies nothing, so it
 costs the same whatever the file's size, and once the rename puts a new inode at
@@ -98,8 +99,8 @@ A filesystem without hard links (`EPERM`, `ENOTSUP`) gets a copy instead. A
 first run has nothing to link and writes no backup. A backup that fails stops
 the write: the new state never lands without the old one kept.
 
-The path follows the state's own — `<state>.bak`, which for the default is
-`stateBackupFile()` — so a test or a copy that points the state elsewhere never
+The path follows the state's own — `<state>.bak`, the one rule `backupFileOf` in
+`paths.ts` holds — so a test or a copy that points the state elsewhere never
 writes a backup into the real root. Saves are serialised (`commit`), so two
 never race for the `.bak`, and the data-root lock covers it with the rest.
 `config.json` and the transcripts get no backup.

@@ -178,15 +178,16 @@ function codeOf(error: unknown): unknown {
  * inode at `filePath`, the old one — already synced when it was written — lives on here.
  * A filesystem without hard links gets a copy instead.
  *
- * Made under a temporary name and renamed over the old backup, so the old one goes only as
- * the new one takes its place: a failure in between leaves the previous backup as it was.
+ * Made under `<backup>.tmp` — cleared first; state writes are serialised — and renamed over
+ * the old backup, so the old one goes only as the new one takes its place.
  */
 export async function keepBackup(
   filePath: string,
   backupPath: string,
   linkFile: (existing: string, created: string) => Promise<void> = link
 ): Promise<void> {
-  const tempPath = `${backupPath}.${randomSuffix()}.tmp`
+  const tempPath = `${backupPath}.tmp`
+  await rm(tempPath, { force: true })
   try {
     try {
       await linkFile(filePath, tempPath)
@@ -198,7 +199,7 @@ export async function keepBackup(
     }
     await rename(tempPath, backupPath)
   } catch (error) {
-    // Settled, as in `replaceThrough`: a cleanup that throws must not replace the error.
+    // Settled, as in `replaceThrough`.
     await Promise.allSettled([rm(tempPath, { force: true })])
     throw error
   }

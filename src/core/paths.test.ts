@@ -22,7 +22,7 @@ import {
   rootDir,
   unlinkedInside,
   skillsDirOf,
-  stateBackupFile,
+  backupFileOf,
   stateFile,
   stateTempFile,
   workspacePath,
@@ -100,8 +100,8 @@ describe('top-level files', () => {
     expect(stateTempFile(ROOT)).toBe(join(ROOT, 'state.json.tmp'))
   })
 
-  it('keeps the backup beside state, so the hard link stays on one filesystem', () => {
-    expect(stateBackupFile(ROOT)).toBe(join(ROOT, 'state.json.bak'))
+  it('keeps the backup beside the state, so the hard link stays on one filesystem', () => {
+    expect(backupFileOf(join(ROOT, 'state.json'))).toBe(join(ROOT, 'state.json.bak'))
   })
 
   it('falls back to rootDir when no root is given', () => {
@@ -109,7 +109,6 @@ describe('top-level files', () => {
     expect(configFile()).toBe(join(root, 'config.json'))
     expect(stateFile()).toBe(join(root, 'state.json'))
     expect(stateTempFile()).toBe(join(root, 'state.json.tmp'))
-    expect(stateBackupFile()).toBe(join(root, 'state.json.bak'))
   })
 })
 

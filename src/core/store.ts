@@ -47,7 +47,7 @@ export {
 export { PROJECT_COLORS, type ProjectColor } from './colors.js'
 export { PROJECT_ICONS, type ProjectIcon } from './icons.js'
 import { withoutDefaults } from './patchSchema.js'
-import { insideWorktree, stateFile, stateTempFile } from './paths.js'
+import { backupFileOf, insideWorktree, stateFile, stateTempFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 
 /*
@@ -470,18 +470,12 @@ export function migrate(state: StoredState): State {
   return { ...state, projects, workspaces }
 }
 
-/**
- * Writes the state, keeping the one it replaces at `backupPath`.
- *
- * The backup follows `filePath` rather than defaulting to the data root's, so a caller
- * that points the state elsewhere — a test, a second copy — never writes a backup into
- * the real root. For the default path the two agree: `stateBackupFile()`.
- */
+/** Writes the state, keeping the one it replaces at `backupPath` — beside `filePath` unless given. */
 export async function saveState(
   state: State,
   filePath: string = stateFile(),
   tempPath: string = stateTempFile(),
-  backupPath = `${filePath}.bak`
+  backupPath = backupFileOf(filePath)
 ): Promise<void> {
   await writeJsonFile(filePath, StateSchema, state, tempPath, backupPath)
 }
