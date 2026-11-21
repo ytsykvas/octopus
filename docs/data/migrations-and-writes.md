@@ -111,9 +111,10 @@ because `state.json` itself does not read (`InvalidFileError` on that path) and
 Quit, with when the copy was saved and how many projects it holds. Restore
 copies the damaged file aside as `state.json.broken-<time>`, writes the backup
 over `state.json` atomically and starts again; a second failure ends in the same
-error box as before. Without a good backup the start fails exactly as it always
+error box as before, and a restore that fails names both failures. Quit quits —
+no second box saying the app could not start, since the user just chose that. Without a good backup the start fails exactly as it always
 has. The damaged file is **copied** aside rather than renamed: until the backup
 has landed `state.json` stays where it is, because a moment with no file at all
 is a moment in which a start reads "first run" — the silent reset this whole
-section refuses. The decisions are in `stateRecovery.ts`; `main/index.ts`
-(`openService`) only shows the question.
+section refuses. The decisions are in `openWithRecovery` (`stateRecovery.ts`),
+which answers `null` for a Quit; `main/index.ts` only shows the question.

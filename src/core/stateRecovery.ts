@@ -1,26 +1,24 @@
 /**
  * Offering `state.json` back from its backup when it cannot be read (§13).
  *
- * Reading the state fails loudly on a damaged file rather than starting empty, and
- * that is right — but it left the app unable to start with nothing to offer except
- * editing JSON by hand. `saveState` keeps the version before each save as
- * `state.json.bak`; this decides whether that copy can be offered, and restores it.
- *
- * Never silently. `main` asks, and only an explicit yes restores — a backup is a
- * save behind, so whatever the last save recorded is lost with the damaged file.
- * The decisions live here rather than in `main/index.ts`, which tests cannot reach.
+ * A damaged state fails the start loudly rather than starting empty; without a
+ * backup the only way on is editing JSON by hand. `saveState` keeps the version
+ * before each save as `state.json.bak`, and this offers it — never silently, since a
+ * backup is a save behind. The decisions live here rather than in `main/index.ts`,
+ * which tests cannot reach.
  */
 
 import { constants, copyFile, readFile, stat } from 'node:fs/promises'
 
-import { backupFileOf, stateFile } from './paths.js'
-import { InvalidFileError, readJsonFile, writeTextFile } from './persist.js'
+import { describeError, InvalidFileError, readJsonFile, writeTextFile } from './persist.js'
 import { StateSchema } from './store.js'
 
 /** What can be offered when the state cannot be read. */
 export type StateRecovery =
   | { readonly kind: 'none' }
   | { readonly kind: 'backup'; readonly savedAt: Date; readonly projects: number }
+
+export type BackupRecovery = Extract<StateRecovery, { kind: 'backup' }>
 
 const NONE: StateRecovery = { kind: 'none' }
 
@@ -40,8 +38,8 @@ export async function inspectStateBackup(backupPath: string): Promise<StateRecov
 /** What to offer for a failure to start: only a damaged state, and only with a good backup. */
 export async function recoveryFor(
   error: unknown,
-  statePath: string = stateFile(),
-  backupPath: string = backupFileOf(statePath)
+  statePath: string,
+  backupPath: string
 ): Promise<StateRecovery> {
   if (!(error instanceof InvalidFileError) || error.filePath !== statePath) return NONE
   return inspectStateBackup(backupPath)
@@ -53,16 +51,39 @@ export async function recoveryFor(
  * Copied aside rather than renamed: until the backup has landed, `state.json` stays
  * where it is, damaged. A rename first would leave a moment with no file at all,
  * and a start in that moment reads "first run" — the silent reset this exists to
- * avoid. Answers where the damaged file was kept.
+ * avoid.
  */
 export async function restoreStateBackup(
   statePath: string,
   backupPath: string,
   now: () => Date = () => new Date()
-): Promise<string> {
+): Promise<void> {
   const contents = await readFile(backupPath, 'utf8')
   const kept = `${statePath}.broken-${now().toISOString().replaceAll(':', '-')}`
   await copyFile(statePath, kept, constants.COPYFILE_EXCL)
   await writeTextFile(statePath, contents)
-  return kept
+}
+
+/** Opens with `open`; a damaged state with a good backup is restored only if `ask` says yes. Null when it says no. */
+export async function openWithRecovery<T>(
+  open: () => Promise<T>,
+  ask: (recovery: BackupRecovery, error: unknown) => boolean,
+  paths: { readonly statePath: string; readonly stateBackupPath: string }
+): Promise<T | null> {
+  try {
+    return await open()
+  } catch (error) {
+    const recovery = await recoveryFor(error, paths.statePath, paths.stateBackupPath)
+    if (recovery.kind === 'none') throw error
+    if (!ask(recovery, error)) return null
+    try {
+      await restoreStateBackup(paths.statePath, paths.stateBackupPath)
+    } catch (restoreError) {
+      throw new Error(
+        `${describeError(error)}\n\nRestoring the backup failed as well: ${describeError(restoreError)}`,
+        { cause: restoreError }
+      )
+    }
+    return await open()
+  }
 }

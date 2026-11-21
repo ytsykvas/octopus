@@ -12,7 +12,7 @@ import {
   type ServiceOptions,
   statePathsFor
 } from '../core/service.js'
-import { recoveryFor, restoreStateBackup, type StateRecovery } from '../core/stateRecovery.js'
+import { type BackupRecovery, openWithRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
 import {
   pushChatEvent,
@@ -133,7 +133,7 @@ function watchSystemTheme(service: OctopusService): void {
 }
 
 /** Asks whether to put the backup in place of a state that cannot be read. */
-function askRestore(recovery: Extract<StateRecovery, { kind: 'backup' }>, error: unknown): boolean {
+function askRestore(recovery: BackupRecovery, error: unknown): boolean {
   // Before any window exists, so no sheet and no i18n: English, as the other startup boxes.
   const response = dialog.showMessageBoxSync({
     type: 'warning',
@@ -148,32 +148,6 @@ function askRestore(recovery: Extract<StateRecovery, { kind: 'backup' }>, error:
       'state.json.broken-….'
   })
   return response === 0
-}
-
-/**
- * Opens the service; a damaged state.json with a good backup beside it is offered back.
- *
- * Only with a yes — `stateRecovery.ts` holds why never silently. A second failure
- * throws to the caller like the first; a restore that fails says so beside the
- * failure that asked for it, rather than in its place.
- */
-async function openService(options: ServiceOptions): Promise<OctopusService> {
-  try {
-    return await createService(options)
-  } catch (error) {
-    const { statePath, stateBackupPath } = statePathsFor(options)
-    const recovery = await recoveryFor(error, statePath, stateBackupPath)
-    if (recovery.kind === 'none' || !askRestore(recovery, error)) throw error
-    try {
-      await restoreStateBackup(statePath, stateBackupPath)
-    } catch (restoreError) {
-      throw new Error(
-        `${describeError(error)}\n\nRestoring the backup failed as well: ${describeError(restoreError)}`,
-        { cause: restoreError }
-      )
-    }
-    return await createService(options)
-  }
 }
 
 /**
@@ -227,9 +201,20 @@ async function start(): Promise<void> {
   let service: OctopusService
 
   try {
-    service = await openService({
+    const options: ServiceOptions = {
       onDiagnostic: diagnosticLog(join(app.getPath('logs'), 'main.log'))
-    })
+    }
+    const opened = await openWithRecovery(
+      () => createService(options),
+      askRestore,
+      statePathsFor(options)
+    )
+    if (opened === null) {
+      await lock.release()
+      app.quit()
+      return
+    }
+    service = opened
   } catch (error) {
     dialog.showErrorBox('octopus could not start', describeError(error))
     await lock.release()

@@ -1,11 +1,17 @@
-import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
+import { mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { InvalidFileError } from './persist.js'
-import { inspectStateBackup, recoveryFor, restoreStateBackup } from './stateRecovery.js'
+import {
+  inspectStateBackup,
+  openWithRecovery,
+  recoveryFor,
+  restoreStateBackup
+} from './stateRecovery.js'
 import { addProject, EMPTY_STATE, type Project, saveState } from './store.js'
 
 function project(id: string): Project {
@@ -103,13 +109,6 @@ describe('recoveryFor', () => {
       projects: 2
     })
   })
-
-  it('looks in the data root when given no paths', async () => {
-    vi.stubEnv('OCTOPUS_DATA_DIR', dir)
-    const error = new InvalidFileError(statePath, 'Unexpected end of JSON input')
-
-    await expect(recoveryFor(error)).resolves.toMatchObject({ kind: 'backup', projects: 2 })
-  })
 })
 
 describe('restoreStateBackup', () => {
@@ -119,14 +118,11 @@ describe('restoreStateBackup', () => {
   })
 
   it('puts the backup in place and keeps the damaged file as evidence', async () => {
-    const kept = await restoreStateBackup(
-      statePath,
-      backupPath,
-      () => new Date('2026-11-20T10:11:12.000Z')
-    )
+    await restoreStateBackup(statePath, backupPath, () => new Date('2026-11-20T10:11:12.000Z'))
 
-    expect(kept).toBe(join(dir, 'state.json.broken-2026-11-20T10-11-12.000Z'))
-    await expect(readFile(kept, 'utf8')).resolves.toBe('{ damaged')
+    await expect(
+      readFile(join(dir, 'state.json.broken-2026-11-20T10-11-12.000Z'), 'utf8')
+    ).resolves.toBe('{ damaged')
     await expect(readFile(statePath, 'utf8')).resolves.toBe(await readFile(backupPath, 'utf8'))
   })
 
@@ -139,9 +135,11 @@ describe('restoreStateBackup', () => {
   })
 
   it('names the evidence by the clock when none is given', async () => {
-    const kept = await restoreStateBackup(statePath, backupPath)
+    await restoreStateBackup(statePath, backupPath)
 
-    expect(kept).toMatch(/state\.json\.broken-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z$/u)
+    expect((await readdir(dir)).filter((name) => name.startsWith('state.json.broken-'))).toEqual([
+      expect.stringMatching(/^state\.json\.broken-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z$/u)
+    ])
   })
 
   // Never a moment with no state.json: a start in between would read "first run".
@@ -152,5 +150,69 @@ describe('restoreStateBackup', () => {
       code: 'ENOENT'
     })
     await expect(readFile(statePath, 'utf8')).resolves.toBe('{ damaged')
+  })
+})
+
+describe('openWithRecovery', () => {
+  const paths = (): { statePath: string; stateBackupPath: string } => ({
+    statePath,
+    stateBackupPath: backupPath
+  })
+  const damaged = (): InvalidFileError =>
+    new InvalidFileError(statePath, 'Unexpected end of JSON input')
+
+  beforeEach(async () => {
+    await saveState(TWO, backupPath, `${backupPath}.tmp`, join(dir, 'unused.bak'))
+    await writeFile(statePath, '{ damaged', 'utf8')
+  })
+
+  it('opens at once when nothing is wrong', async () => {
+    const ask = vi.fn(() => true)
+
+    await expect(openWithRecovery(() => Promise.resolve('open'), ask, paths())).resolves.toBe(
+      'open'
+    )
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it('passes on a failure no backup can mend', async () => {
+    const failure = new Error('EACCES')
+
+    await expect(openWithRecovery(() => Promise.reject(failure), vi.fn(), paths())).rejects.toBe(
+      failure
+    )
+  })
+
+  // The user chose to quit: there is nothing more to say about it.
+  it('answers with nothing, and restores nothing, when the user declines', async () => {
+    await expect(
+      openWithRecovery(
+        () => Promise.reject(damaged()),
+        () => false,
+        paths()
+      )
+    ).resolves.toBeNull()
+    await expect(readFile(statePath, 'utf8')).resolves.toBe('{ damaged')
+  })
+
+  it('restores the backup and opens again when the user agrees', async () => {
+    const open = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(damaged())
+      .mockResolvedValueOnce('reopened')
+
+    await expect(openWithRecovery(open, () => true, paths())).resolves.toBe('reopened')
+    await expect(readFile(statePath, 'utf8')).resolves.toBe(await readFile(backupPath, 'utf8'))
+  })
+
+  it('says both failures when the restore fails as well', async () => {
+    const ask = (): boolean => {
+      rmSync(backupPath)
+      return true
+    }
+
+    await expect(openWithRecovery(() => Promise.reject(damaged()), ask, paths())).rejects.toThrow(
+      /Unexpected end of JSON input[\s\S]*Restoring the backup failed as well/u
+    )
   })
 })
