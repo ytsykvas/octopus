@@ -24,6 +24,7 @@ import {
   type TerminalSession,
   type TerminalSpec
 } from '../core/terminal.js'
+import { type Kill, killProcess, signalQuietly } from '../core/signals.js'
 
 /**
  * Live pseudo-terminal sessions.
@@ -87,14 +88,6 @@ export const BATCH_MS = 16
  */
 export const BATCH_CHARS = 64 * 1024
 
-/**
- * How a signal reaches a process, injected so tests never send a real one.
- *
- * Signal 0 sends nothing: it throws when no such process — or, for a negative
- * pid, no such group — exists, which is how a stop knows a group has emptied.
- */
-export type Kill = (pid: number, signal: NodeJS.Signals | 0) => void
-
 /** A live session, and the window it belongs to. */
 interface Session {
   readonly pty: IPty
@@ -139,14 +132,9 @@ export class TerminalManager {
   private readonly ending = new Map<TerminalId, Promise<void>>()
   private nextId = 1
 
-  /**
-   * `process.kill` by default, replaced in tests.
-   *
-   * Bound, because it reads `process` through `this` and a bare reference to
-   * the method loses it.
-   */
+  /** `process.kill` by default, replaced in tests. */
   constructor(
-    private readonly kill: Kill = process.kill.bind(process),
+    private readonly kill: Kill = killProcess,
     /** When a run ended is read from this, so a test can say when that was. */
     private readonly now: () => Date = () => new Date()
   ) {}
@@ -438,12 +426,7 @@ export class TerminalManager {
 
   /** Signals the group a session's shell leads, which may have ended since. */
   private signalGroup(leader: number, signal: NodeJS.Signals): void {
-    try {
-      this.kill(-leader, signal)
-    } catch {
-      // The group ended between being read and being signalled, which is the
-      // ordinary case for a script that has just finished.
-    }
+    signalQuietly(this.kill, -leader, signal)
   }
 
   /** Whether nothing is left in the group a session's shell led. */

@@ -19,6 +19,7 @@ import { isNotFound } from './persist.js'
 import { present } from './present.js'
 import type { ResolvedScript } from './repoSource.js'
 import { scriptEnv, type ScriptValues } from './scriptEnv.js'
+import { type Kill, killProcess, signalQuietly } from './signals.js'
 
 /**
  * How long the script has.
@@ -38,6 +39,9 @@ export const ARCHIVE_OUTPUT_TAIL_BYTES = 64 * 1024
 /** How long the group has between SIGTERM and SIGKILL once the deadline passes. */
 export const ARCHIVE_KILL_GRACE_MS = 2_000
 
+/** How long an exit waits for the rest of stderr, which a grandchild may hold open for ever. */
+export const ARCHIVE_STDERR_DRAIN_MS = 200
+
 /** How the script is run, injected so tests never spawn a shell. */
 export type RunScript = (
   file: string,
@@ -47,25 +51,23 @@ export type RunScript = (
 /** What `spawnInGroup` reaches the system through, injected so a test can stand in. */
 export interface SpawnInGroupDeps {
   readonly spawn?: typeof spawnProcess
-  readonly kill?: (pid: number, signal?: string | number) => true
+  readonly kill?: Kill
   readonly graceMs?: number
 }
 
 /**
  * Runs the script as the leader of a process group of its own, and waits for it.
  *
- * Not `execFile`, for three reasons. Its 1 MiB output ceiling killed a cleanup that
- * succeeded noisily — `docker compose down -v`, `rm -rv` — and reported it failed;
- * here stdout goes to /dev/null, since nobody shows a success, and only the end of
- * stderr is kept for a failure. Its deadline signalled the script alone, and the
- * `psql` or `docker` it had started went on under init; here `detached` makes the
- * script a group leader and the deadline signals the group (`-pid`), SIGTERM then
- * SIGKILL, as `src/main/terminals.ts` stops a server. And a workspace directory
- * already deleted by hand surfaced as `spawn archive.sh ENOENT`, blaming the script;
- * here the directory is looked at first and named.
+ * Not `execFile`: its 1 MiB output ceiling fails a noisy cleanup that succeeded
+ * (`docker compose down -v`, `rm -rv`), its deadline signals the script alone and
+ * leaves the `psql` or `docker` it started under init, and a missing cwd surfaces
+ * as `spawn archive.sh ENOENT`, blaming the script. So stdout goes to /dev/null and
+ * only the tail of stderr is kept; the script leads a group of its own (`detached`),
+ * signalled as `-pid`, SIGTERM then SIGKILL, as `src/main/terminals.ts` stops a
+ * server; and the directory is looked at first.
  *
- * Done at `exit`, not `close`: a grandchild left running in the background holds
- * the pipe open, and the removal must not wait on it.
+ * Done at `exit`, not `close`, since a grandchild left in the background holds the
+ * pipe open — then the rest of stderr is read, for at most `ARCHIVE_STDERR_DRAIN_MS`.
  */
 export async function spawnInGroup(
   file: string,
@@ -73,7 +75,7 @@ export async function spawnInGroup(
   deps: SpawnInGroupDeps = {}
 ): Promise<void> {
   const spawn = deps.spawn ?? spawnProcess
-  const kill = deps.kill ?? ((pid: number, signal?: string | number) => process.kill(pid, signal))
+  const kill = deps.kill ?? killProcess
   const graceMs = deps.graceMs ?? ARCHIVE_KILL_GRACE_MS
 
   try {
@@ -93,7 +95,6 @@ export async function spawnInGroup(
     stdio: ['ignore', 'ignore', 'pipe']
   })
 
-  // Asked for as a pipe two lines up, so it is there.
   const stderr = present(child.stderr, 'the stderr pipe the spawn was given')
 
   return new Promise((resolve, reject) => {
@@ -102,20 +103,17 @@ export async function spawnInGroup(
     let settled = false
 
     const signalGroup = (signal: NodeJS.Signals): void => {
-      try {
-        kill(-present(child.pid, 'the pid of a script that spawned'), signal)
-      } catch {
-        // The group has already gone, which is what the signal was for.
-      }
+      signalQuietly(kill, -present(child.pid, 'the pid of a script that spawned'), signal)
     }
 
     const deadline = setTimeout(() => {
       timedOut = true
       signalGroup('SIGTERM')
-      // Never cleared: see `settle`.
+      // Not cleared on exit: the script usually dies of SIGTERM at once, and what it
+      // started that ignores SIGTERM still has the SIGKILL coming.
       setTimeout(() => {
         signalGroup('SIGKILL')
-      }, graceMs)
+      }, graceMs).unref()
     }, options.timeout)
 
     stderr.on('data', (chunk: Buffer) => {
@@ -127,8 +125,6 @@ export async function spawnInGroup(
       if (settled) return
       settled = true
       clearTimeout(deadline)
-      // The SIGKILL is not called off: past the deadline the script usually dies of
-      // SIGTERM at once, and what it started that ignores SIGTERM still has it coming.
       stderr.destroy()
       if (error === null) resolve()
       else reject(error)
@@ -136,12 +132,24 @@ export async function spawnInGroup(
 
     child.on('error', settle)
     child.on('exit', (code) => {
-      if (code === 0 && !timedOut) {
-        settle(null)
+      const finish = (): void => {
+        if (code === 0 && !timedOut) {
+          settle(null)
+          return
+        }
+        const reason = timedOut ? ` (timed out after ${String(options.timeout / 1000)} s)` : ''
+        settle(new Error(`Command failed: ${file}${reason}\n${tail.toString('utf8').trimEnd()}`))
+      }
+
+      if (stderr.readableEnded || stderr.destroyed) {
+        finish()
         return
       }
-      const reason = timedOut ? ` (timed out after ${String(options.timeout / 1000)} s)` : ''
-      settle(new Error(`Command failed: ${file}${reason}\n${tail.toString('utf8').trimEnd()}`))
+      const drained = setTimeout(finish, ARCHIVE_STDERR_DRAIN_MS)
+      stderr.once('end', () => {
+        clearTimeout(drained)
+        finish()
+      })
     })
   })
 }

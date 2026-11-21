@@ -51,7 +51,8 @@ not live on under init. Its output has no ceiling: stdout goes nowhere, since a
 success shows nothing, and only the last 64 KB of stderr are kept for the
 report, so a cleanup that succeeds noisily is no longer reported as failed. The
 wait ends when the script exits, not when every holder of its pipe lets go, so a
-grandchild left in the background does not hold the removal. And a workspace
+grandchild left in the background does not hold the removal; what the script
+wrote last is still read, for up to 200 ms after the exit. And a workspace
 directory already deleted by hand is named as such — the script did not run —
 rather than reported as the script not being found.
 

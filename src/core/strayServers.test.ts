@@ -8,11 +8,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   defaultStrayDeps,
   findStrayServers,
-  type Kill,
   type Lsof,
   lsofVia,
   parseLsof,
   runLsof,
+  type StrayDeps,
   StrayError,
   stopStrayServers
 } from './strayServers.js'
@@ -155,7 +155,7 @@ describe('stopStrayServers', () => {
     processes: FakeProcess[],
     behaviour: { ignores?: readonly NodeJS.Signals[]; graceTicks?: number } = {}
   ): {
-    deps: { lsof: Lsof; kill: Kill; sleep: (ms: number) => Promise<void> }
+    deps: { lsof: Lsof; kill: StrayDeps['kill']; sleep: (ms: number) => Promise<void> }
     signals: [number, NodeJS.Signals][]
   } {
     const signals: [number, NodeJS.Signals][] = []

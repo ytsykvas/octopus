@@ -23,6 +23,7 @@ import { promisify } from 'node:util'
 import { z } from 'zod'
 
 import { CodedError } from './codedError.js'
+import { killProcess, signalQuietly } from './signals.js'
 
 const run = promisify(execFile)
 
@@ -51,11 +52,10 @@ export class StrayError extends CodedError<StrayErrorCode> {
 export type Lsof = (args: readonly string[]) => Promise<string>
 
 /** How a signal is sent — `process.kill`'s shape, injected so a test kills nothing. */
-export type Kill = (pid: number, signal: NodeJS.Signals) => void
 
 export interface StrayDeps {
   readonly lsof: Lsof
-  readonly kill: Kill
+  readonly kill: (pid: number, signal: NodeJS.Signals) => void
   readonly sleep: (ms: number) => Promise<void>
 }
 
@@ -222,13 +222,7 @@ export async function stopStrayServers(
   }
 
   const signal = (targets: readonly number[], name: NodeJS.Signals): void => {
-    for (const pid of targets) {
-      try {
-        deps.kill(pid, name)
-      } catch {
-        // Exited between the question and the signal, which is what was wanted.
-      }
-    }
+    for (const pid of targets) signalQuietly(deps.kill, pid, name)
   }
 
   const targets = await serving(pids)
@@ -249,9 +243,7 @@ export async function stopStrayServers(
 
 export const defaultStrayDeps: StrayDeps = {
   lsof: runLsof,
-  kill: (pid, signal) => {
-    process.kill(pid, signal)
-  },
+  kill: killProcess,
   sleep: (ms) =>
     new Promise((resolve) => {
       setTimeout(resolve, ms)

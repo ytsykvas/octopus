@@ -308,6 +308,43 @@ describe('spawnInGroup', () => {
     ).rejects.toThrow('spawn failed')
   })
 
+  // Node may send `exit` while stderr still holds what the script wrote last.
+  it('keeps what the script wrote to stderr just before it exited', async () => {
+    const file = await script('exit 0')
+    const stderr = new PassThrough()
+    const child = Object.assign(new EventEmitter(), { pid: 1, stderr })
+    const spawn = (() => {
+      setImmediate(() => {
+        child.emit('exit', 1, null)
+        stderr.end('late line\n')
+      })
+      return child
+    }) as unknown as NonNullable<SpawnInGroupDeps['spawn']>
+
+    await expect(
+      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }, { spawn })
+    ).rejects.toThrow('late line')
+  })
+
+  it('reports at once when stderr had already ended at the exit', async () => {
+    const file = await script('exit 0')
+    const stderr = new PassThrough()
+    const child = Object.assign(new EventEmitter(), { pid: 1, stderr })
+    const spawn = (() => {
+      stderr.once('end', () => {
+        child.emit('exit', 1, null)
+      })
+      setImmediate(() => {
+        stderr.end('early line\n')
+      })
+      return child
+    }) as unknown as NonNullable<SpawnInGroupDeps['spawn']>
+
+    await expect(
+      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }, { spawn })
+    ).rejects.toThrow('early line')
+  })
+
   it('passes on a script that cannot be started', async () => {
     const file = await script('exit 0', 0o644)
 
