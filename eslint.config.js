@@ -8,13 +8,16 @@ const noElectron = {
   message: 'core/ knows nothing about the UI — see docs/architecture.md.'
 }
 
-const bareWriteMessage =
-  'Write through persist.ts (writeTextFile / writeJsonFile / writeNewFile) — see docs/data/migrations-and-writes.md.'
-
-const noBareWrite = ['node:fs/promises', 'fs/promises'].map((name) => ({
+const noBareWrite = [
+  ['node:fs/promises', 'writeFile'],
+  ['fs/promises', 'writeFile'],
+  ['node:fs', 'writeFileSync'],
+  ['fs', 'writeFileSync']
+].map(([name, importName]) => ({
   name,
-  importNames: ['writeFile'],
-  message: bareWriteMessage
+  importNames: [importName],
+  message:
+    'Write through persist.ts (writeTextFile / writeJsonFile / writeNewFile) — see docs/data/migrations-and-writes.md.'
 }))
 
 export default tseslint.config(
@@ -66,8 +69,9 @@ export default tseslint.config(
   {
     // A later block replaces the rule's options rather than merging them, so
     // this one restates what core keeps. persist.ts is where the write lives;
-    // a test builds its fixtures with a plain write.
-    files: ['src/core/persist.ts', 'src/core/**/*.test.ts'],
+    // the diagnostics log runs inside catch, synchronously, and replaces by
+    // rename itself; a test builds its fixtures with a plain write.
+    files: ['src/core/persist.ts', 'src/core/diagnostics.ts', 'src/core/**/*.test.ts'],
     rules: {
       'no-restricted-imports': ['error', { paths: [noElectron] }]
     }

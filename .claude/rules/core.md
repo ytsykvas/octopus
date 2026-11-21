@@ -17,8 +17,8 @@ for meeting them is the `core-module` skill.
 - **`execFile` with an argument array, never `exec`.** Nothing is interpolated
   into a shell line or an AppleScript source.
 - **A file is replaced through `persist.ts`** — `writeTextFile`,
-  `writeJsonFile`, `writeNewFile`. ESLint refuses a bare `writeFile` from
-  `fs/promises` in `src/core/` and `src/main/`; appends (transcripts, the
+  `writeJsonFile`, `writeNewFile`. ESLint refuses a bare `writeFile` /
+  `writeFileSync` in `src/core/` and `src/main/`; appends (transcripts, the
   diagnostics log) are the exception.
 - **zod at every boundary** — IPC, disk, git output, the SDK — before a value
   reaches a process argument, a path or a script. Types come from `z.infer`.

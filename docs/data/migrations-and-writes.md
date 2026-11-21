@@ -69,16 +69,18 @@ atomic, because nobody knows the name before the write returns. It goes through
 than one picture silently replacing another.
 
 The rule holds by lint, not by memory: `no-restricted-imports` in
-`eslint.config.js` refuses `writeFile` from `fs/promises` anywhere in
-`src/core/` and `src/main/` except `persist.ts` itself and the tests, which
-build their fixtures with it.
+`eslint.config.js` refuses `writeFile` from `fs/promises` and `writeFileSync`
+from `fs` anywhere in `src/core/` and `src/main/` except `persist.ts` itself,
+`diagnostics.ts` (below) and the tests, which build their fixtures with them.
 
 Two writers append rather than replace, and stay outside it on purpose: a
 transcript gains one line per entry (`appendFile` in `transcript.ts`), and the
 diagnostics log one line per swallowed error (`diagnostics.ts`, synchronous
 because it runs inside `catch`). An append never shows a reader half of the
-old file. The lint rule names `writeFile` from `fs/promises` only, so it does
-not see the diagnostics log's synchronous trim either.
+old file. When the diagnostics log outgrows what it keeps, it is cut by writing
+`main.log.tmp` and renaming it over the log — synchronously, since it runs
+inside `catch`, which is why it does this itself rather than through
+`persist.ts`.
 
 Reading validates with zod and **fails loudly** on a corrupt file rather than
 falling back to defaults. Silently resetting someone's projects because a byte

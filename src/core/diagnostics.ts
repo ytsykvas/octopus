@@ -4,6 +4,7 @@ import {
   mkdirSync,
   openSync,
   readSync,
+  renameSync,
   statSync,
   writeFileSync
 } from 'node:fs'
@@ -51,7 +52,8 @@ function trim(file: string, keepBytes: number): number {
       closeSync(handle)
     }
     const kept = tail.subarray(tail.indexOf(0x0a) + 1)
-    writeFileSync(file, kept)
+    writeFileSync(`${file}.tmp`, kept)
+    renameSync(`${file}.tmp`, file)
     return kept.length
   } catch {
     return 0

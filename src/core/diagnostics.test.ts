@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -80,6 +80,19 @@ describe('the diagnostic log', () => {
     expect((await stat(file)).size).toBeLessThanOrEqual(1024 * 1024)
     expect(kept).toMatch(/^line \d+\n/)
     expect(kept.endsWith('line 149999\n')).toBe(true)
+  })
+
+  // A crash mid-trim must leave the old log or the cut one, never half of either.
+  it('replaces the log when it cuts it, rather than rewriting it in place', async () => {
+    const file = join(dir, 'main.log')
+    const lines = Array.from({ length: 150_000 }, (_, index) => `line ${String(index)}\n`)
+    await writeFile(file, lines.join(''), 'utf8')
+    const before = (await stat(file)).ino
+
+    diagnosticLog(file, () => undefined)
+
+    expect((await stat(file)).ino).not.toBe(before)
+    expect(await readdir(dir)).toEqual(['main.log'])
   })
 
   it('leaves a log under a megabyte as it is', async () => {
