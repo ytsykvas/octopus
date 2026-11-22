@@ -10,7 +10,17 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import { copyFile, link, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import {
+  copyFile,
+  link,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile
+} from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import type { z } from 'zod'
@@ -110,6 +120,19 @@ export async function readJsonFile<T>(
   return result.data
 }
 
+/**
+ * The mode a replacement keeps, as writing over the file did: a user's `chmod 600` stays.
+ * Without setuid and the like, as an editor saving a file drops them. A path with nothing
+ * readable there has no mode to keep, and the write that follows says what is wrong with it.
+ */
+async function modeToKeep(filePath: string): Promise<number | undefined> {
+  try {
+    return (await stat(filePath)).mode & 0o777
+  } catch {
+    return undefined
+  }
+}
+
 function randomSuffix(): string {
   return randomBytes(6).toString('hex')
 }
@@ -119,17 +142,18 @@ async function replaceThrough(
   filePath: string,
   contents: string,
   {
-    mode,
+    mode: asked,
     beforeRename
   }: { readonly mode?: number | undefined; readonly beforeRename?: () => Promise<void> } = {}
 ): Promise<void> {
+  const mode = asked ?? (await modeToKeep(filePath))
   // `wx` (O_EXCL) never follows a link planted at the name. Outside the try: when `open`
   // fails, EEXIST included, the path is not ours to remove.
   const handle = await open(tempPath, 'wx', mode)
   try {
     try {
       await handle.writeFile(contents, 'utf8')
-      // A mode asked for goes through fchmod: the one given to open(2) is cut by the umask.
+      // Through fchmod: the mode given to open(2) is cut by the umask.
       if (mode !== undefined) await handle.chmod(mode)
       // macOS fsync(2) without F_FULLFSYNC does not flush the drive cache: accepted.
       await handle.sync()

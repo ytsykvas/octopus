@@ -38,8 +38,8 @@ Both writers share one helper, `replaceThrough`, and it holds three things:
   replaces the error being reported.
 - **A mode asked for is set on the descriptor** (`fchmod`), not the path, so
   umask bits cannot clear it and a swapped-in link cannot receive it. Without
-  one the file is created as `writeFile` would (`0o666` less the umask); the
-  target's previous mode is not kept.
+  one a file replaced keeps its mode (setuid and the like dropped, as an editor
+  drops them), and a new one gets `0o666` less the umask, as `writeFile` would.
 - **The contents are `fsync`ed before the rename**, so after a power cut the
   new name does not point at an empty `state.json`. On macOS `fsync(2)` without
   `F_FULLFSYNC` leaves the drive free to cache and reorder the write, and the
@@ -63,8 +63,7 @@ the new file's bytes from wherever it had got to, while a replaced one keeps
 the inode it opened. `writeScript` and the repository's `script.*` pass
 `0o755`, so the executable bit comes through the replacement. A replacement is a
 new file: a symlink at the path — an instruction kept in dotfiles, say — becomes
-a plain file, a hard link is cut, and anything but a script gets `0o666` less the
-umask rather than the mode the old file had.
+a plain file and a hard link is cut; the mode the old file had is kept.
 
 A file written once under a fresh name — a pasted image — has nothing to make
 atomic, because nobody knows the name before the write returns. It goes through

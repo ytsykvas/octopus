@@ -449,11 +449,19 @@ describe('writeTextFile', () => {
     await expect(modeOf(path)).resolves.toBe(0o666)
   })
 
-  it('leaves the mode alone when none is asked for', async () => {
+  // 0o600 rather than what the umask gives anyway, or a replacement that dropped it would pass.
+  it('keeps the mode of the file it replaces when none is asked for', async () => {
     const path = join(dir, 'notes.txt')
-    await writeFile(path, 'first\n', { encoding: 'utf8', mode: 0o644 })
+    await writeFile(path, 'first\n', { encoding: 'utf8', mode: 0o600 })
 
     await writeTextFile(path, 'second\n')
+
+    await expect(modeOf(path)).resolves.toBe(0o600)
+  })
+
+  it('gives a new file 0o666 less the umask when no mode is asked for', async () => {
+    const path = join(dir, 'notes.txt')
+    await writeTextFile(path, 'first\n')
 
     await expect(modeOf(path)).resolves.toBe(0o644)
   })
