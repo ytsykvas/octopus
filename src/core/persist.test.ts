@@ -298,20 +298,16 @@ describe('keepBackup', () => {
     await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
   })
 
-  it('copies when the filesystem has no hard links', async () => {
-    await writeFile(file, 'old', 'utf8')
-    await keepBackup(file, `${file}.bak`, refusing('ENOTSUP'))
+  it.each(['ENOTSUP', 'EPERM'])(
+    'copies when the filesystem refuses a link with %s',
+    async (code) => {
+      await writeFile(file, 'old', 'utf8')
+      await keepBackup(file, `${file}.bak`, refusing(code))
 
-    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
-    expect((await stat(`${file}.bak`)).ino).not.toBe((await stat(file)).ino)
-  })
-
-  it('copies when the filesystem refuses a link', async () => {
-    await writeFile(file, 'old', 'utf8')
-    await keepBackup(file, `${file}.bak`, refusing('EPERM'))
-
-    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
-  })
+      await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
+      expect((await stat(`${file}.bak`)).ino).not.toBe((await stat(file)).ino)
+    }
+  )
 
   it('passes on any other failure', async () => {
     await writeFile(file, 'old', 'utf8')

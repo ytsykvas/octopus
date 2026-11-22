@@ -226,7 +226,10 @@ actual commands.
 A project record for a test comes from `makeProject(id)` in
 [`src/core/test/projects.ts`](../src/core/test/projects.ts) — the store and
 recovery tests already do; older suites still spell theirs out, and a new test
-reaches for it rather than adding another copy.
+reaches for it rather than adding another copy. What `gh pr view` says about a
+request's head comes from `headRef(branch, fork)` in
+[`src/core/test/pullRequests.ts`](../src/core/test/pullRequests.ts), shared by
+the core and IPC tests.
 
 This has caught bugs no mock would have:
 

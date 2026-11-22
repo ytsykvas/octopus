@@ -10,9 +10,12 @@ import {
   ARCHIVE_OUTPUT_TAIL_BYTES,
   type RunScript,
   runArchiveScript,
+  type ScriptRunOptions,
   spawnInGroup,
   type SpawnInGroupDeps
 } from './archive.js'
+
+type Spawn = NonNullable<SpawnInGroupDeps['spawn']>
 import type { ResolvedScript } from './repoSource.js'
 
 const values = {
@@ -148,6 +151,21 @@ describe('spawnInGroup', () => {
     return path
   }
 
+  /** How a test runs the script: in `dir`, with no variables, ten seconds unless told. */
+  function options(overrides: Partial<ScriptRunOptions> = {}): ScriptRunOptions {
+    return { cwd: dir, env: {}, timeout: 10_000, ...overrides }
+  }
+
+  /** A child `run` drives by hand, for an order of events a real process will not give on cue. */
+  function fakeSpawn(run: (child: EventEmitter, stderr: PassThrough) => void): Spawn {
+    const stderr = new PassThrough()
+    const child = Object.assign(new EventEmitter(), { pid: 1, stderr })
+    return (() => {
+      run(child, stderr)
+      return child
+    }) as unknown as Spawn
+  }
+
   /** Whether a process is still there; signal 0 asks without sending anything. */
   function alive(pid: number): boolean {
     try {
@@ -166,17 +184,13 @@ describe('spawnInGroup', () => {
   it('succeeds however much the script writes', async () => {
     const file = await script('yes | head -c 3000000; yes | head -c 3000000 >&2; exit 0')
 
-    await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 })
-    ).resolves.toBeUndefined()
+    await expect(spawnInGroup(file, options())).resolves.toBeUndefined()
   })
 
   it('reports the script and the end of stderr when it fails', async () => {
     const file = await script('echo nope >&2; exit 3')
 
-    await expect(spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 })).rejects.toThrow(
-      `Command failed: ${file}\nnope`
-    )
+    await expect(spawnInGroup(file, options())).rejects.toThrow(`Command failed: ${file}\nnope`)
   })
 
   it('keeps only the end of a long stderr', async () => {
@@ -184,9 +198,7 @@ describe('spawnInGroup', () => {
     const PREFIX_SLACK = 100
     const file = await script('yes x | head -c 200000 >&2; echo last >&2; exit 1')
 
-    const error: unknown = await spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }).catch(
-      (failure: unknown) => failure
-    )
+    const error: unknown = await spawnInGroup(file, options()).catch((failure: unknown) => failure)
 
     expect(error).toBeInstanceOf(Error)
     const message = error instanceof Error ? error.message : ''
@@ -198,45 +210,33 @@ describe('spawnInGroup', () => {
     const file = await script('test "$OCTOPUS_WORKSPACE_SLUG" = anna && test -n "$PATH"')
 
     await expect(
-      spawnInGroup(file, { cwd: dir, env: { OCTOPUS_WORKSPACE_SLUG: 'anna' }, timeout: 10_000 })
+      spawnInGroup(file, options({ env: { OCTOPUS_WORKSPACE_SLUG: 'anna' } }))
     ).resolves.toBeUndefined()
   })
 
-  // `docker compose` and `psql` outlive a SIGTERM sent to the script alone.
-  it('stops the whole group at the deadline', async () => {
-    const file = await script('sleep 30 & echo $! > child.pid; wait')
+  it.each<[string, string, SpawnInGroupDeps]>([
+    // `docker compose` and `psql` outlive a SIGTERM sent to the script alone.
+    ['stops the whole group at the deadline', 'sleep 30 & echo $! > child.pid; wait', {}],
+    // An ignored signal stays ignored across exec, so `sleep` ignores it too.
+    [
+      'kills a group that ignores the polite signal',
+      "trap '' TERM; sleep 30 & echo $! > child.pid; wait",
+      { graceMs: 50 }
+    ],
+    // The common case: the script dies of SIGTERM at once, and what it started ignores
+    // it. The leader's exit must not call off the SIGKILL.
+    [
+      'kills what the script started even after the script itself has died',
+      `sh -c "trap '' TERM; sleep 30" & echo $! > child.pid; wait`,
+      { graceMs: 50 }
+    ]
+  ])('%s', async (_name, body, deps) => {
+    const file = await script(body)
 
     // Long enough for a loaded machine to start `sh` and write the pid first.
-    await expect(spawnInGroup(file, { cwd: dir, env: {}, timeout: 1_500 })).rejects.toThrow(
+    await expect(spawnInGroup(file, options({ timeout: 1_500 }), deps)).rejects.toThrow(
       `Command failed: ${file} (timed out after 1.5 s)`
     )
-    const child = await pidIn('child.pid')
-    await vi.waitFor(() => {
-      expect(alive(child)).toBe(false)
-    })
-  })
-
-  it('kills a group that ignores the polite signal', async () => {
-    // An ignored signal stays ignored across exec, so `sleep` ignores it too.
-    const file = await script("trap '' TERM; sleep 30 & echo $! > child.pid; wait")
-
-    await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 1_500 }, { graceMs: 50 })
-    ).rejects.toThrow('timed out')
-    const child = await pidIn('child.pid')
-    await vi.waitFor(() => {
-      expect(alive(child)).toBe(false)
-    })
-  })
-
-  // The common case: the script dies of SIGTERM at once, and what it started
-  // ignores it. The leader's exit must not call off the SIGKILL.
-  it('kills what the script started even after the script itself has died', async () => {
-    const file = await script(`sh -c "trap '' TERM; sleep 30" & echo $! > child.pid; wait`)
-
-    await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 1_500 }, { graceMs: 50 })
-    ).rejects.toThrow('timed out')
     const child = await pidIn('child.pid')
     await vi.waitFor(() => {
       expect(alive(child)).toBe(false)
@@ -251,7 +251,7 @@ describe('spawnInGroup', () => {
     }
 
     await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 100 }, { kill, graceMs: 50 })
+      spawnInGroup(file, options({ timeout: 100 }), { kill, graceMs: 50 })
     ).rejects.toThrow('timed out')
   })
 
@@ -261,9 +261,7 @@ describe('spawnInGroup', () => {
     const started = Date.now()
 
     try {
-      await expect(
-        spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 })
-      ).resolves.toBeUndefined()
+      await expect(spawnInGroup(file, options())).resolves.toBeUndefined()
       expect(Date.now() - started).toBeLessThan(2_000)
     } finally {
       process.kill(await pidIn('grand.pid'), 'SIGKILL')
@@ -273,9 +271,7 @@ describe('spawnInGroup', () => {
   it('lets a step the script left running write to stderr and finish', async () => {
     const file = await script('(sleep 0.5; echo late >&2; echo done > out) & exit 0')
 
-    await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 })
-    ).resolves.toBeUndefined()
+    await expect(spawnInGroup(file, options())).resolves.toBeUndefined()
     await vi.waitFor(
       async () => {
         await expect(readFile(join(dir, 'out'), 'utf8')).resolves.toBe('done\n')
@@ -289,9 +285,7 @@ describe('spawnInGroup', () => {
     const spawn = vi.fn()
     const gone = join(dir, 'anna')
 
-    await expect(
-      spawnInGroup(file, { cwd: gone, env: {}, timeout: 10_000 }, { spawn })
-    ).rejects.toThrow(
+    await expect(spawnInGroup(file, options({ cwd: gone }), { spawn })).rejects.toThrow(
       `The workspace directory ${gone} was already gone, so archive.sh did not run.`
     )
     expect(spawn).not.toHaveBeenCalled()
@@ -302,7 +296,7 @@ describe('spawnInGroup', () => {
     const spawn = vi.fn()
 
     await expect(
-      spawnInGroup(file, { cwd: join(file, 'inside'), env: {}, timeout: 10_000 }, { spawn })
+      spawnInGroup(file, options({ cwd: join(file, 'inside') }), { spawn })
     ).rejects.toMatchObject({ code: 'ENOTDIR' })
     expect(spawn).not.toHaveBeenCalled()
   })
@@ -310,82 +304,67 @@ describe('spawnInGroup', () => {
   // Node may or may not send `exit` after `error`; the first one is the answer.
   it('answers once when a failure to start is followed by an exit', async () => {
     const file = await script('exit 0')
-    const child = Object.assign(new EventEmitter(), { pid: 1, stderr: new PassThrough() })
-    const spawn = (() => {
+    const spawn = fakeSpawn((child) => {
       setImmediate(() => {
         child.emit('error', new Error('spawn failed'))
         child.emit('exit', 1, null)
       })
-      return child
-    }) as unknown as NonNullable<SpawnInGroupDeps['spawn']>
+    })
 
-    await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }, { spawn })
-    ).rejects.toThrow('spawn failed')
+    await expect(spawnInGroup(file, options(), { spawn })).rejects.toThrow('spawn failed')
   })
 
   // Node may send `exit` while stderr still holds what the script wrote last.
   it('keeps what the script wrote to stderr just before it exited', async () => {
     const file = await script('exit 0')
-    const stderr = new PassThrough()
-    const child = Object.assign(new EventEmitter(), { pid: 1, stderr })
-    const spawn = (() => {
+    const spawn = fakeSpawn((child, stderr) => {
       setImmediate(() => {
         child.emit('exit', 1, null)
         stderr.end('late line\n')
       })
-      return child
-    }) as unknown as NonNullable<SpawnInGroupDeps['spawn']>
+    })
 
-    await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }, { spawn })
-    ).rejects.toThrow('late line')
+    await expect(spawnInGroup(file, options(), { spawn })).rejects.toThrow('late line')
   })
 
   // The deadline can fall while stderr is still being read after a clean exit.
   it('does not call a script that exited in time late because its stderr was slow', async () => {
     const file = await script('exit 0')
-    const stderr = new PassThrough()
-    const child = Object.assign(new EventEmitter(), { pid: 1, stderr })
     const kill = vi.fn()
-    const spawn = (() => {
+    const spawn = fakeSpawn((child, stderr) => {
       setImmediate(() => {
         child.emit('exit', 0, null)
         setTimeout(() => stderr.end(), 100)
       })
-      return child
-    }) as unknown as NonNullable<SpawnInGroupDeps['spawn']>
+    })
 
     await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 30 }, { spawn, kill })
+      spawnInGroup(file, options({ timeout: 30 }), { spawn, kill })
     ).resolves.toBeUndefined()
     expect(kill).not.toHaveBeenCalled()
   })
 
   it('reports at once when stderr had already ended at the exit', async () => {
     const file = await script('exit 0')
-    const stderr = new PassThrough()
-    const child = Object.assign(new EventEmitter(), { pid: 1, stderr })
-    const spawn = (() => {
+    const spawn = fakeSpawn((child, stderr) => {
       stderr.once('end', () => {
         child.emit('exit', 1, null)
       })
       setImmediate(() => {
         stderr.end('early line\n')
       })
-      return child
-    }) as unknown as NonNullable<SpawnInGroupDeps['spawn']>
+    })
 
     // A drain longer than the test's own deadline: only finishing at once passes.
-    await expect(
-      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 }, { spawn, drainMs: 60_000 })
-    ).rejects.toThrow('early line')
+    await expect(spawnInGroup(file, options(), { spawn, drainMs: 60_000 })).rejects.toThrow(
+      'early line'
+    )
   })
 
   it('passes on a script that cannot be started', async () => {
     const file = await script('exit 0', 0o644)
 
-    await expect(spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 })).rejects.toMatchObject({
+    await expect(spawnInGroup(file, options())).rejects.toMatchObject({
       code: 'EACCES'
     })
   })

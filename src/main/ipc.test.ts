@@ -41,6 +41,7 @@ import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
 import { TAIL_CHARS, type RecordedRun } from '../core/runLog.js'
 import type { Workspace } from '../core/store.js'
 import type { ThemeName } from '../core/types.js'
+import { headRef } from '../core/test/pullRequests.js'
 import type { UsageWindows } from '../core/usage.js'
 import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
 import type { Result } from './result.js'
@@ -2562,11 +2563,7 @@ describe('workspaces of a real project', () => {
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve(
-          args[1] === 'view'
-            ? JSON.stringify({ headRefName: branch, isCrossRepository: false })
-            : ''
-        )
+        return Promise.resolve(args[1] === 'view' ? headRef(branch) : '')
       }
     })
     const workspace = await createWorkspace(projectId)
@@ -2684,11 +2681,7 @@ describe('workspaces of a real project', () => {
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve(
-          args[1] === 'view'
-            ? JSON.stringify({ headRefName: branch, isCrossRepository: false })
-            : ''
-        )
+        return Promise.resolve(args[1] === 'view' ? headRef(branch) : '')
       }
     })
     const workspace = await createWorkspace(projectId)
@@ -2720,11 +2713,7 @@ describe('workspaces of a real project', () => {
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve(
-          args[1] === 'view'
-            ? JSON.stringify({ headRefName: 'someone/else', isCrossRepository: false })
-            : ''
-        )
+        return Promise.resolve(args[1] === 'view' ? headRef('someone/else') : '')
       }
     })
     const workspace = await createWorkspace(projectId)

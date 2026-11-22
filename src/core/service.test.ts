@@ -900,7 +900,10 @@ describe('workspaces', () => {
     expect(asks.map(({ options }) => options)).toEqual(asks.map(() => DEADLINED))
   })
 
-  it('lines bringing the base in up behind a push', async () => {
+  it.each<[string, (service: OctopusService, workspaceId: string) => Promise<void>]>([
+    ['catching a request up with its base', (service, id) => service.catchUpWorkspace(id, 8)],
+    ["an update from the project's base", (service, id) => service.updateWorkspaceFromBase(id)]
+  ])('lines %s up behind a push', async (_name, bringIn) => {
     let branch = ''
     const lining = await lined('push', () =>
       Promise.resolve(
@@ -912,26 +915,12 @@ describe('workspaces', () => {
 
     const pushed = service.pushWorkspace(workspaceId)
     await holding
-    const caught = service.catchUpWorkspace(workspaceId, 8)
+    const brought = bringIn(service, workspaceId)
     await new Promise((resolve) => setTimeout(resolve, UNLINED))
 
     expect(stray).toEqual([])
     release()
-    await Promise.allSettled([pushed, caught])
-    expect(events.slice(0, 2)).toEqual(['push', 'push done'])
-  })
-
-  it('lines bringing the base in for a second request up behind a push', async () => {
-    const { service, workspaceId, events, stray, holding, release } = await lined('push')
-
-    const pushed = service.pushWorkspace(workspaceId)
-    await holding
-    const updated = service.updateWorkspaceFromBase(workspaceId)
-    await new Promise((resolve) => setTimeout(resolve, UNLINED))
-
-    expect(stray).toEqual([])
-    release()
-    await Promise.allSettled([pushed, updated])
+    await Promise.allSettled([pushed, brought])
     expect(events.slice(0, 2)).toEqual(['push', 'push done'])
   })
 
