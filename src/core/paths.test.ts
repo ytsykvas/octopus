@@ -22,8 +22,9 @@ import {
   rootDir,
   unlinkedInside,
   skillsDirOf,
+  backupFileOf,
+  fileStamp,
   stateFile,
-  stateTempFile,
   workspacePath,
   workspacesDir
 } from './paths.js'
@@ -95,15 +96,18 @@ describe('top-level files', () => {
     expect(stateFile(ROOT)).toBe(join(ROOT, 'state.json'))
   })
 
-  it('puts the temp file next to state, otherwise rename would not be atomic', () => {
-    expect(stateTempFile(ROOT)).toBe(join(ROOT, 'state.json.tmp'))
+  it('writes a moment the way a file name can hold it', () => {
+    expect(fileStamp(new Date('2026-11-20T10:11:12.345Z'))).toBe('2026-11-20T10-11-12-345Z')
+  })
+
+  it('keeps the backup beside the state, so the hard link stays on one filesystem', () => {
+    expect(backupFileOf(join(ROOT, 'state.json'))).toBe(join(ROOT, 'state.json.bak'))
   })
 
   it('falls back to rootDir when no root is given', () => {
     const root = rootDir()
     expect(configFile()).toBe(join(root, 'config.json'))
     expect(stateFile()).toBe(join(root, 'state.json'))
-    expect(stateTempFile()).toBe(join(root, 'state.json.tmp'))
   })
 })
 

@@ -19,11 +19,14 @@ import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } fr
 import { z } from 'zod'
 
 import {
+  codeOf,
   describeError,
   InvalidFileError,
   isDiskFull,
+  keepBackup,
   readJsonFile,
   writeJsonFile,
+  writeNewFile,
   writeTextFile
 } from './persist.js'
 
@@ -72,6 +75,18 @@ describe('describeError', () => {
     expect(describeError('plain string')).toBe('plain string')
     expect(describeError(42)).toBe('42')
     expect(describeError(null)).toBe('null')
+  })
+})
+
+describe('codeOf', () => {
+  it('reads the code a failure carries', () => {
+    expect(codeOf(Object.assign(new Error('x'), { code: 'EEXIST' }))).toBe('EEXIST')
+  })
+
+  it('answers with nothing for what carries no code', () => {
+    expect(codeOf(new Error('x'))).toBeUndefined()
+    expect(codeOf('EEXIST')).toBeUndefined()
+    expect(codeOf(null)).toBeUndefined()
   })
 })
 
@@ -156,7 +171,7 @@ describe('writeJsonFile', () => {
 
   it('accepts a custom temporary path', async () => {
     const temp = join(dir, 'custom.tmp')
-    await writeJsonFile(file, Schema, FALLBACK, temp)
+    await writeJsonFile(file, Schema, FALLBACK, { tempPath: temp })
     await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual(FALLBACK)
   })
 
@@ -191,6 +206,180 @@ describe('writeJsonFile', () => {
     await writeJsonFile(file, Schema, FALLBACK)
 
     expect(sync).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the previous version as the backup', async () => {
+    const backup = `${file}.bak`
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 }, { backupPath: backup })
+    await writeJsonFile(file, Schema, { name: 'second', count: 2 }, { backupPath: backup })
+
+    await expect(readJsonFile(backup, Schema, FALLBACK)).resolves.toEqual({
+      name: 'first',
+      count: 1
+    })
+    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({
+      name: 'second',
+      count: 2
+    })
+  })
+
+  it('writes no backup on the first write', async () => {
+    const backup = `${file}.bak`
+    await writeJsonFile(file, Schema, FALLBACK, { backupPath: backup })
+
+    await expect(stat(backup)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('writes no backup unless asked', async () => {
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 })
+    await writeJsonFile(file, Schema, { name: 'second', count: 2 })
+
+    expect((await readdir(dir)).sort()).toEqual(['data.json'])
+  })
+
+  // The new contents never land when the old ones could not be kept.
+  it('leaves the file as it was when the backup fails', async () => {
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 })
+    // A directory where the backup goes: a file cannot be renamed over it.
+    const backup = join(dir, 'taken')
+    await mkdir(backup)
+
+    await expect(
+      writeJsonFile(file, Schema, { name: 'second', count: 2 }, { backupPath: backup })
+    ).rejects.toThrow()
+    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({
+      name: 'first',
+      count: 1
+    })
+    expect(await temporaries()).toEqual([])
+  })
+
+  it('writes on when the backup fails and onBackupFailed takes it', async () => {
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 })
+    const backup = join(dir, 'taken')
+    await mkdir(backup)
+    const failures: unknown[] = []
+
+    await writeJsonFile(
+      file,
+      Schema,
+      { name: 'second', count: 2 },
+      { backupPath: backup, onBackupFailed: (error) => failures.push(error) }
+    )
+
+    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({
+      name: 'second',
+      count: 2
+    })
+    expect(failures).toHaveLength(1)
+    expect((await stat(backup)).isDirectory()).toBe(true)
+  })
+})
+
+describe('keepBackup', () => {
+  /** A link that fails with `code`. */
+  function refusing(code: string): () => Promise<void> {
+    return () => Promise.reject(Object.assign(new Error(code), { code }))
+  }
+
+  it('uses a real hard link by default', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await keepBackup(file, `${file}.bak`)
+
+    expect((await stat(`${file}.bak`)).ino).toBe((await stat(file)).ino)
+  })
+
+  it('replaces a backup already there', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await writeFile(`${file}.bak`, 'older', 'utf8')
+
+    await keepBackup(file, `${file}.bak`)
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
+  })
+
+  it.each(['ENOTSUP', 'EPERM'])(
+    'copies when the filesystem refuses a link with %s',
+    async (code) => {
+      await writeFile(file, 'old', 'utf8')
+      await keepBackup(file, `${file}.bak`, refusing(code))
+
+      await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
+      expect((await stat(`${file}.bak`)).ino).not.toBe((await stat(file)).ino)
+    }
+  )
+
+  it('rethrows any other failure', async () => {
+    await writeFile(file, 'old', 'utf8')
+
+    await expect(keepBackup(file, `${file}.bak`, refusing('EIO'))).rejects.toMatchObject({
+      code: 'EIO'
+    })
+  })
+
+  // The old one goes only as the new one takes its name.
+  it('keeps the previous backup when a new one cannot be made', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await writeFile(`${file}.bak`, 'older', 'utf8')
+
+    await expect(keepBackup(file, `${file}.bak`, refusing('EIO'))).rejects.toMatchObject({
+      code: 'EIO'
+    })
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('older')
+    expect(await temporaries()).toEqual([])
+  })
+
+  it('clears a temporary backup a crash left behind', async () => {
+    await writeFile(file, 'old', 'utf8')
+    await writeFile(`${file}.bak.tmp`, 'left by a crash', 'utf8')
+
+    await keepBackup(file, `${file}.bak`)
+
+    await expect(readFile(`${file}.bak`, 'utf8')).resolves.toBe('old')
+    expect(await temporaries()).toEqual([])
+  })
+
+  it('rethrows a failure that carries no code', async () => {
+    await writeFile(file, 'old', 'utf8')
+
+    await expect(
+      keepBackup(file, `${file}.bak`, () => Promise.reject(new Error('odd')))
+    ).rejects.toThrow('odd')
+  })
+
+  it('does nothing when there is nothing yet to keep', async () => {
+    await keepBackup(file, `${file}.bak`)
+
+    await expect(stat(`${file}.bak`)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})
+
+describe('writeNewFile', () => {
+  it('writes the bytes it is given', async () => {
+    const path = join(dir, 'paste.png')
+    await writeNewFile(path, Uint8Array.from([137, 80, 78, 71]))
+
+    expect([...(await readFile(path))]).toEqual([137, 80, 78, 71])
+  })
+
+  // A fresh name, never a replacement: landing on a file means two names
+  // collided, and the one already there is somebody's.
+  it('refuses a path that already holds a file', async () => {
+    const path = join(dir, 'paste.png')
+    await writeFile(path, 'first')
+
+    await expect(writeNewFile(path, Uint8Array.from([1]))).rejects.toMatchObject({
+      code: 'EEXIST'
+    })
+    await expect(readFile(path, 'utf8')).resolves.toBe('first')
+  })
+
+  it('creates the directory it needs', async () => {
+    const path = join(dir, 'attachments', 'paste.png')
+    await writeNewFile(path, Uint8Array.from([1]))
+
+    expect([...(await readFile(path))]).toEqual([1])
   })
 })
 
@@ -256,13 +445,31 @@ describe('writeTextFile', () => {
     await expect(modeOf(path)).resolves.toBe(0o666)
   })
 
-  it('leaves the mode alone when none is asked for', async () => {
+  // 0o600 rather than what the umask gives anyway, or a replacement that dropped it would pass.
+  it('keeps the mode of the file it replaces when none is asked for', async () => {
     const path = join(dir, 'notes.txt')
-    await writeFile(path, 'first\n', { encoding: 'utf8', mode: 0o644 })
+    await writeFile(path, 'first\n', { encoding: 'utf8', mode: 0o600 })
 
     await writeTextFile(path, 'second\n')
 
-    await expect(modeOf(path)).resolves.toBe(0o644)
+    await expect(modeOf(path)).resolves.toBe(0o600)
+  })
+
+  it('gives a new file 0o666 less the umask when no mode is asked for', async () => {
+    const path = join(dir, 'notes.txt')
+    await writeTextFile(path, 'first\n')
+
+    await expect(modeOf(path)).resolves.toBe(0o666 & ~0o022)
+  })
+
+  it('drops setuid from the mode it keeps', async () => {
+    const path = join(dir, 'tool')
+    await writeFile(path, 'first\n', 'utf8')
+    await chmod(path, 0o4755)
+
+    await writeTextFile(path, 'second\n')
+
+    expect((await stat(path)).mode & 0o7777).toBe(0o755)
   })
 
   it('leaves no temporary file behind after a successful write', async () => {
@@ -373,7 +580,7 @@ describe('surviving a bad file', () => {
 
   it('creates missing parent directories rather than failing', async () => {
     const nested = join(dir, 'deep', 'nested', 'f.json')
-    await writeJsonFile(nested, Shape, { a: 'x' }, `${nested}.tmp`)
+    await writeJsonFile(nested, Shape, { a: 'x' }, { tempPath: `${nested}.tmp` })
 
     await expect(readJsonFile(nested, Shape, { a: '' })).resolves.toEqual({ a: 'x' })
   })
@@ -399,13 +606,13 @@ describe('surviving a bad file', () => {
     const temp = `${file}.tmp`
     await writeFile(temp, 'garbage from last time', 'utf8')
 
-    await writeJsonFile(file, Shape, { a: 'fresh' }, temp)
+    await writeJsonFile(file, Shape, { a: 'fresh' }, { tempPath: temp })
     await expect(readJsonFile(file, Shape, { a: '' })).resolves.toEqual({ a: 'fresh' })
   })
 
   it('leaves no temp file behind once the write lands', async () => {
     const file = join(dir, 'f.json')
-    await writeJsonFile(file, Shape, { a: 'x' }, `${file}.tmp`)
+    await writeJsonFile(file, Shape, { a: 'x' }, { tempPath: `${file}.tmp` })
 
     await expect(readFile(`${file}.tmp`, 'utf8')).rejects.toThrow()
   })

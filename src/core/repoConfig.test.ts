@@ -3,6 +3,7 @@ import {
   chmod,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   stat,
@@ -426,6 +427,28 @@ describe('writeRepoConfig', () => {
 
     expect(script.mode & 0o111).toBe(0o111)
     expect(carry.mode & 0o111).toBe(0)
+  })
+
+  // A script the repository carries can be running in a workspace while it is
+  // exported again.
+  it('replaces a script rather than rewriting it in place', async () => {
+    await writeRepoConfig(repo, [item('script.run', 'npm run dev\n')])
+    const before = (await stat(join(repo, REPO_DIR, 'scripts', 'run.sh'))).ino
+
+    await writeRepoConfig(repo, [item('script.run', 'npm start\n')])
+
+    expect((await stat(join(repo, REPO_DIR, 'scripts', 'run.sh'))).ino).not.toBe(before)
+  })
+
+  it('leaves no temporary file behind', async () => {
+    await writeRepoConfig(repo, [item('script.run', 'npm run dev\n'), item('carry', '.env\n')])
+
+    expect((await readdir(join(repo, REPO_DIR), { recursive: true })).sort()).toEqual([
+      'README.md',
+      'carry',
+      'scripts',
+      join('scripts', 'run.sh')
+    ])
   })
 
   it('replaces what an earlier export wrote', async () => {

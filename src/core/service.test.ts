@@ -58,6 +58,7 @@ import {
   type ListSessionsFn,
   sameWindows,
   SHUTDOWN_GRACE_MS,
+  statePathFor,
   type OctopusService,
   type ServiceOptions,
   type UsageOutcome,
@@ -72,7 +73,7 @@ import { appendEntry, type ChatEntry, readTranscript } from './transcript.js'
 import type { UsageLimit, UsageWindows } from './usage.js'
 import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
-import type { Workspace } from './store.js'
+import { loadState, type Workspace } from './store.js'
 import { listWorktrees } from './worktree.js'
 import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
 import { type RemovalRequest, WorkspaceError } from './workspaces.js'
@@ -144,7 +145,6 @@ async function initRepo(path: string): Promise<void> {
 function paths(root: string): Parameters<typeof createService>[0] {
   return {
     stateFilePath: join(root, 'state.json'),
-    stateTempFilePath: join(root, 'state.json.tmp'),
     configFilePath: join(root, 'config.json'),
     // Without this, worktrees would land in the real ~/.octopus.
     dataRoot: join(root, 'data'),
@@ -232,6 +232,21 @@ afterEach(async () => {
   // can still land after it — the same `ENOTEMPTY`, in the MCP question tests
   // twice in a row. The write is real and finishing; the removal just waits.
   await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+})
+
+describe('statePathFor', () => {
+  it('puts the state in the data root when given nothing', () => {
+    vi.stubEnv('OCTOPUS_DATA_DIR', dir)
+    try {
+      expect(statePathFor()).toBe(join(dir, 'state.json'))
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('takes the path it is given', () => {
+    expect(statePathFor({ stateFilePath: join(dir, 's.json') })).toBe(join(dir, 's.json'))
+  })
 })
 
 describe('default paths', () => {
@@ -402,7 +417,8 @@ const oneRequest =
       state: 'MERGED',
       url: 'https://x/pull/7',
       createdAt,
-      headRefOid: head()
+      headRefOid: head(),
+      isCrossRepository: false
     }
     return Promise.resolve(
       JSON.stringify([
@@ -689,7 +705,10 @@ describe('workspaces', () => {
    * that skipped the line is seen at its first command, a few milliseconds in,
    * rather than only if it reached the move or the removal inside the window.
    */
-  async function lined(hold: 'push' | 'move' | 'remove'): Promise<{
+  async function lined(
+    hold: 'push' | 'move' | 'remove',
+    gh: (args: readonly string[]) => Promise<string> = () => Promise.resolve('https://x/pull/8\n')
+  ): Promise<{
     service: OctopusService
     projectId: string
     workspaceId: string
@@ -722,7 +741,7 @@ describe('workspaces', () => {
 
     const service = await createService({
       ...paths(dir),
-      makeGh: () => () => Promise.resolve('https://x/pull/8\n'),
+      makeGh: () => gh,
       makeExec: (cwd, options) => {
         const git = gitIn(cwd, options)
         return async (args) => {
@@ -879,6 +898,30 @@ describe('workspaces', () => {
     const asks = asked.filter(({ ref }) => ref === `refs/heads/${workspace.branch}`)
     expect(asks).not.toHaveLength(0)
     expect(asks.map(({ options }) => options)).toEqual(asks.map(() => DEADLINED))
+  })
+
+  it.each<[string, (service: OctopusService, workspaceId: string) => Promise<void>]>([
+    ['catching a request up with its base', (service, id) => service.catchUpWorkspace(id, 8)],
+    ["an update from the project's base", (service, id) => service.updateWorkspaceFromBase(id)]
+  ])('lines %s up behind a push', async (_name, bringIn) => {
+    let branch = ''
+    const lining = await lined('push', () =>
+      Promise.resolve(
+        JSON.stringify({ headRefName: branch, isCrossRepository: false, baseRefName: 'main' })
+      )
+    )
+    branch = lining.branch
+    const { service, workspaceId, events, stray, holding, release } = lining
+
+    const pushed = service.pushWorkspace(workspaceId)
+    await holding
+    const brought = bringIn(service, workspaceId)
+    await new Promise((resolve) => setTimeout(resolve, UNLINED))
+
+    expect(stray).toEqual([])
+    release()
+    await Promise.allSettled([pushed, brought])
+    expect(events.slice(0, 2)).toEqual(['push', 'push done'])
   })
 
   it('lines a rename up behind a push', async () => {
@@ -2029,7 +2072,6 @@ describe('workspaces', () => {
     // into the real home directory.
     const service = await createService({
       stateFilePath: join(dir, 'plain-state.json'),
-      stateTempFilePath: join(dir, 'plain-state.json.tmp'),
       configFilePath: join(dir, 'plain-config.json')
     })
 
@@ -2163,6 +2205,35 @@ describe('projects', () => {
 
   it('starts with an empty list', () => {
     expect(service.listProjects()).toHaveLength(0)
+  })
+
+  // Beside the state it was given, never in the real root.
+  it('keeps the state before the last change beside the state file', async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await service.addProjectFromPath(repo)
+    await service.updateProjectById(project.id, { name: 'renamed' })
+
+    const backup = await loadState(join(dir, 'state.json.bak'))
+    expect(backup.projects.map((one) => one.name)).toEqual(['planner'])
+  })
+
+  it('saves a change though the backup cannot be kept, and says so', async () => {
+    const diagnosed: unknown[] = []
+    const told = await createService({
+      ...paths(dir),
+      onDiagnostic: (error) => diagnosed.push(error)
+    })
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await told.addProjectFromPath(repo)
+    await mkdir(join(dir, 'state.json.bak', 'taken'), { recursive: true })
+
+    await told.updateProjectById(project.id, { name: 'renamed' })
+
+    const saved = await loadState(join(dir, 'state.json'))
+    expect(saved.projects.map((one) => one.name)).toEqual(['renamed'])
+    expect(diagnosed).toHaveLength(1)
   })
 
   it('shows an added project in the list', async () => {
@@ -5152,6 +5223,7 @@ describe('the port a workspace serves on', () => {
     await rm(join(dir, 'state.json'))
     await mkdir(join(dir, 'state.json'))
 
+    // The backup's failure is only reported; the rename cannot put a file over a directory.
     await expect(service.createWorkspaceIn(project?.id ?? '')).rejects.toMatchObject({
       code: 'EISDIR'
     })
@@ -7801,12 +7873,12 @@ describe('the agent chat', () => {
   })
 
   describe('a session at rest', () => {
-    async function resting(): Promise<{
+    async function resting(options = SOON): Promise<{
       service: OctopusService
       workspaceId: string
       chatId: string
     }> {
-      const { service, workspaceId } = await withWorkspace(SOON)
+      const { service, workspaceId } = await withWorkspace(options)
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
       agent().emit(initMessage)
@@ -7917,11 +7989,13 @@ describe('the agent chat', () => {
       expect(agents[0]?.closed()).toBe(0)
     })
 
+    // Each wait is under the rest and both together are over it; the room either side
+    // is what a loaded machine's timers need.
     it('rests from a side question asked of it, as from a message', async () => {
-      const { service, chatId } = await resting()
-      await after(100)
+      const { service, chatId } = await resting({ ...SOON, idleReleaseMs: 500 })
+      await after(350)
       await service.askSideQuestion(chatId, 'what is x?', [])
-      await after(100)
+      await after(350)
 
       expect(agents[0]?.closed()).toBe(0)
       await letGo()
@@ -18541,10 +18615,13 @@ describe('a branch the remote moved', () => {
     readonly make: (deps: RemoteRefWatchDeps) => RemoteRefWatch
     readonly deps: () => RemoteRefWatchDeps
     readonly synced: string[][]
+    /** The checkout of each project, per sync — what a watcher keys its git dir on. */
+    readonly checkouts: string[][]
     readonly closed: () => number
   } {
     let given: RemoteRefWatchDeps | null = null
     const synced: string[][] = []
+    const checkouts: string[][] = []
     let closes = 0
 
     return {
@@ -18553,6 +18630,7 @@ describe('a branch the remote moved', () => {
         return {
           sync: (projects) => {
             synced.push(projects.map((project) => project.id))
+            checkouts.push(projects.map((project) => project.repoPath))
             return Promise.resolve()
           },
           close: () => {
@@ -18565,6 +18643,7 @@ describe('a branch the remote moved', () => {
         return given
       },
       synced,
+      checkouts,
       closed: () => closes
     }
   }
@@ -18582,6 +18661,24 @@ describe('a branch the remote moved', () => {
 
     await watching.removeProjectById(project.id)
     expect(watch.synced.at(-1)).toEqual([])
+  })
+
+  // What the watcher's re-watch on a move rests on: the service hands it the new
+  // checkout, under the same project id.
+  it('hands the watch a project pointed at another checkout', async () => {
+    const repo = join(dir, 'planner')
+    const other = join(dir, 'planner-clone')
+    await initRepo(repo)
+    await initRepo(other)
+    const watch = fakeRefWatch()
+    const watching = await createService({ ...paths(dir), refWatch: watch.make })
+    const project = await watching.addProjectFromPath(repo)
+
+    await watching.updateProjectById(project.id, { repoPath: other })
+
+    expect(watch.synced.at(-1)).toEqual([project.id])
+    expect(watch.checkouts.at(-1)).toEqual([watching.listProjects()[0]?.repoPath])
+    expect(watch.checkouts.at(-2)).not.toEqual(watch.checkouts.at(-1))
   })
 
   // A write that leaves the projects as they were is most writes: a turn, a

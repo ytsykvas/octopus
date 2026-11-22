@@ -26,7 +26,7 @@
  * every route in here ends up asking the caller for one.
  */
 
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 import { z } from 'zod'
@@ -36,6 +36,7 @@ import { type Download, fetchDocument, httpsUrl } from './download.js'
 import { parseFrontmatter, setFields } from './frontmatter.js'
 import { isLibraryName, type LibraryKind } from './libraryNames.js'
 import { libraryDirOf } from './paths.js'
+import { writeTextFile } from './persist.js'
 
 /**
  * Caps, each answering a different way this can go wrong.
@@ -268,8 +269,7 @@ export async function writeLibraryItem(
   const text = documentFor(kind, name, raw)
   assertFits(text)
 
-  await mkdir(dir, { recursive: true })
-  await writeFile(itemPath(dir, name), text, 'utf8')
+  await writeTextFile(itemPath(dir, name), text)
 
   return {
     kind,
@@ -334,7 +334,7 @@ export async function renameLibraryItem(
 
   await rename(itemPath(dir, name), itemPath(dir, to))
   const text = documentFor(kind, to, raw)
-  await writeFile(itemPath(dir, to), text, 'utf8')
+  await writeTextFile(itemPath(dir, to), text)
 
   return {
     kind,

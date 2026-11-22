@@ -11,13 +11,15 @@
  * may be a file the repository carries, or the project's own.
  */
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import { spawn as spawnProcess } from 'node:child_process'
+import { stat } from 'node:fs/promises'
+import { basename } from 'node:path'
 
+import { isNotFound } from './persist.js'
+import { present } from './present.js'
 import type { ResolvedScript } from './repoSource.js'
 import { scriptEnv, type ScriptValues } from './scriptEnv.js'
-
-const run = promisify(execFile)
+import { type Kill, killProcess, signalQuietly } from './signals.js'
 
 /**
  * How long the script has.
@@ -31,14 +33,139 @@ const run = promisify(execFile)
  */
 export const ARCHIVE_TIMEOUT_MS = 30_000
 
-/** How the script is run, injected so tests never spawn a shell. */
-export type RunScript = (
-  file: string,
-  options: { cwd: string; env: Record<string, string>; timeout: number }
-) => Promise<unknown>
+/** How much of stderr a failure reports: its end, which is where a script says what broke. */
+export const ARCHIVE_OUTPUT_TAIL_BYTES = 64 * 1024
 
-const defaultRun: RunScript = async (file, options) => {
-  await run(file, [], { ...options, env: { ...process.env, ...options.env } })
+/** How long the group has between SIGTERM and SIGKILL once the deadline passes. */
+const ARCHIVE_KILL_GRACE_MS = 2_000
+
+/** How long an exit waits for the rest of stderr, which a grandchild may hold open for ever. */
+const ARCHIVE_STDERR_DRAIN_MS = 200
+
+/** Where the script runs, with what, and for how long. */
+export interface ScriptRunOptions {
+  readonly cwd: string
+  readonly env: Record<string, string>
+  readonly timeout: number
+}
+
+/** How the script is run, injected so tests never spawn a shell. */
+export type RunScript = (file: string, options: ScriptRunOptions) => Promise<unknown>
+
+/** What `spawnInGroup` reaches the system through, injected so a test can stand in. */
+export interface SpawnInGroupDeps {
+  readonly spawn?: typeof spawnProcess
+  readonly kill?: Kill
+  readonly graceMs?: number
+  readonly drainMs?: number
+}
+
+/**
+ * Runs the script as the leader of a process group of its own, and waits for it.
+ *
+ * Not `execFile`: its 1 MiB output ceiling fails a noisy cleanup that succeeded
+ * (`docker compose down -v`, `rm -rv`), its deadline signals the script alone and
+ * leaves the `psql` or `docker` it started under init, and a missing cwd surfaces
+ * as `spawn archive.sh ENOENT`, blaming the script. So stdout goes to /dev/null and
+ * only the tail of stderr is kept; the script leads a group of its own (`detached`),
+ * signalled as `-pid` the way `src/main/terminals.ts` signals a group, SIGTERM then
+ * SIGKILL; and the directory is looked at first.
+ *
+ * Done at `exit`, not `close`, since a grandchild left in the background holds the
+ * pipe open — then the rest of stderr is read, for at most `ARCHIVE_STDERR_DRAIN_MS`.
+ */
+export async function spawnInGroup(
+  file: string,
+  options: ScriptRunOptions,
+  deps: SpawnInGroupDeps = {}
+): Promise<void> {
+  const spawn = deps.spawn ?? spawnProcess
+  const kill = deps.kill ?? killProcess
+  const graceMs = deps.graceMs ?? ARCHIVE_KILL_GRACE_MS
+  const drainMs = deps.drainMs ?? ARCHIVE_STDERR_DRAIN_MS
+
+  try {
+    await stat(options.cwd)
+  } catch (error) {
+    if (!isNotFound(error)) throw error
+    throw new Error(
+      `The workspace directory ${options.cwd} was already gone, so ${basename(file)} did not run.`,
+      { cause: error }
+    )
+  }
+
+  const child = spawn(file, [], {
+    cwd: options.cwd,
+    env: { ...process.env, ...options.env },
+    detached: true,
+    stdio: ['ignore', 'ignore', 'pipe']
+  })
+
+  const stderr = present(child.stderr, 'the stderr pipe the spawn was given')
+
+  return new Promise((resolve, reject) => {
+    let tail = Buffer.alloc(0)
+    let timedOut = false
+    let settled = false
+
+    const signalGroup = (signal: NodeJS.Signals): void => {
+      signalQuietly(kill, -present(child.pid, 'the pid of a script that spawned'), signal)
+    }
+
+    const deadline = setTimeout(() => {
+      timedOut = true
+      signalGroup('SIGTERM')
+      // Not cleared on exit: the script usually dies of SIGTERM at once, and what it
+      // started that ignores SIGTERM still has the SIGKILL coming.
+      setTimeout(() => {
+        signalGroup('SIGKILL')
+      }, graceMs).unref()
+    }, options.timeout)
+
+    const collect = (chunk: Buffer): void => {
+      tail = Buffer.concat([tail, chunk])
+      if (tail.length > ARCHIVE_OUTPUT_TAIL_BYTES) tail = tail.subarray(-ARCHIVE_OUTPUT_TAIL_BYTES)
+    }
+    stderr.on('data', collect)
+
+    const settle = (error: Error | null): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(deadline)
+      // Read on rather than destroyed: a step the script left running would die of SIGPIPE
+      // on its next write.
+      stderr.off('data', collect)
+      stderr.resume()
+      // Nobody reads it any more: an error on it now is not worth an unhandled event in main.
+      stderr.on('error', () => undefined)
+      if (error === null) resolve()
+      else reject(error)
+    }
+
+    child.on('error', settle)
+    child.on('exit', (code) => {
+      // Exited before the deadline is in time, however long stderr then takes.
+      clearTimeout(deadline)
+      const finish = (): void => {
+        if (code === 0 && !timedOut) {
+          settle(null)
+          return
+        }
+        const reason = timedOut ? ` (timed out after ${String(options.timeout / 1000)} s)` : ''
+        settle(new Error(`Command failed: ${file}${reason}\n${tail.toString('utf8').trimEnd()}`))
+      }
+
+      if (stderr.readableEnded || stderr.destroyed) {
+        finish()
+        return
+      }
+      const drained = setTimeout(finish, drainMs)
+      stderr.once('end', () => {
+        clearTimeout(drained)
+        finish()
+      })
+    })
+  })
 }
 
 /** What the script needs to know about the workspace it is taking apart. */
@@ -86,7 +213,7 @@ export function leavesBehind(cleanup: CleanupOutcome): boolean {
 export async function runArchiveScript(
   script: ResolvedScript | null,
   values: ArchiveValues,
-  runner: RunScript = defaultRun
+  runner: RunScript = spawnInGroup
 ): Promise<string | null> {
   if (script === null) return null
 

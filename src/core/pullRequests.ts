@@ -15,7 +15,7 @@ import { promisify } from 'node:util'
 
 import { z } from 'zod'
 
-import { shortBranchName } from './branches.js'
+import { DEFAULT_REMOTE, shortBranchName } from './branches.js'
 import { ghFailure, GitHubError } from './github.js'
 import { countAhead, currentBranch, type GitExec, MAX_OUTPUT_BYTES, reasonFrom } from './git.js'
 import {
@@ -26,6 +26,7 @@ import {
   DetailPayloadSchema,
   openedFor,
   ownRequests,
+  sameRepository,
   type PullRequestDetail,
   type PullRequestState,
   RemoteStateSchema,
@@ -147,7 +148,8 @@ const RemotePullRequestSchema = z.object({
   title: z.string(),
   url: z.string(),
   createdAt: z.iso.datetime(),
-  headRefOid: z.string().min(1)
+  headRefOid: z.string().min(1),
+  isCrossRepository: z.boolean()
 })
 
 /**
@@ -257,6 +259,9 @@ async function previousOf(
   }
 }
 
+/** Room for forks reusing the branch name: the newest by that name may be theirs. */
+const PULL_REQUEST_LOOKUP_LIMIT = 10
+
 async function listPullRequests(
   branch: string,
   gh: GhExec
@@ -271,9 +276,9 @@ async function listPullRequests(
       '--state',
       'all',
       '--limit',
-      '1',
+      String(PULL_REQUEST_LOOKUP_LIMIT),
       '--json',
-      'number,state,title,url,createdAt,headRefOid'
+      'number,state,title,url,createdAt,headRefOid,isCrossRepository'
     ])
   } catch (error) {
     throw ghFailure(error, 'Could not ask GitHub about this branch.')
@@ -291,7 +296,7 @@ async function listPullRequests(
     throw new GitHubError('listFailed', {}, 'GitHub returned an unexpected response.')
   }
 
-  return result.data
+  return sameRepository(result.data)
 }
 
 /**
@@ -313,7 +318,7 @@ async function listPullRequests(
  * remote does not have.
  */
 async function remoteTip(branch: string, git: GitExec): Promise<string | null> {
-  const out = await git(['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])
+  const out = await git(['ls-remote', '--heads', DEFAULT_REMOTE, `refs/heads/${branch}`])
 
   for (const line of out.split('\n')) {
     const [commit, ref] = line.split('\t')
@@ -519,6 +524,20 @@ async function abortMerge(git: GitExec): Promise<boolean> {
   }
 }
 
+/** Brings the request's own base in and pushes — GitHub's base, which a retargeted request no longer shares with the project. */
+export async function catchUpWithBase(
+  number: number,
+  branch: string,
+  git: GitExec,
+  fetchGit: GitExec,
+  gh: GhExec
+): Promise<void> {
+  const { baseRefName, ...head } = await viewRequest(number, BaseRefSchema, gh)
+  assertOnBranch(number, branch, head)
+  await updateFromBase(branch, `${DEFAULT_REMOTE}/${baseRefName}`, git, fetchGit)
+  await pushBranch(branch, git)
+}
+
 /**
  * Sends the branch to the remote.
  *
@@ -527,7 +546,7 @@ async function abortMerge(git: GitExec): Promise<boolean> {
  */
 export async function pushBranch(branch: string, git: GitExec): Promise<void> {
   try {
-    await git(['push', '-u', 'origin', branch])
+    await git(['push', '-u', DEFAULT_REMOTE, branch])
   } catch (error) {
     throw new GitHubError(
       'pushFailed',
@@ -539,7 +558,7 @@ export async function pushBranch(branch: string, git: GitExec): Promise<void> {
 
 /** Where `origin` pushes to, as git resolves it now. */
 export async function pushUrl(git: GitExec): Promise<string> {
-  return (await git(['remote', 'get-url', '--push', 'origin'])).trim()
+  return (await git(['remote', 'get-url', '--push', DEFAULT_REMOTE])).trim()
 }
 
 /**
@@ -644,7 +663,7 @@ export async function amendAndPush(
   }
 
   try {
-    await git(['push', '-u', `--force-with-lease=${branch}:${tip}`, 'origin', branch])
+    await git(['push', '-u', `--force-with-lease=${branch}:${tip}`, DEFAULT_REMOTE, branch])
   } catch (error) {
     throw new GitHubError(
       'pushFailed',
@@ -746,17 +765,25 @@ export type MergeMethod = z.infer<typeof MergeMethodSchema>
 /** Which checks a re-run restarts; the type itself lives with the pure half. */
 export const RerunScopeSchema = z.enum(['failed', 'all']) satisfies z.ZodType<RerunScope>
 
+/** `gh`'s wording when branch protection wants the branch level with its base first. */
+const BEHIND_BASE = /not up to date with the base branch/iu
+
 const MERGE_FLAGS: Record<MergeMethod, string> = {
   merge: '--merge',
   squash: '--squash',
   rebase: '--rebase'
 }
 
-/** What a one-field `gh pr view` answers when asked which branch a request is on. */
-const HeadRefSchema = z.object({ headRefName: z.string().min(1) })
+/** What `gh pr view` answers when asked which branch, and which repository, a request is on. */
+const HeadRefSchema = z.object({
+  headRefName: z.string().min(1),
+  isCrossRepository: z.boolean()
+})
+
+const BaseRefSchema = HeadRefSchema.extend({ baseRefName: z.string().min(1) })
 
 /**
- * Refuses a number that belongs to some other branch of the same repository.
+ * Refuses a number that belongs to another branch, or to a fork's branch of the same name.
  *
  * `gh pr merge 7` resolves 7 against the **repository**, not against the branch
  * the working directory happens to be on, so a stale number drawn beside one
@@ -770,20 +797,34 @@ const HeadRefSchema = z.object({ headRefName: z.string().min(1) })
  * `RevertPathSchema` rejects at the boundary. One `gh` call, on something
  * somebody does a few times a day, and merging does not come back.
  *
- * Its own one-field view rather than `readPullRequestDetail`, which asks for
+ * Its own two-field view rather than `readPullRequestDetail`, which asks for
  * fourteen fields and then a GraphQL round trip for the threads.
  */
 async function refuseAnotherBranch(number: number, branch: string, gh: GhExec): Promise<void> {
-  const { headRefName } = shaped(
-    HeadRefSchema,
-    parsed(await asked(() => gh(['pr', 'view', String(number), '--json', 'headRefName'])))
-  )
-
-  assertOnBranch(number, branch, headRefName)
+  assertOnBranch(number, branch, await viewRequest(number, HeadRefSchema, gh))
 }
 
-/** The refusal itself, shared by the guard above and a read that already has the head. */
-function assertOnBranch(number: number, branch: string, headRefName: string): void {
+/**
+ * The refusal itself, shared by the guard above and a read that already has the head.
+ *
+ * A fork first: its branch can carry exactly this name, so the name alone says
+ * nothing about whose request it is.
+ */
+function assertOnBranch(
+  number: number,
+  branch: string,
+  {
+    headRefName,
+    isCrossRepository
+  }: { readonly headRefName: string; readonly isCrossRepository: boolean }
+): void {
+  if (isCrossRepository) {
+    throw new GitHubError(
+      'requestFromFork',
+      { number: String(number) },
+      `Pull request #${String(number)} comes from another repository.`
+    )
+  }
   if (headRefName === branch) return
 
   throw new GitHubError(
@@ -800,10 +841,10 @@ function assertOnBranch(number: number, branch: string, headRefName: string): vo
  * that branch, so git refuses to delete it and the merge reports a failure the
  * app caused itself. Removing the workspace is how the branch goes.
  *
- * Answers with nothing, and that is deliberate rather than lazy: `gh` enables
- * auto-merge instead of merging when required checks have not passed, so a
- * zero exit is not proof of a merge. The caller reads the request again, which
- * is also what turns a refusal we cannot name into a visible reason.
+ * Answers with nothing, and that is deliberate rather than lazy: on a branch with
+ * a merge queue `gh` adds the request to the queue instead of merging, so a zero
+ * exit is not proof of a merge. The caller reads the request again, which is
+ * also what turns a refusal we cannot name into a visible reason.
  */
 export async function mergePullRequest(
   number: number,
@@ -816,9 +857,17 @@ export async function mergePullRequest(
   try {
     await gh(['pr', 'merge', String(number), MERGE_FLAGS[method]])
   } catch (error) {
+    const reason = reasonFrom(error)
+    if (BEHIND_BASE.test(reason)) {
+      throw new GitHubError(
+        'requestBehind',
+        { number: String(number) },
+        `Pull request #${String(number)} is behind its base branch.`
+      )
+    }
     throw new GitHubError(
       'mergeFailed',
-      { number: String(number), reason: reasonFrom(error) },
+      { number: String(number), reason },
       'GitHub would not merge the pull request.'
     )
   }
@@ -864,17 +913,8 @@ export async function rerunChecks(
   branch: string,
   gh: GhExec
 ): Promise<void> {
-  const { headRefName, checks } = toRerunPayload(
-    shaped(
-      RerunPayloadSchema,
-      parsed(
-        await asked(() =>
-          gh(['pr', 'view', String(number), '--json', 'headRefName,url,statusCheckRollup'])
-        )
-      )
-    )
-  )
-  assertOnBranch(number, branch, headRefName)
+  const { checks, ...head } = toRerunPayload(await viewRequest(number, RerunPayloadSchema, gh))
+  assertOnBranch(number, branch, head)
 
   const runs = runsToRerun(checks, scope)
   if (runs.length === 0) {
@@ -897,23 +937,6 @@ export async function rerunChecks(
     }
   }
 }
-
-/** The fields `gh pr view` is asked for; named once because the list is long. */
-const DETAIL_FIELDS = [
-  'id',
-  'state',
-  'title',
-  'body',
-  'url',
-  'isDraft',
-  'mergeable',
-  'mergeStateStatus',
-  'reviewDecision',
-  'statusCheckRollup',
-  'headRefOid',
-  'comments',
-  'reviews'
-].join(',')
 
 /**
  * The review threads, by the request's own node id.
@@ -1048,10 +1071,7 @@ export async function readPullRequestDetail(
   number: number,
   gh: GhExec
 ): Promise<PullRequestDetail> {
-  const view = shaped(
-    DetailPayloadSchema,
-    parsed(await asked(() => gh(['pr', 'view', String(number), '--json', DETAIL_FIELDS])))
-  )
+  const view = await viewRequest(number, DetailPayloadSchema, gh)
 
   const threads = shaped(
     ThreadsPayloadSchema,
@@ -1112,13 +1132,13 @@ export async function readBranchRequests(
           '--limit',
           String(limit),
           '--json',
-          'headRefName,number,state,url,createdAt,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision,headRefOid'
+          'headRefName,number,state,url,createdAt,statusCheckRollup,isDraft,mergeable,mergeStateStatus,reviewDecision,headRefOid,isCrossRepository'
         ])
       )
     )
   )
 
-  const own = ownRequests(payload, owners)
+  const own = ownRequests(sameRepository(payload), owners)
   const passed = await branchesMovedPast(own, owners, git)
   const requests = toBranchRequests(own).filter((request) => !passed.has(request.branch))
 
@@ -1167,6 +1187,19 @@ async function asked(run: () => Promise<string>): Promise<string> {
   } catch (error) {
     throw ghFailure(error, 'Could not ask GitHub about this pull request.')
   }
+}
+
+/** `gh pr view` asked for exactly the fields `schema` reads, so the two cannot drift apart. */
+async function viewRequest<T>(
+  number: number,
+  schema: z.ZodType<T> & { readonly shape: object },
+  gh: GhExec
+): Promise<T> {
+  const fields = Object.keys(schema.shape).join(',')
+  return shaped(
+    schema,
+    parsed(await asked(() => gh(['pr', 'view', String(number), '--json', fields])))
+  )
 }
 
 /**

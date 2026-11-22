@@ -44,13 +44,17 @@ export type ChecksVerdict = 'failed' | 'running' | 'passed' | 'skipped' | 'none'
  * Whether the request would merge, as one answer, most decisive first.
  *
  * - `conflict`, `draft`, `checks` hold the button;
- * - `held` is GitHub refusing for a reason of its own (a required review, a
- *   branch behind its base), and `settling` is GitHub not having worked it out
- *   yet — both still take a press, since `gh` turns one into auto-merge;
+ * - `behind` is a branch GitHub will merge only once the base is brought in,
+ *   which the pane offers; `gh` refuses it outright, so it holds the button too;
+ * - `held` is GitHub refusing for a reason of its own (a required review): the
+ *   press still goes, into the queue where the branch has one, and elsewhere
+ *   comes back with GitHub's reason;
+ * - `settling` is GitHub not having worked it out yet, and the press goes to
+ *   GitHub, which decides;
  * - `ready` is the only one that says so.
  */
 export type MergeVerdict =
-  'merged' | 'closed' | 'conflict' | 'draft' | 'checks' | 'held' | 'settling' | 'ready'
+  'merged' | 'closed' | 'conflict' | 'draft' | 'checks' | 'behind' | 'held' | 'settling' | 'ready'
 
 /**
  * One thing about an open request that wants doing, or waiting for.
@@ -144,13 +148,13 @@ export function requestStatus(
   const waiting = checks === 'failed' || checks === 'running'
   const conflicting = detail.mergeable === 'conflicting'
   const settling = detail.mergeable === 'unknown' || detail.mergeState === 'unknown'
-  const held = detail.mergeState === 'blocked' || detail.mergeState === 'behind'
+  const behind = detail.mergeState === 'behind'
+  const held = detail.mergeState === 'blocked'
   const reviewed = detail.decision === 'changesRequested' || hasRemarks(detail)
 
   /* A conflict and a draft are refusals GitHub would make anyway. A red or
-     running check is not — GitHub merges over one nobody marked required, and
-     turns a press during a run into auto-merge — so that one is a policy
-     octopus keeps rather than a refusal it is predicting. */
+     running check is not — GitHub merges over one nobody marked required — so
+     that one is a policy octopus keeps rather than a refusal it is predicting. */
   const merge: MergeVerdict =
     detail.state !== 'open'
       ? detail.state
@@ -160,11 +164,13 @@ export function requestStatus(
           ? 'draft'
           : waiting
             ? 'checks'
-            : held
-              ? 'held'
-              : settling
-                ? 'settling'
-                : 'ready'
+            : behind
+              ? 'behind'
+              : held
+                ? 'held'
+                : settling
+                  ? 'settling'
+                  : 'ready'
 
   const offered: PromptKind[] = []
   /* A request that is merged or closed has nothing left to do to it. The
@@ -209,6 +215,19 @@ export function requestStatus(
     attention,
     recommendedView: !open ? 'merge' : waiting ? 'checks' : reviewed ? 'review' : 'merge'
   }
+}
+
+/** The press the footer offers as the next step: the work here first, then what GitHub asks for. */
+export type NextPress = 'commit' | 'push' | 'catchUp' | 'merge'
+
+export function nextPress(state: {
+  readonly dirty: boolean
+  readonly pushable: boolean
+  readonly merge: MergeVerdict
+}): NextPress {
+  if (state.dirty) return 'commit'
+  if (state.pushable) return 'push'
+  return state.merge === 'behind' ? 'catchUp' : 'merge'
 }
 
 /**

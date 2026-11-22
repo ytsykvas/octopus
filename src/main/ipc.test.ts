@@ -41,6 +41,7 @@ import { SIDE_HISTORY_LIMIT } from '../core/sideQuestions.js'
 import { TAIL_CHARS, type RecordedRun } from '../core/runLog.js'
 import type { Workspace } from '../core/store.js'
 import type { ThemeName } from '../core/types.js'
+import { headRef } from '../core/test/pullRequests.js'
 import type { UsageWindows } from '../core/usage.js'
 import { type IpcHost, registerIpc, type PickedDirectory } from './ipc.js'
 import type { Result } from './result.js'
@@ -235,7 +236,6 @@ async function createWorkspace(projectId: string): Promise<Workspace> {
 function servicePaths(root: string): ServiceOptions {
   return {
     stateFilePath: join(root, 'state.json'),
-    stateTempFilePath: join(root, 'state.json.tmp'),
     configFilePath: join(root, 'config.json'),
     // Without this, worktrees would land in the real ~/.octopus.
     dataRoot: join(root, 'data')
@@ -469,6 +469,7 @@ describe('channel table', () => {
     'workspaces:amendAndPush',
     'workspaces:push',
     'workspaces:updateFromBase',
+    'workspaces:catchUp',
     'workspaces:pullRequestDetail',
     'workspaces:mergePullRequest',
     'workspaces:closePullRequest',
@@ -2444,6 +2445,45 @@ describe('workspaces of a real project', () => {
     })
   })
 
+  it('refuses to bring a base in for a request number that is not one', async () => {
+    const projectId = await addProject('catching')
+    const workspace = await createWorkspace(projectId)
+
+    await expect(invoke('workspaces:catchUp', workspace.id, '7')).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('asks GitHub which base the request has before bringing it in', async () => {
+    const projectId = await addProject('caught')
+    const workspace = await createWorkspace(projectId)
+    const asked: string[][] = []
+    service = await useService({
+      makeGh: () => (args) => {
+        asked.push([...args])
+        return Promise.resolve(
+          JSON.stringify({
+            headRefName: 'someone/else',
+            isCrossRepository: false,
+            baseRefName: 'main'
+          })
+        )
+      }
+    })
+
+    await expect(invoke('workspaces:catchUp', workspace.id, 7)).resolves.toMatchObject({
+      ok: false,
+      code: 'requestNotOnBranch'
+    })
+    expect(asked[0]).toEqual([
+      'pr',
+      'view',
+      '7',
+      '--json',
+      'headRefName,isCrossRepository,baseRefName'
+    ])
+  })
+
   it('says why a push failed rather than swallowing it', async () => {
     const projectId = await addProject('unsendable')
     const workspace = await createWorkspace(projectId)
@@ -2483,6 +2523,7 @@ describe('workspaces of a real project', () => {
                 reviewDecision: 'CHANGES_REQUESTED',
                 statusCheckRollup: [],
                 headRefOid: 'a'.repeat(40),
+                baseRefName: 'main',
                 comments: [],
                 reviews: []
               })
@@ -2522,7 +2563,7 @@ describe('workspaces of a real project', () => {
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve(args[1] === 'view' ? JSON.stringify({ headRefName: branch }) : '')
+        return Promise.resolve(args[1] === 'view' ? headRef(branch) : '')
       }
     })
     const workspace = await createWorkspace(projectId)
@@ -2550,6 +2591,7 @@ describe('workspaces of a real project', () => {
           args[1] === 'view'
             ? JSON.stringify({
                 headRefName: branch,
+                isCrossRepository: false,
                 url: 'https://github.com/o/p/pull/7',
                 statusCheckRollup: [
                   {
@@ -2639,7 +2681,7 @@ describe('workspaces of a real project', () => {
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve(args[1] === 'view' ? JSON.stringify({ headRefName: branch }) : '')
+        return Promise.resolve(args[1] === 'view' ? headRef(branch) : '')
       }
     })
     const workspace = await createWorkspace(projectId)
@@ -2671,9 +2713,7 @@ describe('workspaces of a real project', () => {
     service = await useService({
       makeGh: () => (args) => {
         asked.push([...args])
-        return Promise.resolve(
-          args[1] === 'view' ? JSON.stringify({ headRefName: 'someone/else' }) : ''
-        )
+        return Promise.resolve(args[1] === 'view' ? headRef('someone/else') : '')
       }
     })
     const workspace = await createWorkspace(projectId)
@@ -2702,7 +2742,8 @@ describe('workspaces of a real project', () => {
               mergeable: 'MERGEABLE',
               mergeStateStatus: 'CLEAN',
               reviewDecision: '',
-              headRefOid: 'abc123'
+              headRefOid: 'abc123',
+              isCrossRepository: false
             }
           ])
         )

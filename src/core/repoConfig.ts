@@ -30,8 +30,8 @@
  * has been published whatever the next commit does — `env.ts` says the rest.
  */
 
-import { chmod, lstat, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join, sep } from 'node:path'
+import { lstat, mkdir, readFile } from 'node:fs/promises'
+import { join, sep } from 'node:path'
 
 import { z } from 'zod'
 
@@ -45,6 +45,7 @@ import {
   type InstructionKind,
   InstructionKindSchema
 } from './instructions.js'
+import { writeTextFile } from './persist.js'
 import { SCRIPT_FILES, ScriptBodySchema, type ScriptKind, ScriptKindSchema } from './scripts.js'
 
 /** The directory a repository carries its octopus settings in. */
@@ -504,14 +505,14 @@ export async function writeRepoConfig(repoPath: string, items: readonly RepoItem
 
   const readme = join(repoPath, REPO_README_FILE)
   await assertUnlinkedPath(repoPath, REPO_README_FILE)
-  await writeFile(readme, REPO_README, 'utf8')
+  await writeTextFile(readme, REPO_README)
 
   for (const item of items) {
-    const path = repoItemPath(repoPath, item.id)
     await assertUnlinkedPath(repoPath, repoItemFile(item.id))
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(path, item.contents, 'utf8')
-
-    if (item.id.startsWith('script.')) await chmod(path, SCRIPT_MODE)
+    await writeTextFile(
+      repoItemPath(repoPath, item.id),
+      item.contents,
+      item.id.startsWith('script.') ? SCRIPT_MODE : undefined
+    )
   }
 }

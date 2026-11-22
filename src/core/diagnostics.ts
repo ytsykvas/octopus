@@ -4,6 +4,8 @@ import {
   mkdirSync,
   openSync,
   readSync,
+  renameSync,
+  rmSync,
   statSync,
   writeFileSync
 } from 'node:fs'
@@ -51,9 +53,15 @@ function trim(file: string, keepBytes: number): number {
       closeSync(handle)
     }
     const kept = tail.subarray(tail.indexOf(0x0a) + 1)
-    writeFileSync(file, kept)
+    writeFileSync(`${file}.tmp`, kept)
+    renameSync(`${file}.tmp`, file)
     return kept.length
   } catch {
+    try {
+      rmSync(`${file}.tmp`, { force: true })
+    } catch {
+      // The log is a convenience, never a reason for the app not to start.
+    }
     return 0
   }
 }

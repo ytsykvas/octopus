@@ -6,7 +6,13 @@ import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
 import { electronUserDataDir, rootDir } from '../core/paths.js'
 import { diagnosticLog } from '../core/diagnostics.js'
-import { createService, type OctopusService } from '../core/service.js'
+import {
+  createService,
+  type OctopusService,
+  type ServiceOptions,
+  statePathFor
+} from '../core/service.js'
+import { type BackupRecovery, openWithRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
 import {
   pushChatEvent,
@@ -126,6 +132,23 @@ function watchSystemTheme(service: OctopusService): void {
   })
 }
 
+/** Asks whether to put the backup in place of a state that cannot be read. */
+function askRestore(recovery: BackupRecovery, error: unknown): boolean {
+  // Before any window exists, so no sheet and no i18n: English, as the other startup boxes.
+  const response = dialog.showMessageBoxSync({
+    type: 'warning',
+    buttons: ['Restore', 'Quit'],
+    defaultId: 0,
+    cancelId: 1,
+    message: 'octopus could not read its saved state',
+    detail:
+      `${describeError(error)}\n\n` +
+      `A copy from ${recovery.savedAt.toLocaleString()} with ${String(recovery.projects)} ` +
+      'project(s) is beside it. Restoring keeps the damaged file next to it.'
+  })
+  return response === 0
+}
+
 /**
  * Startup failures must be visible.
  *
@@ -177,9 +200,20 @@ async function start(): Promise<void> {
   let service: OctopusService
 
   try {
-    service = await createService({
+    const options: ServiceOptions = {
       onDiagnostic: diagnosticLog(join(app.getPath('logs'), 'main.log'))
-    })
+    }
+    const opened = await openWithRecovery(
+      () => createService(options),
+      askRestore,
+      statePathFor(options)
+    )
+    if (opened === null) {
+      await lock.release()
+      app.quit()
+      return
+    }
+    service = opened
   } catch (error) {
     dialog.showErrorBox('octopus could not start', describeError(error))
     await lock.release()

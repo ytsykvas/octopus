@@ -8,6 +8,7 @@ import {
   ownRequests,
   pullRequestStanding,
   runsToRerun,
+  sameRepository,
   type DetailPayload,
   DetailPayloadSchema,
   type PullRequestCheck,
@@ -79,6 +80,7 @@ function view(overrides: Record<string, unknown> = {}): DetailPayload {
     reviewDecision: '',
     statusCheckRollup: [],
     headRefOid: 'c0ffee'.padEnd(40, '0'),
+    baseRefName: 'main',
     comments: [],
     reviews: [],
     ...overrides
@@ -693,6 +695,10 @@ describe('where a pull request stands', () => {
     )
   })
 
+  it('carries the branch the request is to merge into', () => {
+    expect(toPullRequestDetail(view({ baseRefName: 'develop' }), NO_THREADS).base).toBe('develop')
+  })
+
   it("carries the author's description as written", () => {
     const body = '## Why\n\nBecause.\n<!-- the template -->'
 
@@ -760,6 +766,7 @@ describe('every branch of a project at once', () => {
     mergeStateStatus: 'CLEAN',
     reviewDecision: '',
     headRefOid: 'abc123',
+    isCrossRepository: false,
     ...overrides
   })
 
@@ -889,6 +896,27 @@ describe('where an open request stands', () => {
     ['a state GitHub would block', { mergeState: 'blocked' }]
   ] as const)('is pending with %s', (_name, overrides) => {
     expect(pullRequestStanding(request(overrides))).toEqual({ kind: 'pending' })
+  })
+})
+
+describe('sameRepository', () => {
+  const entry = (
+    id: number,
+    isCrossRepository: boolean
+  ): { id: number; isCrossRepository: boolean } => ({
+    id,
+    isCrossRepository
+  })
+
+  it('keeps the entries opened from this repository, in order', () => {
+    expect(sameRepository([entry(9, true), entry(4, false), entry(3, false)])).toEqual([
+      entry(4, false),
+      entry(3, false)
+    ])
+  })
+
+  it('answers with nothing when every entry came from a fork', () => {
+    expect(sameRepository([entry(9, true)])).toEqual([])
   })
 })
 

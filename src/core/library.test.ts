@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -184,6 +184,15 @@ describe('writing one', () => {
     await expect(readFile(join(commands, 'check.md'), 'utf8')).resolves.toBe('Run the gate.')
   })
 
+  it('replaces the file rather than rewriting it in place', async () => {
+    await writeLibraryItem(commands, 'command', 'check', 'first')
+    const before = (await stat(join(commands, 'check.md'))).ino
+
+    await writeLibraryItem(commands, 'command', 'check', 'second')
+
+    expect((await stat(join(commands, 'check.md'))).ino).not.toBe(before)
+  })
+
   /*
    * The name the agent knows a subagent by is the one in its frontmatter, and
    * the name this module addresses it by is the file. A document naming
@@ -317,6 +326,15 @@ describe('renaming one', () => {
     expect(entry.name).toBe('gate')
     await expect(readFile(join(commands, 'gate.md'), 'utf8')).resolves.toBe('Run the gate.')
     await expect(readLibraryIn(commands, 'command')).resolves.toHaveLength(1)
+  })
+
+  it('writes the renamed file whole rather than over the one it moved', async () => {
+    await writeLibraryItem(commands, 'command', 'check', 'Run the gate.')
+    const before = (await stat(join(commands, 'check.md'))).ino
+
+    await renameLibraryItem(commands, 'command', 'check', 'gate')
+
+    expect((await stat(join(commands, 'gate.md'))).ino).not.toBe(before)
   })
 
   it('takes a subagent frontmatter with it', async () => {

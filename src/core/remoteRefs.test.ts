@@ -135,6 +135,20 @@ describe('createRemoteRefWatch', () => {
 
   const REF = join(COMMON, 'refs', 'remotes/origin/octopus/ava')
 
+  /** Holds every git-dir search until `answer(repoPath)` settles those for that checkout. */
+  function deferredSearches(commonDirOf: Bench['commonDirOf']): (repoPath: string) => void {
+    const waiting: { readonly repoPath: string; readonly settle: (dir: string) => void }[] = []
+    commonDirOf.mockImplementation(
+      (repoPath) =>
+        new Promise((settle) => {
+          waiting.push({ repoPath, settle })
+        })
+    )
+    return (repoPath) => {
+      for (const one of waiting) if (one.repoPath === repoPath) one.settle(join(repoPath, '.git'))
+    }
+  }
+
   // `refs/remotes/` does not exist in a clone that has never fetched, and
   // watching a directory that is not there throws.
   it('watches the refs directory of the common git dir', async () => {
@@ -326,6 +340,72 @@ describe('createRemoteRefWatch', () => {
     await first
 
     expect(fake.paths).toEqual([])
+  })
+
+  // Project settings can point a project with no workspace at another clone,
+  // and the pushes worth hearing are then the new clone's.
+  it('moves to the new checkout when a project is pointed elsewhere', async () => {
+    const { fake, commonDirOf, refs } = setUp()
+    commonDirOf.mockImplementation((repoPath) => Promise.resolve(join(repoPath, '.git')))
+
+    await refs.sync([{ id: 'planner', repoPath: '/old' }])
+    await refs.sync([{ id: 'planner', repoPath: '/new' }])
+
+    expect(fake.closed).toEqual([join('/old', '.git', 'refs')])
+    expect(fake.paths).toEqual([join('/old', '.git', 'refs'), join('/new', '.git', 'refs')])
+  })
+
+  it('drops a start for a checkout the project has since left', async () => {
+    const { fake, commonDirOf, refs } = setUp()
+    let answer: (dir: string) => void = () => undefined
+    commonDirOf.mockImplementation((repoPath) =>
+      repoPath === '/old'
+        ? new Promise((settle) => {
+            answer = settle
+          })
+        : Promise.resolve(join(repoPath, '.git'))
+    )
+
+    const first = refs.sync([{ id: 'planner', repoPath: '/old' }])
+    await refs.sync([{ id: 'planner', repoPath: '/new' }])
+    answer(join('/old', '.git'))
+    await first
+
+    expect(fake.paths).toEqual([join('/new', '.git', 'refs')])
+    expect(fake.closed).toEqual([])
+  })
+
+  it('does not search the new checkout twice when the old checkout’s search ends first', async () => {
+    const { fake, commonDirOf, refs } = setUp()
+    const answer = deferredSearches(commonDirOf)
+
+    const old = refs.sync([{ id: 'planner', repoPath: '/old' }])
+    const moved = refs.sync([{ id: 'planner', repoPath: '/new' }])
+    answer('/old')
+    await old
+    const again = refs.sync([{ id: 'planner', repoPath: '/new' }])
+    answer('/new')
+    await Promise.all([moved, again])
+
+    expect(commonDirOf).toHaveBeenCalledTimes(2)
+    expect(fake.paths).toEqual([join('/new', '.git', 'refs')])
+  })
+
+  // A → B → A while the first search is out: two starts for A, and the second
+  // must not replace the first's watcher without closing it.
+  it('watches a checkout once when the project comes back to it mid-search', async () => {
+    const { fake, commonDirOf, refs } = setUp()
+    const answer = deferredSearches(commonDirOf)
+
+    const first = refs.sync([{ id: 'planner', repoPath: '/a' }])
+    const away = refs.sync([{ id: 'planner', repoPath: '/b' }])
+    const back = refs.sync([{ id: 'planner', repoPath: '/a' }])
+    answer('/a')
+    answer('/b')
+    await Promise.all([first, away, back])
+
+    expect(fake.paths).toEqual([join('/a', '.git', 'refs')])
+    expect(fake.closed).toEqual([])
   })
 
   it('does not start one twice when two syncs overlap', async () => {

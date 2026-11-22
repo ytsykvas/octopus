@@ -829,6 +829,7 @@ export const en = {
     tileMergeReady: 'Ready',
     tileMergeWaiting: 'Waiting',
     tileMergeConflict: 'Conflict',
+    tileMergeBehind: 'Out of date',
     /* The Merge view and the footer: the rows that say something is fine, the
        footer's line when nothing wants attention, the one row about this
        checkout's own work, and the press that ends a request unmerged. */
@@ -899,7 +900,8 @@ export const en = {
     /* Why merging is not offered, each naming the thing to do about it. */
     conflicting: 'This branch conflicts with {{base}}.',
     mergeBlocked: 'GitHub will not merge this yet — a required review or check is missing.',
-    mergeBehind: '{{base}} has moved on since this branch left it.',
+    mergeBehind:
+      '{{base}} has moved on, and GitHub merges this branch only once it is up to date. Bring {{base}} in first.',
     mergeUnstable: 'A check has not passed, but merging is still allowed.',
     /* Right after a push GitHub has not worked out whether the request
        merges; the button still takes a press, but "ready" would be a guess. */
@@ -907,9 +909,9 @@ export const en = {
     mergeDraft: 'A draft cannot be merged. Mark it ready on GitHub first.',
     /* Not a refusal GitHub would make — it merges over a check that is not
        required — so this one says outright that the app is the one refusing. */
-    /* Waited for rather than merged past. `gh` would take the press and turn it
-       into auto-merge, which is a fair thing for `gh` to do and the wrong thing
-       to offer beside a list that says "running". */
+    /* Waited for rather than merged past: a check nobody marked required does
+       not stop GitHub, and merging beside a list that says "running" should not
+       be one press away. */
     mergeChecksRunning_one: '{{count}} check is still running.',
     mergeChecksRunning_few: '{{count}} checks are still running.',
     mergeChecksRunning_many: '{{count}} checks are still running.',
@@ -2469,6 +2471,10 @@ export const en = {
        the number alone cannot answer it. */
     requestNotOnBranch:
       'Pull request #{{number}} is on {{head}}, not on this workspace\u2019s {{branch}}. Nothing was done.',
+    requestFromFork:
+      'Pull request #{{number}} comes from a branch of the same name in another repository, not from this workspace. Nothing was done.',
+    requestBehind:
+      'GitHub will not merge #{{number}} until it is up to date with its base branch. Bring the base in with \u201cUpdate from\u201d in the Pull request tab, then merge.',
     // Undone rather than left mid-merge, and said so where it could not be.
     updateFailed:
       '{{base}} could not be merged into {{branch}}, so nothing was changed. Git said: {{reason}}',

@@ -268,9 +268,10 @@ export function runsToRerun(checks: readonly PullRequestCheck[], scope: RerunSco
     .map(([run]) => run)
 }
 
-/** What `gh pr view --json headRefName,statusCheckRollup` sends before a re-run. */
+/** What `gh pr view` sends before a re-run: the head, its repository, the page and the checks. */
 export const RerunPayloadSchema = z.object({
   headRefName: z.string().min(1),
+  isCrossRepository: z.boolean(),
   /** The request's own page, which says which repository a run must be in. */
   url: z.string(),
   statusCheckRollup: RollupSchema
@@ -287,12 +288,14 @@ export const RerunPayloadSchema = z.object({
  */
 export function toRerunPayload(payload: z.infer<typeof RerunPayloadSchema>): {
   readonly headRefName: string
+  readonly isCrossRepository: boolean
   readonly checks: PullRequestCheck[]
 } {
   const repository = payload.url.replace(/\/pull\/\d+$/u, '')
 
   return {
     headRefName: payload.headRefName,
+    isCrossRepository: payload.isCrossRepository,
     checks: toChecks(payload.statusCheckRollup).map((check) =>
       check.url?.startsWith(`${repository}/actions/runs/`) === true
         ? check
@@ -408,6 +411,8 @@ export interface PullRequestDetail {
    * they say there is nothing left to wait for at exactly the moment there is.
    */
   readonly head: string
+  /** The branch the request is to merge into — GitHub's, which can differ from the project's. */
+  readonly base: string
   readonly checks: readonly PullRequestCheck[]
   /** All three kinds in one reading order, oldest first. */
   readonly comments: readonly PullRequestComment[]
@@ -453,6 +458,7 @@ export const DetailPayloadSchema = z.object({
   reviewDecision: z.string(),
   statusCheckRollup: RollupSchema,
   headRefOid: z.string().min(1),
+  baseRefName: z.string().min(1),
   comments: z.array(
     z.object({
       id: z.string(),
@@ -598,6 +604,7 @@ export function toPullRequestDetail(
     url: view.url,
     draft: view.isDraft,
     head: view.headRefOid,
+    base: view.baseRefName,
     checks: toChecks(view.statusCheckRollup),
     comments: comments(view, threads),
     decision: DECISIONS[view.reviewDecision] ?? null,
@@ -654,7 +661,9 @@ export const BranchListSchema = z.array(
     // `""` where there is none, as in the detail.
     reviewDecision: z.string(),
     // The request's last commit: what a branch that moved on has moved past.
-    headRefOid: z.string().min(1)
+    headRefOid: z.string().min(1),
+    // Opened from a fork, whose branch may carry a workspace's name.
+    isCrossRepository: z.boolean()
   })
 )
 
@@ -677,6 +686,17 @@ const CLOCK_SKEW_MS = 5 * 60_000
 export function openedFor(request: { readonly createdAt: string }, owner: BranchOwner): boolean {
   const since = Date.parse(owner.branchSince ?? owner.createdAt)
   return Date.parse(request.createdAt) >= since - CLOCK_SKEW_MS
+}
+
+/**
+ * Drops requests opened from another repository: a fork's branch may carry a
+ * workspace's name — the names are a short list — and its request is never that
+ * workspace's.
+ */
+export function sameRepository<T extends { readonly isCrossRepository: boolean }>(
+  entries: readonly T[]
+): T[] {
+  return entries.filter((entry) => !entry.isCrossRepository)
 }
 
 /** Drops requests opened before their branch's workspace came onto it; branches with no workspace pass. */

@@ -314,6 +314,11 @@ describe('channel names', () => {
       'workspaces:updateFromBase'
     ],
     [
+      'workspaces.catchUp',
+      () => method('workspaces', 'catchUp')('w' as never, 7 as never),
+      'workspaces:catchUp'
+    ],
+    [
       'workspaces.pullRequestDetail',
       () => method('workspaces', 'pullRequestDetail')('w' as never, 7 as never),
       'workspaces:pullRequestDetail'

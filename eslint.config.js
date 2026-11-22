@@ -3,6 +3,23 @@ import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
 import prettier from 'eslint-config-prettier'
 
+const noElectron = {
+  name: 'electron',
+  message: 'core/ knows nothing about the UI — see docs/architecture.md.'
+}
+
+const noBareWrite = [
+  ['node:fs/promises', ['writeFile']],
+  ['fs/promises', ['writeFile']],
+  ['node:fs', ['writeFile', 'writeFileSync', 'promises']],
+  ['fs', ['writeFile', 'writeFileSync', 'promises']]
+].map(([name, importNames]) => ({
+  name,
+  importNames,
+  message:
+    'Write through persist.ts (writeTextFile / writeJsonFile / writeNewFile) — see docs/data/migrations-and-writes.md.'
+}))
+
 export default tseslint.config(
   {
     ignores: ['out/**', 'dist/**', 'node_modules/**', 'coverage/**']
@@ -36,20 +53,33 @@ export default tseslint.config(
   },
   {
     // §11.1: the core has to stay headless, so it can be tested without a
-    // display and extracted into a CLI or daemon later.
+    // display and extracted into a CLI or daemon later. §11.2: a file is
+    // replaced whole, so a reader — a running `sh` included — never sees half.
     files: ['src/core/**/*.ts'],
     rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: 'electron',
-              message: 'core/ knows nothing about the UI — see docs/architecture.md.'
-            }
-          ]
-        }
-      ]
+      'no-restricted-imports': ['error', { paths: [noElectron, ...noBareWrite] }]
+    }
+  },
+  {
+    files: ['src/main/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: noBareWrite }]
+    }
+  },
+  {
+    // A later block replaces the rule's options rather than merging them, so
+    // this one restates what core keeps. persist.ts is where the write lives;
+    // the diagnostics log runs inside catch, synchronously, and replaces by
+    // rename itself; a test builds its fixtures with a plain write.
+    files: ['src/core/persist.ts', 'src/core/diagnostics.ts', 'src/core/**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: [noElectron] }]
+    }
+  },
+  {
+    files: ['src/main/**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': 'off'
     }
   },
   {

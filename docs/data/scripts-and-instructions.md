@@ -44,5 +44,21 @@ all are reported once the workspace has gone, so a database left behind is known
 about rather than found months later. Removing a whole project names every workspace whose cleanup did
 not finish, in one line.
 
+It runs as the leader of a process group of its own (`spawnInGroup` in
+`archive.ts`). The 30-second deadline signals the whole group — SIGTERM, then
+SIGKILL two seconds later, even when the script itself died of the first — so
+the `docker compose` or `psql` it started does not live on under init. Its
+output has no ceiling: stdout goes nowhere, since a success shows nothing, and
+only the last 64 KB of stderr are kept for the report, so a cleanup that
+succeeds noisily is not reported as failed. The wait ends when the script exits,
+not when every holder of its pipe lets go, so a grandchild left in the
+background does not hold the removal; what the script wrote last is still read,
+for up to 200 ms after the exit, and the pipe stays open after that, so a step
+left running can still write to it. And a workspace directory already deleted by
+hand is named as such — the script did not run — rather than reported as the
+script not being found.
+
 Scripts are saved executable. Without the bit, running one fails with
-"permission denied", which says nothing about what to do.
+"permission denied", which says nothing about what to do. A save replaces the
+file rather than rewriting it, so a script already running reads on in its own
+version instead of continuing mid-line into the new one.

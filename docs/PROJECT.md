@@ -686,17 +686,16 @@ the app never sees a token (§10.9).
   and neither does a change of where `origin` pushes to during the turn. A
   message typed into the chat never pushes.
 - **Merging**, with the three methods, and never `--delete-branch`: a worktree
-  is checked out on that branch. A zero exit is not proof of a merge — `gh`
-  enables auto-merge instead when a required check has not passed — so the pane
-  reads the request again afterwards, which is also what turns a refusal it
-  cannot name into a visible reason.
+  is checked out on that branch. A zero exit is not proof of a merge — on a
+  branch with a merge queue `gh` queues the request instead — so the pane reads
+  the request again afterwards, which is also what turns a refusal it cannot
+  name into a visible reason.
   **A check that is red, or still running, disables the button.** Neither is a
   refusal GitHub would make — it merges happily over a check nobody marked
-  required, and turns a press during a run into auto-merge. Both are policies
-  the app keeps, they are hard, and the way past them is to fix the check, wait,
-  or merge in the browser — where nobody does it by reflex. A repository that
-  runs no checks at all is unaffected: waiting for checks that never arrive
-  would leave it unmergeable from here for ever.
+  required. Both are policies the app keeps, they are hard, and the way past them
+  is to fix the check, wait, or merge in the browser — where nobody does it by
+  reflex. A repository that runs no checks at all is unaffected: waiting for
+  checks that never arrive would leave it unmergeable from here for ever.
 - **Committing and pushing**, under a message typed here, without which the loop
   ends in the terminal. The message used to be fixed at "Answer the review", so
   a branch worked on this way ended with four identical commits describing a
@@ -742,7 +741,8 @@ Everything under one directory:
 
 - Cold start to interactive: under 2 s.
 - State survives a crash: atomic writes, zod validation on read, a clear error instead of a silent reset.
-- Errors from git and scripts surface with full stderr rather than being swallowed.
+- Errors from git and scripts surface with full stderr (a cleanup script: the last
+  64 KB) rather than being swallowed.
 - The core is covered by vitest without launching Electron.
 - No secrets in `state.json`; authentication remains Claude Code's business.
 

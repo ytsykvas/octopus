@@ -6,7 +6,13 @@ import type {
   PullRequestDetail
 } from '@core/pullRequestShapes.js'
 
-import { type ChecksVerdict, type MergeVerdict, requestStatus } from './requestStatus.js'
+import {
+  type ChecksVerdict,
+  type MergeVerdict,
+  nextPress,
+  type NextPress,
+  requestStatus
+} from './requestStatus.js'
 
 function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
   return {
@@ -16,6 +22,7 @@ function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
     url: 'https://github.com/o/p/pull/7',
     draft: false,
     head: 'a'.repeat(40),
+    base: 'main',
     checks: [],
     comments: [],
     decision: null,
@@ -221,15 +228,34 @@ describe('the status of a request', () => {
 
   it.each([
     ['blocked', 'held'],
-    ['behind', 'held'],
     ['unstable', 'ready']
   ] as const)('passes on GitHub’s %s note', (mergeState, verdict) => {
     const status = requestStatus(detail({ mergeState }), clean)
 
     expect(status.attention).toEqual([{ kind: 'githubNote', note: mergeState }])
     expect(status.merge).toBe(verdict)
-    // A hold is GitHub's to make; the press still goes through, as auto-merge.
+    // A hold is GitHub's to make: queued where the branch has a merge queue,
+    // refused with its reason elsewhere.
     expect(status.canMerge).toBe(true)
+  })
+
+  it('holds the merge for a branch behind its base, and says so', () => {
+    const status = requestStatus(detail({ mergeState: 'behind' }), clean)
+
+    expect(status.merge).toBe('behind')
+    expect(status.canMerge).toBe(false)
+    expect(status.attention).toEqual([{ kind: 'githubNote', note: 'behind' }])
+  })
+
+  // GitHub's note is not said while a check of ours holds the button, so the
+  // verdict must not name a reason the list leaves out.
+  it('says the checks first when a branch behind its base is still being checked', () => {
+    const status = requestStatus(
+      detail({ mergeState: 'behind', checks: [check('pending')] }),
+      clean
+    )
+
+    expect(status.merge).toBe('checks')
   })
 
   it.each(['clean', 'hasHooks', 'dirty'] as const)('says nothing for GitHub’s %s', (mergeState) => {
@@ -297,4 +323,25 @@ describe('the status of a request', () => {
       expect(status.recommendedView).toBe('merge')
     }
   )
+})
+
+describe('the next press', () => {
+  it.each<[string, { dirty: boolean; pushable: boolean; merge: MergeVerdict }, NextPress]>([
+    ['work to commit', { dirty: true, pushable: false, merge: 'ready' }, 'commit'],
+    ['commits to push', { dirty: false, pushable: true, merge: 'ready' }, 'push'],
+    ['a branch behind its base', { dirty: false, pushable: false, merge: 'behind' }, 'catchUp'],
+    ['nothing else', { dirty: false, pushable: false, merge: 'ready' }, 'merge'],
+    [
+      'work to commit and commits to push',
+      { dirty: true, pushable: true, merge: 'behind' },
+      'commit'
+    ],
+    [
+      'commits to push on a branch behind its base',
+      { dirty: false, pushable: true, merge: 'behind' },
+      'push'
+    ]
+  ])('for %s', (_case, state, press) => {
+    expect(nextPress(state)).toBe(press)
+  })
 })

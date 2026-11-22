@@ -24,7 +24,7 @@
  * octopus makes inside a repository still holds.
  */
 
-import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { z } from 'zod'
@@ -33,6 +33,7 @@ import { CodedError } from './codedError.js'
 import { parseFrontmatter, setFields } from './frontmatter.js'
 import { type Download, fetchDocument } from './download.js'
 import { skillsDirOf } from './paths.js'
+import { writeTextFile } from './persist.js'
 import type { SessionSkillSource } from './sessionSkills.js'
 import { isSkillName, type OwnSkillScope } from './skillNames.js'
 
@@ -390,8 +391,7 @@ export async function writeSkill(
   const raw = `---\n${frontmatterFor(existing === null ? null : existing.front, name, content.description).trimEnd()}\n---\n\n${content.body}`
 
   assertFits(raw)
-  await mkdir(path, { recursive: true })
-  await writeFile(join(path, SKILL_FILE), raw, 'utf8')
+  await writeTextFile(join(path, SKILL_FILE), raw)
 
   return { name, description: content.description, folder, path }
 }
@@ -451,8 +451,7 @@ export async function writeRawSkill(
     )
   }
 
-  await mkdir(path, { recursive: true })
-  await writeFile(join(path, SKILL_FILE), text, 'utf8')
+  await writeTextFile(join(path, SKILL_FILE), text)
 
   return { name: parsed.name, description: parsed.description, folder, path }
 }
@@ -499,7 +498,7 @@ export async function renameSkill(
   // The frontmatter follows the directory, or the file claims to be a skill the
   // store has filed under another name — the drift `writeRawSkill` refuses.
   const raw = `---\n${frontmatterFor(existing.front, to, existing.description).trimEnd()}\n---\n\n${existing.body}`
-  await writeFile(join(path, SKILL_FILE), raw, 'utf8')
+  await writeTextFile(join(path, SKILL_FILE), raw)
 
   return { name: to, description: existing.description, folder: to, path }
 }
