@@ -318,7 +318,7 @@ async function listPullRequests(
  * remote does not have.
  */
 async function remoteTip(branch: string, git: GitExec): Promise<string | null> {
-  const out = await git(['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])
+  const out = await git(['ls-remote', '--heads', DEFAULT_REMOTE, `refs/heads/${branch}`])
 
   for (const line of out.split('\n')) {
     const [commit, ref] = line.split('\t')
@@ -532,14 +532,7 @@ export async function catchUpWithBase(
   fetchGit: GitExec,
   gh: GhExec
 ): Promise<void> {
-  const { baseRefName, ...head } = shaped(
-    BaseRefSchema,
-    parsed(
-      await asked(() =>
-        gh(['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository,baseRefName'])
-      )
-    )
-  )
+  const { baseRefName, ...head } = await viewRequest(number, BaseRefSchema, gh)
   assertOnBranch(number, branch, head)
   await updateFromBase(branch, `${DEFAULT_REMOTE}/${baseRefName}`, git, fetchGit)
   await pushBranch(branch, git)
@@ -553,7 +546,7 @@ export async function catchUpWithBase(
  */
 export async function pushBranch(branch: string, git: GitExec): Promise<void> {
   try {
-    await git(['push', '-u', 'origin', branch])
+    await git(['push', '-u', DEFAULT_REMOTE, branch])
   } catch (error) {
     throw new GitHubError(
       'pushFailed',
@@ -565,7 +558,7 @@ export async function pushBranch(branch: string, git: GitExec): Promise<void> {
 
 /** Where `origin` pushes to, as git resolves it now. */
 export async function pushUrl(git: GitExec): Promise<string> {
-  return (await git(['remote', 'get-url', '--push', 'origin'])).trim()
+  return (await git(['remote', 'get-url', '--push', DEFAULT_REMOTE])).trim()
 }
 
 /**
@@ -670,7 +663,7 @@ export async function amendAndPush(
   }
 
   try {
-    await git(['push', '-u', `--force-with-lease=${branch}:${tip}`, 'origin', branch])
+    await git(['push', '-u', `--force-with-lease=${branch}:${tip}`, DEFAULT_REMOTE, branch])
   } catch (error) {
     throw new GitHubError(
       'pushFailed',
@@ -808,16 +801,7 @@ const BaseRefSchema = HeadRefSchema.extend({ baseRefName: z.string().min(1) })
  * fourteen fields and then a GraphQL round trip for the threads.
  */
 async function refuseAnotherBranch(number: number, branch: string, gh: GhExec): Promise<void> {
-  const head = shaped(
-    HeadRefSchema,
-    parsed(
-      await asked(() =>
-        gh(['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository'])
-      )
-    )
-  )
-
-  assertOnBranch(number, branch, head)
+  assertOnBranch(number, branch, await viewRequest(number, HeadRefSchema, gh))
 }
 
 /**
@@ -929,22 +913,7 @@ export async function rerunChecks(
   branch: string,
   gh: GhExec
 ): Promise<void> {
-  const { checks, ...head } = toRerunPayload(
-    shaped(
-      RerunPayloadSchema,
-      parsed(
-        await asked(() =>
-          gh([
-            'pr',
-            'view',
-            String(number),
-            '--json',
-            'headRefName,isCrossRepository,url,statusCheckRollup'
-          ])
-        )
-      )
-    )
-  )
+  const { checks, ...head } = toRerunPayload(await viewRequest(number, RerunPayloadSchema, gh))
   assertOnBranch(number, branch, head)
 
   const runs = runsToRerun(checks, scope)
@@ -968,24 +937,6 @@ export async function rerunChecks(
     }
   }
 }
-
-/** The fields `gh pr view` is asked for; named once because the list is long. */
-const DETAIL_FIELDS = [
-  'id',
-  'state',
-  'title',
-  'body',
-  'url',
-  'isDraft',
-  'mergeable',
-  'mergeStateStatus',
-  'reviewDecision',
-  'statusCheckRollup',
-  'headRefOid',
-  'baseRefName',
-  'comments',
-  'reviews'
-].join(',')
 
 /**
  * The review threads, by the request's own node id.
@@ -1120,10 +1071,7 @@ export async function readPullRequestDetail(
   number: number,
   gh: GhExec
 ): Promise<PullRequestDetail> {
-  const view = shaped(
-    DetailPayloadSchema,
-    parsed(await asked(() => gh(['pr', 'view', String(number), '--json', DETAIL_FIELDS])))
-  )
+  const view = await viewRequest(number, DetailPayloadSchema, gh)
 
   const threads = shaped(
     ThreadsPayloadSchema,
@@ -1254,6 +1202,19 @@ async function asked(run: () => Promise<string>): Promise<string> {
  * `readBranchPullRequests` above already does this by hand; this is that, made
  * reusable, because three more call sites needed it.
  */
+/** `gh pr view` asked for exactly the fields `schema` reads, so the two cannot drift apart. */
+async function viewRequest<T>(
+  number: number,
+  schema: z.ZodType<T> & { readonly shape: object },
+  gh: GhExec
+): Promise<T> {
+  const fields = Object.keys(schema.shape).join(',')
+  return shaped(
+    schema,
+    parsed(await asked(() => gh(['pr', 'view', String(number), '--json', fields])))
+  )
+}
+
 function shaped<T>(schema: z.ZodType<T>, payload: unknown): T {
   const result = schema.safeParse(payload)
   if (!result.success) {
