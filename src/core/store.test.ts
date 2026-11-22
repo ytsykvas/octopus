@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NotesBodySchema } from './notes.js'
 
@@ -127,30 +127,32 @@ describe('load and save', () => {
 
   it('reads saved state back without loss', async () => {
     const state = addWorkspace(withProject, makeWorkspace())
-    await saveState(state, file, `${file}.tmp`)
+    await saveState(state, file)
     await expect(loadState(file)).resolves.toEqual(state)
   })
 
   it('keeps the state before the last save beside the file', async () => {
     const state = addWorkspace(withProject, makeWorkspace())
-    await saveState(withProject, file, `${file}.tmp`)
-    await saveState(state, file, `${file}.tmp`)
+    await saveState(withProject, file)
+    await saveState(state, file)
 
     await expect(loadState(`${file}.bak`)).resolves.toEqual(withProject)
     await expect(loadState(file)).resolves.toEqual(state)
   })
 
-  it('takes a backup path when one is given', async () => {
-    const backup = `${file}.elsewhere`
-    await saveState(withProject, file, `${file}.tmp`, backup)
-    await saveState(EMPTY_STATE, file, `${file}.tmp`, backup)
-
-    await expect(loadState(backup)).resolves.toEqual(withProject)
+  it('saves into the data root when given no path', async () => {
+    vi.stubEnv('OCTOPUS_DATA_DIR', dir)
+    try {
+      await saveState(withProject)
+      await expect(loadState(file)).resolves.toEqual(withProject)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('reads a chosen icon back', async () => {
     const marked = updateProject(withProject, 'planner', { icon: 'rocket' })
-    await saveState(marked, file, `${file}.tmp`)
+    await saveState(marked, file)
 
     await expect(loadState(file)).resolves.toEqual(marked)
   })
@@ -219,7 +221,7 @@ describe('load and save', () => {
       addWorkspace(withProject, makeWorkspace()),
       storedChat({ status: 'running' })
     )
-    await saveState(working, file, `${file}.tmp`)
+    await saveState(working, file)
 
     const loaded = await loadState(file)
     expect(loaded.chats[0]?.status).toBe('idle')
@@ -234,7 +236,7 @@ describe('load and save', () => {
     'remembers a turn left %s as interrupted',
     async (status) => {
       const working = addChat(addWorkspace(withProject, makeWorkspace()), storedChat({ status }))
-      await saveState(working, file, `${file}.tmp`)
+      await saveState(working, file)
 
       const loaded = await loadState(file)
       expect(loaded.chats[0]?.interrupted).toBe(true)
@@ -245,7 +247,7 @@ describe('load and save', () => {
     'does not call a conversation left %s interrupted',
     async (status) => {
       const resting = addChat(addWorkspace(withProject, makeWorkspace()), storedChat({ status }))
-      await saveState(resting, file, `${file}.tmp`)
+      await saveState(resting, file)
 
       const loaded = await loadState(file)
       expect(loaded.chats[0]?.interrupted).toBe(false)
@@ -257,7 +259,7 @@ describe('load and save', () => {
       addWorkspace(withProject, makeWorkspace()),
       storedChat({ status: 'error' })
     )
-    await saveState(failed, file, `${file}.tmp`)
+    await saveState(failed, file)
 
     const loaded = await loadState(file)
     expect(loaded.chats[0]?.status).toBe('error')
@@ -274,7 +276,7 @@ describe('load and save', () => {
     const failed = updateWorkspace(addWorkspace(withProject, makeWorkspace()), 'planner/kyiv', {
       status: 'error'
     })
-    await saveState(failed, file, `${file}.tmp`)
+    await saveState(failed, file)
 
     const loaded = await loadState(file)
     expect(loaded.workspaces[0]?.status).toBe('idle')
@@ -287,7 +289,7 @@ describe('load and save', () => {
 
   it('refuses a workspace whose port is outside the allowed range', async () => {
     const broken = { ...withProject, workspaces: [makeWorkspace({ port: 80 })] }
-    await expect(saveState(broken, file, `${file}.tmp`)).rejects.toBeInstanceOf(InvalidFileError)
+    await expect(saveState(broken, file)).rejects.toBeInstanceOf(InvalidFileError)
   })
 })
 

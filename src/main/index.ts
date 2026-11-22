@@ -4,13 +4,13 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell 
 
 import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
-import { electronUserDataDir, rootDir } from '../core/paths.js'
+import { backupFileOf, electronUserDataDir, rootDir } from '../core/paths.js'
 import { diagnosticLog } from '../core/diagnostics.js'
 import {
   createService,
   type OctopusService,
   type ServiceOptions,
-  statePathsFor
+  statePathFor
 } from '../core/service.js'
 import { type BackupRecovery, openWithRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
@@ -204,11 +204,11 @@ async function start(): Promise<void> {
     const options: ServiceOptions = {
       onDiagnostic: diagnosticLog(join(app.getPath('logs'), 'main.log'))
     }
-    const opened = await openWithRecovery(
-      () => createService(options),
-      askRestore,
-      statePathsFor(options)
-    )
+    const statePath = statePathFor(options)
+    const opened = await openWithRecovery(() => createService(options), askRestore, {
+      statePath,
+      stateBackupPath: backupFileOf(statePath)
+    })
     if (opened === null) {
       await lock.release()
       app.quit()

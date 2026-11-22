@@ -58,15 +58,6 @@ export function stateFile(root: string = rootDir()): string {
   return join(root, 'state.json')
 }
 
-/**
- * Temporary file used for atomic state writes.
- * Content is written here, then renamed, so a crash cannot leave a
- * truncated `state.json` behind (§11.2).
- */
-export function stateTempFile(root: string = rootDir()): string {
-  return join(root, 'state.json.tmp')
-}
-
 /** A moment as it can sit in a file name: no `:` and no `.`. */
 export function fileStamp(at: Date): string {
   return at.toISOString().replaceAll(/[:.]/gu, '-')
@@ -77,7 +68,6 @@ export function backupFileOf(statePath: string): string {
   return `${statePath}.bak`
 }
 
-/** Where every project's own directory sits: `~/.octopus/projects`. */
 /**
  * Where an image pasted into the composer is written.
  *

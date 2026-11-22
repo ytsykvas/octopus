@@ -47,7 +47,7 @@ export {
 export { PROJECT_COLORS, type ProjectColor } from './colors.js'
 export { PROJECT_ICONS, type ProjectIcon } from './icons.js'
 import { withoutDefaults } from './patchSchema.js'
-import { backupFileOf, insideWorktree, stateFile, stateTempFile } from './paths.js'
+import { backupFileOf, insideWorktree, stateFile } from './paths.js'
 import { readJsonFile, writeJsonFile } from './persist.js'
 
 /*
@@ -470,14 +470,9 @@ export function migrate(state: StoredState): State {
   return { ...state, projects, workspaces }
 }
 
-/** Writes the state, keeping the one it replaces at `backupPath` — beside `filePath` unless given. */
-export async function saveState(
-  state: State,
-  filePath: string = stateFile(),
-  tempPath: string = stateTempFile(),
-  backupPath = backupFileOf(filePath)
-): Promise<void> {
-  await writeJsonFile(filePath, StateSchema, state, { tempPath, backupPath })
+/** Writes the state, keeping the one it replaces at `backupFileOf(filePath)`. */
+export async function saveState(state: State, filePath: string = stateFile()): Promise<void> {
+  await writeJsonFile(filePath, StateSchema, state, { backupPath: backupFileOf(filePath) })
 }
 
 export function findProject(state: State, projectId: string): Project | undefined {

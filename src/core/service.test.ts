@@ -58,7 +58,7 @@ import {
   type ListSessionsFn,
   sameWindows,
   SHUTDOWN_GRACE_MS,
-  statePathsFor,
+  statePathFor,
   type OctopusService,
   type ServiceOptions,
   type UsageOutcome,
@@ -145,7 +145,6 @@ async function initRepo(path: string): Promise<void> {
 function paths(root: string): Parameters<typeof createService>[0] {
   return {
     stateFilePath: join(root, 'state.json'),
-    stateTempFilePath: join(root, 'state.json.tmp'),
     configFilePath: join(root, 'config.json'),
     // Without this, worktrees would land in the real ~/.octopus.
     dataRoot: join(root, 'data'),
@@ -235,38 +234,18 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
 })
 
-describe('statePathsFor', () => {
-  it('puts everything in the data root when given nothing', () => {
+describe('statePathFor', () => {
+  it('puts the state in the data root when given nothing', () => {
     vi.stubEnv('OCTOPUS_DATA_DIR', dir)
     try {
-      expect(statePathsFor()).toEqual({
-        statePath: join(dir, 'state.json'),
-        stateTempPath: join(dir, 'state.json.tmp'),
-        stateBackupPath: join(dir, 'state.json.bak')
-      })
+      expect(statePathFor()).toBe(join(dir, 'state.json'))
     } finally {
       vi.unstubAllEnvs()
     }
   })
 
-  it('keeps the backup beside a state pointed elsewhere', () => {
-    expect(statePathsFor({ stateFilePath: join(dir, 'copy.json') }).stateBackupPath).toBe(
-      join(dir, 'copy.json.bak')
-    )
-  })
-
-  it('takes every path it is given', () => {
-    expect(
-      statePathsFor({
-        stateFilePath: join(dir, 's.json'),
-        stateTempFilePath: join(dir, 's.tmp'),
-        stateBackupFilePath: join(dir, 's.bak')
-      })
-    ).toEqual({
-      statePath: join(dir, 's.json'),
-      stateTempPath: join(dir, 's.tmp'),
-      stateBackupPath: join(dir, 's.bak')
-    })
+  it('takes the path it is given', () => {
+    expect(statePathFor({ stateFilePath: join(dir, 's.json') })).toBe(join(dir, 's.json'))
   })
 })
 
@@ -2104,7 +2083,6 @@ describe('workspaces', () => {
     // into the real home directory.
     const service = await createService({
       stateFilePath: join(dir, 'plain-state.json'),
-      stateTempFilePath: join(dir, 'plain-state.json.tmp'),
       configFilePath: join(dir, 'plain-config.json')
     })
 
@@ -2248,18 +2226,6 @@ describe('projects', () => {
     await service.updateProjectById(project.id, { name: 'renamed' })
 
     const backup = await loadState(join(dir, 'state.json.bak'))
-    expect(backup.projects.map((one) => one.name)).toEqual(['planner'])
-  })
-
-  it('keeps the backup where it is told to', async () => {
-    const backupPath = join(dir, 'elsewhere.bak')
-    const told = await createService({ ...paths(dir), stateBackupFilePath: backupPath })
-    const repo = join(dir, 'planner')
-    await initRepo(repo)
-    const project = await told.addProjectFromPath(repo)
-    await told.updateProjectById(project.id, { name: 'renamed' })
-
-    const backup = await loadState(backupPath)
     expect(backup.projects.map((one) => one.name)).toEqual(['planner'])
   })
 

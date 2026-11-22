@@ -23,7 +23,7 @@ let backupPath: string
 
 /** A backup holding two projects, written the way a save writes one. */
 async function writeGoodBackup(): Promise<void> {
-  await saveState(TWO, backupPath, `${backupPath}.tmp`)
+  await saveState(TWO, backupPath)
 }
 
 beforeEach(async () => {

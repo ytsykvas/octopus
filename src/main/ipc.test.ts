@@ -235,7 +235,6 @@ async function createWorkspace(projectId: string): Promise<Workspace> {
 function servicePaths(root: string): ServiceOptions {
   return {
     stateFilePath: join(root, 'state.json'),
-    stateTempFilePath: join(root, 'state.json.tmp'),
     configFilePath: join(root, 'config.json'),
     // Without this, worktrees would land in the real ~/.octopus.
     dataRoot: join(root, 'data')

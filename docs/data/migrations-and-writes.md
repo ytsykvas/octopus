@@ -104,9 +104,11 @@ A filesystem without hard links (`EPERM`, `ENOTSUP`) gets a copy instead. A
 first run has nothing to link and writes no backup. A backup that fails stops
 the write: the new state never lands without the old one kept.
 
-The path follows the state's own — `<state>.bak`, the one rule `backupFileOf` in
-`paths.ts` holds — so a test or a copy that points the state elsewhere never
-writes a backup into the real root. Saves are serialised (`commit`), so two
+Both companions follow the state's own path — `<state>.tmp` for the write and
+`<state>.bak`, the one rule `backupFileOf` in `paths.ts` holds, for the backup —
+with no option to put either elsewhere, so a test or a copy that points the
+state elsewhere never writes into the real root, and the hard link never crosses
+a filesystem. Saves are serialised (`commit`), so two
 never race for the `.bak`, and the data-root lock covers it with the rest.
 `config.json` and the transcripts get no backup.
 
