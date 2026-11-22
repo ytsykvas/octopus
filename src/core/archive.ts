@@ -118,16 +118,20 @@ export async function spawnInGroup(
       }, graceMs).unref()
     }, options.timeout)
 
-    stderr.on('data', (chunk: Buffer) => {
+    const collect = (chunk: Buffer): void => {
       tail = Buffer.concat([tail, chunk])
       if (tail.length > ARCHIVE_OUTPUT_TAIL_BYTES) tail = tail.subarray(-ARCHIVE_OUTPUT_TAIL_BYTES)
-    })
+    }
+    stderr.on('data', collect)
 
     const settle = (error: Error | null): void => {
       if (settled) return
       settled = true
       clearTimeout(deadline)
-      stderr.destroy()
+      // Read on rather than destroyed: a step the script left running would die of SIGPIPE
+      // on its next write.
+      stderr.off('data', collect)
+      stderr.resume()
       if (error === null) resolve()
       else reject(error)
     }

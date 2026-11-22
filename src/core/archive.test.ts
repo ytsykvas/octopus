@@ -270,6 +270,20 @@ describe('spawnInGroup', () => {
     }
   })
 
+  it('lets a step the script left running write to stderr and finish', async () => {
+    const file = await script('(sleep 0.5; echo late >&2; echo done > out) & exit 0')
+
+    await expect(
+      spawnInGroup(file, { cwd: dir, env: {}, timeout: 10_000 })
+    ).resolves.toBeUndefined()
+    await vi.waitFor(
+      async () => {
+        await expect(readFile(join(dir, 'out'), 'utf8')).resolves.toBe('done\n')
+      },
+      { timeout: 5_000 }
+    )
+  })
+
   it('says the directory was gone rather than blaming the script', async () => {
     const file = await script('exit 0')
     const spawn = vi.fn()
