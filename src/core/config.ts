@@ -130,6 +130,14 @@ export const ConfigSchema = z.object({
    * loads; an empty string means "ask every time".
    */
   cloneDirectory: z.string().default(''),
+  /**
+   * The folder the board reads tasks from: one subfolder per project, one per
+   * column inside it. Usually one a sync service keeps on every Mac.
+   *
+   * Defaulted so a config from an older build still loads; empty means "not
+   * chosen yet", which the board answers with a way to choose it.
+   */
+  boardFolder: z.string().default(''),
 
   settingSources: SettingSourcesModeSchema,
 
@@ -462,6 +470,7 @@ export function createDefaultConfig(
     theme: 'system',
     language: 'en',
     cloneDirectory: '',
+    boardFolder: '',
     rightPanelWidth: 360,
     rightPanelOpen: true,
     statusBarOpen: true,
