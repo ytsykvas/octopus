@@ -444,6 +444,7 @@ function defaultConfig(): Config {
     version: 2 as const,
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
+    boardFolder: '',
     settingSources: 'none' as const,
     workingMode: 'default' as const,
     planExecutionMode: 'auto' as const,

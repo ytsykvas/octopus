@@ -24,6 +24,7 @@ function config(overrides: Partial<Config> = {}): Config {
     version: 2,
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
+    boardFolder: '',
     settingSources: 'none',
     agentProgressSummaries: true,
     workingMode: 'default',

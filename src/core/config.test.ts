@@ -32,6 +32,7 @@ const SENT_BY_THE_WINDOW = {
   notificationSoundId: 'bell',
   branchPrefix: 'ytsykvas',
   cloneDirectory: '/tmp/clones',
+  boardFolder: '/Users/someone/Desktop/tasks',
   settingSources: 'project',
   agentProgressSummaries: false,
   workingMode: 'acceptEdits',
@@ -73,6 +74,10 @@ describe('createDefaultConfig', () => {
 
   it('keeps the branch prefix it was given', () => {
     expect(createDefaultConfig('ytsykvas', NOW, () => UUID).branchPrefix).toBe('ytsykvas')
+  })
+
+  it('leaves the board folder unset until one is chosen', () => {
+    expect(createDefaultConfig('ytsykvas', NOW, () => UUID).boardFolder).toBe('')
   })
 
   it('records deviceId and install time — hooks for future licensing', () => {
@@ -170,6 +175,7 @@ describe('loadConfig', () => {
     expect(config.notificationSoundId).toBe('chime')
     expect(config.rightPanelTab).toBe('diff')
     expect(config.sidebarWidth).toBe(240)
+    expect(config.boardFolder).toBe('')
     expect(config.dismissedTips).toEqual([])
     expect(config.branchPrefix).toBe('ytsykvas')
     // Absent, so the default answers for it.
@@ -307,6 +313,17 @@ describe('saveConfig', () => {
     const config = createDefaultConfig('ytsykvas', NOW, () => UUID)
     await saveConfig({ ...config, theme: 'dark' }, file)
     await expect(loadConfig(file)).resolves.toMatchObject({ theme: 'dark' })
+  })
+
+  it('keeps the board folder across a save and a load', async () => {
+    await saveConfig(
+      {
+        ...createDefaultConfig('ytsykvas', NOW, () => UUID),
+        boardFolder: '/Users/someone/Desktop/tasks'
+      },
+      file
+    )
+    expect((await loadConfig(file)).boardFolder).toBe('/Users/someone/Desktop/tasks')
   })
 
   it('refuses to save a config with an empty branch prefix', async () => {
