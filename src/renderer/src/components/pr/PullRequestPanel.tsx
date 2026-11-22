@@ -10,7 +10,7 @@ import {
 } from '@core/pullRequestShapes.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
-import type { Failure } from '../../../../preload/index.js'
+import type { Failure, Result } from '../../../../preload/index.js'
 import { useFocusKeeper } from '../../hooks/useFocusKeeper.js'
 import { usePendingIn } from '../../hooks/usePendingIn.js'
 import { usePullRequest } from '../../hooks/usePullRequest.js'
@@ -284,53 +284,58 @@ export function PullRequestPanel({
     })()
   }
 
+  /**
+   * Runs a press: reports a failure, then `then` either way — reading again is what
+   * the pane believes, not what the call answered.
+   */
+  const act = (
+    action: PanelAction,
+    call: () => Promise<Result<unknown>>,
+    then: () => void
+  ): void => {
+    pending.start(workspace.id, action)
+    void (async () => {
+      const result = await call()
+      pending.finish(workspace.id, action)
+      if (!result.ok) report(result)
+      then()
+    })()
+  }
+
+  // With a merge queue `gh` queues the request rather than merging it, so success is
+  // not proof of a merge — and a refusal it could not name is explained by the fresh state.
   const merge = (number: number, method: MergeMethod): void => {
-    pending.start(workspace.id, 'merge')
-    void (async () => {
-      const result = await window.octopus.workspaces.mergePullRequest(workspace.id, number, method)
-      pending.finish(workspace.id, 'merge')
-      if (!result.ok) report(result)
-
-      // Read again either way. With a merge queue `gh` queues the request rather
-      // than merging it, so success is not proof of a merge — and a refusal it
-      // could not name is explained by the fresh state.
-      readAgain(refresh, detail.refresh)
-      onRequestChanged()
-    })()
+    act(
+      'merge',
+      () => window.octopus.workspaces.mergePullRequest(workspace.id, number, method),
+      () => {
+        readAgain(refresh, detail.refresh)
+        onRequestChanged()
+      }
+    )
   }
 
-  /*
-   * Closing, which is the other way a request ends.
-   *
-   * The same shape as merging above, and for the same reason: reading again is
-   * what the pane believes, not what the call answered.
-   */
   const close = (number: number): void => {
-    pending.start(workspace.id, 'close')
-    void (async () => {
-      const result = await window.octopus.workspaces.closePullRequest(workspace.id, number)
-      pending.finish(workspace.id, 'close')
-      if (!result.ok) report(result)
-
-      readAgain(refresh, detail.refresh)
-      onRequestChanged()
-    })()
+    act(
+      'close',
+      () => window.octopus.workspaces.closePullRequest(workspace.id, number),
+      () => {
+        readAgain(refresh, detail.refresh)
+        onRequestChanged()
+      }
+    )
   }
 
-  /*
-   * Restarts CI, the same shape as closing: the fresh reading is what the pane
-   * believes, and the list's mark goes back to spinning along with the rows.
-   */
+  // The list's mark goes back to spinning along with the rows.
   const rerun = (number: number, scope: RerunScope): void => {
-    pending.start(workspace.id, `rerun:${scope}`)
-    void (async () => {
-      const result = await window.octopus.workspaces.rerunChecks(workspace.id, number, scope)
-      pending.finish(workspace.id, `rerun:${scope}`)
-      if (!result.ok) report(result)
-
-      readAgain(detail.refresh)
-      onRequestChanged()
-    })()
+    act(
+      `rerun:${scope}`,
+      () => window.octopus.workspaces.rerunChecks(workspace.id, number, scope),
+      () => {
+        readAgain(detail.refresh)
+        onRequestChanged()
+      }
+    )
   }
 
   const commitAndPush = (message: string): void => {
@@ -351,49 +356,37 @@ export function PullRequestPanel({
     })()
   }
 
-  /*
-   * Sends what is committed and nothing else.
-   *
-   * The same shape as the two above: read again either way, because what the
-   * pane believes is the fresh reading rather than what the call answered. The
-   * request's detail too — pushing is what starts the checks again.
-   */
+  // Sends what is committed and nothing else. The detail too: pushing starts the checks again.
   const push = (): void => {
-    pending.start(workspace.id, 'push')
-    void (async () => {
-      const result = await window.octopus.workspaces.push(workspace.id)
-      pending.finish(workspace.id, 'push')
-      if (!result.ok) report(result)
-
-      readAgain(refresh, detail.refresh)
-    })()
+    act(
+      'push',
+      () => window.octopus.workspaces.push(workspace.id),
+      () => {
+        readAgain(refresh, detail.refresh)
+      }
+    )
   }
 
-  /*
-   * Brings the base in, after a squash left the branch carrying what the base
-   * took as one. Read again either way, as after a push: the count of commits
-   * ahead is what changed, and the fresh reading is what the pane believes.
-   */
+  // After a squash left the branch carrying what the base took as one: the count of
+  // commits ahead is what changes.
   const updateFromBase = (): void => {
-    pending.start(workspace.id, 'update')
-    void (async () => {
-      const result = await window.octopus.workspaces.updateFromBase(workspace.id)
-      pending.finish(workspace.id, 'update')
-      if (!result.ok) report(result)
-
-      readAgain(refresh)
-    })()
+    act(
+      'update',
+      () => window.octopus.workspaces.updateFromBase(workspace.id),
+      () => {
+        readAgain(refresh)
+      }
+    )
   }
 
   const catchUp = (number: number): void => {
-    pending.start(workspace.id, 'update')
-    void (async () => {
-      const result = await window.octopus.workspaces.catchUp(workspace.id, number)
-      pending.finish(workspace.id, 'update')
-      if (!result.ok) report(result)
-
-      readAgain(refresh, detail.refresh)
-    })()
+    act(
+      'update',
+      () => window.octopus.workspaces.catchUp(workspace.id, number),
+      () => {
+        readAgain(refresh, detail.refresh)
+      }
+    )
   }
 
   const attached = new Set(quotes.pending.map((quote) => quote.key))

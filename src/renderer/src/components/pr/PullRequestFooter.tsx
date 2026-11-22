@@ -9,7 +9,7 @@ import { AgentMenu } from './AgentMenu.js'
 import { CommitMessageField } from './CommitMessageField.js'
 import { AttentionLine, FooterLine } from './MergeConditions.js'
 import { MergeMenu } from './MergeMenu.js'
-import type { PromptKind, RequestStatus } from './requestStatus.js'
+import { nextPress, type PromptKind, type RequestStatus } from './requestStatus.js'
 
 interface PullRequestFooterProps {
   readonly status: RequestStatus
@@ -132,13 +132,7 @@ export function PullRequestFooter({
      worktree — an env file git does not ignore included, which committing
      would stage. */
   const pushable = unpushedCommits !== null && unpushedCommits > 0
-  const next = dirty
-    ? 'commit'
-    : pushable
-      ? 'push'
-      : status.merge === 'behind'
-        ? 'catchUp'
-        : 'merge'
+  const next = nextPress({ dirty, pushable, merge: status.merge })
 
   /* An empty field amends, and where the last commit is already on GitHub the
      amended one replaces it there. That is the one consequence of this press

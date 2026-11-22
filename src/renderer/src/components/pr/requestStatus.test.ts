@@ -6,7 +6,13 @@ import type {
   PullRequestDetail
 } from '@core/pullRequestShapes.js'
 
-import { type ChecksVerdict, type MergeVerdict, requestStatus } from './requestStatus.js'
+import {
+  type ChecksVerdict,
+  type MergeVerdict,
+  nextPress,
+  type NextPress,
+  requestStatus
+} from './requestStatus.js'
 
 function detail(overrides: Partial<PullRequestDetail> = {}): PullRequestDetail {
   return {
@@ -317,4 +323,25 @@ describe('the status of a request', () => {
       expect(status.recommendedView).toBe('merge')
     }
   )
+})
+
+describe('the next press', () => {
+  it.each<[string, { dirty: boolean; pushable: boolean; merge: MergeVerdict }, NextPress]>([
+    ['work to commit', { dirty: true, pushable: false, merge: 'ready' }, 'commit'],
+    ['commits to push', { dirty: false, pushable: true, merge: 'ready' }, 'push'],
+    ['a branch behind its base', { dirty: false, pushable: false, merge: 'behind' }, 'catchUp'],
+    ['nothing else', { dirty: false, pushable: false, merge: 'ready' }, 'merge'],
+    [
+      'work to commit and commits to push',
+      { dirty: true, pushable: true, merge: 'behind' },
+      'commit'
+    ],
+    [
+      'commits to push on a branch behind its base',
+      { dirty: false, pushable: true, merge: 'behind' },
+      'push'
+    ]
+  ])('for %s', (_case, state, press) => {
+    expect(nextPress(state)).toBe(press)
+  })
 })

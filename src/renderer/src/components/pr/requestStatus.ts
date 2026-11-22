@@ -217,6 +217,19 @@ export function requestStatus(
   }
 }
 
+/** The press the footer offers as the next step: the work here first, then what GitHub asks for. */
+export type NextPress = 'commit' | 'push' | 'catchUp' | 'merge'
+
+export function nextPress(state: {
+  readonly dirty: boolean
+  readonly pushable: boolean
+  readonly merge: MergeVerdict
+}): NextPress {
+  if (state.dirty) return 'commit'
+  if (state.pushable) return 'push'
+  return state.merge === 'behind' ? 'catchUp' : 'merge'
+}
+
 /**
  * Whether anybody has reviewed this.
  *
