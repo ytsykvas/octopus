@@ -693,10 +693,9 @@ the app never sees a token (§10.9).
   **A check that is red, or still running, disables the button.** Neither is a
   refusal GitHub would make — it merges happily over a check nobody marked
   required. Both are policies the app keeps, they are hard, and the way past them
-  is to fix the check, wait,
-  or merge in the browser — where nobody does it by reflex. A repository that
-  runs no checks at all is unaffected: waiting for checks that never arrive
-  would leave it unmergeable from here for ever.
+  is to fix the check, wait, or merge in the browser — where nobody does it by
+  reflex. A repository that runs no checks at all is unaffected: waiting for
+  checks that never arrive would leave it unmergeable from here for ever.
 - **Committing and pushing**, under a message typed here, without which the loop
   ends in the terminal. The message used to be fixed at "Answer the review", so
   a branch worked on this way ended with four identical commits describing a

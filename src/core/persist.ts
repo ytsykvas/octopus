@@ -123,7 +123,7 @@ export async function readJsonFile<T>(
 /**
  * The mode a replacement keeps, as writing over the file did: a user's `chmod 600` stays.
  * Without setuid and the like, as an editor saving a file drops them. A path with nothing
- * readable there has no mode to keep, and the write that follows says what is wrong with it.
+ * there to stat has no mode to keep, and the write that follows says what is wrong with it.
  */
 async function modeToKeep(filePath: string): Promise<number | undefined> {
   try {

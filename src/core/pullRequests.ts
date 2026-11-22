@@ -1189,19 +1189,6 @@ async function asked(run: () => Promise<string>): Promise<string> {
   }
 }
 
-/**
- * An answer that is JSON and is not what was asked for.
- *
- * `safeParse` rather than `parse`, and the difference is the whole point: a
- * bare `parse` raises a `ZodError`, which is not one of the classes the bridge
- * translates — so it reached the pane whose whole job is explaining GitHub as a
- * serialised array of issue objects, in English, in one unwrapped paragraph.
- * What the reader can do about it is the same either way, so it says the same
- * thing an unreadable answer says.
- *
- * `readBranchPullRequests` above already does this by hand; this is that, made
- * reusable, because three more call sites needed it.
- */
 /** `gh pr view` asked for exactly the fields `schema` reads, so the two cannot drift apart. */
 async function viewRequest<T>(
   number: number,
@@ -1215,6 +1202,19 @@ async function viewRequest<T>(
   )
 }
 
+/**
+ * An answer that is JSON and is not what was asked for.
+ *
+ * `safeParse` rather than `parse`, and the difference is the whole point: a
+ * bare `parse` raises a `ZodError`, which is not one of the classes the bridge
+ * translates — so it reached the pane whose whole job is explaining GitHub as a
+ * serialised array of issue objects, in English, in one unwrapped paragraph.
+ * What the reader can do about it is the same either way, so it says the same
+ * thing an unreadable answer says.
+ *
+ * `readBranchPullRequests` above already does this by hand; this is that, made
+ * reusable, because three more call sites needed it.
+ */
 function shaped<T>(schema: z.ZodType<T>, payload: unknown): T {
   const result = schema.safeParse(payload)
   if (!result.success) {

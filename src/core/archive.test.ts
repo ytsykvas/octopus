@@ -14,9 +14,9 @@ import {
   spawnInGroup,
   type SpawnInGroupDeps
 } from './archive.js'
+import type { ResolvedScript } from './repoSource.js'
 
 type Spawn = NonNullable<SpawnInGroupDeps['spawn']>
-import type { ResolvedScript } from './repoSource.js'
 
 const values = {
   rootPath: '/Users/test/planner',
@@ -278,6 +278,20 @@ describe('spawnInGroup', () => {
       },
       { timeout: 5_000 }
     )
+  })
+
+  it('takes an error on stderr after it settled quietly', async () => {
+    const file = await script('exit 0')
+    let pipe: PassThrough | undefined
+    const spawn = fakeSpawn((child, stderr) => {
+      pipe = stderr
+      setImmediate(() => {
+        child.emit('exit', 0, null)
+      })
+    })
+
+    await expect(spawnInGroup(file, options(), { spawn, drainMs: 10 })).resolves.toBeUndefined()
+    expect(() => pipe?.emit('error', new Error('EPIPE'))).not.toThrow()
   })
 
   it('says the directory was gone rather than blaming the script', async () => {

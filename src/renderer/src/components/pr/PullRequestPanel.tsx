@@ -302,16 +302,19 @@ export function PullRequestPanel({
     })()
   }
 
+  /** After a request ends, or may have: the pane, the detail, and the list's mark. */
+  const readEverything = (): void => {
+    readAgain(refresh, detail.refresh)
+    onRequestChanged()
+  }
+
   // With a merge queue `gh` queues the request rather than merging it, so success is
   // not proof of a merge — and a refusal it could not name is explained by the fresh state.
   const merge = (number: number, method: MergeMethod): void => {
     act(
       'merge',
       () => window.octopus.workspaces.mergePullRequest(workspace.id, number, method),
-      () => {
-        readAgain(refresh, detail.refresh)
-        onRequestChanged()
-      }
+      readEverything
     )
   }
 
@@ -319,10 +322,7 @@ export function PullRequestPanel({
     act(
       'close',
       () => window.octopus.workspaces.closePullRequest(workspace.id, number),
-      () => {
-        readAgain(refresh, detail.refresh)
-        onRequestChanged()
-      }
+      readEverything
     )
   }
 

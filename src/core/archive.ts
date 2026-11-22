@@ -136,6 +136,8 @@ export async function spawnInGroup(
       // on its next write.
       stderr.off('data', collect)
       stderr.resume()
+      // Nobody reads it any more: an error on it now is not worth an unhandled event in main.
+      stderr.on('error', () => undefined)
       if (error === null) resolve()
       else reject(error)
     }

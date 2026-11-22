@@ -459,7 +459,17 @@ describe('writeTextFile', () => {
     const path = join(dir, 'notes.txt')
     await writeTextFile(path, 'first\n')
 
-    await expect(modeOf(path)).resolves.toBe(0o644)
+    await expect(modeOf(path)).resolves.toBe(0o666 & ~0o022)
+  })
+
+  it('drops setuid from the mode it keeps', async () => {
+    const path = join(dir, 'tool')
+    await writeFile(path, 'first\n', 'utf8')
+    await chmod(path, 0o4755)
+
+    await writeTextFile(path, 'second\n')
+
+    expect((await stat(path)).mode & 0o7777).toBe(0o755)
   })
 
   it('leaves no temporary file behind after a successful write', async () => {
