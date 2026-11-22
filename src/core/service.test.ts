@@ -7884,12 +7884,12 @@ describe('the agent chat', () => {
   })
 
   describe('a session at rest', () => {
-    async function resting(): Promise<{
+    async function resting(options = SOON): Promise<{
       service: OctopusService
       workspaceId: string
       chatId: string
     }> {
-      const { service, workspaceId } = await withWorkspace(SOON)
+      const { service, workspaceId } = await withWorkspace(options)
       const chat = await service.openChat(workspaceId)
       await service.sendToChat(chat.id, 'work')
       agent().emit(initMessage)
@@ -8000,11 +8000,13 @@ describe('the agent chat', () => {
       expect(agents[0]?.closed()).toBe(0)
     })
 
+    // Each wait is under the rest and both together are over it; the room either side
+    // is what a loaded machine's timers need.
     it('rests from a side question asked of it, as from a message', async () => {
-      const { service, chatId } = await resting()
-      await after(100)
+      const { service, chatId } = await resting({ ...SOON, idleReleaseMs: 500 })
+      await after(350)
       await service.askSideQuestion(chatId, 'what is x?', [])
-      await after(100)
+      await after(350)
 
       expect(agents[0]?.closed()).toBe(0)
       await letGo()
