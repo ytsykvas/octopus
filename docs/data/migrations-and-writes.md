@@ -119,8 +119,8 @@ Quit, with when the copy was saved and how many projects it holds. Restore
 copies the damaged file aside as `state.json.broken-<time>`, writes the backup
 over `state.json` atomically and starts again; a second failure ends in the same
 error box as before, and a restore that fails names both failures. Quit quits —
-no second box saying the app could not start, since the user just chose that. Without a good backup the start fails exactly as it always
-has. The damaged file is **copied** aside rather than renamed: until the backup
+no second box saying the app could not start, since the user just chose that.
+Without a good backup the start fails with the original error. The damaged file is **copied** aside rather than renamed: until the backup
 has landed `state.json` stays where it is, because a moment with no file at all
 is a moment in which a start reads "first run" — the silent reset this whole
 section refuses. The decisions are in `openWithRecovery` (`stateRecovery.ts`),

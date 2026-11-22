@@ -4,7 +4,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell 
 
 import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
-import { backupFileOf, electronUserDataDir, rootDir } from '../core/paths.js'
+import { electronUserDataDir, rootDir } from '../core/paths.js'
 import { diagnosticLog } from '../core/diagnostics.js'
 import {
   createService,
@@ -144,8 +144,7 @@ function askRestore(recovery: BackupRecovery, error: unknown): boolean {
     detail:
       `${describeError(error)}\n\n` +
       `A copy from ${recovery.savedAt.toLocaleString()} with ${String(recovery.projects)} ` +
-      'project(s) is beside it. Restoring keeps the damaged file next to it as ' +
-      'state.json.broken-….'
+      'project(s) is beside it. Restoring keeps the damaged file next to it.'
   })
   return response === 0
 }
@@ -204,11 +203,11 @@ async function start(): Promise<void> {
     const options: ServiceOptions = {
       onDiagnostic: diagnosticLog(join(app.getPath('logs'), 'main.log'))
     }
-    const statePath = statePathFor(options)
-    const opened = await openWithRecovery(() => createService(options), askRestore, {
-      statePath,
-      stateBackupPath: backupFileOf(statePath)
-    })
+    const opened = await openWithRecovery(
+      () => createService(options),
+      askRestore,
+      statePathFor(options)
+    )
     if (opened === null) {
       await lock.release()
       app.quit()
