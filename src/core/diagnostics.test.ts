@@ -95,6 +95,16 @@ describe('the diagnostic log', () => {
     expect(await readdir(dir)).toEqual(['main.log'])
   })
 
+  it('gives up quietly when a leftover in the way cannot be removed', async () => {
+    const file = join(dir, 'main.log')
+    const lines = Array.from({ length: 150_000 }, (_, index) => `line ${String(index)}\n`)
+    await writeFile(file, lines.join(''), 'utf8')
+    await mkdir(join(dir, 'main.log.tmp', 'inside'), { recursive: true })
+
+    expect(() => diagnosticLog(file, () => undefined)).not.toThrow()
+    expect((await stat(file)).size).toBeGreaterThan(1024 * 1024)
+  })
+
   it('leaves a log under a megabyte as it is', async () => {
     const file = join(dir, 'main.log')
     await writeFile(file, 'old\n', 'utf8')

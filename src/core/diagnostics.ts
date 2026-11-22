@@ -57,7 +57,11 @@ function trim(file: string, keepBytes: number): number {
     renameSync(`${file}.tmp`, file)
     return kept.length
   } catch {
-    rmSync(`${file}.tmp`, { force: true })
+    try {
+      rmSync(`${file}.tmp`, { force: true })
+    } catch {
+      // The log is a convenience, never a reason for the app not to start.
+    }
     return 0
   }
 }
