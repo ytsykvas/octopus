@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -138,6 +138,25 @@ describe('load and save', () => {
 
     await expect(loadState(`${file}.bak`)).resolves.toEqual(withProject)
     await expect(loadState(file)).resolves.toEqual(state)
+  })
+
+  it('stops the save when the backup cannot be kept and nothing takes the failure', async () => {
+    await saveState(withProject, file)
+    await mkdir(`${file}.bak`)
+
+    await expect(saveState(EMPTY_STATE, file)).rejects.toThrow()
+    await expect(loadState(file)).resolves.toEqual(withProject)
+  })
+
+  it('saves on when the backup cannot be kept and the failure is taken', async () => {
+    await saveState(withProject, file)
+    await mkdir(`${file}.bak`)
+    const failures: unknown[] = []
+
+    await saveState(EMPTY_STATE, file, (error) => failures.push(error))
+
+    await expect(loadState(file)).resolves.toEqual(EMPTY_STATE)
+    expect(failures).toHaveLength(1)
   })
 
   it('saves into the data root when given no path', async () => {

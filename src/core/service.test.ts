@@ -2229,6 +2229,24 @@ describe('projects', () => {
     expect(backup.projects.map((one) => one.name)).toEqual(['planner'])
   })
 
+  it('saves a change though the backup cannot be kept, and says so', async () => {
+    const diagnosed: unknown[] = []
+    const told = await createService({
+      ...paths(dir),
+      onDiagnostic: (error) => diagnosed.push(error)
+    })
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    const project = await told.addProjectFromPath(repo)
+    await mkdir(join(dir, 'state.json.bak', 'taken'), { recursive: true })
+
+    await told.updateProjectById(project.id, { name: 'renamed' })
+
+    const saved = await loadState(join(dir, 'state.json'))
+    expect(saved.projects.map((one) => one.name)).toEqual(['renamed'])
+    expect(diagnosed).toHaveLength(1)
+  })
+
   it('shows an added project in the list', async () => {
     const repo = join(dir, 'planner')
     await initRepo(repo)
@@ -5216,10 +5234,9 @@ describe('the port a workspace serves on', () => {
     await rm(join(dir, 'state.json'))
     await mkdir(join(dir, 'state.json'))
 
-    // Refused at the backup, before the rename gets its turn: a directory takes
-    // no hard link (EPERM) and no copy (ENOTSUP).
+    // The backup's failure is only reported; the rename cannot put a file over a directory.
     await expect(service.createWorkspaceIn(project?.id ?? '')).rejects.toMatchObject({
-      code: 'ENOTSUP'
+      code: 'EISDIR'
     })
 
     await rm(join(dir, 'state.json'), { recursive: true })

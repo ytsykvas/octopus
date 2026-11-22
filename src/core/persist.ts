@@ -210,7 +210,8 @@ export async function keepBackup(
  * data on disk that cannot be read back.
  *
  * With `backupPath`, the version being replaced stays there (`keepBackup`), taken after
- * the new contents are synced and before they land — a backup that fails stops the write.
+ * the new contents are synced and before they land — a backup that fails stops the write,
+ * unless `onBackupFailed` takes it: then the older backup stays and the write goes on.
  */
 export async function writeJsonFile<T>(
   filePath: string,
@@ -218,8 +219,13 @@ export async function writeJsonFile<T>(
   value: T,
   {
     tempPath = `${filePath}.tmp`,
-    backupPath
-  }: { readonly tempPath?: string; readonly backupPath?: string } = {}
+    backupPath,
+    onBackupFailed
+  }: {
+    readonly tempPath?: string
+    readonly backupPath?: string
+    readonly onBackupFailed?: (error: unknown) => void
+  } = {}
 ): Promise<void> {
   const result = schema.safeParse(value)
   if (!result.success) {
@@ -237,6 +243,13 @@ export async function writeJsonFile<T>(
     tempPath,
     filePath,
     `${JSON.stringify(result.data, null, 2)}\n`,
-    backupPath === undefined ? {} : { beforeRename: () => keepBackup(filePath, backupPath) }
+    backupPath === undefined
+      ? {}
+      : {
+          beforeRename: () =>
+            onBackupFailed === undefined
+              ? keepBackup(filePath, backupPath)
+              : keepBackup(filePath, backupPath).catch(onBackupFailed)
+        }
   )
 }

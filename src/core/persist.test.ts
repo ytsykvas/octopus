@@ -253,6 +253,27 @@ describe('writeJsonFile', () => {
     })
     expect(await temporaries()).toEqual([])
   })
+
+  it('writes on when the backup fails and onBackupFailed takes it', async () => {
+    await writeJsonFile(file, Schema, { name: 'first', count: 1 })
+    const backup = join(dir, 'taken')
+    await mkdir(backup)
+    const failures: unknown[] = []
+
+    await writeJsonFile(
+      file,
+      Schema,
+      { name: 'second', count: 2 },
+      { backupPath: backup, onBackupFailed: (error) => failures.push(error) }
+    )
+
+    await expect(readJsonFile(file, Schema, FALLBACK)).resolves.toEqual({
+      name: 'second',
+      count: 2
+    })
+    expect(failures).toHaveLength(1)
+    expect((await stat(backup)).isDirectory()).toBe(true)
+  })
 })
 
 describe('keepBackup', () => {

@@ -470,9 +470,19 @@ export function migrate(state: StoredState): State {
   return { ...state, projects, workspaces }
 }
 
-/** Writes the state, keeping the one it replaces at `backupFileOf(filePath)`. */
-export async function saveState(state: State, filePath: string = stateFile()): Promise<void> {
-  await writeJsonFile(filePath, StateSchema, state, { backupPath: backupFileOf(filePath) })
+/**
+ * Writes the state, keeping the one it replaces at `backupFileOf(filePath)`. A backup
+ * that fails stops the write unless `onBackupFailed` takes it.
+ */
+export async function saveState(
+  state: State,
+  filePath: string = stateFile(),
+  onBackupFailed?: (error: unknown) => void
+): Promise<void> {
+  await writeJsonFile(filePath, StateSchema, state, {
+    backupPath: backupFileOf(filePath),
+    ...(onBackupFailed === undefined ? {} : { onBackupFailed })
+  })
 }
 
 export function findProject(state: State, projectId: string): Project | undefined {

@@ -2382,7 +2382,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return stateWrites(async () => {
       const next = change(state)
       if (next === state) return
-      await saveState(next, statePath)
+      // One backup behind is a smaller loss than no save at all.
+      await saveState(next, statePath, onDiagnostic)
       const moved = next.projects !== state.projects
       state = next
       // Added or removed is what matters, and a write that leaves the list

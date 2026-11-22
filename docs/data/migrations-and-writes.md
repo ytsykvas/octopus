@@ -101,8 +101,9 @@ failure in between leaves it as it was. A link copies nothing, so it
 costs the same whatever the file's size, and once the rename puts a new inode at
 `state.json` the old one — synced when it was written — lives on under `.bak`.
 A filesystem without hard links (`EPERM`, `ENOTSUP`) gets a copy instead. A
-first run has nothing to link and writes no backup. A backup that fails stops
-the write: the new state never lands without the old one kept.
+first run has nothing to link and writes no backup. A backup that cannot be
+kept goes to the diagnostics log and the save goes on (`onBackupFailed`): the
+older backup stays, and losing every save would be worse than one backup behind.
 
 Both companions follow the state's own path — `<state>.tmp` for the write and
 `<state>.bak`, the one rule `backupFileOf` in `paths.ts` holds, for the backup —
