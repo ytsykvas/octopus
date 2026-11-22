@@ -309,7 +309,7 @@ describe('keepBackup', () => {
     }
   )
 
-  it('passes on any other failure', async () => {
+  it('rethrows any other failure', async () => {
     await writeFile(file, 'old', 'utf8')
 
     await expect(keepBackup(file, `${file}.bak`, refusing('EIO'))).rejects.toMatchObject({
@@ -340,7 +340,7 @@ describe('keepBackup', () => {
     expect(await temporaries()).toEqual([])
   })
 
-  it('passes on a failure that carries no code', async () => {
+  it('rethrows a failure that carries no code', async () => {
     await writeFile(file, 'old', 'utf8')
 
     await expect(

@@ -110,8 +110,8 @@ to GitHub, which decides.
 
 **A branch behind its base is held, and offered the way out.** Branch protection
 that wants a branch up to date with its base makes GitHub answer `BEHIND`, and
-`gh pr merge` then refuses outright — no auto-merge — so a press could only fail
-with GitHub's raw sentence. The verdict is `behind`: Merge is off, the tile reads
+`gh pr merge` then refuses outright, so a press would only be refused with
+GitHub's raw sentence. The verdict is `behind`: Merge is off, the tile reads
 _Out of date_, the line says the base has to come in first, and the footer
 offers _Update from {{base}}_ — the request's own base, `baseRefName` from the
 detail, which a retargeted request no longer shares with the project. That
@@ -125,13 +125,12 @@ and pushes nothing.
 
 The `behind` verdict is ranked after the checks: while one of ours runs,
 GitHub's note is not said, and the verdict must not name a reason the list
-leaves out. A
-conflict is not this case: with commits on the base that clash, GitHub answers
-`CONFLICTING`, and the pane offers the agent's _Resolve conflicts_ prompt; a
-merge that clashes only because the base moved since the last read is undone
-and said, and the next read shows the conflict. Merge pressed anyway — from the
-window header, which reads a slower list — comes back as `requestBehind`, which
-says what to press.
+leaves out. A conflict is not this case: with commits on the base that clash,
+GitHub answers `CONFLICTING`, and the pane offers the agent's _Resolve
+conflicts_ prompt; a merge that clashes only because the base moved since the
+last read is undone and said, and the next read shows the conflict. Merge
+pressed anyway — from the window header, which reads a slower list — comes back
+as `requestBehind`, which says what to press.
 
 **The pane opens on the view that answers the question the request is asking**:
 Checks while one is red or running, Review once there is a review or an open
@@ -207,16 +206,17 @@ terminal's, the one opening a request makes — ends with git rewriting
 `refs/remotes/<remote>/<branch>`, and `remoteRefs.ts` watches `refs/` in the
 project's common git dir for exactly that — the checkout the project points at
 now: one moved to another clone in Project settings is watched there from the
-next sync, and a search for the old one's git dir still under way is dropped. A workspace's branch moving arrives
-as `workspaces:pushed` with the commit it moved to, and the tab reads at once.
-What GitHub says straight after is worse than nothing: for a few seconds it has
-not taken the commit in, and reports the one before with its checks finished —
-which on its own reads as nothing left to wait for. So the detail carries
-`head` (`headRefOid`), and for `PUSH_SETTLE_MS` (90 s) after a push the tab
-reads after 2 s and 3 s, then every 5 s, while GitHub names a different
-commit, has put no check on it yet, or has not worked out mergeability; then it
-is back on the rule above (`nextDelay` in `pullRequestPace.ts`). The window is
-what stops a repository with no CI being read every 5 s for ever.
+next sync, and a search for the old one's git dir still under way is dropped. A
+workspace's branch moving arrives as `workspaces:pushed` with the commit it
+moved to, and the tab reads at once. What GitHub says straight after is worse
+than nothing: for a few seconds it has not taken the commit in, and reports the
+one before with its checks finished — which on its own reads as nothing left to
+wait for. So the detail carries `head` (`headRefOid`), and for `PUSH_SETTLE_MS`
+(90 s) after a push the tab reads after 2 s and 3 s, then every 5 s, while
+GitHub names a different commit, has put no check on it yet, or has not worked
+out mergeability; then it is back on the rule above (`nextDelay` in
+`pullRequestPace.ts`). The window is what stops a repository with no CI being
+read every 5 s for ever.
 
 **And it reads again when a turn ends in the workspace.** A check that has
 _failed_ is not pending, so the poll above stops at exactly the moment a fix is
@@ -398,7 +398,9 @@ before the workspace's own are picked, while `capped` still counts what GitHub
 sent). Merge, Close and Re-run ask again before they act and refuse a fork's
 request as `requestFromFork`, ahead of the branch-name check that would let it
 through. octopus opens its own requests with `--head <branch>`, in the same
-repository, so nothing it made is ever cross-repository.
+repository, so nothing it made is ever cross-repository. A clone of a fork whose
+`gh` default is the parent is not supported: its requests read as
+cross-repository and are left out.
 
 **A request that is no longer open is current only until the branch moves past
 it.** GitHub keeps a branch's newest request as its newest until another is

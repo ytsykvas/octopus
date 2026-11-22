@@ -200,8 +200,8 @@ export async function writeNewFile(filePath: string, bytes: Uint8Array): Promise
  * inode at `filePath`, the old one — already synced when it was written — lives on here.
  * A filesystem without hard links gets a copy instead.
  *
- * Made under `<backup>.tmp` — cleared first; state writes are serialised — and renamed over
- * the old backup, so the old one goes only as the new one takes its place.
+ * Made under `<backup>.tmp` — cleared first; callers serialise writes on the path —
+ * and renamed over the old backup, so the old one goes only as the new one takes its place.
  */
 export async function keepBackup(
   filePath: string,

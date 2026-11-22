@@ -239,8 +239,7 @@ export interface PreparedWorkspace extends CarryReport {
  * Whether a failure means the worktree already has the file.
  *
  * `COPYFILE_EXCL` is how this refuses to overwrite, so `EEXIST` is the success
- * of a second run rather than a failure. The narrowing is the one `persist.ts`
- * and `git.ts` use — `unknown` questioned, never cast.
+ * of a second run rather than a failure.
  */
 function alreadyThere(error: unknown): boolean {
   return codeOf(error) === 'EEXIST'

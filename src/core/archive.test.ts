@@ -291,7 +291,7 @@ describe('spawnInGroup', () => {
     expect(spawn).not.toHaveBeenCalled()
   })
 
-  it('passes on a directory it cannot look at', async () => {
+  it('rethrows a failure to look at the directory', async () => {
     const file = await script('exit 0')
     const spawn = vi.fn()
 
@@ -361,7 +361,7 @@ describe('spawnInGroup', () => {
     )
   })
 
-  it('passes on a script that cannot be started', async () => {
+  it('rethrows a failure to start the script', async () => {
     const file = await script('exit 0', 0o644)
 
     await expect(spawnInGroup(file, options())).rejects.toMatchObject({

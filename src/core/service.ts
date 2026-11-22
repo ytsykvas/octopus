@@ -181,6 +181,7 @@ import {
 import type { GitExec, GitOptions } from './git.js'
 import {
   amendAndPush,
+  catchUpWithBase,
   commitAndPush,
   createPullRequest,
   type GhExec,
@@ -200,8 +201,7 @@ import {
   pushUrl,
   readPullRequest,
   readPullRequestDetail,
-  updateFromBase,
-  catchUpWithBase
+  updateFromBase
 } from './pullRequests.js'
 import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, keptIndexCopies } from './git.js'

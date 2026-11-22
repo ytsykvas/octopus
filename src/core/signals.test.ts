@@ -23,9 +23,12 @@ describe('signalQuietly', () => {
 })
 
 describe('killProcess', () => {
+  /** Above Linux's largest pid_max and macOS's 99998, so no process has it. */
+  const NO_SUCH_PID = 2 ** 22 + 1
+
   it('asks the system, which answers for a process that is not there', () => {
     expect(() => {
-      killProcess(2 ** 22 + 1, 0)
+      killProcess(NO_SUCH_PID, 0)
     }).toThrow()
   })
 })

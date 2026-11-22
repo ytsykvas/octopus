@@ -2681,7 +2681,8 @@ describe('the shape of a request on screen', () => {
     const footer = await nextStep()
     expect(within(footer).getByText(/GitHub will not merge this yet/)).toBeInTheDocument()
     expect(within(footer).queryByText('Ready to merge into main.')).not.toBeInTheDocument()
-    // Still a press: a merge queue takes it.
+    // Still a press: queued where the branch has a merge queue, refused with
+    // GitHub's reason elsewhere.
     expect(within(footer).getByRole('button', { name: 'Merge' })).toBeEnabled()
   })
 

@@ -71,9 +71,10 @@ atomic, because nobody knows the name before the write returns. It goes through
 than one picture silently replacing another.
 
 The rule holds by lint, not by memory: `no-restricted-imports` in
-`eslint.config.js` refuses `writeFile` from `fs/promises` and `writeFileSync`
-from `fs` anywhere in `src/core/` and `src/main/` except `persist.ts` itself,
-`diagnostics.ts` (below) and the tests, which build their fixtures with them.
+`eslint.config.js` refuses `writeFile` from `fs/promises`, and `writeFile`,
+`writeFileSync` and `promises` from `fs`, anywhere in `src/core/` and
+`src/main/` except `persist.ts` itself, `diagnostics.ts` (below) and the tests,
+which build their fixtures with them.
 
 Two writers append rather than replace, and stay outside it on purpose: a
 transcript gains one line per entry (`appendFile` in `transcript.ts`), and the
@@ -114,14 +115,15 @@ never race for the `.bak`, and the data-root lock covers it with the rest.
 
 The backup is offered, never taken silently. When the service fails to start
 because `state.json` itself does not read (`InvalidFileError` on that path) and
-`.bak` parses as a state, `main` asks before any window exists: Restore or
-Quit, with when the copy was saved and how many projects it holds. Restore
-copies the damaged file aside as `state.json.broken-<time>`, writes the backup
-over `state.json` atomically and starts again; a second failure ends in the same
+`.bak` parses as a state, `main` asks before any window exists: Restore or Quit,
+with when the copy was saved and how many projects it holds. Restore copies the
+damaged file aside as `state.json.broken-<time>`, writes the backup over
+`state.json` atomically and starts again; a second failure ends in the same
 error box as before, and a restore that fails names both failures. Quit quits —
 no second box saying the app could not start, since the user just chose that.
-Without a good backup the start fails with the original error. The damaged file is **copied** aside rather than renamed: until the backup
-has landed `state.json` stays where it is, because a moment with no file at all
-is a moment in which a start reads "first run" — the silent reset this whole
-section refuses. The decisions are in `openWithRecovery` (`stateRecovery.ts`),
-which answers `null` for a Quit; `main/index.ts` only shows the question.
+Without a good backup the start fails with the original error. The damaged file
+is **copied** aside rather than renamed: until the backup has landed
+`state.json` stays where it is, because a moment with no file at all is a moment
+in which a start reads "first run" — the silent reset this whole section
+refuses. The decisions are in `openWithRecovery` (`stateRecovery.ts`), which
+answers `null` for a Quit; `main/index.ts` only shows the question.

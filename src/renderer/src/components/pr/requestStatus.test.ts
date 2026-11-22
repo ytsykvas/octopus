@@ -234,11 +234,11 @@ describe('the status of a request', () => {
 
     expect(status.attention).toEqual([{ kind: 'githubNote', note: mergeState }])
     expect(status.merge).toBe(verdict)
-    // A hold is GitHub's to make; a merge queue takes the press.
+    // A hold is GitHub's to make: queued where the branch has a merge queue,
+    // refused with its reason elsewhere.
     expect(status.canMerge).toBe(true)
   })
 
-  // GitHub refuses a branch behind its base outright — `gh` makes no auto-merge of it.
   it('holds the merge for a branch behind its base, and says so', () => {
     const status = requestStatus(detail({ mergeState: 'behind' }), clean)
 
