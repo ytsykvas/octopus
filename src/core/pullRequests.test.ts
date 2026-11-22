@@ -1506,6 +1506,23 @@ describe('bringing the request’s base in', () => {
 
     expect(await onOrigin(branch)).toBe('')
   })
+
+  // GitHub can still say behind on the read right after the push, and the button is pressed again.
+  it('brings nothing and pushes nothing on a second press', async () => {
+    const work = join(dir, 'work')
+    const branch = await branchWithCommit()
+    await run('git', ['checkout', '-q', 'main'], { cwd: work })
+    await commitOn('base.txt')
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: work })
+    await run('git', ['checkout', '-q', branch], { cwd: work })
+    await catchUpWithBase(7, branch, workExec(), workExec(), viewing(branch).gh)
+    const caughtUp = await tipOf(branch)
+
+    await catchUpWithBase(7, branch, workExec(), workExec(), viewing(branch).gh)
+
+    expect(await tipOf(branch)).toBe(caughtUp)
+    expect(await onOrigin(branch)).toContain(caughtUp)
+  })
 })
 
 describe('pushing what is already committed', () => {

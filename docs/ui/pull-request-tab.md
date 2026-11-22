@@ -120,6 +120,8 @@ merges it in the way `updateFromBase` does — undone if it fails, refused over
 uncommitted work — and pushes, as one task in the workspace's `branchWork`
 queue, so a push or a rename cannot land between the merge and the push. The
 request on GitHub then moves and is read again; the header names the same base.
+A read just after the push can still say behind; pressing again merges nothing
+and pushes nothing.
 
 The `behind` verdict is ranked after the checks: while one of ours runs,
 GitHub's note is not said, and the verdict must not name a reason the list
