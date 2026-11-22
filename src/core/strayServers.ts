@@ -23,7 +23,7 @@ import { promisify } from 'node:util'
 import { z } from 'zod'
 
 import { CodedError } from './codedError.js'
-import { killProcess, signalQuietly } from './signals.js'
+import { killProcess, type SendSignal, signalQuietly } from './signals.js'
 
 const run = promisify(execFile)
 
@@ -53,7 +53,7 @@ export type Lsof = (args: readonly string[]) => Promise<string>
 
 export interface StrayDeps {
   readonly lsof: Lsof
-  readonly kill: (pid: number, signal: NodeJS.Signals) => void
+  readonly kill: SendSignal
   readonly sleep: (ms: number) => Promise<void>
 }
 

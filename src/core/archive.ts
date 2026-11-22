@@ -37,16 +37,20 @@ export const ARCHIVE_TIMEOUT_MS = 30_000
 export const ARCHIVE_OUTPUT_TAIL_BYTES = 64 * 1024
 
 /** How long the group has between SIGTERM and SIGKILL once the deadline passes. */
-export const ARCHIVE_KILL_GRACE_MS = 2_000
+const ARCHIVE_KILL_GRACE_MS = 2_000
 
 /** How long an exit waits for the rest of stderr, which a grandchild may hold open for ever. */
-export const ARCHIVE_STDERR_DRAIN_MS = 200
+const ARCHIVE_STDERR_DRAIN_MS = 200
+
+/** Where the script runs, with what, and for how long. */
+export interface ScriptRunOptions {
+  readonly cwd: string
+  readonly env: Record<string, string>
+  readonly timeout: number
+}
 
 /** How the script is run, injected so tests never spawn a shell. */
-export type RunScript = (
-  file: string,
-  options: { cwd: string; env: Record<string, string>; timeout: number }
-) => Promise<unknown>
+export type RunScript = (file: string, options: ScriptRunOptions) => Promise<unknown>
 
 /** What `spawnInGroup` reaches the system through, injected so a test can stand in. */
 export interface SpawnInGroupDeps {
@@ -64,15 +68,15 @@ export interface SpawnInGroupDeps {
  * leaves the `psql` or `docker` it started under init, and a missing cwd surfaces
  * as `spawn archive.sh ENOENT`, blaming the script. So stdout goes to /dev/null and
  * only the tail of stderr is kept; the script leads a group of its own (`detached`),
- * signalled as `-pid`, SIGTERM then SIGKILL, as `src/main/terminals.ts` stops a
- * server; and the directory is looked at first.
+ * signalled as `-pid` the way `src/main/terminals.ts` signals a group, SIGTERM then
+ * SIGKILL; and the directory is looked at first.
  *
  * Done at `exit`, not `close`, since a grandchild left in the background holds the
  * pipe open — then the rest of stderr is read, for at most `ARCHIVE_STDERR_DRAIN_MS`.
  */
 export async function spawnInGroup(
   file: string,
-  options: { cwd: string; env: Record<string, string>; timeout: number },
+  options: ScriptRunOptions,
   deps: SpawnInGroupDeps = {}
 ): Promise<void> {
   const spawn = deps.spawn ?? spawnProcess

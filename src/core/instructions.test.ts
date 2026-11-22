@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { ARCHIVE_TIMEOUT_MS } from './archive.js'
+import { ARCHIVE_OUTPUT_TAIL_BYTES, ARCHIVE_TIMEOUT_MS } from './archive.js'
 import {
   effectiveInstruction,
   InstructionBodySchema,
@@ -246,6 +246,7 @@ describe('the two Help asks for', () => {
     const prompt = instructionTemplate('setupScripts')
     expect(prompt).toContain(`cut to ${String(SLUG_MAX_LENGTH)} characters`)
     expect(prompt).toContain(`given ${String(ARCHIVE_TIMEOUT_MS / 1000)} seconds`)
+    expect(prompt).toContain(`last ${String(ARCHIVE_OUTPUT_TAIL_BYTES / 1024)} KB of stderr`)
   })
 
   // A failed cleanup is reported in the window with what it wrote to stderr,
