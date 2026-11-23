@@ -711,7 +711,7 @@ describe('useBoard', () => {
       expect(onError).toHaveBeenCalledWith('“Fix login.md” is no longer on disk.')
     })
 
-    it("answers B203's writes that outlived their board as if nothing were refused", async () => {
+    it('answers a rename, a description and a comment that outlived their board as if nothing were refused', async () => {
       givenBoard([boardCard()])
       const renamed = held<Result<undefined>>()
       const saved = held<Result<undefined>>()
@@ -752,7 +752,7 @@ describe('useBoard', () => {
       expect(onError).toHaveBeenLastCalledWith('Something went wrong: Disk full')
     })
 
-    it("writes nothing without a folder, B203's writes too", async () => {
+    it('writes no rename, description or comment without a folder', async () => {
       const { result } = renderBoard({ folder: '' })
 
       const renamed = await act(() => result.current.rename('a', 'T'))

@@ -30,7 +30,6 @@ export interface BoardScreenProps {
   readonly onError: (message: string | null) => void
   /** Where the title bar takes the folder this board reads; null while it shows something else. */
   readonly titleSlot: HTMLElement | null
-  /** The unsaved description of a card of this project, or null: App keeps them. */
   readonly draftOf: (ref: string) => DescriptionDraft | null
   readonly onDraft: (ref: string, draft: DescriptionDraft | null) => void
   readonly onDraftMoved: (from: string, to: string) => void
@@ -115,7 +114,9 @@ export function BoardScreen({
 
   const createIn = async (status: BoardStatus, title: string): Promise<void> => {
     const ref = await board.create({ status, title })
-    if (ref !== null) openCardAt(ref)
+    if (ref === null) return
+    onDraft(ref, null)
+    openCardAt(ref)
   }
 
   if (boardFolder === null) return null

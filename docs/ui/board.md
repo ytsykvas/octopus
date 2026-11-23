@@ -105,13 +105,14 @@ not a rich editor: the file is the source of truth and the agent reads the Markd
 Saving sends `base`, the description as it was when the editor opened, not the whole file, so
 octopus's own header writes in the background do not count as a conflict. When the description
 changed on disk meanwhile, nothing is written, the banner stays out of it, and the editor offers
-Reload, which drops the edit, and Overwrite, which saves over it on purpose — never one without
-the other being chosen.
+Reload, which drops the edit, and Overwrite, which saves over it on purpose — and neither happens
+until one is chosen.
 
 An edit not saved yet survives closing the panel, another card, a status change, ⌘1–⌘9 and the
 screen switch: the editor hands it up once on the way out, as the composer does, and `App` keeps
-it by project and card (`boardDrafts`); a move carries it to the card's new ref. The panel is
-keyed by the opening, so a move does not remount the editor.
+it by project and card (`boardDrafts`); a move carries it to the card's new ref, and a card
+created in place of a deleted one starts without it. The panel is keyed by the opening, so a move
+does not remount the editor.
 
 ## Comments
 

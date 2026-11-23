@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-import type { DescriptionSave } from '@core/boardSchema.js'
+import { CARD_TEXT_MAX, type DescriptionSave } from '@core/boardSchema.js'
 
 import type { Failure } from '../../../../preload/index.js'
 import { refusal } from '../../test/board.js'
@@ -60,7 +60,7 @@ describe('CardDescription', () => {
 
     expect(field()).toHaveValue(OPENED)
     expect(field()).toHaveFocus()
-    expect(field()).toHaveAttribute('maxlength', '100000')
+    expect(field()).toHaveAttribute('maxlength', String(CARD_TEXT_MAX))
   })
 
   it('saves with ⌘Enter against the text it opened on', async () => {
@@ -224,6 +224,24 @@ describe('CardDescription', () => {
     expect(
       screen.queryByText('This description changed on disk while you were editing it.')
     ).toBeNull()
+  })
+
+  it('opens without a conflict that answered a save it cancelled', async () => {
+    const answer = held<Failure | null>()
+    onSave.mockReturnValueOnce(answer.promise)
+    const user = userEvent.setup()
+    renderDescription()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await act(async () => {
+      answer.resolve(refusal('cardChanged', { name: 'Fix login.md' }))
+      await answer.promise
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+
+    expect(screen.queryByRole('button', { name: 'Overwrite' })).toBeNull()
   })
 
   it('keeps the editor open after another refusal', async () => {

@@ -23,7 +23,7 @@ describe('CardComments', () => {
     expect(screen.getByText('No comments.')).toBeInTheDocument()
   })
 
-  it('lists the comments oldest first with their time', () => {
+  it('lists the comments in the order given, with their time', () => {
     renderComments([
       { at: '2026-11-21T14:05:00.000Z', text: 'First' },
       { at: '2026-11-22T09:30:00.000Z', text: 'Second' }
@@ -32,6 +32,24 @@ describe('CardComments', () => {
     const [first, second] = screen.getAllByRole('listitem')
     expect(first).toHaveTextContent(/^Nov 21, 2026, 4:05\sPMFirst$/)
     expect(second).toHaveTextContent(/^Nov 22, 2026, 11:30\sAMSecond$/)
+  })
+
+  it('lists two comments that read the same, and the one after them', () => {
+    const same = { at: '2026-11-21T14:05:00.000Z', text: 'Done.' }
+    const spy = vi.spyOn(console, 'error')
+    const view = render(<CardComments thread={[same, same]} onAdd={vi.fn()} />)
+
+    view.rerender(
+      <CardComments thread={[same, same, { ...same, text: 'Shipped.' }]} onAdd={vi.fn()} />
+    )
+
+    expect(screen.getAllByRole('listitem').map((item) => item.lastChild?.textContent)).toEqual([
+      'Done.',
+      'Done.',
+      'Shipped.'
+    ])
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   it('renders a comment as markdown', () => {

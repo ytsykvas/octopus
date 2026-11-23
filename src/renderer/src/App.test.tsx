@@ -4220,6 +4220,27 @@ describe('the board screen', () => {
     )
   })
 
+  it('keeps an unsaved description of a card moved to another status', async () => {
+    const user = await onTheBoard()
+    await editFixLogin(user)
+    givenBoard([boardCard({ ref: 'done/Fix login.md', status: 'done' })])
+
+    const panel = screen.getByRole('complementary', { name: 'Fix login' })
+    await user.click(within(panel).getByRole('button', { name: 'Backlog' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Done' }))
+    await within(panel).findByRole('button', { name: 'Done' })
+    await user.click(within(panel).getByRole('button', { name: 'Close' }))
+    await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+
+    expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue(
+      '# Fix login\n\nThe form forgets the e-mail.\n!'
+    )
+    expect(window.octopus.board.move).toHaveBeenCalledWith('planner', 'backlog/Fix login.md', {
+      status: 'done',
+      index: 0
+    })
+  })
+
   it('keeps an unsaved description across ⌘digit', async () => {
     const user = await onTheBoard()
     await editFixLogin(user)
@@ -4228,6 +4249,9 @@ describe('the board screen', () => {
     await waitFor(() => {
       expect(window.octopus.board.list).toHaveBeenCalledWith('ledger')
     })
+    await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+    await screen.findByRole('button', { name: 'Edit' })
+    expect(screen.queryByRole('textbox', { name: 'Description' })).toBeNull()
     await user.keyboard('{Meta>}1{/Meta}')
     await user.click(await screen.findByRole('button', { name: 'Fix login' }))
 

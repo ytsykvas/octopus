@@ -1,4 +1,3 @@
-/** A description edit not saved yet: what was typed, and the description it was opened on. */
 export interface DescriptionDraft {
   readonly text: string
   readonly base: string

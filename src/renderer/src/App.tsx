@@ -378,7 +378,6 @@ export function App(): React.JSX.Element {
   const keepDraft = useCallback((workspaceId: string, tabKey: string, text: string) => {
     setDrafts((current) => new Map(current).set(slotOf(workspaceId, tabKey), text))
   }, [])
-  // A card's unsaved description, by project and card: the composer's `drafts` again.
   const [boardDrafts, setBoardDrafts] = useState<ReadonlyMap<string, DescriptionDraft>>(new Map())
 
   const forgetComments = diffComments.forget

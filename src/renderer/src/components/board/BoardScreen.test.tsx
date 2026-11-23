@@ -645,6 +645,29 @@ describe('BoardScreen', () => {
         ).toHaveValue('# A\n!')
       })
 
+      it('opens a card created where a deleted one was without its draft', async () => {
+        vi.mocked(octopus().board.create).mockResolvedValueOnce(ok('backlog/A.md'))
+        const user = userEvent.setup()
+        renderScreen({ ...draftStore() })
+        const panel = await openPanel(user, 'A')
+        await typeInto(user, panel)
+        givenBoard([boardCard({ ref: 'backlog/B.md', title: 'B' })])
+        const dialog = await askToDelete(user, panel)
+        await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+        await waitFor(() => {
+          expect(screen.queryByRole('complementary')).toBeNull()
+        })
+        twoCards()
+
+        const backlog = screen.getByRole('region', { name: 'Backlog' })
+        await user.click(within(backlog).getByRole('button', { name: 'New task' }))
+        await user.type(within(backlog).getByRole('textbox', { name: 'Task title' }), 'A{Enter}')
+        const fresh = await screen.findByRole('complementary', { name: 'A' })
+
+        await within(fresh).findByRole('button', { name: 'Edit' })
+        expect(within(fresh).queryByRole('textbox', { name: 'Description' })).toBeNull()
+      })
+
       it('carries the draft of a moved card to its new ref', async () => {
         vi.mocked(octopus().board.move).mockResolvedValueOnce(ok('done/A.md'))
         const user = userEvent.setup()

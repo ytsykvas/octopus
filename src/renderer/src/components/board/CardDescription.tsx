@@ -23,7 +23,6 @@ export function CardDescription({
   onSave
 }: {
   readonly description: string
-  /** The edit left unsaved the last time this card's panel closed; the editor opens on it. */
   readonly draft: DescriptionDraft | null
   /** Called once, on the way out, with the edit as it stands — null when nothing is being edited. */
   readonly onDraft: (draft: DescriptionDraft | null) => void
@@ -84,6 +83,7 @@ export function CardDescription({
             className="ml-auto"
             onClick={() => {
               edit({ text: description, base: description, mode: 'edit' })
+              setConflict(false)
             }}
           >
             {t('board.panel.edit')}

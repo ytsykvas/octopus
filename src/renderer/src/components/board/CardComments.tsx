@@ -18,9 +18,7 @@ export function CardComments({
   const [writing, setWriting] = useState(false)
   const [adding, setAdding] = useState(false)
   const format = (at: string): string =>
-    new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' }).format(
-      new Date(at)
-    )
+    new Date(at).toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' })
 
   // NoteEditor has no pending state of its own; without this a second ⌘Enter posted the comment twice.
   const add = async (text: string): Promise<void> => {
@@ -39,8 +37,8 @@ export function CardComments({
         <p className="text-ink-soft">{t('board.comments.empty')}</p>
       ) : (
         <ol className="flex flex-col gap-3">
-          {thread.map((comment) => (
-            <li key={`${comment.at}\n${comment.text}`} className="flex flex-col gap-0.5">
+          {thread.map((comment, index) => (
+            <li key={index} className="flex flex-col gap-0.5">
               <time dateTime={comment.at} className="text-ink-faint text-[11px]">
                 {format(comment.at)}
               </time>

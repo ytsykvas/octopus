@@ -92,7 +92,6 @@ export function renderScreen(overrides: Partial<BoardScreenProps> = {}): {
   }
 }
 
-/** A controller for a component handed one; the writes join it in B202a, B202b and B203. */
 export function boardController(overrides: Partial<BoardController> = {}): BoardController {
   return {
     listing: boardListing([boardCard()]),
@@ -110,7 +109,6 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
   }
 }
 
-/** Drafts held the way App holds them, for a screen test that leaves a card and comes back. */
 export function draftStore(): Pick<BoardScreenProps, 'draftOf' | 'onDraft' | 'onDraftMoved'> {
   let drafts: ReadonlyMap<string, DescriptionDraft> = new Map()
   return {

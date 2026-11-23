@@ -12,10 +12,7 @@ describe('draftSlot', () => {
 
 describe('withDraft', () => {
   it('sets a draft', () => {
-    expect(withDraft(new Map(), 's', { text: 'T', base: 'B' }).get('s')).toEqual({
-      text: 'T',
-      base: 'B'
-    })
+    expect(withDraft(new Map(), 's', d).get('s')).toBe(d)
   })
 
   it('forgets a draft', () => {
