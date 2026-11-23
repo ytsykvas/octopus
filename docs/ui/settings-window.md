@@ -16,7 +16,8 @@ when the window opens.
 destination uses in Git: the path, or a muted "Not set", and Change… opening
 the system folder dialog. Picked through the dialog rather than typed, because
 a folder chosen in an Open dialog is the one macOS lets the app read without
-a separate prompt.
+a separate prompt. A dialog that fails says why under the field, in
+either section.
 
 **`PluginsWindow`** is a `Modal` of the large size with two tabs, styled as the
 import dialogs' pills:
