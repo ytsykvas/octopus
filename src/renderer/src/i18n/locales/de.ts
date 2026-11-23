@@ -2004,11 +2004,24 @@ export const de: Translation = {
       remove: 'Löschen',
       description: 'Beschreibung',
       noDescription: 'Noch keine Beschreibung.',
-      cancel: 'Abbrechen'
+      cancel: 'Abbrechen',
+      edit: 'Bearbeiten',
+      preview: 'Vorschau',
+      save: 'Speichern',
+      changed:
+        'Die Beschreibung hat sich auf der Festplatte geändert, während du sie bearbeitet hast.',
+      reload: 'Neu laden',
+      overwrite: 'Überschreiben'
     },
     remove: {
       title: '„{{title}}“ löschen?',
       body: 'Die Datei landet im Papierkorb und lässt sich von dort wiederherstellen.'
+    },
+    comments: {
+      title: 'Kommentare',
+      placeholder: 'Kommentar schreiben… ⌘↩ zum Senden',
+      empty: 'Keine Kommentare.',
+      add: 'Kommentar hinzufügen'
     }
   },
 

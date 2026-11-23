@@ -1,4 +1,5 @@
 import { ChevronDown, Copy, Ellipsis, Trash2, X } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -8,7 +9,8 @@ import {
   type CardDetail,
   type CardMove,
   CARD_PRIORITIES,
-  type CardPriority
+  type CardPriority,
+  CARD_TITLE_MAX
 } from '@core/boardSchema.js'
 import { KIND_COLORS, WORKSPACE_KINDS, type WorkspaceKind } from '@core/workspaceKinds.js'
 
@@ -18,11 +20,14 @@ import { useCopy } from '../../hooks/useCopy.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { Button } from '../Button.js'
 import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
+import { NameEditor } from '../NameEditor.js'
 import { IconButton } from '../paneControls.js'
 import { Callout } from '../pr/Callout.js'
 import { LETTERS } from '../projectTint.js'
 import { ResizeHandle } from '../ResizeHandle.js'
+import type { DescriptionDraft } from './boardDrafts.js'
 import { NO_PRIORITY_LOOK, PRIORITY_LOOKS, STATUS_LABEL_KEYS } from './boardLabels.js'
+import { CardComments } from './CardComments.js'
 import { CardDescription } from './CardDescription.js'
 
 export const PANEL_WIDTH = 420
@@ -38,6 +43,8 @@ export interface CardPanelProps {
   readonly detail: CardDetail | null
   readonly failure: Failure | null
   readonly board: BoardController
+  readonly draft: DescriptionDraft | null
+  readonly onDraft: (draft: DescriptionDraft | null) => void
   readonly width: number
   readonly onWidth: (width: number) => void
   readonly onClose: () => void
@@ -120,6 +127,8 @@ export function CardPanel({
   detail,
   failure,
   board,
+  draft,
+  onDraft,
   width,
   onWidth,
   onClose,
@@ -127,6 +136,7 @@ export function CardPanel({
   onRemove
 }: CardPanelProps): React.JSX.Element {
   const { t } = useTranslation()
+  const [renaming, setRenaming] = useState(false)
   const describeFailure = useErrorMessage()
   const statusLabel = (status: BoardStatus): string =>
     t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
@@ -234,17 +244,48 @@ export function CardPanel({
         </IconButton>
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">
-        <h2 className="text-ink text-[15px] font-semibold break-words">{card.title}</h2>
+        {renaming ? (
+          <NameEditor
+            initial={card.title}
+            maxLength={CARD_TITLE_MAX}
+            className="input focus-ring text-[15px] font-semibold"
+            onCommit={(title) => {
+              setRenaming(false)
+              if (title !== card.title) void board.rename(card.ref, title)
+            }}
+            onCancel={() => {
+              setRenaming(false)
+            }}
+          />
+        ) : (
+          <h2
+            onDoubleClick={() => {
+              setRenaming(true)
+            }}
+            className="text-ink cursor-text text-[15px] font-semibold break-words"
+          >
+            {card.title}
+          </h2>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <CopyDescription description={card.notText ? null : (detail?.description ?? null)} />
         </div>
         {failure !== null && <Callout tone="warning">{describeFailure(failure)}</Callout>}
-        {detail !== null &&
-          (card.notText ? (
-            <Callout tone="warning">{t('board.card.notText')}</Callout>
-          ) : (
-            <CardDescription description={detail.description} />
-          ))}
+        {detail !== null && (
+          <>
+            {card.notText ? (
+              <Callout tone="warning">{t('board.card.notText')}</Callout>
+            ) : (
+              <CardDescription
+                description={detail.description}
+                draft={draft}
+                onDraft={onDraft}
+                onSave={(save) => board.saveDescription(card.ref, save)}
+              />
+            )}
+            <CardComments thread={detail.thread} onAdd={(text) => board.comment(card.ref, text)} />
+          </>
+        )}
       </div>
     </aside>
   )

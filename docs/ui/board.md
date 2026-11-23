@@ -87,7 +87,9 @@ Another project or another board folder closes the panel and the new-task field.
 **Delete asks first** and sends the file to the Trash through core; it closes the panel only when
 it was that card's. Copy description puts the whole description on the clipboard, its `# title`
 line included, with the whitespace around it trimmed. A file that is not UTF-8 shows a warning in
-place of its description and has nothing to copy. The panel's width is dragged from its left edge,
+place of its description and has nothing to copy or edit; its comments still show.
+A double-click on the title renames the card: only its `# ` line changes, and the file keeps its
+name, which is what other Macs and links know it by. The panel's width is dragged from its left edge,
 320 to 720px, and not saved.
 
 `useCardDetail` reads the open card at its ref, again on every listing `revision`, and keeps the
@@ -95,6 +97,29 @@ previous detail while the same opening is read again. A card removed outside is 
 (`cardMissing`): the next listing drops its panel, and the panel comes back if the file does. Any
 other failure to read it is said in the panel, where the description would be, not in the banner:
 it belongs to the card, and the next read that works takes it away.
+
+## Editing a description
+
+Edit opens the whole description, title line included, in a plain textarea with a preview —
+not a rich editor: the file is the source of truth and the agent reads the Markdown as written.
+Saving sends `base`, the description as it was when the editor opened, not the whole file, so
+octopus's own header writes in the background do not count as a conflict. When the description
+changed on disk meanwhile, nothing is written, the banner stays out of it, and the editor offers
+Reload, which drops the edit, and Overwrite, which saves over it on purpose — never one without
+the other being chosen.
+
+An edit not saved yet survives closing the panel, another card, a status change, ⌘1–⌘9 and the
+screen switch: the editor hands it up once on the way out, as the composer does, and `App` keeps
+it by project and card (`boardDrafts`); a move carries it to the card's new ref. The panel is
+keyed by the opening, so a move does not remount the editor.
+
+## Comments
+
+Comments sit under the description, oldest first, with their time; they are kept at the end of
+the card's file under a marker (`docs/data/board.md`). The field opens on demand — opening a card
+is a click on the board, and a field that took the caret then would take it from the board — and
+⌘Enter posts once, however many times it is pressed while the write is out. A refused comment
+stays in the field. Editing or deleting a comment is not offered.
 
 ## Drag and drop
 

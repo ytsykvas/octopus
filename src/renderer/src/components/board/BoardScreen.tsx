@@ -18,6 +18,7 @@ import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { Button } from '../Button.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardColumn } from './BoardColumn.js'
+import type { DescriptionDraft } from './boardDrafts.js'
 import { CardPanel, PANEL_WIDTH } from './CardPanel.js'
 
 export interface BoardScreenProps {
@@ -29,6 +30,10 @@ export interface BoardScreenProps {
   readonly onError: (message: string | null) => void
   /** Where the title bar takes the folder this board reads; null while it shows something else. */
   readonly titleSlot: HTMLElement | null
+  /** The unsaved description of a card of this project, or null: App keeps them. */
+  readonly draftOf: (ref: string) => DescriptionDraft | null
+  readonly onDraft: (ref: string, draft: DescriptionDraft | null) => void
+  readonly onDraftMoved: (from: string, to: string) => void
 }
 
 export function BoardScreen({
@@ -36,7 +41,10 @@ export function BoardScreen({
   boardFolder,
   onPickFolder,
   onError,
-  titleSlot
+  titleSlot,
+  draftOf,
+  onDraft,
+  onDraftMoved
 }: BoardScreenProps): React.JSX.Element | null {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -74,13 +82,15 @@ export function BoardScreen({
   const moveCard = useCallback(
     async (ref: string, to: CardMove): Promise<string | null> => {
       const moved = await move(ref, to)
-      if (moved !== null)
+      if (moved !== null) {
         setOpen((current) =>
           current?.ref === ref ? { ref: moved, session: current.session } : current
         )
+        onDraftMoved(ref, moved)
+      }
       return moved
     },
-    [move]
+    [move, onDraftMoved]
   )
 
   const removeCard = useCallback(
@@ -164,6 +174,10 @@ export function BoardScreen({
           detail={detail}
           failure={failure}
           board={board}
+          draft={draftOf(openCard.ref)}
+          onDraft={(draft) => {
+            onDraft(openCard.ref, draft)
+          }}
           width={panelWidth}
           onWidth={setPanelWidth}
           onClose={() => {

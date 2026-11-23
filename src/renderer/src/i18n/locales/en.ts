@@ -2442,11 +2442,23 @@ export const en = {
       remove: 'Delete',
       description: 'Description',
       noDescription: 'No description yet.',
-      cancel: 'Cancel'
+      cancel: 'Cancel',
+      edit: 'Edit',
+      preview: 'Preview',
+      save: 'Save',
+      changed: 'This description changed on disk while you were editing it.',
+      reload: 'Reload',
+      overwrite: 'Overwrite'
     },
     remove: {
       title: 'Delete “{{title}}”?',
       body: 'The file goes to the Trash, where it can be restored.'
+    },
+    comments: {
+      title: 'Comments',
+      placeholder: 'Write a comment… ⌘↩ to post',
+      empty: 'No comments.',
+      add: 'Add a comment'
     }
   },
   errors: {

@@ -5,6 +5,7 @@ import { vi } from 'vitest'
 import type { BoardCard, BoardListing, CardDetail } from '@core/boardSchema.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
+import { type DescriptionDraft, movedDraft, withDraft } from '../components/board/boardDrafts.js'
 import { BoardScreen, type BoardScreenProps } from '../components/board/BoardScreen.js'
 import type { BoardController } from '../hooks/useBoard.js'
 import { octopus } from './octopus.js'
@@ -76,6 +77,9 @@ export function renderScreen(overrides: Partial<BoardScreenProps> = {}): {
     onPickFolder: vi.fn(),
     onError: vi.fn(),
     titleSlot: null,
+    draftOf: () => null,
+    onDraft: vi.fn(),
+    onDraftMoved: vi.fn(),
     ...overrides
   }
   const view = render(createElement(BoardScreen, props))
@@ -99,6 +103,23 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
     update: vi.fn(() => Promise.resolve(true)),
     move: vi.fn(() => Promise.resolve('done/Fix login.md')),
     remove: vi.fn(() => Promise.resolve(true)),
+    rename: vi.fn(() => Promise.resolve(true)),
+    saveDescription: vi.fn(() => Promise.resolve(null)),
+    comment: vi.fn(() => Promise.resolve(true)),
     ...overrides
+  }
+}
+
+/** Drafts held the way App holds them, for a screen test that leaves a card and comes back. */
+export function draftStore(): Pick<BoardScreenProps, 'draftOf' | 'onDraft' | 'onDraftMoved'> {
+  let drafts: ReadonlyMap<string, DescriptionDraft> = new Map()
+  return {
+    draftOf: (ref) => drafts.get(ref) ?? null,
+    onDraft: (ref, draft) => {
+      drafts = withDraft(drafts, ref, draft)
+    },
+    onDraftMoved: (from, to) => {
+      drafts = movedDraft(drafts, from, to)
+    }
   }
 }

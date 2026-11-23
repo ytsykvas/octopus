@@ -10,6 +10,7 @@ import {
   boardListing,
   boardProject,
   cardDetail,
+  draftStore,
   givenBoard,
   ok,
   refusal,
@@ -575,6 +576,87 @@ describe('BoardScreen', () => {
       })
 
       expect(screen.getByRole('complementary', { name: 'Fix login' })).toBeInTheDocument()
+    })
+
+    describe('an unsaved description', () => {
+      beforeEach(() => {
+        twoCards()
+        vi.mocked(octopus().board.read).mockImplementation((_projectId, ref) =>
+          Promise.resolve(
+            ok(cardDetail({ ref, title: ref === 'backlog/A.md' ? 'A' : 'B', description: '# A\n' }))
+          )
+        )
+      })
+
+      async function typeInto(user: UserEvent, panel: HTMLElement): Promise<void> {
+        await user.click(await within(panel).findByRole('button', { name: 'Edit' }))
+        await user.type(within(panel).getByRole('textbox', { name: 'Description' }), '!')
+      }
+
+      it('keeps an unsaved description when the panel closes', async () => {
+        const user = userEvent.setup()
+        renderScreen({ ...draftStore() })
+        const panel = await openPanel(user, 'A')
+        await typeInto(user, panel)
+
+        await user.click(within(panel).getByRole('button', { name: 'Close' }))
+        const again = await openPanel(user, 'A')
+
+        expect(await within(again).findByRole('textbox', { name: 'Description' })).toHaveValue(
+          '# A\n!'
+        )
+      })
+
+      it('keeps it when another card opens', async () => {
+        const user = userEvent.setup()
+        renderScreen({ ...draftStore() })
+        await typeInto(user, await openPanel(user, 'A'))
+
+        const other = await openPanel(user, 'B')
+        await within(other).findByRole('button', { name: 'Edit' })
+        expect(within(other).queryByRole('textbox', { name: 'Description' })).toBeNull()
+        const again = await openPanel(user, 'A')
+
+        expect(await within(again).findByRole('textbox', { name: 'Description' })).toHaveValue(
+          '# A\n!'
+        )
+      })
+
+      it('keeps it when the status changes', async () => {
+        vi.mocked(octopus().board.move).mockResolvedValueOnce(ok('done/A.md'))
+        const user = userEvent.setup()
+        renderScreen({ ...draftStore() })
+        const panel = await openPanel(user, 'A')
+        await typeInto(user, panel)
+        givenBoard([
+          boardCard({ ref: 'done/A.md', status: 'done', title: 'A' }),
+          boardCard({ ref: 'backlog/B.md', title: 'B' })
+        ])
+
+        await chooseStatus(user, panel, 'Done')
+        await within(screen.getByRole('region', { name: 'Done' })).findByRole('button', {
+          name: 'A'
+        })
+
+        expect(
+          await within(screen.getByRole('complementary', { name: 'A' })).findByRole('textbox', {
+            name: 'Description'
+          })
+        ).toHaveValue('# A\n!')
+      })
+
+      it('carries the draft of a moved card to its new ref', async () => {
+        vi.mocked(octopus().board.move).mockResolvedValueOnce(ok('done/A.md'))
+        const user = userEvent.setup()
+        const { props } = renderScreen()
+        const panel = await openPanel(user, 'A')
+
+        await chooseStatus(user, panel, 'Done')
+
+        await waitFor(() => {
+          expect(props.onDraftMoved).toHaveBeenCalledWith('backlog/A.md', 'done/A.md')
+        })
+      })
     })
 
     it('widens the panel', async () => {

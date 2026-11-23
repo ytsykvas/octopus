@@ -5,7 +5,9 @@ Hooks own everything that talks to IPC — `useProjects`, `useWorkspaces`,
 know what an IPC failure looks like.
 
 Which screen is in front — Octopus or the Board — is App state that is not
-saved, like the workspace list's fold.
+saved, like the workspace list's fold. A card's unsaved description is App state too
+(`boardDrafts`), keyed by project and card and handed up when the editor goes, like the
+composer's drafts.
 
 Two small hooks hold the clocks. `useVisibleInterval(tick, ms, active)` is
 "now, and every so often, while somebody can see it" — the account's limits and

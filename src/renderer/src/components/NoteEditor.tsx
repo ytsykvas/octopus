@@ -54,7 +54,11 @@ export function NoteEditor({
         }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') onCancel()
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) save()
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            // Not a line break: a comment the board refused kept one at its end.
+            event.preventDefault()
+            save()
+          }
         }}
         placeholder={placeholder}
         aria-label={placeholder}
