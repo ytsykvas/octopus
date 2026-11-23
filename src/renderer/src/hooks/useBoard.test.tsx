@@ -436,6 +436,36 @@ describe('useBoard', () => {
       expect(onError).not.toHaveBeenCalled()
     })
 
+    it('answers every write that outlived its board as if it were refused', async () => {
+      givenBoard([boardCard()])
+      const created = held<Result<string>>()
+      const updated = held<Result<undefined>>()
+      const moved = held<Result<string>>()
+      const removed = held<Result<undefined>>()
+      vi.mocked(octopus().board.create).mockReturnValueOnce(created.promise)
+      vi.mocked(octopus().board.update).mockReturnValueOnce(updated.promise)
+      vi.mocked(octopus().board.move).mockReturnValueOnce(moved.promise)
+      vi.mocked(octopus().board.remove).mockReturnValueOnce(removed.promise)
+      const { result, rerender, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      const writes = Promise.all([
+        result.current.create({ status: 'backlog', title: 'Fix login' }),
+        result.current.update('backlog/Fix login.md', { priority: 'high' }),
+        result.current.move('backlog/Fix login.md', { status: 'done', index: 0 }),
+        result.current.remove('backlog/Fix login.md')
+      ])
+
+      rerender({ projectId: 'ledger', folder: '/tmp/board', onError })
+      created.resolve(ok('backlog/Fix login.md'))
+      updated.resolve(ok(undefined))
+      moved.resolve(ok('done/Fix login.md'))
+      removed.resolve(ok(undefined))
+
+      expect(await act(() => writes)).toEqual([null, false, null, false])
+    })
+
     it('drops a refusal whose board left while it was read again', async () => {
       givenBoard([boardCard()])
       vi.mocked(octopus().board.create).mockResolvedValueOnce(
@@ -489,6 +519,103 @@ describe('useBoard', () => {
 
       expect(made).toBeNull()
       expect(octopus().board.create).not.toHaveBeenCalled()
+    })
+
+    it('updates a card', async () => {
+      givenBoard([boardCard()])
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const updated = await act(() =>
+        result.current.update('backlog/Fix login.md', { priority: 'high' })
+      )
+
+      expect(updated).toBe(true)
+      expect(octopus().board.update).toHaveBeenCalledWith('planner', 'backlog/Fix login.md', {
+        priority: 'high'
+      })
+      expect(list()).toHaveBeenCalledTimes(2)
+    })
+
+    it('answers false for a refused update', async () => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.update).mockResolvedValueOnce(
+        refusal('cardMissing', { name: 'Fix login.md' })
+      )
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const updated = await act(() =>
+        result.current.update('backlog/Fix login.md', { priority: 'high' })
+      )
+
+      expect(updated).toBe(false)
+    })
+
+    it('hands back the new ref of a moved card', async () => {
+      givenBoard([boardCard()])
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const moved = await act(() =>
+        result.current.move('backlog/Fix login.md', { status: 'done', index: 0 })
+      )
+
+      expect(moved).toBe('done/Fix login.md')
+      expect(octopus().board.move).toHaveBeenCalledWith('planner', 'backlog/Fix login.md', {
+        status: 'done',
+        index: 0
+      })
+    })
+
+    it('answers null for a refused move', async () => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.move).mockResolvedValueOnce(
+        refusal('cardMissing', { name: 'Fix login.md' })
+      )
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const moved = await act(() =>
+        result.current.move('backlog/Fix login.md', { status: 'done', index: 0 })
+      )
+
+      expect(moved).toBeNull()
+      expect(onError).toHaveBeenCalledWith('“Fix login.md” is no longer on disk.')
+    })
+
+    it('removes a card', async () => {
+      givenBoard([boardCard()])
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const removed = await act(() => result.current.remove('backlog/Fix login.md'))
+
+      expect(removed).toBe(true)
+      expect(octopus().board.remove).toHaveBeenCalledWith('planner', 'backlog/Fix login.md')
+    })
+
+    it('writes nothing without a folder, whatever the write', async () => {
+      const { result } = renderBoard({ folder: '' })
+
+      const updated = await act(() => result.current.update('a', {}))
+      const moved = await act(() => result.current.move('a', { status: 'done', index: 0 }))
+      const removed = await act(() => result.current.remove('a'))
+
+      expect([updated, moved, removed]).toEqual([false, null, false])
+      expect(octopus().board.update).not.toHaveBeenCalled()
+      expect(octopus().board.move).not.toHaveBeenCalled()
+      expect(octopus().board.remove).not.toHaveBeenCalled()
     })
   })
 })

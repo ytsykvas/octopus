@@ -2402,7 +2402,8 @@ export const en = {
       urgent: 'Urgent',
       high: 'High',
       medium: 'Medium',
-      low: 'Low'
+      low: 'Low',
+      none: 'No priority'
     },
     empty: {
       noFolderTitle: 'Choose where tasks live',
@@ -2428,6 +2429,24 @@ export const en = {
       comments_other: '{{count}} comments',
       malformed: 'The header of this file could not be read; its fields are not shown.',
       notText: 'This file is not UTF-8 text. It is shown by its file name and is not changed here.'
+    },
+    panel: {
+      close: 'Close',
+      status: 'Status',
+      priority: 'Priority',
+      tag: 'Tag',
+      noTag: 'No tag',
+      more: 'More',
+      copy: 'Copy description',
+      copied: 'Copied',
+      remove: 'Delete',
+      description: 'Description',
+      noDescription: 'No description yet.',
+      cancel: 'Cancel'
+    },
+    remove: {
+      title: 'Delete “{{title}}”?',
+      body: 'The file goes to the Trash, where it can be restored.'
     }
   },
   errors: {

@@ -12,6 +12,8 @@ function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
     creating: false,
     onCreating: vi.fn(),
     onCreate: vi.fn(),
+    openRef: null,
+    onOpen: vi.fn(),
     ...props
   }
   render(<BoardColumn {...all} />)
@@ -118,6 +120,21 @@ describe('BoardColumn', () => {
 
     expect(screen.getByRole('textbox', { name: 'Task title' })).toBeInTheDocument()
     expect(screen.queryByText('Nothing here')).toBeNull()
+  })
+
+  it('marks the open card', () => {
+    renderColumn({ cards: [card('A'), card('B')], openRef: 'backlog/B.md' })
+
+    expect(screen.getByRole('button', { name: 'B' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: 'A' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('opens the card clicked', async () => {
+    const { onOpen } = renderColumn({ cards: [card('A'), card('B')] })
+
+    await userEvent.click(screen.getByRole('button', { name: 'B' }))
+
+    expect(onOpen).toHaveBeenCalledWith('backlog/B.md')
   })
 
   it('shows the field above the cards', () => {

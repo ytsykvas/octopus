@@ -64,7 +64,37 @@ every rename in the window uses. The new card goes to the top of its column: it 
 thought of. Every write, worked or refused, reads the board again (`settle`): a refusal usually
 means the disk has moved on from the cards on screen, and the board should show it. A refusal is
 reported after that read, so the read cannot clear it, and a write whose board leaves before it
-settles — before its answer or during that read — reports nothing.
+settles — before its answer or during that read — reports nothing and answers as refused, so the
+next board never opens or follows a card the last one wrote.
+
+## The card panel
+
+A click on a card opens its panel on the right — a panel rather than a modal, so the board stays
+in view and the next card is one click away — and a card just created opens at once. The header
+holds the status, priority and tag menus, More (Delete) and Close. Their items carry no icons:
+`DropdownMenu` draws the tick where an item's icon would be, so the value's look sits on the
+trigger instead: the priority's icon, the tag's colour. Choosing the value a card already has
+writes nothing.
+
+**A move follows its card.** A status change moves the file into another folder, which gives it a
+new ref. Every move goes through `moveCard` in `BoardScreen` — the status menu's now, dragging's
+and ⌥↑/⌥↓'s once they are built — and the panel follows the new ref, but only while it still shows
+that card. The panel and its detail are keyed by the opening, not the ref, so a move keeps what
+the panel holds and shows, and an opening's number is never reused, so a card opened after a close
+never shows the last one's description. The status menu puts the card first in its new column.
+Another project or another board folder closes the panel and the new-task field.
+
+**Delete asks first** and sends the file to the Trash through core; it closes the panel only when
+it was that card's. Copy description puts the whole description on the clipboard, its `# title`
+line included, with the whitespace around it trimmed. A file that is not UTF-8 shows a warning in
+place of its description and has nothing to copy. The panel's width is dragged from its left edge,
+320 to 720px, and not saved.
+
+`useCardDetail` reads the open card at its ref, again on every listing `revision`, and keeps the
+previous detail while the same opening is read again. A card removed outside is quiet
+(`cardMissing`): the next listing drops its panel, and the panel comes back if the file does. Any
+other failure to read it is said in the panel, where the description would be, not in the banner:
+it belongs to the card, and the next read that works takes it away.
 
 ## Drag and drop
 
