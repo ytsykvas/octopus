@@ -23,6 +23,7 @@ import {
   describeError,
   InvalidFileError,
   isDiskFull,
+  isNotDirectory,
   keepBackup,
   readJsonFile,
   writeJsonFile,
@@ -103,6 +104,21 @@ describe('isDiskFull', () => {
     expect(isDiskFull(new Error('ENOSPC'))).toBe(false)
     expect(isDiskFull('ENOSPC')).toBe(false)
     expect(isDiskFull(null)).toBe(false)
+  })
+})
+
+describe('isNotDirectory', () => {
+  const failure = (code: string): Error => Object.assign(new Error(code), { code })
+
+  it('recognises a file met where a folder had to be', () => {
+    expect(isNotDirectory(failure('ENOTDIR'))).toBe(true)
+  })
+
+  it('leaves every other failure alone', () => {
+    expect(isNotDirectory(failure('ENOENT'))).toBe(false)
+    expect(isNotDirectory(new Error('ENOTDIR'))).toBe(false)
+    expect(isNotDirectory('ENOTDIR')).toBe(false)
+    expect(isNotDirectory(null)).toBe(false)
   })
 })
 
