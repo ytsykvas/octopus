@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
 import { cardsByStatus } from '@core/boardOrder.js'
@@ -18,13 +19,16 @@ export interface BoardScreenProps {
   readonly boardFolder: string | null
   readonly onPickFolder: () => void
   readonly onError: (message: string | null) => void
+  /** Where the title bar takes the folder this board reads; null while it shows something else. */
+  readonly titleSlot: HTMLElement | null
 }
 
 export function BoardScreen({
   project,
   boardFolder,
   onPickFolder,
-  onError
+  onError,
+  titleSlot
 }: BoardScreenProps): React.JSX.Element | null {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -71,6 +75,7 @@ export function BoardScreen({
           <BoardColumn key={status} status={status} cards={columns[status]} />
         ))}
       </div>
+      {titleSlot !== null && createPortal(board.listing.folder, titleSlot)}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -112,5 +112,18 @@ describe('BoardScreen', () => {
     expect(
       await within(await screen.findByRole('region', { name: 'Backlog' })).findByText('Notes')
     ).toBeInTheDocument()
+  })
+
+  it("writes the folder it reads into the title bar's slot", async () => {
+    vi.mocked(octopus().board.list).mockResolvedValue(
+      ok({ folder: '/tmp/board/Planner', cards: [] })
+    )
+    const slot = document.createElement('span')
+
+    renderScreen({ titleSlot: slot })
+
+    await waitFor(() => {
+      expect(slot).toHaveTextContent(/^\/tmp\/board\/Planner$/)
+    })
   })
 })

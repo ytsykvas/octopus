@@ -828,6 +828,86 @@ describe('Settings', () => {
     expect(screen.getByText('/Users/someone/code')).toBeInTheDocument()
   })
 
+  it('shows that no board folder has been chosen yet', async () => {
+    const user = userEvent.setup()
+    await renderSettings()
+
+    await openSection(user, 'General')
+
+    expect(screen.getByText('Not set')).toBeInTheDocument()
+    expect(screen.getByText('Board folder')).toBeInTheDocument()
+  })
+
+  it('takes the board folder chosen in the picker', async () => {
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: true,
+      value: '/Users/someone/Desktop/tasks'
+    })
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'General')
+    await user.click(screen.getByRole('button', { name: 'Change…' }))
+
+    await waitFor(() => {
+      expect(props.onChange).toHaveBeenCalledExactlyOnceWith({
+        boardFolder: '/Users/someone/Desktop/tasks'
+      })
+    })
+    expect(window.octopus.dialog.pickDirectory).toHaveBeenCalledWith('Board folder')
+  })
+
+  it('keeps the board folder when the picker is cancelled', async () => {
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({ ok: true, value: null })
+    const user = userEvent.setup()
+    const props = await renderSettings({
+      config: config({ boardFolder: '/Users/someone/Desktop/tasks' })
+    })
+
+    await openSection(user, 'General')
+    await user.click(screen.getByRole('button', { name: 'Change…' }))
+
+    await waitFor(() => {
+      expect(window.octopus.dialog.pickDirectory).toHaveBeenCalledWith('Board folder')
+    })
+    expect(props.onChange).not.toHaveBeenCalled()
+    expect(screen.getByText('/Users/someone/Desktop/tasks')).toBeInTheDocument()
+  })
+
+  it('says why the folder dialog failed', async () => {
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: false,
+      error: 'No window'
+    })
+    const user = userEvent.setup()
+    const props = await renderSettings()
+
+    await openSection(user, 'General')
+    await user.click(screen.getByRole('button', { name: 'Change…' }))
+
+    expect(await screen.findByText('Something went wrong: No window')).toBeInTheDocument()
+    expect(props.onChange).not.toHaveBeenCalled()
+  })
+
+  it('forgets the failure on the next pick', async () => {
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: false,
+      error: 'No window'
+    })
+    const user = userEvent.setup()
+    await renderSettings()
+    await openSection(user, 'General')
+    await user.click(screen.getByRole('button', { name: 'Change…' }))
+    await screen.findByText('Something went wrong: No window')
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({ ok: true, value: null })
+
+    await user.click(screen.getByRole('button', { name: 'Change…' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Something went wrong: No window')).toBeNull()
+    })
+  })
+
   it('shows the Claude account under its own section', async () => {
     const user = userEvent.setup()
     await renderSettings()

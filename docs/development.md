@@ -32,6 +32,15 @@ also makes it the only safe place to reproduce a bug. The path must be
 absolute. If octopus is the project open in octopus, the Scripts tab's Run
 sets this for you (`.octopus/scripts/run.sh`).
 
+## A development copy gets a copy of the board folder
+
+The board writes into the folder it is given — a header into a task when a
+field changes, a move between column folders, a file to the Trash. Point a
+development copy at a scratch copy of that folder, never at the real one:
+copy it into `$TMPDIR/board-try` and choose that under Settings → General.
+The real folder is synced to every Mac; a bug in a branch should not travel
+with it.
+
 ## Only the renderer hot-reloads
 
 A change under `src/main/`, `src/preload/` or any core module they import

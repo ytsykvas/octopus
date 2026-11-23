@@ -98,7 +98,10 @@ The right pane folds away from **one button in the title bar**, which switches
 between collapse and expand in place. The collapse used to sit inside the pane
 and the expand in the bar — but a control that folds something away cannot live
 inside it, or once folded there is nothing left to click, and the way back has to
-be hunted for somewhere else.
+be hunted for somewhere else. The Board folds it the same way, offstage and
+without writing the choice, and unfolds it on the way back at the width it had:
+the room of the list it hides stays reserved, or every terminal in the pane
+would be resized while nobody can see it.
 
 Both side panes are resizable and their widths persist. The right pane's floor is
 **measured, not chosen**: it is whatever its six tabs need. The four that

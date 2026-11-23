@@ -258,6 +258,15 @@ function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
       >
         {(id) => <SoundChoice id={id} config={config} onChange={onChange} />}
       </Field>
+
+      <Field label={t('settings.boardFolder')} hint={t('settings.boardFolderHint')}>
+        <DirectoryField
+          value={config.boardFolder}
+          placeholder={t('settings.boardFolderUnset')}
+          title={t('settings.boardFolder')}
+          onPick={(boardFolder) => void onChange({ boardFolder })}
+        />
+      </Field>
     </div>
   )
 }
@@ -951,30 +960,37 @@ function DirectoryField({
   onPick: (path: string) => void
 }): React.JSX.Element {
   const { t } = useTranslation()
+  const describeFailure = useErrorMessage()
+  const [failure, setFailure] = useState<Failure | null>(null)
 
   return (
-    <div className="flex items-center gap-2">
-      <span
-        className={`border-line bg-muted flex h-7 min-w-0 flex-1 items-center truncate rounded-[var(--radius-control)] border px-2 font-mono text-[11px] ${
-          value === '' ? 'text-ink-faint' : 'text-ink-soft'
-        }`}
-        title={value || placeholder}
-      >
-        {value === '' ? placeholder : value}
-      </span>
+    <div>
+      <div className="flex items-center gap-2">
+        <span
+          className={`border-line bg-muted flex h-7 min-w-0 flex-1 items-center truncate rounded-[var(--radius-control)] border px-2 font-mono text-[11px] ${
+            value === '' ? 'text-ink-faint' : 'text-ink-soft'
+          }`}
+          title={value || placeholder}
+        >
+          {value === '' ? placeholder : value}
+        </span>
 
-      <Button
-        variant="quiet"
-        size="sm"
-        onClick={() => {
-          void (async () => {
-            const result = await window.octopus.dialog.pickDirectory(title)
-            if (result.ok && result.value !== null) onPick(result.value)
-          })()
-        }}
-      >
-        {t('settings.change')}
-      </Button>
+        <Button
+          variant="quiet"
+          size="sm"
+          onClick={() => {
+            void (async () => {
+              const result = await window.octopus.dialog.pickDirectory(title)
+              setFailure(result.ok ? null : result)
+              if (result.ok && result.value !== null) onPick(result.value)
+            })()
+          }}
+        >
+          {t('settings.change')}
+        </Button>
+      </div>
+
+      {failure !== null && <p className="text-danger mt-1.5">{describeFailure(failure)}</p>}
     </div>
   )
 }

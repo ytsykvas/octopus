@@ -23,7 +23,8 @@ import { Chat } from './components/chat/Chat.js'
 import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { Placeholder } from './components/Placeholder.js'
 import { ProjectSettings, type SectionId as ProjectSection } from './components/ProjectSettings.js'
-import { ProjectTabs } from './components/ProjectTabs.js'
+import { ProjectTabs, type Screen } from './components/ProjectTabs.js'
+import { BoardScreen } from './components/board/BoardScreen.js'
 import { PluginsWindow } from './components/plugins/PluginsWindow.js'
 import { RightPanel } from './components/RightPanel.js'
 import type { DiffReveal } from './components/diff/DiffPanel.js'
@@ -100,6 +101,32 @@ function takesText(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
 }
 
+/** Where the error banner belongs: the screen in front and what is selected on it. */
+function selectionKey(
+  screen: Screen,
+  projectId: string | null,
+  workspaceId: string | null
+): string {
+  return `${screen}/${projectId ?? ''}/${workspaceId ?? ''}`
+}
+
+function isNewWorkspaceKey(event: KeyboardEvent): boolean {
+  return event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n'
+}
+
+/** The 1–9 a project or workspace shortcut names, or null. */
+function shortcutDigit(event: KeyboardEvent): number | null {
+  const digit = Number.parseInt(event.key, 10)
+  return digit >= 1 && digit <= 9 ? digit : null
+}
+
+/** A new workspace and the jumps by number: the board has no conversation or pane for the rest. */
+function isBoardPassThrough(event: KeyboardEvent): boolean {
+  return (
+    isNewWorkspaceKey(event) || ((event.metaKey || event.ctrlKey) && shortcutDigit(event) !== null)
+  )
+}
+
 /**
  * Window layout (§10.8 docs/PROJECT.md): a project tab strip, then the active
  * project's workspaces, the agent chat, and diff and terminal on the right.
@@ -142,6 +169,12 @@ export function App(): React.JSX.Element {
   // Not persisted, unlike the right pane: the workspace list's fold lasts for
   // the session.
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Not persisted, like the list's fold: which screen is in front lasts for the session.
+  const [screen, setScreen] = useState<Screen>('octopus')
+  const onBoard = screen === 'board'
+  // Filled by the board itself: core finds its folder by name regardless of case, so only the
+  // board knows the path it actually reads.
+  const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null)
   const [pickingRepository, setPickingRepository] = useState(false)
   /* Read off the same check that decides whether the picker opens at all, and
      kept only for as long as it is open — see `addFromGitHub`. */
@@ -165,7 +198,9 @@ export function App(): React.JSX.Element {
   }
 
   /*
-   * The error banner follows the selection out, and no further.
+   * The error banner follows the selection out, and no further — and the
+   * screen is part of the selection: the board's banner is not about the
+   * conversation behind it.
    *
    * One transient failure — a config write that lost a race, a `gh` not signed
    * in yet, a rename git refused — used to pin a red sentence to the top of the
@@ -176,7 +211,7 @@ export function App(): React.JSX.Element {
    * The hooks clear it themselves on entry to a new attempt, which is the
    * other half: a fresh error told apart from an old one.
    */
-  const selection = `${selectedProjectId ?? ''}/${selectedWorkspaceId ?? ''}`
+  const selection = selectionKey(screen, selectedProjectId, selectedWorkspaceId)
   const [shownSelection, setShownSelection] = useState(selection)
   if (selection !== shownSelection) {
     setShownSelection(selection)
@@ -190,7 +225,7 @@ export function App(): React.JSX.Element {
   const attention = useAttention(
     projects.all,
     workspaces.flat,
-    selectedWorkspaceId,
+    onBoard ? null : selectedWorkspaceId,
     config?.notificationSound === true ? config.notificationSoundId : null
   )
 
@@ -386,8 +421,9 @@ export function App(): React.JSX.Element {
       // Moved by the creation itself, so the banner is already about where it
       // lands: a creation that went round a branch named after its kind says
       // so there, and clearing on the move would wipe it as it was written.
-      setShownSelection(`${projectId}/${made}`)
+      setShownSelection(selectionKey('octopus', projectId, made))
       setFreshWorkspaceId(made)
+      setScreen('octopus')
     },
     [workspaces, forgetWorkspaces]
   )
@@ -498,6 +534,15 @@ export function App(): React.JSX.Element {
     [settleConfig]
   )
 
+  const pickBoardFolder = useCallback(async () => {
+    const picked = await window.octopus.dialog.pickDirectory(t('settings.boardFolder'))
+    if (!picked.ok) {
+      setError(describeFailure(picked))
+      return
+    }
+    if (picked.value !== null) await updateConfig({ boardFolder: picked.value })
+  }, [t, describeFailure, updateConfig])
+
   // A list in the config, as an operation (`ConfigEditSchema` says why).
   const editConfig = useCallback(
     async (edit: ConfigEdit) => {
@@ -562,6 +607,7 @@ export function App(): React.JSX.Element {
    */
   const openWorkspace = useCallback(
     (target: StatusTarget) => {
+      setScreen('octopus')
       if (target.chatId != null) conversations.selectIn(target.workspaceId, target.chatId)
       setSelectedProjectId(target.projectId)
       setSelectedWorkspaceId(target.workspaceId)
@@ -642,6 +688,10 @@ export function App(): React.JSX.Element {
      */
     if (document.querySelector('dialog[open]') !== null) return
 
+    // The board shows no conversation, tab or pane to act on: only a new workspace and a
+    // jump by number mean anything there.
+    if (onBoard && !isBoardPassThrough(event)) return
+
     if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 't') {
       event.preventDefault()
       if (chatTabs.canCreate) void chatTabs.create()
@@ -682,7 +732,7 @@ export function App(): React.JSX.Element {
       return
     }
 
-    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n') {
+    if (isNewWorkspaceKey(event)) {
       event.preventDefault()
       if (selectedProjectId !== null) void createWorkspace(selectedProjectId)
       return
@@ -728,8 +778,8 @@ export function App(): React.JSX.Element {
       return
     }
 
-    const digit = Number.parseInt(event.key, 10)
-    if (Number.isNaN(digit) || digit < 1 || digit > 9) return
+    const digit = shortcutDigit(event)
+    if (digit === null) return
 
     if (event.metaKey) {
       const project = projects.all[digit - 1]
@@ -745,6 +795,7 @@ export function App(): React.JSX.Element {
       const target = (workspaces.byProject.get(selectedProjectId) ?? [])[digit - 1]
       if (target) {
         event.preventDefault()
+        setScreen('octopus')
         setSelectedWorkspaceId(target.id)
       }
     }
@@ -764,6 +815,8 @@ export function App(): React.JSX.Element {
   // same config field would be one refactor away from disagreeing, and the
   // disagreement would show up as a centre pane with nowhere to go.
   const sidebarWidth = config?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH
+  // The list belongs to the Octopus screen; on the board the strip stands alone.
+  const listShown = sidebarOpen && !onBoard
 
   // Read twice: the right pane hands it to the scripts, and the hint they
   // draw when there is none sends the user to edit that same project.
@@ -894,6 +947,22 @@ export function App(): React.JSX.Element {
   const defaultPlanModel = config?.planModel ?? null
   const dismissedTips = config?.dismissedTips ?? NO_TIPS
 
+  // No padded wrapper: the placeholder brings its own frame and centres
+  // itself, so one here would centre it inside a box already inset from the
+  // pane and leave it sitting low.
+  const centerPane = (
+    <CenterPane
+      hasProjects={hasProjects}
+      busy={projects.busy || checkingGitHub}
+      checkingGitHub={checkingGitHub}
+      onAddFromDisk={() => void addFromDisk()}
+      onAddFromGitHub={() => void addFromGitHub()}
+    />
+  )
+
+  const showsBoardFolder =
+    onBoard && selectedProject !== null && config !== null && config.boardFolder !== ''
+
   return (
     // The bar's height as a variable, for what floats in the corner above it.
     <div
@@ -904,9 +973,14 @@ export function App(): React.JSX.Element {
           a pane's colour reaching up here made the window look like it started
           in the wrong place. */}
       <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b pr-3 pl-[5.5rem]">
-        {/* The project's name is not repeated here: the sidebar beside the
-            window always shows it. */}
-        {selectedProject ? (
+        {/* The project's name is not repeated here: the project strip beside
+            the window always shows it. */}
+        {showsBoardFolder ? (
+          <span
+            ref={setTitleSlot}
+            className="text-ink-faint min-w-0 truncate font-mono text-[11px]"
+          />
+        ) : selectedProject && !onBoard ? (
           <span className="text-ink-faint min-w-0 truncate font-mono text-[11px]">
             {selectedProject.repoPath}
           </span>
@@ -920,113 +994,117 @@ export function App(): React.JSX.Element {
             the window rather than about the conversation: where the work lands.
             Here it reads as one line with the project and its directory, and
             the row it left is the tab strip's. */}
-        {selectedWorkspace && (
-          <span className="text-ink-soft flex min-w-0 shrink-0 items-center gap-1.5">
-            <GitBranch aria-hidden size={12} className="shrink-0" />
-            <span className="truncate font-mono text-[11px]">{selectedWorkspace.branch}</span>
-          </span>
-        )}
+        {!onBoard && (
+          <>
+            {selectedWorkspace && (
+              <span className="text-ink-soft flex min-w-0 shrink-0 items-center gap-1.5">
+                <GitBranch aria-hidden size={12} className="shrink-0" />
+                <span className="truncate font-mono text-[11px]">{selectedWorkspace.branch}</span>
+              </span>
+            )}
 
-        <span className="ml-auto flex shrink-0 items-center gap-2">
-          {/*
-           * Finished work, one press from a request.
-           *
-           * Beside the branch, because that is what a request would be made of.
-           * It appears when the workspace has something to carry and no request
-           * open yet, and stays away while the project's list cannot say so (see
-           * `requestKnown`) — and it deliberately does not ask GitHub itself: that is a
-           * network call per workspace, and the tab it opens is the one authority
-           * on what the branch has.
-           */}
-          {readyForRequest && requestKnown && (
-            <Button size="sm" onClick={showPullRequests}>
-              <GitPullRequest aria-hidden size={12} />
-              {t('pullRequest.createShortcut')}
-            </Button>
-          )}
+            <span className="ml-auto flex shrink-0 items-center gap-2">
+              {/*
+               * Finished work, one press from a request.
+               *
+               * Beside the branch, because that is what a request would be made of.
+               * It appears when the workspace has something to carry and no request
+               * open yet, and stays away while the project's list cannot say so (see
+               * `requestKnown`) — and it deliberately does not ask GitHub itself: that is a
+               * network call per workspace, and the tab it opens is the one authority
+               * on what the branch has.
+               */}
+              {readyForRequest && requestKnown && (
+                <Button size="sm" onClick={showPullRequests}>
+                  <GitPullRequest aria-hidden size={12} />
+                  {t('pullRequest.createShortcut')}
+                </Button>
+              )}
 
-          {/*
-           * A request that exists is finished here rather than opened.
-           *
-           * The header cannot see conflicts or draft status — the pane reads
-           * those for the workspace showing. It can see the checks, so a failed
-           * run stops the merge here as it would there; everything else GitHub
-           * refuses on its own, and a refusal now says why.
-           */}
-          {openRequest?.state === 'open' && selectedWorkspace !== null && (
-            <>
-              <MergeMenu
-                // Green, like every press that finishes the work.
-                variant="success"
-                onMerge={(method) => {
-                  finishRequest(selectedWorkspace, () =>
-                    window.octopus.workspaces.mergePullRequest(
-                      selectedWorkspace.id,
-                      openRequest.number,
-                      method
-                    )
-                  )
-                }}
-                /* The same rule the pane keeps, said in the summary this list
-                   carries: a red check and a check still going both hold the
-                   button, and a repository that runs none reports `none` and
-                   is merged as it always was. */
-                disabled={
-                  finishing.isPending(selectedWorkspace.id, 'finish') ||
-                  openRequest.checks === 'failed' ||
-                  openRequest.checks === 'running'
-                }
+              {/*
+               * A request that exists is finished here rather than opened.
+               *
+               * The header cannot see conflicts or draft status — the pane reads
+               * those for the workspace showing. It can see the checks, so a failed
+               * run stops the merge here as it would there; everything else GitHub
+               * refuses on its own, and a refusal now says why.
+               */}
+              {openRequest?.state === 'open' && selectedWorkspace !== null && (
+                <>
+                  <MergeMenu
+                    // Green, like every press that finishes the work.
+                    variant="success"
+                    onMerge={(method) => {
+                      finishRequest(selectedWorkspace, () =>
+                        window.octopus.workspaces.mergePullRequest(
+                          selectedWorkspace.id,
+                          openRequest.number,
+                          method
+                        )
+                      )
+                    }}
+                    /* The same rule the pane keeps, said in the summary this list
+                       carries: a red check and a check still going both hold the
+                       button, and a repository that runs none reports `none` and
+                       is merged as it always was. */
+                    disabled={
+                      finishing.isPending(selectedWorkspace.id, 'finish') ||
+                      openRequest.checks === 'failed' ||
+                      openRequest.checks === 'running'
+                    }
+                  />
+
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={finishing.isPending(selectedWorkspace.id, 'finish')}
+                    onClick={() => {
+                      finishRequest(selectedWorkspace, () =>
+                        window.octopus.workspaces.closePullRequest(
+                          selectedWorkspace.id,
+                          openRequest.number
+                        )
+                      )
+                    }}
+                  >
+                    {t('pullRequest.close')}
+                  </Button>
+                </>
+              )}
+
+              <ServerControls
+                runnable={server.runnable}
+                activeRun={server.activeRun}
+                building={server.building}
+                servingAt={server.servingAt}
+                runAll={server.runAll}
+                stopRun={server.stopRun}
               />
 
-              <Button
-                size="sm"
-                variant="danger"
-                disabled={finishing.isPending(selectedWorkspace.id, 'finish')}
+              {server.runnable && <span aria-hidden className="bg-line h-4 w-px" />}
+
+              {/* One control in one place, rather than a collapse inside the pane and
+                an expand out here: the button that folds something away should be
+                the button that brings it back, or the second one has to be hunted
+                for in a pane that is no longer on screen. */}
+              <button
+                type="button"
                 onClick={() => {
-                  finishRequest(selectedWorkspace, () =>
-                    window.octopus.workspaces.closePullRequest(
-                      selectedWorkspace.id,
-                      openRequest.number
-                    )
-                  )
+                  showRightPanel(!rightPanelOpen)
                 }}
+                className="text-ink-faint hover:text-ink focus-ring rounded p-1 transition-colors"
+                title={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
+                aria-label={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
               >
-                {t('pullRequest.close')}
-              </Button>
-            </>
-          )}
-
-          <ServerControls
-            runnable={server.runnable}
-            activeRun={server.activeRun}
-            building={server.building}
-            servingAt={server.servingAt}
-            runAll={server.runAll}
-            stopRun={server.stopRun}
-          />
-
-          {server.runnable && <span aria-hidden className="bg-line h-4 w-px" />}
-
-          {/* One control in one place, rather than a collapse inside the pane and
-            an expand out here: the button that folds something away should be
-            the button that brings it back, or the second one has to be hunted
-            for in a pane that is no longer on screen. */}
-          <button
-            type="button"
-            onClick={() => {
-              showRightPanel(!rightPanelOpen)
-            }}
-            className="text-ink-faint hover:text-ink focus-ring rounded p-1 transition-colors"
-            title={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
-            aria-label={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
-          >
-            {rightPanelOpen ? (
-              <PanelRightClose aria-hidden size={14} />
-            ) : (
-              <PanelRightOpen aria-hidden size={14} />
-            )}
-          </button>
-        </span>
+                {rightPanelOpen ? (
+                  <PanelRightClose aria-hidden size={14} />
+                ) : (
+                  <PanelRightOpen aria-hidden size={14} />
+                )}
+              </button>
+            </span>
+          </>
+        )}
       </header>
 
       {/* Positioned for the right pane, which folds offstage against this row
@@ -1064,9 +1142,11 @@ export function App(): React.JSX.Element {
                 // Installed from a terminal since the app started, or removed.
                 void plugins.readInstalled()
               }}
+              screen={screen}
+              onScreen={setScreen}
             />
 
-            {sidebarOpen && (
+            {listShown && (
               <Sidebar
                 project={selectedProject}
                 hasProjects={hasProjects}
@@ -1097,8 +1177,14 @@ export function App(): React.JSX.Element {
           </div>
 
           <SidebarFooter
-            sidebarOpen={sidebarOpen}
+            sidebarOpen={listShown}
             onToggleSidebar={() => {
+              // On the board the fold's button says "Show workspaces", and that is where it goes.
+              if (onBoard) {
+                setScreen('octopus')
+                setSidebarOpen(true)
+                return
+              }
               setSidebarOpen((open) => !open)
             }}
             onOpenSettings={() => {
@@ -1113,17 +1199,18 @@ export function App(): React.JSX.Element {
           {/* The chat needs the full height of the pane — a padded, scrolling
               wrapper around it would give it two scrollbars, one of which
               would carry the composer off the bottom of the window. */}
-          {!hasProjects || !selectedProject ? (
-            // No padded wrapper: the placeholder brings its own frame and
-            // centres itself, so one here would centre it inside a box already
-            // inset from the pane and leave it sitting low.
-            <CenterPane
-              hasProjects={hasProjects}
-              busy={projects.busy || checkingGitHub}
-              checkingGitHub={checkingGitHub}
-              onAddFromDisk={() => void addFromDisk()}
-              onAddFromGitHub={() => void addFromGitHub()}
+          {!hasProjects ? (
+            centerPane
+          ) : onBoard ? (
+            <BoardScreen
+              project={selectedProject}
+              boardFolder={config?.boardFolder ?? null}
+              onPickFolder={() => void pickBoardFolder()}
+              onError={setError}
+              titleSlot={titleSlot}
             />
+          ) : !selectedProject ? (
+            centerPane
           ) : !selectedWorkspace ? (
             /* Decided here rather than inside the chat, because the way out of
                this state is to make a workspace — and the chat has no business
@@ -1185,7 +1272,7 @@ export function App(): React.JSX.Element {
             and the servers running there belong to their workspaces, and
             unmounting the pane used to end every one of them. */}
         <RightPanel
-          open={rightPanelOpen}
+          open={rightPanelOpen && !onBoard}
           onOpenChange={(open) => {
             showRightPanel(open)
           }}
@@ -1269,7 +1356,9 @@ export function App(): React.JSX.Element {
           reveal={diffReveal}
           onError={setError}
           // The room the pane must leave alone. Folded away, the list takes
-          // none of it — and the pane may have that room too.
+          // none of it — and the pane may have that room too. Not so on the
+          // board, where the pane is offstage: widening it there would resize
+          // every terminal in it.
           leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
         />
       </div>

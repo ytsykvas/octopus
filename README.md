@@ -107,6 +107,9 @@ local-only, and is built to one person's taste.
   plugins window lists what is installed beside a store. A repository that ships
   settings which pre-approve tools or run hooks is shown to you once, before any
   of it is believed.
+- **A board of tasks per project.** A second screen lays a project's tasks out
+  as columns — Backlog to Done — read from Markdown files in a folder you
+  choose, so a folder iCloud syncs shows the same board on every Mac.
 
 The details behind each of these — the port pool, the env block, what a diff
 counts — are in [docs/](docs/README.md).

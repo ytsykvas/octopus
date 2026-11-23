@@ -12,6 +12,13 @@ dot in the project dot's place says an installed plugin would not load, which
 is why `usePlugins` reads the installed list when the app starts rather than
 when the window opens.
 
+**General ends with the board folder.** The same directory field the clone
+destination uses in Git: the path, or a muted "Not set", and Change… opening
+the system folder dialog. Picked through the dialog rather than typed, because
+a folder chosen in an Open dialog is the one macOS lets the app read without
+a separate prompt. A dialog that fails says why under the field, in
+either section.
+
 **`PluginsWindow`** is a `Modal` of the large size with two tabs, styled as the
 import dialogs' pills:
 

@@ -9,6 +9,8 @@
 │ OC ├──────────────┤                          │                      │
 │    │  ● anna      │                          │                      │
 │ +  │  ○ maria     │                          │                      │
+│ ▣  │              │                          │                      │  ▣ Octopus
+│ ▢  │              │                          │                      │  ▢ Board
 │ ✣  │              │                          │                      │  ✣ plugins
 ├────┴──────────────┤                          │                      │
 │ Claude   5h 31%   │                          │                      │
@@ -17,30 +19,30 @@
   tabs   workspaces           centre                 right pane
 ```
 
-| File                                                             | Read it when                                                                                    |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [title-bar-and-project-tabs.md](title-bar-and-project-tabs.md)   | the title bar, its Run button, the project tab strip, a tile's attention dot, toasts and sounds |
-| [workspace-list.md](workspace-list.md)                           | the left column's list: Help, the branch header, change counts, a branch's pull request state   |
-| [board.md](board.md)                                             | the Board: columns, cards, how the board is read, its empty states                              |
-| [account-and-status.md](account-and-status.md)                   | the foot of the left column, the usage reading and the status bar                               |
-| [chat-tabs-and-viewer.md](chat-tabs-and-viewer.md)               | the centre's tab strip, file tabs and the file viewer                                           |
-| [chat-log.md](chat-log.md)                                       | how the conversation log is drawn                                                               |
-| [composer.md](composer.md)                                       | the composer, the context strip, `@` and `/`, side questions                                    |
-| [chat-blocks-and-permissions.md](chat-blocks-and-permissions.md) | how blocks render, permission cards, the plan dialog, an MCP server's question                  |
-| [chat-pickers.md](chat-pickers.md)                               | the model, effort and mode pickers                                                              |
-| [right-pane.md](right-pane.md)                                   | the right pane itself: its tabs, folding, resizing, the terminal and notes tabs                 |
-| [scripts-tab.md](scripts-tab.md)                                 | the Scripts tab: build, server, logs, the env editor                                            |
-| [pull-request-tab.md](pull-request-tab.md)                       | the Pull request tab                                                                            |
-| [settings-window.md](settings-window.md)                         | plugins, what a repository may run, About, file editors                                         |
-| [files-tab.md](files-tab.md)                                     | the Files tab                                                                                   |
-| [diff.md](diff.md)                                               | the Changes tab's diff and review notes                                                         |
-| [colour.md](colour.md)                                           | tokens, project colours, contrast                                                               |
-| [selection.md](selection.md)                                     | how a selected row, tab or rail item is drawn                                                   |
-| [empty-panes.md](empty-panes.md)                                 | what a pane shows with nothing in it                                                            |
-| [motion.md](motion.md)                                           | animation and reduced motion                                                                    |
-| [classes-and-components.md](classes-and-components.md)           | the ready-made classes and shared components to reach for first                                 |
-| [state.md](state.md)                                             | where the window keeps state and how it follows the core                                        |
-| [lint-and-localisation.md](lint-and-localisation.md)             | the two lint rules that stop a build, and localising a string                                   |
+| File                                                             | Read it when                                                                                                |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| [title-bar-and-project-tabs.md](title-bar-and-project-tabs.md)   | the title bar, its Run button, the project tab strip, a tile's attention dot, toasts and sounds             |
+| [workspace-list.md](workspace-list.md)                           | the left column's list: Help, the branch header, change counts, a branch's pull request state               |
+| [board.md](board.md)                                             | the Board: the switch at the foot of the tab strip, columns, cards, how the board is read, its empty states |
+| [account-and-status.md](account-and-status.md)                   | the foot of the left column, the usage reading and the status bar                                           |
+| [chat-tabs-and-viewer.md](chat-tabs-and-viewer.md)               | the centre's tab strip, file tabs and the file viewer                                                       |
+| [chat-log.md](chat-log.md)                                       | how the conversation log is drawn                                                                           |
+| [composer.md](composer.md)                                       | the composer, the context strip, `@` and `/`, side questions                                                |
+| [chat-blocks-and-permissions.md](chat-blocks-and-permissions.md) | how blocks render, permission cards, the plan dialog, an MCP server's question                              |
+| [chat-pickers.md](chat-pickers.md)                               | the model, effort and mode pickers                                                                          |
+| [right-pane.md](right-pane.md)                                   | the right pane itself: its tabs, folding, resizing, the terminal and notes tabs                             |
+| [scripts-tab.md](scripts-tab.md)                                 | the Scripts tab: build, server, logs, the env editor                                                        |
+| [pull-request-tab.md](pull-request-tab.md)                       | the Pull request tab                                                                                        |
+| [settings-window.md](settings-window.md)                         | plugins, what a repository may run, About, file editors                                                     |
+| [files-tab.md](files-tab.md)                                     | the Files tab                                                                                               |
+| [diff.md](diff.md)                                               | the Changes tab's diff and review notes                                                                     |
+| [colour.md](colour.md)                                           | tokens, project colours, contrast                                                                           |
+| [selection.md](selection.md)                                     | how a selected row, tab or rail item is drawn                                                               |
+| [empty-panes.md](empty-panes.md)                                 | what a pane shows with nothing in it                                                                        |
+| [motion.md](motion.md)                                           | animation and reduced motion                                                                                |
+| [classes-and-components.md](classes-and-components.md)           | the ready-made classes and shared components to reach for first                                             |
+| [state.md](state.md)                                             | where the window keeps state and how it follows the core                                                    |
+| [lint-and-localisation.md](lint-and-localisation.md)             | the two lint rules that stop a build, and localising a string                                               |
 
 ## Across the window
 

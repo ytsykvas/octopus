@@ -15,6 +15,8 @@ export const de: Translation = {
     empty: 'Noch nichts hier. Füge mit „+“ ein Repository hinzu.',
     pick: 'Wähle ganz links ein Projekt.',
     addProject: 'Repository hinzufügen',
+    screenOctopus: 'Octopus',
+    screenBoard: 'Board',
     projectDone: 'Ein Agent ist hier fertig geworden, während du weg warst',
     addFromDisk: 'Von der Festplatte…',
     addFromDiskHint: 'Ein Repository, das schon auf diesem Rechner liegt',
@@ -1437,6 +1439,10 @@ export const de: Translation = {
     cloneDirectoryHint:
       'Repositorys von GitHub werden hierhin geklont. Jedes bekommt einen eigenen Ordner mit dem Namen des Repositorys.',
     cloneDirectoryUnset: 'Nicht festgelegt – du wirst beim ersten Klonen gefragt.',
+    boardFolder: 'Board-Ordner',
+    boardFolderHint:
+      'Die Aufgaben jedes Projekts liegen in einem Ordner mit seinem Namen, ein Unterordner pro Spalte. Synchronisiert iCloud den Ordner, ist das Board auf jedem Mac gleich.',
+    boardFolderUnset: 'Nicht festgelegt',
     change: 'Ändern…',
 
     settingSources: 'Quellen für Anweisungen',

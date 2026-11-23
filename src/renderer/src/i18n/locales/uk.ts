@@ -15,6 +15,8 @@ export const uk: Translation = {
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
     pick: 'Оберіть проєкт на смузі ліворуч.',
     addProject: 'Додати репозиторій',
+    screenOctopus: 'Octopus',
+    screenBoard: 'Дошка',
     projectDone: 'Агент тут закінчив, поки вас не було',
     addFromDisk: 'З диска…',
     addFromDiskHint: 'Репозиторій, який уже є на цьому комп’ютері',
@@ -1412,6 +1414,10 @@ export const uk: Translation = {
     cloneDirectoryHint:
       'Репозиторії, додані з GitHub, клонуються сюди. Кожен отримує власну теку з назвою репозиторію.',
     cloneDirectoryUnset: 'Не задано — спитаємо при першому клонуванні.',
+    boardFolder: 'Тека дошки',
+    boardFolderHint:
+      'Задачі кожного проєкту лежать у теці з його назвою, по підтеці на колонку. Якщо цю теку синхронізує iCloud, дошка однакова на всіх маках.',
+    boardFolderUnset: 'Не задано',
     change: 'Змінити…',
 
     settingSources: 'Джерела інструкцій',

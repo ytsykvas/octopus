@@ -22,6 +22,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Result } from '../../preload/index.js'
 import { project } from './test/projects.js'
+import { boardCard, givenBoard } from './test/board.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
 import { chat, emitAgentEvent, givenChats, TURN_DONE } from './test/chat.js'
@@ -223,8 +224,8 @@ function findTab(letters: string): Promise<HTMLElement> {
 }
 
 /** The right pane: a `<section>`, which carries no role to reach it by. */
-function rightPane(): HTMLElement {
-  const section = screen.getByRole('button', { name: 'Changes' }).closest('section')
+function rightPane({ hidden = false }: { readonly hidden?: boolean } = {}): HTMLElement {
+  const section = screen.getByRole('button', { name: 'Changes', hidden }).closest('section')
   if (!section) throw new Error('the right pane is not in the window')
   return section
 }
@@ -4072,5 +4073,346 @@ describe('the status bar along the foot', () => {
     })
     // The header speaks for the workspace now selected, and it has a request.
     expect(await screen.findByRole('button', { name: 'Merge' })).toBeInTheDocument()
+  })
+})
+
+describe('the board screen', () => {
+  async function onTheBoard(
+    overrides: Partial<Config> = {}
+  ): Promise<ReturnType<typeof userEvent.setup>> {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board', ...overrides })
+    })
+    givenBoard([boardCard()])
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+    return user
+  }
+
+  /** Planner open on Octopus with its workspace `anna` selected, and a board folder chosen. */
+  async function onAnna(
+    overrides: Partial<Config> = {}
+  ): Promise<ReturnType<typeof userEvent.setup>> {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board', ...overrides })
+    })
+    givenBoard([boardCard()])
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(await screen.findByText('anna'))
+    return user
+  }
+
+  it('switches to the board and back', async () => {
+    const user = await onTheBoard()
+
+    expect(await screen.findByRole('region', { name: 'Backlog' })).toBeInTheDocument()
+    expect(screen.queryByText('bob')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Octopus' }))
+
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
+    expect(rightPane()).not.toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('keeps the right pane mounted, folded offstage', async () => {
+    await onTheBoard()
+    await screen.findByRole('region', { name: 'Backlog' })
+
+    expect(rightPane({ hidden: true })).toHaveAttribute('aria-hidden', 'true')
+    expect(window.octopus.config.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ rightPanelOpen: false })
+    )
+  })
+
+  it('keeps the right pane its width behind the board', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board', rightPanelWidth: 500 })
+    })
+    givenBoard([boardCard()])
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await screen.findByText('bob')
+    const width = rightPane().style.width
+
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+    await screen.findByRole('region', { name: 'Backlog' })
+
+    expect(rightPane({ hidden: true }).style.width).toBe(width)
+  })
+
+  it('shows the folder the board reads in the title bar', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board' })
+    })
+    vi.mocked(window.octopus.board.list).mockResolvedValue({
+      ok: true,
+      value: { folder: '/tmp/board/Planner', cards: [] }
+    })
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    expect(await screen.findByText('/tmp/board/Planner')).toBeInTheDocument()
+    expect(screen.queryByText('/tmp/board/planner')).toBeNull()
+  })
+
+  it('asks for a folder and shows the app name while there is none', async () => {
+    await onTheBoard({ boardFolder: '' })
+
+    expect(await screen.findByText('Choose where tasks live')).toBeInTheDocument()
+    expect(screen.getByText('octopus')).toBeInTheDocument()
+    expect(screen.queryByText('/Users/someone/code/planner')).toBeNull()
+  })
+
+  it('hides the branch and the right-hand controls on the board', async () => {
+    const user = await onAnna()
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    expect(await screen.findByRole('region', { name: 'Backlog' })).toBeInTheDocument()
+    expect(screen.queryByText('ytsykvas/anna')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Collapse panel' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Octopus' }))
+
+    expect(await screen.findByText('ytsykvas/anna')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Collapse panel' })).toBeInTheDocument()
+  })
+
+  it('keeps a composer draft across the board', async () => {
+    const user = await onAnna()
+    await user.type(await screen.findByRole('textbox'), 'half a thought')
+
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+    await user.click(screen.getByRole('button', { name: 'Octopus' }))
+
+    expect(await screen.findByRole('textbox')).toHaveValue('half a thought')
+  })
+
+  it('leaves the board for a workspace jumped to by ⌃digit', async () => {
+    const user = await onTheBoard()
+    await screen.findByRole('region', { name: 'Backlog' })
+
+    await user.keyboard('{Control>}1{/Control}')
+
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
+  })
+
+  it('stays on the board when ⌘digit changes project', async () => {
+    const user = await onTheBoard()
+
+    await user.keyboard('{Meta>}2{/Meta}')
+
+    await waitFor(() => {
+      expect(window.octopus.board.list).toHaveBeenCalledWith('ledger')
+    })
+    expect(await screen.findByRole('region', { name: 'Backlog' })).toBeInTheDocument()
+  })
+
+  it('ignores the conversation shortcuts on the board', async () => {
+    const user = await onTheBoard()
+
+    await user.keyboard('{Meta>}{Shift>}d{/Shift}{/Meta}')
+
+    expect(window.octopus.config.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ rightPanelTab: 'diff' })
+    )
+    expect(rightPane({ hidden: true })).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('leaves the board for a new workspace made by ⌘⇧N', async () => {
+    const user = await onTheBoard()
+
+    await user.keyboard('{Meta>}{Shift>}N{/Shift}{/Meta}')
+
+    expect(window.octopus.workspaces.create).toHaveBeenCalledWith('planner')
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
+    })
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+  })
+
+  it('leaves the board for the workspace a toast opens', async () => {
+    givenChats([chat({ id: 'c-1', title: 'One', sessionId: 's-1' })])
+    const user = await onTheBoard()
+
+    emitAgentEvent({ type: 'finished' }, 'c-1', 'planner/anna')
+    const toast = await screen.findByRole('region', { name: 'Finished' })
+    await user.click(within(toast).getByRole('button', { name: 'Show' }))
+
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
+  })
+
+  it('tells of the workspace left open behind the board', async () => {
+    givenChats([chat({ id: 'c-1', title: 'One', sessionId: 's-1' })])
+    const user = await onAnna()
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    emitAgentEvent({ type: 'finished' }, 'c-1', 'planner/anna')
+
+    expect(await screen.findByRole('region', { name: 'Finished' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Octopus' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Finished' })).toBeNull()
+    })
+  })
+
+  it("opens the folded list when the board's button leaves", async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board' })
+    })
+    givenBoard([boardCard()])
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await screen.findByText('bob')
+    await user.click(screen.getByRole('button', { name: 'Hide workspaces' }))
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    await user.click(screen.getByRole('button', { name: 'Show workspaces' }))
+
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+  })
+
+  it('brings the list back from the foot of the board', async () => {
+    const user = await onTheBoard()
+    expect(screen.queryByRole('button', { name: 'Hide workspaces' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Show workspaces' }))
+
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
+  })
+
+  it('keeps the folder chosen from the board', async () => {
+    const user = await onTheBoard({ boardFolder: '' })
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: true,
+      value: '/tmp/picked'
+    })
+
+    await user.click(await screen.findByRole('button', { name: 'Choose folder…' }))
+
+    expect(window.octopus.dialog.pickDirectory).toHaveBeenCalledWith('Board folder')
+    await waitFor(() => {
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ boardFolder: '/tmp/picked' })
+    })
+  })
+
+  it('keeps no folder when the dialog is cancelled', async () => {
+    const user = await onTheBoard({ boardFolder: '' })
+    const answer = held<Result<string | null>>()
+    vi.mocked(window.octopus.dialog.pickDirectory).mockReturnValue(answer.promise)
+    await user.click(await screen.findByRole('button', { name: 'Choose folder…' }))
+
+    await act(async () => {
+      answer.resolve({ ok: true, value: null })
+      await answer.promise
+    })
+
+    expect(
+      vi.mocked(window.octopus.config.update).mock.calls.some(([patch]) => 'boardFolder' in patch)
+    ).toBe(false)
+  })
+
+  it('says why the folder dialog failed, and forgets it on the other screen', async () => {
+    const user = await onTheBoard({ boardFolder: '' })
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: false,
+      error: 'No window'
+    })
+
+    await user.click(await screen.findByRole('button', { name: 'Choose folder…' }))
+
+    expect(await screen.findByText('Something went wrong: No window')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Octopus' }))
+
+    expect(screen.queryByText('Something went wrong: No window')).toBeNull()
+  })
+
+  it("forgets the board's error when the list's button leaves it", async () => {
+    const user = await onTheBoard({ boardFolder: '' })
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: false,
+      error: 'No window'
+    })
+    await user.click(await screen.findByRole('button', { name: 'Choose folder…' }))
+    expect(await screen.findByText('Something went wrong: No window')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show workspaces' }))
+
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong: No window')).toBeNull()
+  })
+
+  it("forgets the board's error on ⌃digit to the open workspace", async () => {
+    const user = await onAnna({ boardFolder: '' })
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: false,
+      error: 'No window'
+    })
+    await user.click(await screen.findByRole('button', { name: 'Choose folder…' }))
+    expect(await screen.findByText('Something went wrong: No window')).toBeInTheDocument()
+
+    await user.keyboard('{Control>}1{/Control}')
+
+    expect(await screen.findByText('ytsykvas/anna')).toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong: No window')).toBeNull()
+  })
+
+  it('asks for a project on the board when none is open', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board' })
+    })
+    const user = await openApp()
+    await findTab('PL')
+
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    expect(await screen.findByText('No project selected')).toBeInTheDocument()
+    expect(window.octopus.board.list).not.toHaveBeenCalled()
+  })
+
+  it('draws nothing on the board until the settings have been read', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockReturnValue(new Promise(() => undefined))
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    expect(screen.getByRole('button', { name: 'Board' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByText('Choose where tasks live')).toBeNull()
+    expect(screen.queryAllByRole('region', { name: 'Backlog' })).toEqual([])
+    expect(window.octopus.board.list).not.toHaveBeenCalled()
+  })
+
+  it('offers to add a repository on the board when there is none', async () => {
+    const user = await openApp()
+
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    expect(await screen.findByText('Let’s find something to work on')).toBeInTheDocument()
+    expect(screen.queryAllByRole('region', { name: 'Backlog' })).toEqual([])
   })
 })
