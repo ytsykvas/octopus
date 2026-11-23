@@ -297,6 +297,32 @@ export function installOctopusStub(): Api {
       reorder: vi.fn(() => ok(undefined))
     },
 
+    board: {
+      list: vi.fn(() => ok({ folder: '/board/planner', cards: [] })),
+      read: vi.fn(() =>
+        ok({
+          ref: 'backlog/Fix login.md',
+          status: 'backlog' as const,
+          loose: false,
+          title: 'Fix login',
+          meta: { links: [], runs: [] },
+          malformed: false,
+          notText: false,
+          comments: 0,
+          description: '# Fix login\n',
+          thread: [],
+          attachments: []
+        })
+      ),
+      create: vi.fn(() => ok('backlog/Fix login.md')),
+      update: vi.fn(() => ok(undefined)),
+      rename: vi.fn(() => ok(undefined)),
+      saveDescription: vi.fn(() => ok(undefined)),
+      comment: vi.fn(() => ok(undefined)),
+      move: vi.fn(() => ok('done/Fix login.md')),
+      remove: vi.fn(() => ok(undefined))
+    },
+
     skills: {
       list: vi.fn(() => ok([])),
       read: vi.fn(() =>

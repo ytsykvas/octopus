@@ -70,6 +70,7 @@ describe('the exposed bridge', () => {
     expect(Object.keys(api).sort()).toEqual([
       'accounts',
       'attachments',
+      'board',
       'chats',
       'config',
       'dialog',
@@ -513,6 +514,43 @@ describe('channel names', () => {
       () => method('prompts', 'reorder')({ kind: 'global' } as never, [] as never),
       'prompts:reorder'
     ],
+    ['board.list', () => method('board', 'list')('p' as never), 'board:list'],
+    [
+      'board.read',
+      () => method('board', 'read')('p' as never, 'backlog/a.md' as never),
+      'board:read'
+    ],
+    ['board.create', () => method('board', 'create')('p' as never, {} as never), 'board:create'],
+    [
+      'board.update',
+      () => method('board', 'update')('p' as never, 'backlog/a.md' as never, {} as never),
+      'board:update'
+    ],
+    [
+      'board.rename',
+      () => method('board', 'rename')('p' as never, 'backlog/a.md' as never, 'T' as never),
+      'board:rename'
+    ],
+    [
+      'board.saveDescription',
+      () => method('board', 'saveDescription')('p' as never, 'backlog/a.md' as never, {} as never),
+      'board:saveDescription'
+    ],
+    [
+      'board.comment',
+      () => method('board', 'comment')('p' as never, 'backlog/a.md' as never, 'hi' as never),
+      'board:comment'
+    ],
+    [
+      'board.move',
+      () => method('board', 'move')('p' as never, 'backlog/a.md' as never, {} as never),
+      'board:move'
+    ],
+    [
+      'board.remove',
+      () => method('board', 'remove')('p' as never, 'backlog/a.md' as never),
+      'board:remove'
+    ],
     [
       'library.list',
       () => method('library', 'list')({ kind: 'global' } as never, 'command' as never),
@@ -779,6 +817,18 @@ describe('arguments reach main unchanged', () => {
   it('passes removal options through', () => {
     method('workspaces', 'remove')('planner/anna' as never, { force: true } as never)
     expect(invoke).toHaveBeenCalledWith('workspaces:remove', 'planner/anna', { force: true })
+  })
+
+  it.each([
+    ['move', ['p', 'backlog/a.md', { status: 'done', index: 0 }], 'board:move'],
+    ['update', ['p', 'backlog/a.md', { priority: 'high' }], 'board:update'],
+    ['rename', ['p', 'backlog/a.md', 'T'], 'board:rename'],
+    ['saveDescription', ['p', 'backlog/a.md', { text: 'x', base: null }], 'board:saveDescription'],
+    ['comment', ['p', 'backlog/a.md', 'hi'], 'board:comment'],
+    ['create', ['p', { status: 'backlog', title: 'A' }], 'board:create']
+  ])('board.%s passes every argument through', (name, args, channel) => {
+    method('board', name)(...(args as never[]))
+    expect(invoke).toHaveBeenCalledWith(channel, ...args)
   })
 })
 

@@ -278,6 +278,21 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t('errors.pluginNotInstalled')
         case 'pluginProjectMissing':
           return t('errors.pluginProjectMissing', { path: failure.params?.path ?? '' })
+        case 'boardFolderUnset':
+          return t('errors.boardFolderUnset')
+        case 'boardFolderUnreadable':
+          return t('errors.boardFolderUnreadable', {
+            path: failure.params?.path ?? '',
+            reason: failure.params?.reason ?? ''
+          })
+        case 'cardMissing':
+        case 'cardNameTaken':
+        case 'cardChanged':
+        case 'cardFrontmatterUnreadable':
+        case 'cardOutside':
+        case 'cardNotText':
+        case 'cardTooLong':
+          return t(`errors.${failure.code}`, { name: failure.params?.name ?? '' })
         default:
           return t('errors.unknown', { message: failure.error })
       }

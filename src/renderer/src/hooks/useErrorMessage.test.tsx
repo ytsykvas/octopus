@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import type { AttachmentErrorCode } from '@core/attachments.js'
+import type { BoardErrorCode } from '@core/boardSchema.js'
 import type { ChatErrorCode } from '@core/chats.js'
 import type { DiffErrorCode } from '@core/diff.js'
 import type { EnvProfileCode } from '@core/envProfiles.js'
@@ -35,6 +36,7 @@ import { useErrorMessage } from './useErrorMessage.js'
  */
 type CoreErrorCode =
   | AttachmentErrorCode
+  | BoardErrorCode
   | ChatErrorCode
   | DiffErrorCode
   | EnvProfileCode
@@ -64,6 +66,15 @@ type CoreErrorCode =
 type Interpolated = Readonly<Record<string, string>> | null | 'internal'
 
 const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
+  boardFolderUnset: null,
+  boardFolderUnreadable: { path: '/board', reason: 'not a folder' },
+  cardMissing: { name: 'A.md' },
+  cardNameTaken: { name: 'A.md' },
+  cardChanged: { name: 'A.md' },
+  cardFrontmatterUnreadable: { name: 'A.md' },
+  cardOutside: { name: 'A.md' },
+  cardNotText: { name: 'A.md' },
+  cardTooLong: { name: 'A.md' },
   attachmentTooLarge: { limit: '12' },
   libraryNameInvalid: { name: 'Ship It' },
   libraryExists: { name: 'ship' },
@@ -289,6 +300,27 @@ describe('useErrorMessage', () => {
     expect(result.current({ ok: false, error: 'raw', code: 'noCommits' })).not.toContain('{{')
     expect(result.current({ ok: false, error: 'raw', code: 'pushFailed' })).not.toContain('{{')
     expect(result.current({ ok: false, error: 'raw', code: 'fetchFailed' })).not.toContain('{{')
+  })
+
+  it('says what went wrong with a card in English', () => {
+    const { result } = renderHook(() => useErrorMessage())
+
+    expect(
+      result.current({
+        ok: false,
+        error: 'x',
+        code: 'cardChanged',
+        params: { name: 'Fix login.md' }
+      })
+    ).toBe('“Fix login.md” changed on disk since it was read, so nothing was saved. Try again.')
+    expect(
+      result.current({
+        ok: false,
+        error: 'x',
+        code: 'boardFolderUnreadable',
+        params: { path: '/board', reason: 'not a folder' }
+      })
+    ).toBe('The board folder /board cannot be used: not a folder')
   })
 
   // Core sends the English text as a fallback for logs. An unknown code still

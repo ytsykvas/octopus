@@ -2560,6 +2560,18 @@ export const en = {
       '\u201c{{name}}\u201d is a symbolic link. A skill is copied as it stands, and a link would make what this holds a question about somewhere else on the disk.',
     skillUrlRefused:
       'Nothing could be fetched from {{url}}. Only https addresses are followed, and a redirect off https is refused.',
+    boardFolderUnset: 'Choose a board folder in Settings first.',
+    boardFolderUnreadable: 'The board folder {{path}} cannot be used: {{reason}}',
+    cardMissing: '“{{name}}” is no longer on disk.',
+    cardNameTaken: 'A file named “{{name}}” is already there.',
+    cardChanged: '“{{name}}” changed on disk since it was read, so nothing was saved. Try again.',
+    cardFrontmatterUnreadable:
+      'The header of “{{name}}” cannot be read, so its fields cannot be changed here. Fix it in an editor.',
+    cardOutside: '“{{name}}” is not inside the board folder.',
+    cardNotText:
+      '“{{name}}” is not UTF-8 text, so octopus leaves it as it is. Change it in an editor that can save it as UTF-8.',
+    cardTooLong:
+      '“{{name}}” is longer than 100,000 characters — more than one message to the agent can hold. Shorten it, then run it again.',
     unknown: 'Something went wrong: {{message}}'
   }
 }

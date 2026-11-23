@@ -7,6 +7,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { rm } from 'node:fs/promises'
 import { availableParallelism } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
@@ -258,6 +259,27 @@ import {
   reorderPrompts as reorderPromptsIn,
   updatePrompt as updatePromptIn
 } from './prompts.js'
+import {
+  addComment as addCommentIn,
+  createCard as createCardIn,
+  findLayout,
+  listBoard as listBoardIn,
+  moveCard as moveCardIn,
+  readCard as readCardIn,
+  removeCard as removeCardIn,
+  renameCard as renameCardIn,
+  saveDescription as saveDescriptionIn,
+  updateCard as updateCardIn,
+  type BoardLayout
+} from './boardFiles.js'
+import type {
+  BoardListing,
+  CardDetail,
+  CardDraft,
+  CardMove,
+  CardPatch,
+  DescriptionSave
+} from './boardSchema.js'
 import {
   ensureStore,
   importFromPath,
@@ -629,6 +651,11 @@ export interface ServiceOptions {
   readonly uuid?: () => string
   /** Current time as an ISO string; a parameter so records are predictable in tests. */
   readonly now?: () => string
+  /**
+   * Where a removed card goes. Core cannot reach the Trash — that is Electron's — so main hands in
+   * `shell.trashItem`; the default deletes, which is what a test of the removal wants.
+   */
+  readonly discardPath?: (path: string) => Promise<void>
   /**
    * Where the CLI keeps its own config, read for one thing: when it last
    * fetched the account's usage. Defaults to `$CLAUDE_CONFIG_DIR` or the home
@@ -1341,6 +1368,25 @@ export interface OctopusService {
    */
   reorderPrompts(store: Store, orderedIds: readonly string[]): Promise<void>
 
+  /** The project's board: its folder (made by the first write, never by this) and every card in it. */
+  listBoard(projectId: string): Promise<BoardListing>
+  /** One card whole: its description and its comments. */
+  readCard(projectId: string, ref: string): Promise<CardDetail>
+  /** A new card at the top of its column; answers its ref. */
+  createCard(projectId: string, draft: CardDraft): Promise<string>
+  /** Priority, tag and links; a key the patch leaves out is left alone. */
+  updateCard(projectId: string, ref: string, patch: CardPatch): Promise<void>
+  /** The `# ` line; the file keeps its name. */
+  renameCard(projectId: string, ref: string, title: string): Promise<void>
+  /** Refused with `cardChanged` when the description moved since `save.base`, unless `base` is null. */
+  saveCardDescription(projectId: string, ref: string, save: DescriptionSave): Promise<void>
+  /** A comment stamped now, under the card's marker. */
+  addCardComment(projectId: string, ref: string, text: string): Promise<void>
+  /** Into a column at an index; answers the card's ref there. */
+  moveCard(projectId: string, ref: string, move: CardMove): Promise<string>
+  /** To the Trash in the app (`discardPath`). */
+  removeCard(projectId: string, ref: string): Promise<void>
+
   /** The skills one of the two stores holds, for a settings section. */
   listSkills(store: Store): Promise<SkillEntry[]>
   /**
@@ -1976,6 +2022,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const writeEntry = options.appendEntry ?? appendEntry
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
+  const discardPath = options.discardPath ?? ((path: string): Promise<void> => rm(path))
   const onDiagnostic = options.onDiagnostic ?? ((): void => undefined)
 
   let state: State = await loadState(statePath)
@@ -5074,6 +5121,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   const promptWrites = oneAtATime()
 
+  /** Board writes, one line per project: a move and a create read the whole column first. Keyed by id, not by card: `oneAtATimeEach` never frees a key, and a move changes the ref. */
+  const boardWork = oneAtATimeEach()
+
+  function layoutOf(projectId: string): Promise<BoardLayout> {
+    return findLayout(config.boardFolder, requireProject(projectId).name)
+  }
+
   /** Where one kind of library item lives in a store; a path, made on demand. */
   function libraryDir(store: Store, kind: LibraryKind): string {
     return libraryDirOf(storeRoot(store), kind)
@@ -6428,6 +6482,45 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async reorderPrompts(store, orderedIds) {
       await promptWrites(() => reorderPromptsIn(promptsFileOf(store), orderedIds))
+    },
+
+    async listBoard(projectId) {
+      const layout = await layoutOf(projectId)
+      return { folder: layout.dir, cards: await listBoardIn(layout) }
+    },
+    async readCard(projectId, ref) {
+      return { ...(await readCardIn(await layoutOf(projectId), ref)), attachments: [] }
+    },
+    createCard(projectId, draft) {
+      return boardWork(projectId, async () => createCardIn(await layoutOf(projectId), draft))
+    },
+    updateCard(projectId, ref, patch) {
+      return boardWork(projectId, async () => {
+        await updateCardIn(await layoutOf(projectId), ref, patch)
+      })
+    },
+    renameCard(projectId, ref, title) {
+      return boardWork(projectId, async () => {
+        await renameCardIn(await layoutOf(projectId), ref, title)
+      })
+    },
+    saveCardDescription(projectId, ref, save) {
+      return boardWork(projectId, async () => {
+        await saveDescriptionIn(await layoutOf(projectId), ref, save)
+      })
+    },
+    addCardComment(projectId, ref, text) {
+      return boardWork(projectId, async () => {
+        await addCommentIn(await layoutOf(projectId), ref, text, now())
+      })
+    },
+    moveCard(projectId, ref, move) {
+      return boardWork(projectId, async () => moveCardIn(await layoutOf(projectId), ref, move))
+    },
+    removeCard(projectId, ref) {
+      return boardWork(projectId, async () => {
+        await removeCardIn(await layoutOf(projectId), ref, discardPath)
+      })
     },
 
     async skillsForChat(chatId) {
