@@ -18,7 +18,7 @@ import {
   utimes,
   writeFile
 } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { hostname as osHostname, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -34,6 +34,9 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
+import { descriptionOf, readMeta } from './boardCard.js'
+import { machineLabel } from './boardNames.js'
+import { CARD_TEXT_MAX } from './boardSchema.js'
 import {
   ABANDONED,
   COMPACTION_WATCH_SETTINGS,
@@ -67,6 +70,7 @@ import {
 } from './service.js'
 import type { CliOutput, PluginCli } from './plugins.js'
 import { POOL_START } from './ports.js'
+import { present } from './present.js'
 import type { DraftState } from './pullRequestDraft.js'
 import type { RecordedRun } from './runLog.js'
 import { type AgentEvent } from './events.js'
@@ -437,6 +441,54 @@ const oneRequest =
       ])
     )
   }
+
+function respondTo(command: string, payload: string): CommandExec {
+  return (name) =>
+    name === command ? Promise.resolve(payload) : Promise.reject(new Error('not installed'))
+}
+
+const CLAUDE_SIGNED_IN = JSON.stringify({
+  loggedIn: true,
+  authMethod: 'claude.ai',
+  apiProvider: 'firstParty',
+  email: 'user@example.com',
+  orgId: 'org-1',
+  orgName: "user@example.com's Organization",
+  subscriptionType: 'max'
+})
+
+/** One card in `board/planner/backlog/A.md`, the project `planner`, and a service that can run it. */
+async function withBoard(
+  card: string | Buffer,
+  extra: ServiceOptions = {}
+): Promise<{
+  service: OctopusService
+  projectId: string
+  repo: string
+  board: string
+  file: string
+}> {
+  const repo = join(dir, 'planner')
+  await initRepo(repo)
+  const board = join(dir, 'board')
+  await mkdir(join(board, 'planner', 'backlog'), { recursive: true })
+  const file = join(board, 'planner', 'backlog', 'A.md')
+  await writeFile(file, card)
+  const service = await createService({
+    ...paths(dir),
+    hostname: () => 'Mac-One.local',
+    commandExec: respondTo('claude', CLAUDE_SIGNED_IN),
+    ...extra
+  })
+  await service.updateConfig({ boardFolder: board })
+  const project = await service.addProjectFromPath(repo)
+  return { service, projectId: project.id, repo, board, file }
+}
+
+const only = async (on: OctopusService, projectId: string): Promise<Workspace> =>
+  present((await on.listWorkspaces(projectId))[0], 'a workspace')
+
+const raw = (file: string): Promise<string> => readFile(file, 'utf8')
 
 describe('workspaces', () => {
   /** A service with one project already added, as the UI would have. */
@@ -18604,6 +18656,413 @@ describe('the board', () => {
       code: 'cardMissing',
       params: { name: 'Nope.md' }
     })
+  })
+})
+
+describe('running a board card', () => {
+  const UUID = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
+  const runsIn = async (file: string): Promise<unknown[]> => readMeta(await raw(file)).meta.runs
+
+  it('starts a workspace from a card and returns its description as a draft', async () => {
+    const { service, projectId, file } = await withBoard('# Fix login\n\nBody\n')
+
+    const launch = await service.runCard(projectId, 'backlog/A.md')
+
+    const workspace = await only(service, projectId)
+    expect(launch).toEqual({
+      workspaceId: workspace.id,
+      draft: '# Fix login\n\nBody',
+      detour: null,
+      created: true
+    })
+    expect(workspace.card).toBe(readMeta(await raw(file)).meta.id)
+  })
+
+  it('writes an id into a card that had none, and nothing else above the description', async () => {
+    const { service, projectId, file } = await withBoard('# Fix login\n\nBody\n')
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    const text = await raw(file)
+    expect(text.startsWith('---\nid: ')).toBe(true)
+    expect(readMeta(text).meta.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(descriptionOf(text)).toBe('# Fix login\n\nBody\n')
+  })
+
+  it('keeps an id the card already had', async () => {
+    const { service, projectId, file } = await withBoard(`---\nid: ${UUID}\n---\n# A\n`)
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    expect((await only(service, projectId)).card).toBe(UUID)
+    expect((await raw(file)).match(/^id:/gm)).toHaveLength(1)
+  })
+
+  it('returns the workspace started from the card with its text again while nothing was sent', async () => {
+    const { service, projectId } = await withBoard('# Fix login\n\nBody\n')
+
+    const first = await service.runCard(projectId, 'backlog/A.md')
+    const again = await service.runCard(projectId, 'backlog/A.md')
+
+    expect(again).toEqual({
+      workspaceId: first.workspaceId,
+      draft: '# Fix login\n\nBody',
+      detour: null,
+      created: false
+    })
+    await expect(service.listWorkspaces(projectId)).resolves.toHaveLength(1)
+  })
+
+  it('returns no draft for a workspace whose conversation has started', async () => {
+    const { service, projectId } = await withBoard('# Fix login\n\nBody\n')
+    const launch = await service.runCard(projectId, 'backlog/A.md')
+    const chat = await service.openChat(launch.workspaceId)
+    const statePath = join(dir, 'state.json')
+    const stored = JSON.parse(await readFile(statePath, 'utf8')) as {
+      chats: Record<string, unknown>[]
+    }
+    await writeFile(
+      statePath,
+      JSON.stringify({
+        ...stored,
+        chats: stored.chats.map((record) =>
+          record.id === chat.id ? { ...record, sessionId: 'sess-1' } : record
+        )
+      }),
+      'utf8'
+    )
+    const reopened = await createService({
+      ...paths(dir),
+      hostname: () => 'Mac-One.local',
+      commandExec: respondTo('claude', CLAUDE_SIGNED_IN)
+    })
+
+    await expect(reopened.runCard(projectId, 'backlog/A.md')).resolves.toMatchObject({
+      workspaceId: launch.workspaceId,
+      draft: null,
+      created: false
+    })
+  })
+
+  it('starts one workspace for a card run twice at once', async () => {
+    const { service, projectId } = await withBoard('# Fix login\n')
+
+    // Either call may reach the board line first; exactly one of them makes the workspace.
+    const launches = await Promise.all([
+      service.runCard(projectId, 'backlog/A.md'),
+      service.runCard(projectId, 'backlog/A.md')
+    ])
+
+    await expect(service.listWorkspaces(projectId)).resolves.toHaveLength(1)
+    expect(launches.map((launch) => launch.created).sort()).toEqual([false, true])
+    expect(new Set(launches.map((launch) => launch.workspaceId)).size).toBe(1)
+  })
+
+  it('starts a new workspace for a card whose workspace was removed', async () => {
+    const { service, projectId } = await withBoard('# Fix login\n')
+    const first = await service.runCard(projectId, 'backlog/A.md')
+    await service.removeWorkspaceById(first.workspaceId, { force: true, deleteBranch: true })
+
+    const again = await service.runCard(projectId, 'backlog/A.md')
+
+    expect(again.created).toBe(true)
+    await expect(service.listWorkspaces(projectId)).resolves.toHaveLength(1)
+  })
+
+  it('starts a workspace with an empty draft from a card with no text', async () => {
+    const { service, projectId } = await withBoard('')
+
+    const launch = await service.runCard(projectId, 'backlog/A.md')
+
+    expect(launch.draft).toBe('')
+    expect(WORKSPACE_NAMES).toContain((await only(service, projectId)).name)
+  })
+
+  it('refuses a card longer than a message can be, and creates nothing', async () => {
+    const card = '# A\n\n' + 'x'.repeat(CARD_TEXT_MAX + 1)
+    const { service, projectId, file } = await withBoard(card)
+
+    await expect(service.runCard(projectId, 'backlog/A.md')).rejects.toMatchObject({
+      code: 'cardTooLong',
+      params: { name: 'A.md' }
+    })
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+    expect(await raw(file)).toBe(card)
+  })
+
+  it('refuses a card whose header cannot be read, and creates nothing', async () => {
+    const card = '---\npriority: high\ntag: [feature\n---\n# A\n'
+    const { service, projectId, file } = await withBoard(card)
+
+    await expect(service.runCard(projectId, 'backlog/A.md')).rejects.toMatchObject({
+      code: 'cardFrontmatterUnreadable'
+    })
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+    expect(await raw(file)).toBe(card)
+  })
+
+  it('refuses a card that is not UTF-8 text', async () => {
+    const card = Buffer.from([0xcf, 0xf0, 0xe8, 0x0a])
+    const { service, projectId, file } = await withBoard(card)
+
+    await expect(service.runCard(projectId, 'backlog/A.md')).rejects.toMatchObject({
+      code: 'cardNotText'
+    })
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+    expect(await readFile(file)).toEqual(card)
+  })
+
+  it('refuses a card that is not there', async () => {
+    const { service, projectId } = await withBoard('# A\n')
+
+    await expect(service.runCard(projectId, 'backlog/Nope.md')).rejects.toMatchObject({
+      code: 'cardMissing'
+    })
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+  })
+
+  it("gives the workspace the card's tag", async () => {
+    const { service, projectId } = await withBoard('---\ntag: fix\n---\n# Fix login\n')
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    const workspace = await only(service, projectId)
+    expect(workspace.kind).toBe('fix')
+    expect(workspace.branch).toBe('octopus/fix/fix-login')
+  })
+
+  it('keeps the default tag when the card has none', async () => {
+    const { service, projectId } = await withBoard('# Fix login\n')
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    const workspace = await only(service, projectId)
+    expect(workspace.kind).toBe('feature')
+    expect(workspace.branch).toBe('octopus/feature/fix-login')
+  })
+
+  it("keeps the branch when the card's tag is the default", async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId } = await withBoard('---\ntag: feature\n---\n# Fix login\n', {
+      onDiagnostic
+    })
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    const workspace = await only(service, projectId)
+    expect(workspace.kind).toBe('feature')
+    expect(workspace.branch).toBe('octopus/feature/fix-login')
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it('keeps the default tag when the kind change is refused', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId } = await withBoard('---\ntag: fix\n---\n# Fix login\n', {
+      onDiagnostic,
+      makeExec: (cwd, options) => {
+        const real = gitIn(cwd, options)
+        return (args) =>
+          args[0] === 'branch' && args[1] === '-m' && args[3]?.includes('/fix/') === true
+            ? Promise.reject(new Error('refused'))
+            : real(args)
+      }
+    })
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    expect((await only(service, projectId)).kind).toBe('feature')
+    expect(onDiagnostic).toHaveBeenCalledTimes(1)
+    expect(onDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ message: 'refused' }))
+  })
+
+  it('names the workspace after a Latin title', async () => {
+    const { service, projectId } = await withBoard('# Fix login\n')
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    expect((await only(service, projectId)).name).toBe('Fix login')
+  })
+
+  it('keeps the pool name for a title with too few Latin letters', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId } = await withBoard('# Виправити логін\n', { onDiagnostic })
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    expect(WORKSPACE_NAMES).toContain((await only(service, projectId)).name)
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it('keeps the pool name when the rename is refused', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, board } = await withBoard('# Fix login\n', { onDiagnostic })
+    await writeFile(join(board, 'planner', 'backlog', 'B.md'), '# Fix login\n')
+
+    await service.runCard(projectId, 'backlog/A.md')
+    const second = await service.runCard(projectId, 'backlog/B.md')
+
+    const workspaces = await service.listWorkspaces(projectId)
+    const made = workspaces.find((workspace) => workspace.id === second.workspaceId)
+    expect(WORKSPACE_NAMES).toContain(made?.name)
+    expect(onDiagnostic).toHaveBeenCalledTimes(1)
+    expect(onDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'slugTaken' }))
+  })
+
+  it('returns the detour of the creation first', async () => {
+    const { service, projectId, repo } = await withBoard('# Fix login\n')
+    await run('git', ['branch', 'octopus/feature'], { cwd: repo })
+
+    const launch = await service.runCard(projectId, 'backlog/A.md')
+
+    expect(launch.detour).toMatchObject({ blocker: 'octopus/feature' })
+    expect(launch.detour?.branch).not.toBe((await only(service, projectId)).branch)
+  })
+
+  it('records the run in the card', async () => {
+    const { service, projectId, file } = await withBoard('# Fix login\n')
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    const workspace = await only(service, projectId)
+    await expect(runsIn(file)).resolves.toEqual([
+      {
+        started: workspace.createdAt,
+        device: service.getConfig().deviceId,
+        machine: 'Mac-One',
+        branch: workspace.branch,
+        accounts: ['user@example.com']
+      }
+    ])
+  })
+
+  it('records no account when Claude is signed out', async () => {
+    const { service, projectId, file } = await withBoard('# Fix login\n', {
+      commandExec: () => Promise.reject(new Error('not installed'))
+    })
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    const [entry] = await runsIn(file)
+    expect(entry).toBeDefined()
+    expect(entry).not.toHaveProperty('accounts')
+    await expect(service.listWorkspaces(projectId)).resolves.toHaveLength(1)
+  })
+
+  it('records the run in a card moved while the workspace was made', async () => {
+    const done = (): string => join(dir, 'board', 'planner', 'done')
+    const { service, projectId } = await withBoard('# Fix login\n', {
+      commandExec: async (command) => {
+        if (command !== 'claude') throw new Error('not installed')
+        await mkdir(done(), { recursive: true })
+        await rename(join(dir, 'board', 'planner', 'backlog', 'A.md'), join(done(), 'A.md'))
+        return CLAUDE_SIGNED_IN
+      }
+    })
+
+    await service.runCard(projectId, 'backlog/A.md')
+
+    const workspace = await only(service, projectId)
+    await expect(runsIn(join(done(), 'A.md'))).resolves.toEqual([
+      expect.objectContaining({ branch: workspace.branch })
+    ])
+  })
+
+  it('records nothing for a card deleted while the workspace was made', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId } = await withBoard('# Fix login\n', {
+      onDiagnostic,
+      commandExec: async (command) => {
+        if (command !== 'claude') throw new Error('not installed')
+        await rm(join(dir, 'board', 'planner', 'backlog', 'A.md'))
+        return CLAUDE_SIGNED_IN
+      }
+    })
+
+    const launch = await service.runCard(projectId, 'backlog/A.md')
+
+    expect(launch.created).toBe(true)
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it("records the machine's own name when none is given", async () => {
+    const { projectId, file } = await withBoard('# Fix login\n')
+    const own = await createService({
+      ...paths(dir),
+      commandExec: respondTo('claude', CLAUDE_SIGNED_IN)
+    })
+
+    await own.runCard(projectId, 'backlog/A.md')
+
+    await expect(runsIn(file)).resolves.toEqual([
+      expect.objectContaining({ machine: machineLabel(osHostname()) })
+    ])
+  })
+
+  it('still returns the workspace when the card cannot take the run', async () => {
+    const onDiagnostic = vi.fn()
+    const column = (): string => join(dir, 'board', 'planner', 'backlog')
+    const { service, projectId, file } = await withBoard('# Fix login\n', {
+      onDiagnostic,
+      commandExec: async (command) => {
+        if (command !== 'claude') throw new Error('not installed')
+        await chmod(column(), 0o555)
+        return CLAUDE_SIGNED_IN
+      }
+    })
+    try {
+      const launch = await service.runCard(projectId, 'backlog/A.md')
+
+      expect(launch.workspaceId).toBe((await only(service, projectId)).id)
+      await expect(runsIn(file)).resolves.toEqual([])
+      expect(onDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'EACCES' }))
+    } finally {
+      await chmod(column(), 0o755)
+    }
+  })
+
+  it('answers without the run when the account check hangs', async () => {
+    let reached: () => void = () => undefined
+    const asked = new Promise<void>((resolve) => {
+      reached = resolve
+    })
+    const { service, projectId, file } = await withBoard('# Fix login\n', {
+      commandExec: (command) => {
+        if (command !== 'claude') return Promise.reject(new Error('not installed'))
+        reached()
+        return new Promise<string>(() => undefined)
+      }
+    })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true })
+    try {
+      const launch = service.runCard(projectId, 'backlog/A.md')
+      await asked
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await expect(launch).resolves.toMatchObject({ created: true })
+      await expect(runsIn(file)).resolves.toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('leaves only the id when the workspace cannot be made', async () => {
+    const { service, projectId, repo, file } = await withBoard('# Fix login\n')
+    const remote = join(dir, 'remote')
+    await run('git', ['init', '-q', '--bare', '--initial-branch=main', remote])
+    await run('git', ['remote', 'add', 'origin', remote], { cwd: repo })
+    await run('git', ['push', '-q', 'origin', 'main'], { cwd: repo })
+    await run('git', ['fetch', '-q', 'origin'], { cwd: repo })
+    await rm(remote, { recursive: true, force: true })
+
+    const failure = await service
+      .runCard(projectId, 'backlog/A.md')
+      .catch((error: unknown) => error)
+
+    expect(failure).toMatchObject({ code: 'fetchFailed' })
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+    const { meta } = readMeta(await raw(file))
+    expect(meta.id).toBeDefined()
+    expect(meta.runs).toEqual([])
   })
 })
 

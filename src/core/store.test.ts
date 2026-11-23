@@ -73,6 +73,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     envFileApplied: null,
     kind: 'feature',
     ownerId: null,
+    card: null,
     ...overrides
   }
 }
@@ -226,6 +227,24 @@ describe('load and save', () => {
 
     const loaded = await loadState(file)
     expect(loaded.workspaces[0]?.kind).toBe('bug')
+  })
+
+  it('loads a workspace written before the board as one started from no card', async () => {
+    const older: Record<string, unknown> = { ...makeWorkspace() }
+    delete older.card
+    await writeFile(file, JSON.stringify({ ...withProject, workspaces: [older] }), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.workspaces[0]?.card).toBeNull()
+  })
+
+  it('keeps the card a workspace was started from', async () => {
+    const card = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
+    const stored = { ...withProject, workspaces: [makeWorkspace({ card })] }
+    await writeFile(file, JSON.stringify(stored), 'utf8')
+
+    const loaded = await loadState(file)
+    expect(loaded.workspaces[0]?.card).toBe(card)
   })
 
   /*

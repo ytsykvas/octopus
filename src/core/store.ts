@@ -247,7 +247,9 @@ export const WorkspaceSchema = z.object({
    */
   kind: WorkspaceKindSchema.catch(DEFAULT_WORKSPACE_KIND),
   /** Reserved for future multi-user support; always null for now. */
-  ownerId: z.string().nullable()
+  ownerId: z.string().nullable(),
+  /** The board card this was started from (its frontmatter `id`); null when none was. */
+  card: z.string().nullable().default(null)
 })
 
 /** One skill as a session described it — `AgentSkill`, kept. */

@@ -237,6 +237,8 @@ interface CreateOptions {
   readonly onDetour?: (detour: KindDetour) => void
   /** Awaited last, so a caller that reserves the port frees it via the workspace returned. */
   readonly choosePort?: () => Promise<number>
+  /** The board card's frontmatter `id`, not its ref. */
+  readonly card?: string | null | undefined
 }
 
 /**
@@ -366,7 +368,8 @@ export async function createWorkspace(
     // Nobody has written anything here yet.
     writers: {},
     kind,
-    ownerId: null
+    ownerId: null,
+    card: options.card ?? null
   }
 }
 

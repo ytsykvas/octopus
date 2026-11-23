@@ -851,6 +851,9 @@ export function registerIpc(
   host.handle('board:remove', (_event, projectId: unknown, ref: unknown) =>
     attempt(() => service.removeCard(ProjectIdSchema.parse(projectId), CardRefSchema.parse(ref)))
   )
+  host.handle('board:run', (_event, projectId: unknown, ref: unknown) =>
+    attempt(() => service.runCard(ProjectIdSchema.parse(projectId), CardRefSchema.parse(ref)))
+  )
 
   host.handle('skills:inRepository', (_event, workspaceId: string) =>
     attempt(() => service.listRepositorySkills(workspaceId))

@@ -266,6 +266,11 @@ run one after another.
 | `board:comment`         | `projectId`, `ref`, `text`  | a comment stamped by main, under the card's marker                                                                      |
 | `board:move`            | `projectId`, `ref`, `move`  | into a column at an index, answering the new ref; never replaces a file                                                 |
 | `board:remove`          | `projectId`, `ref`          | to the Trash                                                                                                            |
+| `board:run`             | `projectId`, `ref`          | starts a workspace from the card, or answers the one already started from it here (`CardLaunch`)                        |
+
+`board:run` answers the workspace, the card's description as a draft (null once
+a conversation of a workspace already here has started), the first kind detour,
+and `created`, false when the workspace was already here.
 
 ### Workspaces
 

@@ -38,6 +38,7 @@ import type {
   BoardListing,
   CardDetail,
   CardDraft,
+  CardLaunch,
   CardMove,
   CardPatch,
   DescriptionSave
@@ -1007,7 +1008,9 @@ const api = {
     move: (projectId: string, ref: string, move: CardMove): Promise<Result<string>> =>
       ipcRenderer.invoke('board:move', projectId, ref, move) as Promise<Result<string>>,
     remove: (projectId: string, ref: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('board:remove', projectId, ref) as Promise<Result<void>>
+      ipcRenderer.invoke('board:remove', projectId, ref) as Promise<Result<void>>,
+    run: (projectId: string, ref: string): Promise<Result<CardLaunch>> =>
+      ipcRenderer.invoke('board:run', projectId, ref) as Promise<Result<CardLaunch>>
   },
 
   skills: {
