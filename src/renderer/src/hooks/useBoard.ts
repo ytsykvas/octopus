@@ -57,6 +57,10 @@ export function useBoard(
   // The same state, readable at once by the next answer: written in `apply`, never read in render.
   const record = useRef<BoardState | null>(null)
   const generation = useRef(0)
+  // The board on screen, aborted when it changes or the screen goes: a read `refresh` started
+  // dies with its board, as the mount's own read does, so a board no longer shown never writes
+  // to the window's banner. Already aborted until the first read starts.
+  const live = useRef<AbortSignal>(AbortSignal.abort())
 
   const apply = useCallback(
     (key: string, answer: Result<BoardListing>): void => {
@@ -103,10 +107,10 @@ export function useBoard(
   )
 
   const read = useCallback(
-    async (from: BoardSource, abandoned: () => boolean): Promise<void> => {
+    async (from: BoardSource, signal: AbortSignal): Promise<void> => {
       const attempt = ++generation.current
       const answer = await window.octopus.board.list(from.projectId)
-      if (abandoned() || attempt !== generation.current) return
+      if (signal.aborted || attempt !== generation.current) return
       apply(from.key, answer)
     },
     [apply]
@@ -115,14 +119,15 @@ export function useBoard(
   useEffect(() => {
     if (source === null) return
     const controller = new AbortController()
-    void read(source, () => controller.signal.aborted)
+    live.current = controller.signal
+    void read(source, controller.signal)
     return () => {
       controller.abort()
     }
   }, [source, read])
 
   const refresh = useCallback(async () => {
-    if (source !== null) await read(source, () => false)
+    if (source !== null) await read(source, live.current)
   }, [source, read])
 
   // A sync service writes while the window is elsewhere; coming back is when that matters.

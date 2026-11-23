@@ -18,7 +18,7 @@ sync service writes while the window is elsewhere.
 **Failures.** A first read that fails is the screen's own state, "The board could not be read"
 with Try again. A later failure keeps the cards and goes to the banner, and the next read that
 works clears it (`reported`). A later `boardFolderUnset` or `boardFolderUnreadable` means the
-folder itself is gone, so the cards go too and the screen says so.
+folder itself is gone, so the cards go too and the screen says so. The banner belongs to the whole window, so every read — Try again and the focus re-read included — is abandoned when its board stops being shown: another project, a cleared folder or the screen gone. Its answer, a failure or a success, then reaches neither the board nor the banner.
 
 **A card** is its priority as a labelled icon, its title in two lines, its tag in the kind's
 colour a quarter of the way to the ink (`LETTERS`, as the project tiles: raw pink and rose fail

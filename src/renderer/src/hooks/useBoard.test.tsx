@@ -328,4 +328,47 @@ describe('useBoard', () => {
 
     expect(list()).toHaveBeenCalledTimes(1)
   })
+
+  // The banner belongs to the whole window: a board no longer shown must not write to it.
+  it('drops a refresh answered after the screen is gone', async () => {
+    givenBoard([boardCard()])
+    const { result, unmount, onError } = renderBoard()
+    await waitFor(() => {
+      expect(result.current.listing).not.toBeNull()
+    })
+    const late = holdNextRead()
+    let refreshed: Promise<void> = Promise.resolve()
+    act(() => {
+      refreshed = result.current.refresh()
+    })
+
+    unmount()
+    await act(async () => {
+      late.resolve(refusal('cardMissing', { name: 'Fix login.md' }))
+      await refreshed
+    })
+
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('drops a refresh answered after the folder was cleared', async () => {
+    givenBoard([boardCard()])
+    const { result, rerender, onError } = renderBoard()
+    await waitFor(() => {
+      expect(result.current.listing).not.toBeNull()
+    })
+    const late = holdNextRead()
+    let refreshed: Promise<void> = Promise.resolve()
+    act(() => {
+      refreshed = result.current.refresh()
+    })
+
+    rerender({ projectId: 'planner', folder: '', onError })
+    await act(async () => {
+      late.resolve(refusal('cardMissing', { name: 'Fix login.md' }))
+      await refreshed
+    })
+
+    expect(onError).not.toHaveBeenCalled()
+  })
 })
