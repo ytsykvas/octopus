@@ -3,6 +3,7 @@ import { createElement } from 'react'
 import { vi } from 'vitest'
 
 import type { BoardCard, BoardListing, CardDetail } from '@core/boardSchema.js'
+import type { BranchRequest } from '@core/pullRequestShapes.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { type DescriptionDraft, movedDraft, withDraft } from '../components/board/boardDrafts.js'
@@ -16,6 +17,18 @@ export const PROJECT_ID = 'planner'
 
 /** The board's project: the one every renderer suite starts from. */
 export { boardProject }
+
+export const BRANCH_REQUEST: BranchRequest = {
+  branch: 'ytsykvas/anna',
+  number: 7,
+  state: 'open',
+  checks: 'passed',
+  url: 'https://github.com/o/p/pull/7',
+  draft: false,
+  decision: null,
+  mergeable: 'mergeable',
+  mergeState: 'clean'
+}
 
 export function boardCard(overrides: Partial<BoardCard> = {}): BoardCard {
   return {
@@ -83,6 +96,7 @@ export function renderScreen(overrides: Partial<BoardScreenProps> = {}): {
     workspaces: [],
     deviceId: 'device-one',
     onRun: vi.fn(() => Promise.resolve()),
+    requests: new Map(),
     ...overrides
   }
   const view = render(createElement(BoardScreen, props))

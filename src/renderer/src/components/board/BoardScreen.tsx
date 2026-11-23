@@ -9,6 +9,7 @@ import {
   type BoardStatus,
   type CardMove
 } from '@core/boardSchema.js'
+import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -20,7 +21,8 @@ import { Button } from '../Button.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardColumn } from './BoardColumn.js'
 import type { DescriptionDraft } from './boardDrafts.js'
-import { linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.js'
+import { cardMark, linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.js'
+import { CardMarks } from './CardMarks.js'
 import { CardPanel, PANEL_WIDTH } from './CardPanel.js'
 
 export interface BoardScreenProps {
@@ -40,6 +42,7 @@ export interface BoardScreenProps {
   /** This installation's `config.deviceId`: a run from any other is another machine's. */
   readonly deviceId: string
   readonly onRun: (projectId: string, ref: string) => Promise<void>
+  readonly requests: ReadonlyMap<string, BranchRequest>
 }
 
 export function BoardScreen({
@@ -53,7 +56,8 @@ export function BoardScreen({
   onDraftMoved,
   workspaces,
   deviceId,
-  onRun
+  onRun,
+  requests
 }: BoardScreenProps): React.JSX.Element | null {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -87,6 +91,13 @@ export function BoardScreen({
   )
   const panelKey = open?.session ?? 0
   const linkedBy = useMemo(() => linkedByCard(workspaces), [workspaces])
+  const marksOf = useCallback(
+    (card: BoardCard): React.ReactNode => {
+      const mark = cardMark(card, linkedBy, requests, deviceId)
+      return mark === null ? null : <CardMarks mark={mark} />
+    },
+    [linkedBy, requests, deviceId]
+  )
 
   /** Every move of a card goes through here (status menu now, drag B204, ⌥↑/⌥↓ B205). */
   const moveCard = useCallback(
@@ -196,6 +207,7 @@ export function BoardScreen({
             onCreate={(title) => void createIn(status, title)}
             openRef={openRef}
             onOpen={openCardAt}
+            marksOf={marksOf}
           />
         ))}
       </div>

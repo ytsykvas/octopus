@@ -255,7 +255,7 @@ const MOOD_ICONS: Record<WorkspaceMood, LucideIcon> = {
  * answer summarises to "waiting", and the row would be hiding the two that are
  * still going. Then it is one dot each, in tab order, inside the tile.
  */
-function StatusMark({ workspace }: { workspace: WorkspaceView }): React.JSX.Element {
+export function StatusMark({ workspace }: { workspace: WorkspaceView }): React.JSX.Element {
   const { t } = useTranslation()
 
   if (workspace.missing) {

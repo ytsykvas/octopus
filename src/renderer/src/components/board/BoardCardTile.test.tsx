@@ -7,7 +7,13 @@ import { boardCard } from '../../test/board.js'
 import { BoardCardTile, type BoardCardTileProps } from './BoardCardTile.js'
 
 function renderTile(props: Partial<BoardCardTileProps> = {}): BoardCardTileProps {
-  const all: BoardCardTileProps = { card: boardCard(), open: false, onOpen: vi.fn(), ...props }
+  const all: BoardCardTileProps = {
+    card: boardCard(),
+    open: false,
+    onOpen: vi.fn(),
+    marks: null,
+    ...props
+  }
   render(
     <ul>
       <BoardCardTile {...all} />
@@ -78,6 +84,23 @@ describe('BoardCardTile', () => {
     renderTile()
 
     expect(screen.getByRole('listitem')).toHaveTextContent(/^Fix login$/)
+  })
+
+  it('draws the marks on the second line', () => {
+    renderTile({ marks: <span>Merged</span> })
+
+    expect(
+      within(screen.getByRole('button', { name: /Fix login/ })).getByText('Merged')
+    ).toBeInTheDocument()
+  })
+
+  it('puts the marks after the tag and before the comments', () => {
+    renderTile({
+      card: boardCard({ meta: { links: [], runs: [], tag: 'fix' }, comments: 2 }),
+      marks: <span>Merged</span>
+    })
+
+    expect(screen.getByRole('listitem')).toHaveTextContent(/^Fix loginFixMerged2$/)
   })
 
   it('names the folder of a loose card', () => {

@@ -2030,6 +2030,11 @@ export const de: Translation = {
       elsewhereBody:
         'Ein anderer Mac hat diese Aufgabe begonnen und nicht beendet. Trotzdem hier einen zweiten Workspace anlegen?',
       elsewhereConfirm: 'Hier starten'
+    },
+    marks: {
+      merged: 'Gemergt',
+      removed: 'Workspace entfernt',
+      elsewhere: 'In Arbeit auf {{machine}}'
     }
   },
 

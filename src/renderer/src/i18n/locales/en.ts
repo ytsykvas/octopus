@@ -2467,6 +2467,11 @@ export const en = {
       elsewhereBody:
         'Another Mac started this task and has not finished it. Start a second workspace here anyway?',
       elsewhereConfirm: 'Start here'
+    },
+    marks: {
+      merged: 'Merged',
+      removed: 'Workspace removed',
+      elsewhere: 'In work on {{machine}}'
     }
   },
   errors: {

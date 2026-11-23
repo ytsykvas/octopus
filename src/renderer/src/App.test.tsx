@@ -23,7 +23,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Result } from '../../preload/index.js'
 import { project } from './test/projects.js'
-import { boardCard, cardDetail, givenBoard, ok } from './test/board.js'
+import { boardCard, BRANCH_REQUEST, cardDetail, givenBoard, ok } from './test/board.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
 import { chat, emitAgentEvent, givenChats, TURN_DONE } from './test/chat.js'
@@ -4674,6 +4674,22 @@ describe('the board screen', () => {
       await user.click(within(second).getByRole('button', { name: 'Run' }))
 
       expect(window.octopus.board.run).toHaveBeenCalledTimes(1)
+    })
+
+    it('marks a card with the workspace started from it here and its pull request', async () => {
+      vi.mocked(window.octopus.projects.pullRequests).mockResolvedValue(
+        ok({ capped: false, requests: [BRANCH_REQUEST] })
+      )
+      const user = await inPlanner('anna', 'bob')
+      givenBoard([STARTED])
+
+      await user.click(screen.getByRole('button', { name: 'Board' }))
+
+      const backlog = await screen.findByRole('region', { name: 'Backlog' })
+      expect(await within(backlog).findByText('Not started')).toBeInTheDocument()
+      expect(
+        await within(backlog).findByRole('img', { name: 'Pull request #7 — checks passed' })
+      ).toBeInTheDocument()
     })
   })
 })
