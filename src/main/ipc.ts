@@ -66,6 +66,15 @@ import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
 import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { NotesBodySchema } from '../core/notes.js'
 import { PromptDraftSchema, PromptIdSchema } from '../core/promptSchema.js'
+import {
+  CardDraftSchema,
+  CardMoveSchema,
+  CardPatchSchema,
+  CardRefSchema,
+  CardTitleSchema,
+  CommentTextSchema,
+  DescriptionSaveSchema
+} from '../core/boardSchema.js'
 import { StoreSchema } from '../core/stores.js'
 import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core/plugins.js'
 import type {
@@ -212,6 +221,9 @@ const MessageIdSchema = z.uuid()
  * — so only bounded here; the session is what knows whether it names anything.
  */
 const TaskIdSchema = z.string().min(1).max(128)
+
+/** A project, by its id. Opaque here: the service is what knows whether it names one. */
+const ProjectIdSchema = z.string().min(1)
 
 /**
  * Writes the config and tells every window, from the one place that writes it.
@@ -776,6 +788,68 @@ export function registerIpc(
         z.array(PromptIdSchema).max(1000).parse(orderedIds)
       )
     )
+  )
+
+  /* The board. Every ref is parsed by `CardRefSchema` before it is a path, and every
+     payload whole, as the prompts' drafts are. */
+  host.handle('board:list', (_event, projectId: unknown) =>
+    attempt(() => service.listBoard(ProjectIdSchema.parse(projectId)))
+  )
+  host.handle('board:read', (_event, projectId: unknown, ref: unknown) =>
+    attempt(() => service.readCard(ProjectIdSchema.parse(projectId), CardRefSchema.parse(ref)))
+  )
+  host.handle('board:create', (_event, projectId: unknown, draft: unknown) =>
+    attempt(() =>
+      service.createCard(ProjectIdSchema.parse(projectId), CardDraftSchema.parse(draft))
+    )
+  )
+  host.handle('board:update', (_event, projectId: unknown, ref: unknown, patch: unknown) =>
+    attempt(() =>
+      service.updateCard(
+        ProjectIdSchema.parse(projectId),
+        CardRefSchema.parse(ref),
+        CardPatchSchema.parse(patch)
+      )
+    )
+  )
+  host.handle('board:rename', (_event, projectId: unknown, ref: unknown, title: unknown) =>
+    attempt(() =>
+      service.renameCard(
+        ProjectIdSchema.parse(projectId),
+        CardRefSchema.parse(ref),
+        CardTitleSchema.parse(title)
+      )
+    )
+  )
+  host.handle('board:saveDescription', (_event, projectId: unknown, ref: unknown, save: unknown) =>
+    attempt(() =>
+      service.saveCardDescription(
+        ProjectIdSchema.parse(projectId),
+        CardRefSchema.parse(ref),
+        DescriptionSaveSchema.parse(save)
+      )
+    )
+  )
+  host.handle('board:comment', (_event, projectId: unknown, ref: unknown, text: unknown) =>
+    attempt(() =>
+      service.addCardComment(
+        ProjectIdSchema.parse(projectId),
+        CardRefSchema.parse(ref),
+        CommentTextSchema.parse(text)
+      )
+    )
+  )
+  host.handle('board:move', (_event, projectId: unknown, ref: unknown, move: unknown) =>
+    attempt(() =>
+      service.moveCard(
+        ProjectIdSchema.parse(projectId),
+        CardRefSchema.parse(ref),
+        CardMoveSchema.parse(move)
+      )
+    )
+  )
+  host.handle('board:remove', (_event, projectId: unknown, ref: unknown) =>
+    attempt(() => service.removeCard(ProjectIdSchema.parse(projectId), CardRefSchema.parse(ref)))
   )
 
   host.handle('skills:inRepository', (_event, workspaceId: string) =>

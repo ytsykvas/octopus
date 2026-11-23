@@ -34,6 +34,14 @@ import type {
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type {
+  BoardListing,
+  CardDetail,
+  CardDraft,
+  CardMove,
+  CardPatch,
+  DescriptionSave
+} from '@core/boardSchema.js'
 import type { CleanupOutcome, LeftBehind } from '@core/archive.js'
 import type { SideAnswer, SideExchange } from '@core/sideQuestions.js'
 import type { StrayServer } from '@core/strayServers.js'
@@ -974,6 +982,32 @@ const api = {
     /** The whole new order, as a drop gives it. */
     reorder: (store: Store, orderedIds: readonly string[]): Promise<Result<void>> =>
       ipcRenderer.invoke('prompts:reorder', store, orderedIds) as Promise<Result<void>>
+  },
+
+  /** The board's cards: files in the folder chosen in Settings. */
+  board: {
+    list: (projectId: string): Promise<Result<BoardListing>> =>
+      ipcRenderer.invoke('board:list', projectId) as Promise<Result<BoardListing>>,
+    read: (projectId: string, ref: string): Promise<Result<CardDetail>> =>
+      ipcRenderer.invoke('board:read', projectId, ref) as Promise<Result<CardDetail>>,
+    create: (projectId: string, draft: CardDraft): Promise<Result<string>> =>
+      ipcRenderer.invoke('board:create', projectId, draft) as Promise<Result<string>>,
+    update: (projectId: string, ref: string, patch: CardPatch): Promise<Result<void>> =>
+      ipcRenderer.invoke('board:update', projectId, ref, patch) as Promise<Result<void>>,
+    rename: (projectId: string, ref: string, title: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('board:rename', projectId, ref, title) as Promise<Result<void>>,
+    saveDescription: (
+      projectId: string,
+      ref: string,
+      save: DescriptionSave
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('board:saveDescription', projectId, ref, save) as Promise<Result<void>>,
+    comment: (projectId: string, ref: string, text: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('board:comment', projectId, ref, text) as Promise<Result<void>>,
+    move: (projectId: string, ref: string, move: CardMove): Promise<Result<string>> =>
+      ipcRenderer.invoke('board:move', projectId, ref, move) as Promise<Result<string>>,
+    remove: (projectId: string, ref: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('board:remove', projectId, ref) as Promise<Result<void>>
   },
 
   skills: {

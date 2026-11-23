@@ -5,6 +5,7 @@ import {
   access,
   appendFile,
   chmod,
+  lstat,
   mkdir,
   mkdtemp,
   readdir,
@@ -18467,6 +18468,142 @@ describe('the saved prompts a store holds', () => {
     await expect(
       readFile(join(dir, 'data', 'projects', projectId, 'prompts.json'), 'utf8')
     ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})
+
+describe('the board', () => {
+  let projectId: string
+  let board: string
+  let folder: string
+
+  beforeEach(async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    projectId = (await service.addProjectFromPath(repo)).id
+    board = join(dir, 'board')
+    await mkdir(board)
+    await service.updateConfig({ boardFolder: board })
+    folder = join(board, 'planner')
+  })
+
+  const put = async (path: string, text: string): Promise<void> => {
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, text)
+  }
+
+  it('refuses the board while no folder is set', async () => {
+    await service.updateConfig({ boardFolder: '' })
+
+    await expect(service.listBoard(projectId)).rejects.toMatchObject({ code: 'boardFolderUnset' })
+  })
+
+  it('lists an empty board without making a folder', async () => {
+    await expect(service.listBoard(projectId)).resolves.toEqual({ folder, cards: [] })
+    await expect(readdir(board)).resolves.toEqual([])
+  })
+
+  it('refuses a project it does not know', async () => {
+    await expect(service.listBoard('nope')).rejects.toMatchObject({ code: 'worktreeMissing' })
+  })
+
+  it('writes a card that the listing and the reading both see', async () => {
+    await expect(
+      service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
+    ).resolves.toBe('backlog/Fix login.md')
+
+    const { cards } = await service.listBoard(projectId)
+    expect(cards).toHaveLength(1)
+    expect(cards[0]).toMatchObject({ title: 'Fix login' })
+    const card = await service.readCard(projectId, 'backlog/Fix login.md')
+    expect(card.description).toBe('# Fix login\n')
+    expect(card.notText).toBe(false)
+    expect(card.attachments).toEqual([])
+  })
+
+  it('carries every change through to the file', async () => {
+    const timed = await createService({ ...paths(dir), now: () => '2026-11-21T10:00:00.000Z' })
+    const ref = await timed.createCard(projectId, { status: 'backlog', title: 'Fix login' })
+
+    await timed.updateCard(projectId, ref, { priority: 'high' })
+    await timed.renameCard(projectId, ref, 'Fix the login')
+    await timed.saveCardDescription(projectId, ref, {
+      text: '# Fix the login\n\nSteps',
+      base: '# Fix the login\n'
+    })
+    await timed.addCardComment(projectId, ref, 'hi')
+
+    expect(await readFile(join(folder, 'backlog/Fix login.md'), 'utf8')).toBe(
+      '---\norder: 0\npriority: high\n---\n# Fix the login\n\nSteps\n\n<!-- octopus:comments -->\n\n### 2026-11-21T10:00:00.000Z\n\nhi\n'
+    )
+  })
+
+  it('moves a card and answers its new ref', async () => {
+    await service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
+
+    await expect(
+      service.moveCard(projectId, 'backlog/Fix login.md', { status: 'done', index: 0 })
+    ).resolves.toBe('done/Fix login.md')
+  })
+
+  it("runs one project's writes in turn and another project's beside them", async () => {
+    const second = join(dir, 'esl')
+    await initRepo(second)
+    const other = (await service.addProjectFromPath(second)).id
+    await put(join(folder, 'backlog/a.md'), '# A\n')
+    await put(join(folder, 'backlog/b.md'), '# B\n')
+    await put(join(board, 'esl', 'backlog/c.md'), '# C\n')
+    let release = (): void => undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const discardPath = vi.fn(() => held)
+    const queued = await createService({ ...paths(dir), discardPath })
+
+    const removing = queued.removeCard(projectId, 'backlog/a.md')
+    await vi.waitFor(() => {
+      expect(discardPath).toHaveBeenCalled()
+    })
+    const updating = queued.updateCard(projectId, 'backlog/b.md', { priority: 'high' })
+    // Another project's line: not held behind the removal.
+    await queued.updateCard(other, 'backlog/c.md', { priority: 'low' })
+    // Started earlier, and still waiting its turn.
+    expect(await readFile(join(folder, 'backlog/b.md'), 'utf8')).toBe('# B\n')
+    release()
+    await Promise.all([removing, updating])
+
+    expect(await readFile(join(folder, 'backlog/b.md'), 'utf8')).toBe(
+      '---\npriority: high\n---\n# B\n'
+    )
+    expect(await readFile(join(board, 'esl', 'backlog/c.md'), 'utf8')).toBe(
+      '---\npriority: low\n---\n# C\n'
+    )
+  })
+
+  it('hands a removed card to discardPath', async () => {
+    const discardPath = vi.fn(() => Promise.resolve())
+    const spied = await createService({ ...paths(dir), discardPath })
+    await put(join(folder, 'backlog/a.md'), '# A\n')
+
+    await spied.removeCard(projectId, 'backlog/a.md')
+
+    expect(discardPath).toHaveBeenCalledTimes(1)
+    expect(discardPath).toHaveBeenCalledWith(join(folder, 'backlog/a.md'))
+    await expect(readFile(join(folder, 'backlog/a.md'), 'utf8')).resolves.toBe('# A\n')
+  })
+
+  it('deletes a removed card when no discardPath is given', async () => {
+    await put(join(folder, 'backlog/a.md'), '# A\n')
+
+    await service.removeCard(projectId, 'backlog/a.md')
+
+    await expect(lstat(join(folder, 'backlog/a.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('answers cardMissing for a card that is gone', async () => {
+    await expect(service.readCard(projectId, 'backlog/Nope.md')).rejects.toMatchObject({
+      code: 'cardMissing',
+      params: { name: 'Nope.md' }
+    })
   })
 })
 

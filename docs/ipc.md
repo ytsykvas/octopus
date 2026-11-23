@@ -248,6 +248,25 @@ somewhere else. The clear empties it and leaves the directory, which every
 session is holding as a working-directory root, and answers with what is left so
 the row redraws itself from the write rather than from a second read.
 
+### The board
+
+Every `ref` is parsed by `CardRefSchema` before it is a path, and every payload
+whole. The project id is a non-empty string (`ProjectIdSchema`); the service is
+what knows whether it names a project. Reads take no turn; writes to one project
+run one after another.
+
+| Channel                 | Arguments                   | Notes                                                                                                                   |
+| ----------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `board:list`            | `projectId`                 | the folder and every card in it; a project with no folder yet is an empty board, and nothing is made                    |
+| `board:read`            | `projectId`, `ref`          | one card whole: description and comments                                                                                |
+| `board:create`          | `projectId`, `draft`        | a new card at the top of its column, answering its ref; a file that reached the name first is refused (`cardNameTaken`) |
+| `board:update`          | `projectId`, `ref`, `patch` | priority, tag and links; a key the patch leaves out is left alone                                                       |
+| `board:rename`          | `projectId`, `ref`, `title` | the `# ` line; the file keeps its name                                                                                  |
+| `board:saveDescription` | `projectId`, `ref`, `save`  | refused with `cardChanged` when the description changed since `base`, unless `base` is null                             |
+| `board:comment`         | `projectId`, `ref`, `text`  | a comment stamped by main, under the card's marker                                                                      |
+| `board:move`            | `projectId`, `ref`, `move`  | into a column at an index, answering the new ref; never replaces a file                                                 |
+| `board:remove`          | `projectId`, `ref`          | to the Trash                                                                                                            |
+
 ### Workspaces
 
 | Channel                          | Arguments                             | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |

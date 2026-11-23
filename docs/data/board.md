@@ -61,7 +61,11 @@ Reading — the board, one card — writes nothing, not even a folder: the files
 | New card (`createCard`)           | its name is kept free across the whole project folder, every status and loose cards; `open` with `wx`: a file that reached the name since the listing is refused (`cardNameTaken`), never replaced |
 | Move (`moveCard`)                 | refuses a file of the same name in the target folder (`cardNameTaken`); writes only `order`                                                                                                        |
 | Description (`saveDescription`)   | refuses when the description changed since the editor opened (`cardChanged`) — blank lines at its end aside, since the first comment adds one — unless told to overwrite                           |
-| Removal (`removeCard`)            | handed to the caller; nothing in core deletes a card                                                                                                                                               |
+| Removal (`removeCard`)            | handed to the caller (`discardPath`); `boardFiles.ts` deletes nothing                                                                                                                              |
+
+## Removing a card
+
+A removal goes to the Trash: main hands `shell.trashItem` to the service as `discardPath`, and `boardFiles.ts` deletes no card itself. The service's default, used by tests, deletes.
 
 ## Order
 

@@ -2101,6 +2101,19 @@ export const de: Translation = {
       '„{{name}}“ ist ein symbolischer Link. Ein Skill wird so kopiert, wie er ist, und bei einem Link hinge sein Inhalt von einem anderen Ort auf der Festplatte ab.',
     skillUrlRefused:
       'Von {{url}} ließ sich nichts abrufen. Nur https-Adressen werden verfolgt, und eine Weiterleitung weg von https wird abgelehnt.',
+    boardFolderUnset: 'Wähle zuerst in den Einstellungen einen Board-Ordner.',
+    boardFolderUnreadable: 'Der Board-Ordner {{path}} ist nicht nutzbar: {{reason}}',
+    cardMissing: '„{{name}}“ ist nicht mehr auf der Festplatte.',
+    cardNameTaken: 'Dort gibt es schon eine Datei „{{name}}“.',
+    cardChanged:
+      '„{{name}}“ hat sich auf der Festplatte geändert, seit es gelesen wurde; nichts wurde gespeichert. Versuch es noch einmal.',
+    cardFrontmatterUnreadable:
+      'Der Kopf von „{{name}}“ ist nicht lesbar, daher lassen sich seine Felder hier nicht ändern. Korrigiere ihn in einem Editor.',
+    cardOutside: '„{{name}}“ liegt nicht im Board-Ordner.',
+    cardNotText:
+      '„{{name}}“ ist kein UTF-8-Text, daher lässt octopus die Datei unverändert. Ändere sie in einem Editor, der sie als UTF-8 speichern kann.',
+    cardTooLong:
+      '„{{name}}“ ist länger als 100.000 Zeichen – mehr, als eine Nachricht an den Agenten fassen kann. Kürze die Aufgabe und führe sie dann erneut aus.',
     unknown: 'Etwas ist schiefgelaufen: {{message}}'
   }
 }

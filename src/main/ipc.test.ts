@@ -444,6 +444,15 @@ describe('channel table', () => {
     'prompts:update',
     'prompts:remove',
     'prompts:reorder',
+    'board:list',
+    'board:read',
+    'board:create',
+    'board:update',
+    'board:rename',
+    'board:saveDescription',
+    'board:comment',
+    'board:move',
+    'board:remove',
     'dialog:pickSkill',
     'dialog:pickMarkdown',
     'dialog:pickFiles',
@@ -3979,6 +3988,102 @@ describe('the saved prompts channels', () => {
       ok: false,
       code: 'promptMissing'
     })
+  })
+})
+
+describe('board channels', () => {
+  let id: string
+
+  beforeEach(async () => {
+    id = await addProject()
+    await mkdir(join(dir, 'board'))
+    await invoke('config:update', { boardFolder: join(dir, 'board') })
+  })
+
+  it('writes, lists and reads a card', async () => {
+    await expect(
+      invoke('board:create', id, { status: 'backlog', title: 'Fix login' })
+    ).resolves.toEqual({ ok: true, value: 'backlog/Fix login.md' })
+
+    const listed = (await invoke('board:list', id)) as { value: { cards: unknown[] } }
+    expect(listed.value.cards).toHaveLength(1)
+    await expect(invoke('board:read', id, 'backlog/Fix login.md')).resolves.toMatchObject({
+      ok: true,
+      value: { title: 'Fix login' }
+    })
+  })
+
+  it('carries each change through its channel', async () => {
+    const ref = 'backlog/Fix login.md'
+    await invoke('board:create', id, { status: 'backlog', title: 'Fix login' })
+    await invoke('board:update', id, ref, { priority: 'high' })
+    await invoke('board:rename', id, ref, 'Fix the login')
+    await invoke('board:saveDescription', id, ref, {
+      text: '# Fix the login\n\nSteps',
+      base: '# Fix the login\n'
+    })
+    await invoke('board:comment', id, ref, '  hi  ')
+
+    await expect(invoke('board:read', id, ref)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        title: 'Fix the login',
+        meta: { priority: 'high' },
+        description: '# Fix the login\n\nSteps\n\n',
+        thread: [{ text: 'hi' }]
+      }
+    })
+    await expect(invoke('board:move', id, ref, { status: 'done', index: 0 })).resolves.toEqual({
+      ok: true,
+      value: 'done/Fix login.md'
+    })
+    await invoke('board:remove', id, 'done/Fix login.md')
+    await expect(invoke('board:list', id)).resolves.toMatchObject({ value: { cards: [] } })
+  })
+
+  it('answers a coded failure while no folder is set', async () => {
+    await invoke('config:update', { boardFolder: '' })
+
+    await expect(invoke('board:list', id)).resolves.toMatchObject({
+      ok: false,
+      code: 'boardFolderUnset'
+    })
+  })
+
+  it('refuses a ref that climbs out, in each channel that takes one', async () => {
+    const out = '../x.md'
+    const answers = await Promise.all([
+      invoke('board:read', id, out),
+      invoke('board:update', id, out, {}),
+      invoke('board:rename', id, out, 'T'),
+      invoke('board:saveDescription', id, out, { text: '', base: null }),
+      invoke('board:comment', id, out, 'hi'),
+      invoke('board:move', id, out, { status: 'done', index: 0 }),
+      invoke('board:remove', id, out)
+    ])
+
+    for (const answer of answers) {
+      expect(answer).toMatchObject({ ok: false, code: 'valueRefused' })
+    }
+  })
+
+  it('refuses a malformed payload in each channel that takes one', async () => {
+    const ref = 'backlog/a.md'
+    const answers = await Promise.all([
+      invoke('board:list', ''),
+      invoke('board:create', id, { status: 'backlog', title: '  ' }),
+      invoke('board:create', id, { status: 'later', title: 'A' }),
+      invoke('board:update', id, ref, { order: 3 }),
+      invoke('board:update', id, ref, { links: ['javascript:alert(1)'] }),
+      invoke('board:rename', id, ref, 'a\nb'),
+      invoke('board:saveDescription', id, ref, { text: 'x' }),
+      invoke('board:comment', id, ref, '   '),
+      invoke('board:move', id, ref, { status: 'done', index: -1 })
+    ])
+
+    for (const answer of answers) {
+      expect(answer).toMatchObject({ ok: false, code: 'valueRefused' })
+    }
   })
 })
 

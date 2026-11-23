@@ -201,7 +201,8 @@ async function start(): Promise<void> {
 
   try {
     const options: ServiceOptions = {
-      onDiagnostic: diagnosticLog(join(app.getPath('logs'), 'main.log'))
+      onDiagnostic: diagnosticLog(join(app.getPath('logs'), 'main.log')),
+      discardPath: (path) => shell.trashItem(path)
     }
     const opened = await openWithRecovery(
       () => createService(options),

@@ -111,7 +111,8 @@ service of its own — so most of the usual surface does not exist. What does:
   user's own files and syncs to other machines, so a card is written only after
   its path is checked (`isCardRef`, and no link along it — `unlinkedInside`), a
   new card never replaces a file, a file that is not UTF-8 is never written,
-  and nothing in core deletes a card: a removal is handed to the caller.
+  and the board's file code deletes no card: a removal is handed to the
+  caller, which in the app is the Trash.
   `.octopus/` is the narrowest: exporting a project's
   settings writes there and nowhere else, through fixed path constants a test
   checks, and refuses a symbolic link that could redirect the write out of the

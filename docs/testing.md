@@ -218,6 +218,10 @@ discarded its argument while the test asserted the call merely resolved: deletin
 the line from the service left the suite green. If the promise being made is
 delivery, the fake has to record what it was told.
 
+**Nor send anything to the Trash.** `discardPath` is how `createService` removes
+a card; main passes `shell.trashItem`, and the default deletes. A test hands a
+spy, or removes from a board in its temporary directory.
+
 ## Core tests drive real git
 
 Not a mock. Each test builds a repository in a temporary directory and runs
