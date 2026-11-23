@@ -306,6 +306,22 @@ describe('createWorkspace', () => {
     expect((await create()).name).toBe(SECOND_NAME)
   })
 
+  it('records the card it was started from', async () => {
+    const card = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
+    const workspace = await createWorkspace(project, state, exec, {
+      root,
+      answers: nothingListens,
+      random: first,
+      card
+    })
+
+    expect(workspace.card).toBe(card)
+  })
+
+  it('records no card for an ordinary creation', async () => {
+    expect((await create()).card).toBeNull()
+  })
+
   it('skips a name whose branch is still on the remote', async () => {
     await run('git', ['update-ref', `refs/remotes/origin/ytsykvas/feature/${FIRST_NAME}`, 'HEAD'], {
       cwd: repo

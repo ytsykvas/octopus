@@ -576,6 +576,7 @@ function workspaceFixture(): Workspace {
     envFileApplied: null,
     kind: 'feature',
     ownerId: null,
+    card: null,
     envProfile: null
   }
 }

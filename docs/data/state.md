@@ -18,7 +18,7 @@ the question is asked, every time it is asked.
 
 A **workspace** is a git worktree: `id`, `projectId`, `name`, `branch`, `path`,
 `status`, `port`, `createdAt`, `branchSince`, `writers`, `notes`, `kind`,
-`ownerId`.
+`card`, `ownerId`.
 
 `branchSince` is when a rename or a new kind brought the workspace onto its
 current branch, or null for "since `createdAt`".
@@ -33,6 +33,12 @@ only `catch` in the state, against the rule in [config.md](config.md), because
 here an unknown value is expected rather than corrupt. What it costs: the next
 save writes `feature` back over the newer build's kind. A label, not data — the
 branch keeps its name either way.
+
+`card` is the frontmatter `id` of the board card the workspace was started
+from, or null. It lives here and not only in the card because it is a fact
+about this machine: the card file syncs to every Mac, and a same-named
+workspace on another one is not this one. Defaulted to null, so every record
+written before the board loads unchanged.
 
 `notes` is a line the user wrote to themselves about this workspace, and the one
 thing a workspace carries that the agent never reads. On the record rather than

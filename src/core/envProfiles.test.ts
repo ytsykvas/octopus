@@ -63,7 +63,8 @@ const workspace = (envProfile: string | null): Workspace => ({
   notes: '',
   envFileApplied: null,
   kind: 'feature',
-  ownerId: null
+  ownerId: null,
+  card: null
 })
 
 describe('migrateEnvProfiles', () => {

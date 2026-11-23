@@ -28,6 +28,7 @@ export function workspaceView(name: string, overrides: Partial<WorkspaceView> = 
     envFileApplied: null,
     kind: 'feature',
     ownerId: null,
+    card: null,
     envProfile: null,
     chats: [],
     changedFiles: 0,
