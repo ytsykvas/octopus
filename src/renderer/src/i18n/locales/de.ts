@@ -1944,6 +1944,46 @@ export const de: Translation = {
         'Dateien werden fürs Zurückspulen gesichert, wenn der Agent sie mit Edit oder Write bearbeitet. Ein Befehl – ein Formatter, ein Codegenerator, git checkout, rm – ändert Dateien an diesen Sicherungen vorbei, daher lässt das Zurückspulen unberührt, was er getan hat. Vor einem Befehl, den du vielleicht rückgängig machen willst, committe oder stashe deine Arbeit; der Tab „Änderungen“ zeigt, was in den Dateien hinzugekommen und weggefallen ist.'
     }
   },
+  board: {
+    statuses: {
+      backlog: 'Backlog',
+      inProgress: 'In Arbeit',
+      testing: 'Test',
+      staging: 'Staging',
+      done: 'Erledigt',
+      blocked: 'Blockiert'
+    },
+    priorities: {
+      urgent: 'Dringend',
+      high: 'Hoch',
+      medium: 'Mittel',
+      low: 'Niedrig'
+    },
+    empty: {
+      noFolderTitle: 'Wähle, wo die Aufgaben liegen',
+      noFolderText:
+        'Wähle einen Ordner – ein synchronisierter hält das Board auf jedem Mac aktuell. Jedes Projekt bekommt darin einen eigenen Ordner.',
+      chooseFolder: 'Ordner wählen…',
+      noProjectTitle: 'Kein Projekt ausgewählt',
+      noProjectText: 'Wähle ganz links ein Projekt, um sein Board zu sehen.',
+      failedTitle: 'Das Board konnte nicht gelesen werden',
+      retry: 'Erneut versuchen',
+      columnTitle: 'Nichts hier',
+      columnText: 'Noch keine Aufgabe mit diesem Status.'
+    },
+    column: {
+      byName: 'Nach Name'
+    },
+    card: {
+      comments_one: '{{count}} Kommentar',
+      comments_few: '{{count}} Kommentare',
+      comments_many: '{{count}} Kommentare',
+      comments_other: '{{count}} Kommentare',
+      malformed: 'Der Kopf dieser Datei ist nicht lesbar; seine Felder werden nicht angezeigt.',
+      notText:
+        'Diese Datei ist kein UTF-8-Text. Sie wird mit ihrem Dateinamen gezeigt und hier nicht geändert.'
+    }
+  },
 
   errors: {
     pluginCliUnavailable: 'Claude Code ließ sich nicht ausführen: {{message}}',

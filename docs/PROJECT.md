@@ -762,6 +762,7 @@ octopus/
       src/
         assets/      the mascot, its searching pose, and an octopus per effort level
         components/  UI components
+          board/     the Board screen (docs/ui/board.md)
         hooks/       React hooks
         i18n/        localisation, en is the source of truth
         styles.css   design tokens

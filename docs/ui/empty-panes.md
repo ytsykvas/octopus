@@ -23,7 +23,7 @@ broken image. The sidebar keeps its line too — with no projects, the centre is
 already showing the octopus beside it. Like the centre, it tells the first two
 cases apart: it asks for a repository only when there is none, and otherwise
 points at the strip, because telling someone with three project tabs beside the
-list to add a repository sends them the wrong way.
+list to add a repository sends them the wrong way. The Board uses it for a missing board folder, a board that could not be read, and — compact, without the drawing — an empty column.
 
 `compact` is the right column's variant: no panel around it, since the column is
 already a panel of its own and a box inside it reads as a dialog nobody opened;

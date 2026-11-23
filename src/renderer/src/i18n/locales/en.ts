@@ -2383,6 +2383,45 @@ export const en = {
         'Files are saved for a rewind when the agent edits them with Edit or Write. A command — a formatter, a code generator, git checkout, rm — changes files past those saves, so a rewind will not touch what it did. Before a command you may want to undo, commit or stash your work; the Changes tab shows what the files have gained and lost.'
     }
   },
+  board: {
+    statuses: {
+      backlog: 'Backlog',
+      inProgress: 'In progress',
+      testing: 'Testing',
+      staging: 'Staging',
+      done: 'Done',
+      blocked: 'Blocked'
+    },
+    priorities: {
+      urgent: 'Urgent',
+      high: 'High',
+      medium: 'Medium',
+      low: 'Low'
+    },
+    empty: {
+      noFolderTitle: 'Choose where tasks live',
+      noFolderText:
+        'Pick a folder — a synced one keeps the board on every Mac. Each project gets a folder of its own inside it.',
+      chooseFolder: 'Choose folder…',
+      noProjectTitle: 'No project selected',
+      noProjectText: 'Pick a project on the far left to see its board.',
+      failedTitle: 'The board could not be read',
+      retry: 'Try again',
+      columnTitle: 'Nothing here',
+      columnText: 'No task has this status yet.'
+    },
+    column: {
+      byName: 'By name'
+    },
+    card: {
+      comments_one: '{{count}} comment',
+      comments_few: '{{count}} comments',
+      comments_many: '{{count}} comments',
+      comments_other: '{{count}} comments',
+      malformed: 'The header of this file could not be read; its fields are not shown.',
+      notText: 'This file is not UTF-8 text. It is shown by its file name and is not changed here.'
+    }
+  },
   errors: {
     pluginCliUnavailable: 'Claude Code could not be run: {{message}}',
     pluginTimedOut:

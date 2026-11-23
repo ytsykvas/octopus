@@ -1,7 +1,7 @@
 # State
 
 Hooks own everything that talks to IPC — `useProjects`, `useWorkspaces`,
-`useChat`, `useRateLimit`, `usePlugins` and the rest. A component that lays out a window should not also
+`useChat`, `useRateLimit`, `usePlugins`, `useBoard` and the rest. A component that lays out a window should not also
 know what an IPC failure looks like.
 
 Two small hooks hold the clocks. `useVisibleInterval(tick, ms, active)` is
