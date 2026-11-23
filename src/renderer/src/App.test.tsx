@@ -4122,6 +4122,7 @@ describe('the board screen', () => {
 
     expect(await screen.findByText('bob')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
+    expect(rightPane()).not.toHaveAttribute('aria-hidden', 'true')
   })
 
   it('keeps the right pane mounted, folded offstage', async () => {
@@ -4275,6 +4276,24 @@ describe('the board screen', () => {
     })
   })
 
+  it("opens the folded list when the board's button leaves", async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board' })
+    })
+    givenBoard([boardCard()])
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await screen.findByText('bob')
+    await user.click(screen.getByRole('button', { name: 'Hide workspaces' }))
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    await user.click(screen.getByRole('button', { name: 'Show workspaces' }))
+
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+  })
+
   it('brings the list back from the foot of the board', async () => {
     const user = await onTheBoard()
     expect(screen.queryByRole('button', { name: 'Hide workspaces' })).toBeNull()
@@ -4302,15 +4321,18 @@ describe('the board screen', () => {
 
   it('keeps no folder when the dialog is cancelled', async () => {
     const user = await onTheBoard({ boardFolder: '' })
-
+    const answer = held<Result<string | null>>()
+    vi.mocked(window.octopus.dialog.pickDirectory).mockReturnValue(answer.promise)
     await user.click(await screen.findByRole('button', { name: 'Choose folder…' }))
 
-    await waitFor(() => {
-      expect(window.octopus.dialog.pickDirectory).toHaveBeenCalled()
+    await act(async () => {
+      answer.resolve({ ok: true, value: null })
+      await answer.promise
     })
-    expect(window.octopus.config.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({ boardFolder: expect.any(String) })
-    )
+
+    expect(
+      vi.mocked(window.octopus.config.update).mock.calls.some(([patch]) => 'boardFolder' in patch)
+    ).toBe(false)
   })
 
   it('says why the folder dialog failed, and forgets it on the other screen', async () => {
