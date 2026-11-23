@@ -7,7 +7,7 @@ import {
   PanelRightOpen,
   Plus
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DEFAULT_EFFORT } from '@core/chats.js'
@@ -51,7 +51,12 @@ import { useDiffComments } from './hooks/useDiffComments.js'
 import { useFileRevert } from './hooks/useFileRevert.js'
 import { useBranchRequests } from './hooks/useBranchRequests.js'
 import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
-import { type ChatTab, type ChatTabsController, useChatTabs } from './hooks/useChatTabs.js'
+import {
+  type ChatTab,
+  type ChatTabsController,
+  FIRST_TAB,
+  useChatTabs
+} from './hooks/useChatTabs.js'
 import { useFileTabs } from './hooks/useFileTabs.js'
 import { useWindowEvent } from './hooks/useWindowEvent.js'
 import {
@@ -378,6 +383,13 @@ export function App(): React.JSX.Element {
   const keepDraft = useCallback((workspaceId: string, tabKey: string, text: string) => {
     setDrafts((current) => new Map(current).set(slotOf(workspaceId, tabKey), text))
   }, [])
+  // Into an empty field only: text somebody typed there keeps its place.
+  const offerDraft = useCallback((workspaceId: string, tabKey: string, text: string) => {
+    setDrafts((current) => {
+      const slot = slotOf(workspaceId, tabKey)
+      return (current.get(slot) ?? '') === '' ? new Map(current).set(slot, text) : current
+    })
+  }, [])
   const [boardDrafts, setBoardDrafts] = useState<ReadonlyMap<string, DescriptionDraft>>(new Map())
 
   const forgetComments = diffComments.forget
@@ -406,33 +418,31 @@ export function App(): React.JSX.Element {
     ]
   )
 
-  /*
-   * Makes a workspace and opens it on its empty conversation.
-   *
-   * It used to land in the list, unselected, with its name open for editing —
-   * but what somebody knows at this moment is the task, not a name for it. So
-   * the conversation opens with its field taking the caret, and the set of
-   * variables it will run against can be chosen right there, before the
-   * first message.
-   */
-  const createWorkspace = useCallback(
-    async (projectId: string) => {
-      const made = await workspaces.create(projectId)
-      if (made === null) return
-
+  const showFresh = useCallback(
+    (projectId: string, workspaceId: string, draft: string | null) => {
       // The removed workspace's composer files its draft as it unmounts, after the
       // removal forgot it, so a name that comes back is cleared again here.
-      forgetWorkspaces((id) => id === made)
+      forgetWorkspaces((id) => id === workspaceId)
+      // After the forgetting, which would clear it, and before the selection mounts the composer.
+      if (draft !== null) offerDraft(workspaceId, FIRST_TAB, draft)
       setSelectedProjectId(projectId)
-      setSelectedWorkspaceId(made)
+      setSelectedWorkspaceId(workspaceId)
       // Moved by the creation itself, so the banner is already about where it
       // lands: a creation that went round a branch named after its kind says
       // so there, and clearing on the move would wipe it as it was written.
-      setShownSelection(selectionKey('octopus', projectId, made))
-      setFreshWorkspaceId(made)
+      setShownSelection(selectionKey('octopus', projectId, workspaceId))
+      setFreshWorkspaceId(workspaceId)
       setScreen('octopus')
     },
-    [workspaces, forgetWorkspaces]
+    [forgetWorkspaces, offerDraft]
+  )
+
+  const createWorkspace = useCallback(
+    async (projectId: string) => {
+      const made = await workspaces.create(projectId)
+      if (made !== null) showFresh(projectId, made, null)
+    },
+    [workspaces, showFresh]
   )
 
   const removeWorkspace = useCallback(
@@ -621,6 +631,38 @@ export function App(): React.JSX.Element {
       if (target.pullRequest === true) showPullRequests()
     },
     [conversations, showPullRequests]
+  )
+
+  // A ref, as `useWorkspaces.create` keeps one: the panel closed and opened again offers
+  // the button afresh, and a second press must not start a second run.
+  const launching = useRef(false)
+  const runCard = useCallback(
+    async (projectId: string, ref: string): Promise<void> => {
+      if (launching.current) return
+      launching.current = true
+      try {
+        setError(null)
+        const result = await window.octopus.board.run(projectId, ref)
+        if (!result.ok) {
+          setError(describeFailure(result))
+          return
+        }
+        const launch = result.value
+        await workspaces.refresh()
+        if (launch.created) {
+          showFresh(projectId, launch.workspaceId, launch.draft)
+        } else {
+          // Its drafts, notes and tabs are somebody's work: nothing is forgotten here.
+          if (launch.draft !== null) offerDraft(launch.workspaceId, FIRST_TAB, launch.draft)
+          openWorkspace({ projectId, workspaceId: launch.workspaceId })
+        }
+        // After the move, which showFresh has already marked as seen.
+        if (launch.detour !== null) setError(t('workspaces.kindDetour', { ...launch.detour }))
+      } finally {
+        launching.current = false
+      }
+    },
+    [describeFailure, offerDraft, openWorkspace, showFresh, t, workspaces]
   )
 
   const removeProject = useCallback(
@@ -822,6 +864,7 @@ export function App(): React.JSX.Element {
   // same config field would be one refactor away from disagreeing, and the
   // disagreement would show up as a centre pane with nowhere to go.
   const sidebarWidth = config?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH
+  const deviceId = config?.deviceId ?? ''
   // The list belongs to the Octopus screen; on the board the strip stands alone.
   const listShown = sidebarOpen && !onBoard
 
@@ -1233,6 +1276,9 @@ export function App(): React.JSX.Element {
                   )
                 )
               }}
+              workspaces={projectWorkspaces}
+              deviceId={deviceId}
+              onRun={runCard}
             />
           ) : !selectedProject ? (
             centerPane

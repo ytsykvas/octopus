@@ -2448,7 +2448,9 @@ export const en = {
       save: 'Save',
       changed: 'This description changed on disk while you were editing it.',
       reload: 'Reload',
-      overwrite: 'Overwrite'
+      overwrite: 'Overwrite',
+      run: 'Run',
+      openWorkspace: 'Open workspace'
     },
     remove: {
       title: 'Delete “{{title}}”?',
@@ -2459,6 +2461,12 @@ export const en = {
       placeholder: 'Write a comment… ⌘↩ to post',
       empty: 'No comments.',
       add: 'Add a comment'
+    },
+    run: {
+      elsewhereTitle: 'Already in work on {{machine}}',
+      elsewhereBody:
+        'Another Mac started this task and has not finished it. Start a second workspace here anyway?',
+      elsewhereConfirm: 'Start here'
     }
   },
   errors: {

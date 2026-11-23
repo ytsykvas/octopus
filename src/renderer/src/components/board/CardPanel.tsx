@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Ellipsis, Trash2, X } from 'lucide-react'
+import { ChevronDown, Copy, Ellipsis, Play, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -13,6 +13,7 @@ import {
   CARD_TITLE_MAX
 } from '@core/boardSchema.js'
 import { KIND_COLORS, WORKSPACE_KINDS, type WorkspaceKind } from '@core/workspaceKinds.js'
+import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Failure } from '../../../../preload/index.js'
 import type { BoardController } from '../../hooks/useBoard.js'
@@ -52,6 +53,10 @@ export interface CardPanelProps {
   readonly onMove: (move: CardMove) => void
   /** Asks to delete; the screen confirms, because ⌘⌫ (B205) deletes with no panel open. */
   readonly onRemove: () => void
+  /** The workspace on this machine started from this card, or null. */
+  readonly linked: WorkspaceView | null
+  /** Runs the card, or opens its workspace; the screen asks first when another Mac has it. */
+  readonly onRun: () => Promise<void>
 }
 
 function choices<V extends string | null>(
@@ -133,10 +138,13 @@ export function CardPanel({
   onWidth,
   onClose,
   onMove,
-  onRemove
+  onRemove,
+  linked,
+  onRun
 }: CardPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const [renaming, setRenaming] = useState(false)
+  const [running, setRunning] = useState(false)
   const describeFailure = useErrorMessage()
   const statusLabel = (status: BoardStatus): string =>
     t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
@@ -148,6 +156,15 @@ export function CardPanel({
   const tag = card.meta.tag ?? null
   const { icon: PriorityIcon, tone } =
     priority === null ? NO_PRIORITY_LOOK : PRIORITY_LOOKS[priority]
+
+  const run = async (): Promise<void> => {
+    setRunning(true)
+    try {
+      await onRun()
+    } finally {
+      setRunning(false)
+    }
+  }
 
   return (
     <aside
@@ -268,6 +285,16 @@ export function CardPanel({
           </h2>
         )}
         <div className="flex flex-wrap items-center gap-2">
+          {linked === null ? (
+            <Button variant="success" size="sm" disabled={running} onClick={() => void run()}>
+              <Play aria-hidden size={13} />
+              {t('board.panel.run')}
+            </Button>
+          ) : (
+            <Button size="sm" disabled={running} onClick={() => void run()}>
+              {t('board.panel.openWorkspace')}
+            </Button>
+          )}
           <CopyDescription description={card.notText ? null : (detail?.description ?? null)} />
         </div>
         {failure !== null && <Callout tone="warning">{describeFailure(failure)}</Callout>}

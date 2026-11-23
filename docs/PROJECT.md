@@ -74,6 +74,8 @@ task → workspace → agent works → diff → PR → merge → archive
         + .env)
 ```
 
+A task can be a card on the board (§12.6): **Run** makes the workspace, tagged and named from the card, and puts the card's text into the composer unsent.
+
 ---
 
 ## 4. Guiding principles
@@ -807,10 +809,10 @@ The terminal moved into scope early: account sign-in needs an interactive sessio
 
 ## 16. Open questions
 
-- **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text.
+- **Workspace naming** — given names drawn at random from a pool of 256, task-derived names, or generated from the prompt text. Partly answered: a workspace started from a board card is named after the card's title when it holds at least three Latin letters or digits; otherwise, and for every other workspace, the pool.
 - **Tool permissions** — settled for now: the read-only tools are automatic, everything else prompts in the chat, and an answer of "always" is stored per tool in the config where it can be taken back. In `Auto` the SDK's classifier decides instead, prompting only when it cannot, and every refusal it makes is drawn in the log; `bypassPermissions` stays out. A new chat starts in Plan; the working mode it falls back to after a plan, and the one an approved plan is carried out in, are global settings, so the question is not asked again on each new branch. Open: whether per-project profiles are needed, and whether "always" should narrow to an argument (`Bash(npm test:*)`) rather than a whole tool.
 - **Cross-platform** — whether Linux stays in the plans (affects CI only, not architecture).
-- **Task sources** — creating a workspace from a GitHub issue or a Linear ticket.
+- **Task sources** — partly answered: a markdown card on the board (§12.6) starts a workspace with its text as a draft. A GitHub issue or a Linear ticket is still open.
 - **Code review** — answered. A note against a line rides out inside
   the next message, as readable text rather than as anything hidden (§4); and
   GitHub's review threads now appear on the same surface, with **Add to chat**

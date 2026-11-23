@@ -80,6 +80,9 @@ export function renderScreen(overrides: Partial<BoardScreenProps> = {}): {
     draftOf: () => null,
     onDraft: vi.fn(),
     onDraftMoved: vi.fn(),
+    workspaces: [],
+    deviceId: 'device-one',
+    onRun: vi.fn(() => Promise.resolve()),
     ...overrides
   }
   const view = render(createElement(BoardScreen, props))

@@ -135,7 +135,7 @@ export interface ForkedPlan {
 
 // Drafts, notes and attached files are filed under it, so a conversation that
 // inherited it from a closed one would inherit those too.
-const FIRST_TAB = 'first'
+export const FIRST_TAB = 'first'
 
 function tabOf(chat: Chat): ChatTab {
   return {

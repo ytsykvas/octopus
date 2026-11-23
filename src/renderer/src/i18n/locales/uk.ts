@@ -1976,7 +1976,9 @@ export const uk: Translation = {
       save: 'Зберегти',
       changed: 'Поки ви редагували опис, він змінився на диску.',
       reload: 'Перечитати',
-      overwrite: 'Перезаписати'
+      overwrite: 'Перезаписати',
+      run: 'Виконати',
+      openWorkspace: 'Відкрити воркспейс'
     },
     remove: {
       title: 'Видалити «{{title}}»?',
@@ -1987,6 +1989,12 @@ export const uk: Translation = {
       placeholder: 'Напишіть коментар… ⌘↩, щоб додати',
       empty: 'Коментарів немає.',
       add: 'Додати коментар'
+    },
+    run: {
+      elsewhereTitle: 'Уже в роботі на {{machine}}',
+      elsewhereBody:
+        'Цю задачу почав інший мак і ще не завершив. Усе одно створити другий воркспейс тут?',
+      elsewhereConfirm: 'Почати тут'
     }
   },
   errors: {
