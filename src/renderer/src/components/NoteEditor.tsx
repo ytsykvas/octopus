@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 /**
- * Writing a note on code: a field, Cancel and Add. ⌘Enter saves, Escape leaves
+ * Writing a note: a field, Cancel and Add. ⌘Enter saves, Escape leaves
  * things as they were.
  *
- * Shared by the diff, where a note is written under the line it is about, and
- * the file viewer, where it floats under a selection. The frame around it is
- * the caller's, which is why `className` styles the outside only.
+ * Shared by the diff, where a note is written under the line it is about,
+ * the file viewer, where it floats under a selection, and a card's comments.
+ * The frame around it is the caller's, which is why `className` styles the
+ * outside only.
  */
 export function NoteEditor({
   initial,
@@ -54,7 +55,11 @@ export function NoteEditor({
         }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') onCancel()
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) save()
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            // Not a line break: a comment the board refused kept one at its end.
+            event.preventDefault()
+            save()
+          }
         }}
         placeholder={placeholder}
         aria-label={placeholder}

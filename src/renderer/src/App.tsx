@@ -24,6 +24,12 @@ import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { Placeholder } from './components/Placeholder.js'
 import { ProjectSettings, type SectionId as ProjectSection } from './components/ProjectSettings.js'
 import { ProjectTabs, type Screen } from './components/ProjectTabs.js'
+import {
+  type DescriptionDraft,
+  draftSlot,
+  movedDraft,
+  withDraft
+} from './components/board/boardDrafts.js'
 import { BoardScreen } from './components/board/BoardScreen.js'
 import { PluginsWindow } from './components/plugins/PluginsWindow.js'
 import { RightPanel } from './components/RightPanel.js'
@@ -372,6 +378,7 @@ export function App(): React.JSX.Element {
   const keepDraft = useCallback((workspaceId: string, tabKey: string, text: string) => {
     setDrafts((current) => new Map(current).set(slotOf(workspaceId, tabKey), text))
   }, [])
+  const [boardDrafts, setBoardDrafts] = useState<ReadonlyMap<string, DescriptionDraft>>(new Map())
 
   const forgetComments = diffComments.forget
   const forgetQuotes = reviewQuotes.forget
@@ -960,6 +967,9 @@ export function App(): React.JSX.Element {
     />
   )
 
+  // An editor unmounted by ⌘digit hands its text up through its last render's closure: its own project.
+  const boardProjectId = selectedProject?.id ?? ''
+
   const showsBoardFolder =
     onBoard && selectedProject !== null && config !== null && config.boardFolder !== ''
 
@@ -1208,6 +1218,21 @@ export function App(): React.JSX.Element {
               onPickFolder={() => void pickBoardFolder()}
               onError={setError}
               titleSlot={titleSlot}
+              draftOf={(ref) => boardDrafts.get(draftSlot(boardProjectId, ref)) ?? null}
+              onDraft={(ref, draft) => {
+                setBoardDrafts((current) =>
+                  withDraft(current, draftSlot(boardProjectId, ref), draft)
+                )
+              }}
+              onDraftMoved={(from, to) => {
+                setBoardDrafts((current) =>
+                  movedDraft(
+                    current,
+                    draftSlot(boardProjectId, from),
+                    draftSlot(boardProjectId, to)
+                  )
+                )
+              }}
             />
           ) : !selectedProject ? (
             centerPane

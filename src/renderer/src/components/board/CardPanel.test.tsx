@@ -24,6 +24,8 @@ function renderPanel(props: Partial<CardPanelProps> = {}): CardPanelProps {
     detail: cardDetail(),
     failure: null,
     board: boardController(),
+    draft: null,
+    onDraft: vi.fn(),
     width: 420,
     onWidth: vi.fn(),
     onClose: vi.fn(),
@@ -203,5 +205,81 @@ describe('CardPanel', () => {
       )
     ).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Description' })).toBeNull()
+  })
+
+  it('renames on a double-click', async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel()
+
+    await user.dblClick(screen.getByRole('heading', { name: 'Fix login' }))
+    const name = screen.getByTitle('Enter to save, Escape to cancel')
+    await user.clear(name)
+    await user.type(name, 'Fix sign-in{Enter}')
+
+    expect(board.rename).toHaveBeenCalledWith('backlog/Fix login.md', 'Fix sign-in')
+    expect(screen.queryByTitle('Enter to save, Escape to cancel')).toBeNull()
+  })
+
+  it('sends nothing for an unchanged name', async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel()
+
+    await user.dblClick(screen.getByRole('heading', { name: 'Fix login' }))
+    expect(screen.getByTitle('Enter to save, Escape to cancel')).toHaveValue('Fix login')
+    await user.keyboard('{Enter}')
+
+    expect(board.rename).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Fix login' })).toBeInTheDocument()
+  })
+
+  it('leaves the name alone on Escape', async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel()
+
+    await user.dblClick(screen.getByRole('heading', { name: 'Fix login' }))
+    expect(screen.getByTitle('Enter to save, Escape to cancel')).toHaveFocus()
+    await user.keyboard('X{Escape}')
+
+    expect(screen.getByRole('heading', { name: 'Fix login' })).toBeInTheDocument()
+    expect(board.rename).not.toHaveBeenCalled()
+  })
+
+  it('saves the description through the board', async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel()
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByRole('textbox', { name: 'Description' }), '!')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(board.saveDescription).toHaveBeenCalledWith('backlog/Fix login.md', {
+      text: '# Fix login\n\nThe form forgets the e-mail.\n!',
+      base: '# Fix login\n\nThe form forgets the e-mail.\n'
+    })
+  })
+
+  it('adds a comment through the board', async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel()
+
+    await user.click(screen.getByRole('button', { name: 'Add a comment' }))
+    await user.type(screen.getByRole('textbox', { name: 'Write a comment… ⌘↩ to post' }), 'Asked.')
+    await user.keyboard('{Meta>}{Enter}{/Meta}')
+
+    expect(board.comment).toHaveBeenCalledWith('backlog/Fix login.md', 'Asked.')
+  })
+
+  it('shows the comments of a file that is not UTF-8', () => {
+    renderPanel({
+      card: boardCard({ notText: true }),
+      detail: cardDetail({
+        notText: true,
+        description: '',
+        thread: [{ at: '2026-11-21T14:05:00.000Z', text: 'First' }]
+      })
+    })
+
+    expect(screen.getByText('First')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
   })
 })

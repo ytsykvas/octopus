@@ -1970,11 +1970,23 @@ export const uk: Translation = {
       remove: 'Видалити',
       description: 'Опис',
       noDescription: 'Опису ще немає.',
-      cancel: 'Скасувати'
+      cancel: 'Скасувати',
+      edit: 'Змінити',
+      preview: 'Перегляд',
+      save: 'Зберегти',
+      changed: 'Поки ви редагували опис, він змінився на диску.',
+      reload: 'Перечитати',
+      overwrite: 'Перезаписати'
     },
     remove: {
       title: 'Видалити «{{title}}»?',
       body: 'Файл піде в Кошик, звідти його можна відновити.'
+    },
+    comments: {
+      title: 'Коментарі',
+      placeholder: 'Напишіть коментар… ⌘↩, щоб додати',
+      empty: 'Коментарів немає.',
+      add: 'Додати коментар'
     }
   },
   errors: {

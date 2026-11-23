@@ -22,7 +22,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Result } from '../../preload/index.js'
 import { project } from './test/projects.js'
-import { boardCard, givenBoard } from './test/board.js'
+import { boardCard, cardDetail, givenBoard, ok } from './test/board.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
 import { chat, emitAgentEvent, givenChats, TURN_DONE } from './test/chat.js'
@@ -4108,6 +4108,13 @@ describe('the board screen', () => {
     return user
   }
 
+  async function editFixLogin(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+    vi.mocked(window.octopus.board.read).mockResolvedValue(ok(cardDetail()))
+    await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByRole('textbox', { name: 'Description' }), '!')
+  }
+
   it('switches to the board and back', async () => {
     const user = await onTheBoard()
 
@@ -4198,6 +4205,59 @@ describe('the board screen', () => {
     await user.click(screen.getByRole('button', { name: 'Octopus' }))
 
     expect(await screen.findByRole('textbox')).toHaveValue('half a thought')
+  })
+
+  it('keeps an unsaved description across the screen switch', async () => {
+    const user = await onTheBoard()
+    await editFixLogin(user)
+
+    await user.click(screen.getByRole('button', { name: 'Octopus' }))
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+    await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+
+    expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue(
+      '# Fix login\n\nThe form forgets the e-mail.\n!'
+    )
+  })
+
+  it('keeps an unsaved description of a card moved to another status', async () => {
+    const user = await onTheBoard()
+    await editFixLogin(user)
+    givenBoard([boardCard({ ref: 'done/Fix login.md', status: 'done' })])
+
+    const panel = screen.getByRole('complementary', { name: 'Fix login' })
+    await user.click(within(panel).getByRole('button', { name: 'Backlog' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Done' }))
+    await within(panel).findByRole('button', { name: 'Done' })
+    await user.click(within(panel).getByRole('button', { name: 'Close' }))
+    await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+
+    expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue(
+      '# Fix login\n\nThe form forgets the e-mail.\n!'
+    )
+    expect(window.octopus.board.move).toHaveBeenCalledWith('planner', 'backlog/Fix login.md', {
+      status: 'done',
+      index: 0
+    })
+  })
+
+  it('keeps an unsaved description across ⌘digit', async () => {
+    const user = await onTheBoard()
+    await editFixLogin(user)
+
+    await user.keyboard('{Meta>}2{/Meta}')
+    await waitFor(() => {
+      expect(window.octopus.board.list).toHaveBeenCalledWith('ledger')
+    })
+    await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+    await screen.findByRole('button', { name: 'Edit' })
+    expect(screen.queryByRole('textbox', { name: 'Description' })).toBeNull()
+    await user.keyboard('{Meta>}1{/Meta}')
+    await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+
+    expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue(
+      '# Fix login\n\nThe form forgets the e-mail.\n!'
+    )
   })
 
   it('leaves the board for a workspace jumped to by ⌃digit', async () => {

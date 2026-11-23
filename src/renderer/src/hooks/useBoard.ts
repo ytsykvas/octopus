@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { BoardListing, CardDraft, CardMove, CardPatch } from '@core/boardSchema.js'
+import type {
+  BoardListing,
+  CardDraft,
+  CardMove,
+  CardPatch,
+  DescriptionSave
+} from '@core/boardSchema.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { useErrorMessage } from './useErrorMessage.js'
@@ -21,6 +27,10 @@ export interface BoardController {
   /** The card's new ref, or null when the move was refused or the board left before the answer. */
   readonly move: (ref: string, move: CardMove) => Promise<string | null>
   readonly remove: (ref: string) => Promise<boolean>
+  readonly rename: (ref: string, title: string) => Promise<boolean>
+  /** Null unless refused, so the editor can tell `cardChanged` apart; a board gone first answers null. */
+  readonly saveDescription: (ref: string, save: DescriptionSave) => Promise<Failure | null>
+  readonly comment: (ref: string, text: string) => Promise<boolean>
 }
 
 interface BoardSource {
@@ -140,7 +150,7 @@ export function useBoard(
   // the banner. The signal is taken before the answer: a write outlived by its board stays quiet
   // and answers null, so the next board never opens or follows a card the last one wrote.
   const settle = useCallback(
-    async <T>(sent: Promise<Result<T>>): Promise<Result<T> | null> => {
+    async <T>(sent: Promise<Result<T>>, quiet: string | null = null): Promise<Result<T> | null> => {
       const signal = live.current
       const answer = await sent
       if (!signal.aborted) {
@@ -149,7 +159,8 @@ export function useBoard(
       }
       // Asked again, not once up front: the board may leave while it is read again.
       if (signal.aborted) return null
-      if (!answer.ok) report.current(describe.current(answer))
+      // A refusal coded `quiet` is the caller's to show, as the editor shows `cardChanged`.
+      if (!answer.ok && answer.code !== quiet) report.current(describe.current(answer))
       return answer
     },
     [report, describe, refresh]
@@ -189,6 +200,34 @@ export function useBoard(
     [source, settle]
   )
 
+  const rename = useCallback(
+    async (ref: string, title: string): Promise<boolean> => {
+      if (source === null) return false
+      return (await settle(window.octopus.board.rename(source.projectId, ref, title)))?.ok === true
+    },
+    [source, settle]
+  )
+
+  const saveDescription = useCallback(
+    async (ref: string, save: DescriptionSave): Promise<Failure | null> => {
+      if (source === null) return null
+      const answer = await settle(
+        window.octopus.board.saveDescription(source.projectId, ref, save),
+        'cardChanged'
+      )
+      return answer === null || answer.ok ? null : answer
+    },
+    [source, settle]
+  )
+
+  const comment = useCallback(
+    async (ref: string, text: string): Promise<boolean> => {
+      if (source === null) return false
+      return (await settle(window.octopus.board.comment(source.projectId, ref, text)))?.ok === true
+    },
+    [source, settle]
+  )
+
   // A sync service writes while the window is elsewhere; coming back is when that matters.
   useWindowEvent('focus', () => void refresh(), { active: source !== null })
 
@@ -202,6 +241,9 @@ export function useBoard(
     create,
     update,
     move,
-    remove
+    remove,
+    rename,
+    saveDescription,
+    comment
   }
 }
