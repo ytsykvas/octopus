@@ -43,6 +43,8 @@ A folder is a status when its name, lower-cased, with `-`, `_` and runs of space
 
 Every `.md` file, in any case, in the project's folder or one level below it. One directly in the project's folder, or in a folder that is not a status, is a **loose** card, shown in Backlog. Skipped: names starting with `_` or `.`, names ending in `.tmp`, links, anything deeper, and files that cannot be read. A file that is not UTF-8 is listed by its file name with no text and marked, and nothing ever writes it: decoding would replace what it holds with U+FFFD, and writing that back would lose it.
 
+A loose card is filed into its status folder the first time it is moved, Backlog included; so is a card in the second folder of a status.
+
 ## A ref
 
 A card is named by its path inside the project's folder, `backlog/Fix login.md`. Before a ref becomes a path, `guardRef` checks it: one or two segments, none starting with `_` or `.`, ending in `.md`, and no link anywhere along it.
@@ -51,8 +53,25 @@ A card is named by its path inside the project's folder, `backlog/Fix login.md`.
 
 Reading — the board, one card — writes nothing, not even a folder: the files are the user's, some predate the board, and an unasked write would sync to every Mac.
 
+| Operation                         | Guard                                                                                                                                                                                              |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Any change to a card (`editCard`) | reads the file, changes the text, writes only if it changed — through a temporary file and a rename — and refuses with `cardChanged` if its size or modification time moved in between             |
+| A file that is not UTF-8          | never written (`cardNotText`); a move into another folder carries it and leaves its bytes, a reorder inside its folder is refused                                                                  |
+| A header that cannot be read      | its fields are never written (`cardFrontmatterUnreadable`); a move into another folder carries it, a reorder inside its folder is refused                                                          |
+| New card (`createCard`)           | its name is kept free across the whole project folder, every status and loose cards; `open` with `wx`: a file that reached the name since the listing is refused (`cardNameTaken`), never replaced |
+| Move (`moveCard`)                 | refuses a file of the same name in the target folder (`cardNameTaken`); writes only `order`                                                                                                        |
+| Description (`saveDescription`)   | refuses when the description changed since the editor opened (`cardChanged`) — blank lines at its end aside, since the first comment adds one — unless told to overwrite                           |
+| Removal (`removeCard`)            | handed to the caller; nothing in core deletes a card                                                                                                                                               |
+
+## Order
+
+A card's place in its column is its `order`: cards that have one come first, lowest first, and the rest follow by name. A drop writes a number between its new neighbours' — dropped among cards with no `order`, right after the last one that has — into the moved card and nothing else, so one drag writes one file; a new card takes one less than the first.
+
 ## Known limitations
 
 - A project is found by name: renamed, it shows the empty board of its new name until its folder is renamed too.
 - Prose between two `---` lines at the very top that parses as a YAML map is read as a header.
 - Only iCloud was measured on two Macs (B001). Google Drive in stream mode gives the same plain files, but its not-yet-downloaded files, conflict copies and watch events were never measured.
+- `order` is fractional and never rebalanced: many drops between the same two cards make long numbers.
+- There is no cache: creating, moving and finding a card list the folder again, and an edit reads its one file again.
+- A move checks that the name is free in the target folder, then renames: a file that reaches that name in between is replaced, because `rename` has no form that refuses.

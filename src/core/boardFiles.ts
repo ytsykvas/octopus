@@ -1,27 +1,48 @@
 import type { Dirent, Stats } from 'node:fs'
-import { lstat, readdir, readFile } from 'node:fs/promises'
+import { lstat, mkdir, readdir, readFile, rename } from 'node:fs/promises'
 import { basename, isAbsolute, join } from 'node:path'
 
-import { parseCard } from './boardCard.js'
+import {
+  descriptionOf,
+  newCard,
+  parseCard,
+  setMeta,
+  withComment,
+  withDescription,
+  withTitle
+} from './boardCard.js'
 import {
   boardFolderName,
+  cardFileName,
   compareNames,
   isSkipped,
   sameName,
   statusOfFolder,
   stemOf
 } from './boardNames.js'
+import { cardsByStatus, firstOrder, orderForDrop } from './boardOrder.js'
 import {
   BoardError,
   CardMetaSchema,
   isCardRef,
   type BoardCard,
   type BoardStatus,
-  type CardDetail
+  type CardDetail,
+  type CardDraft,
+  type CardMove,
+  type CardPatch,
+  type DescriptionSave
 } from './boardSchema.js'
 import { allOf } from './parallel.js'
 import { unlinkedInside } from './paths.js'
-import { describeError, isNotDirectory, isNotFound } from './persist.js'
+import {
+  describeError,
+  isAlreadyThere,
+  isNotDirectory,
+  isNotFound,
+  writeNewFile,
+  writeTextFile
+} from './persist.js'
 
 export interface BoardLayout {
   /** The project's folder, absolute — whether or not it exists yet. */
@@ -231,4 +252,164 @@ export async function readCard(
     throw missing(error, ref)
   })
   return cardOf(ref, bytes)
+}
+
+// What `editCard` compares before reading and before writing: a file that changed in between
+// was written by someone else — Finder, an editor, another Mac.
+async function stamp(path: string, ref: string): Promise<string> {
+  try {
+    const { mtimeMs, size } = await lstat(path)
+    return `${String(mtimeMs)}:${String(size)}`
+  } catch (error) {
+    throw missing(error, ref)
+  }
+}
+
+export async function editCard(
+  layout: BoardLayout,
+  ref: string,
+  change: (raw: string, fileName: string) => string
+): Promise<void> {
+  const path = await guardRef(layout, ref)
+  const before = await stamp(path, ref)
+  const bytes = await readFile(path).catch((error: unknown) => {
+    throw missing(error, ref)
+  })
+  const raw = decoded(bytes)
+  const name = basename(ref)
+  if (raw === null) throw new BoardError('cardNotText', { name }, `${name} is not UTF-8 text`)
+  const next = change(raw, name)
+  if (next === raw) return
+  if ((await stamp(path, ref)) !== before)
+    throw new BoardError('cardChanged', { name }, `${name} changed on disk`)
+  await writeTextFile(path, next)
+}
+
+export async function createCard(layout: BoardLayout, draft: CardDraft): Promise<string> {
+  const cards = await listBoard(layout)
+  const name = cardFileName(
+    draft.title,
+    cards.map((card) => basename(card.ref))
+  )
+  const folder = layout.folders[draft.status]
+  const ref = `${folder}/${name}`
+  // Made first, then guarded: a status folder that is a link is refused before anything is written.
+  await mkdir(join(layout.dir, folder), { recursive: true })
+  const path = await guardRef(layout, ref)
+  try {
+    await writeNewFile(path, newCard(draft.title, firstOrder(cardsByStatus(cards)[draft.status])))
+  } catch (error) {
+    if (isAlreadyThere(error))
+      throw new BoardError('cardNameTaken', { name }, `${name} is already there`)
+    throw error
+  }
+  return ref
+}
+
+// Only the keys the patch carries; null and an empty list remove a key (`undefined` to `setMeta`).
+function changesOf(patch: CardPatch): Record<string, unknown> {
+  const changes: Record<string, unknown> = {}
+  if (patch.priority !== undefined) changes.priority = patch.priority ?? undefined
+  if (patch.tag !== undefined) changes.tag = patch.tag ?? undefined
+  if (patch.links !== undefined) changes.links = patch.links.length === 0 ? undefined : patch.links
+  return changes
+}
+
+export function updateCard(layout: BoardLayout, ref: string, patch: CardPatch): Promise<void> {
+  return editCard(layout, ref, (raw, name) => setMeta(raw, changesOf(patch), name))
+}
+
+/** The `# ` line only: the file keeps its name, which is what other Macs and links know it by. */
+export function renameCard(layout: BoardLayout, ref: string, title: string): Promise<void> {
+  return editCard(layout, ref, (raw) => withTitle(raw, title))
+}
+
+/**
+ * The token is the description alone: a header or a comment changed meanwhile is no conflict.
+ * Compared without trailing whitespace: the first comment adds a blank line before its marker.
+ */
+export function saveDescription(
+  layout: BoardLayout,
+  ref: string,
+  save: DescriptionSave
+): Promise<void> {
+  return editCard(layout, ref, (raw, name) => {
+    if (save.base !== null && descriptionOf(raw).trimEnd() !== save.base.trimEnd())
+      throw new BoardError('cardChanged', { name }, `${name} changed on disk`)
+    return withDescription(raw, save.text)
+  })
+}
+
+export function addComment(
+  layout: BoardLayout,
+  ref: string,
+  text: string,
+  at: string
+): Promise<void> {
+  return editCard(layout, ref, (raw) => withComment(raw, at, text))
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await lstat(path)
+    return true
+  } catch (error) {
+    if (isNotFound(error)) return false
+    throw error
+  }
+}
+
+// Moved already: a file octopus may not write keeps its bytes and sorts by name in its new column.
+function keepsItsOrder(error: unknown): boolean {
+  return (
+    error instanceof BoardError &&
+    (error.code === 'cardFrontmatterUnreadable' || error.code === 'cardNotText')
+  )
+}
+
+export async function moveCard(layout: BoardLayout, ref: string, move: CardMove): Promise<string> {
+  const path = await guardRef(layout, ref)
+  await stamp(path, ref)
+  const column = cardsByStatus(await listBoard(layout))[move.status].filter(
+    (card) => card.ref !== ref
+  )
+  const order = orderForDrop(column, move.index)
+  const placed = (raw: string, fileName: string): string => setMeta(raw, { order }, fileName)
+  const name = basename(ref)
+  const folder = layout.folders[move.status]
+  const next = `${folder}/${name}`
+  if (next === ref) {
+    await editCard(layout, ref, placed)
+    return ref
+  }
+  await mkdir(join(layout.dir, folder), { recursive: true })
+  const target = await guardRef(layout, next)
+  if (await exists(target))
+    throw new BoardError('cardNameTaken', { name }, `${name} is already there`)
+  await rename(path, target)
+  try {
+    await editCard(layout, next, placed)
+  } catch (error) {
+    if (!keepsItsOrder(error)) throw error
+  }
+  return next
+}
+
+/** Handed to the caller: core cannot reach the Trash, and deletes nothing itself. */
+export async function removeCard(
+  layout: BoardLayout,
+  ref: string,
+  discard: (path: string) => Promise<void>
+): Promise<void> {
+  const path = await guardRef(layout, ref)
+  await stamp(path, ref)
+  await discard(path)
+}
+
+/** Of two cards with one id (a copy made in Finder), the first by path is the real one. */
+export async function findCard(layout: BoardLayout, id: string): Promise<string | null> {
+  const named = (await listBoard(layout))
+    .filter((card) => card.meta.id === id)
+    .sort((a, b) => compareNames(a.ref, b.ref))
+  return named[0]?.ref ?? null
 }

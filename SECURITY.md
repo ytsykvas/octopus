@@ -105,9 +105,14 @@ service of its own — so most of the usual surface does not exist. What does:
   and project ids come from repository directory names — is worth reporting. A
   terminal's argv is quoted argument by argument on its way to `zsh -i -c`, so
   a path with a `;` or a `$(` in it is a name, not a command.
-- **Files written outside `~/.octopus`, the worktree, and `.octopus/` inside a
-  project's checkout.** Those three are the whole of what the app is allowed to
-  touch. The third is the narrowest and the newest: exporting a project's
+- **Files written outside `~/.octopus`, the worktree, `.octopus/` inside a
+  project's checkout, and the board folder chosen in Settings.** Those four are
+  the whole of what the app is allowed to touch. The board folder holds the
+  user's own files and syncs to other machines, so a card is written only after
+  its path is checked (`isCardRef`, and no link along it — `unlinkedInside`), a
+  new card never replaces a file, a file that is not UTF-8 is never written,
+  and nothing in core deletes a card: a removal is handed to the caller.
+  `.octopus/` is the narrowest: exporting a project's
   settings writes there and nowhere else, through fixed path constants a test
   checks, and refuses a symbolic link that could redirect the write out of the
   directory. The worktree is held to the same rule: a carried file whose

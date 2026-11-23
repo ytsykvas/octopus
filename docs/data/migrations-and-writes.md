@@ -65,10 +65,13 @@ the inode it opened. `writeScript` and the repository's `script.*` pass
 new file: a symlink at the path — an instruction kept in dotfiles, say — becomes
 a plain file and a hard link is cut; the mode the old file had is kept.
 
-A file written once under a fresh name — a pasted image — has nothing to make
-atomic, because nobody knows the name before the write returns. It goes through
-`writeNewFile`, which creates it with `wx`, so two names colliding fail rather
-than one picture silently replacing another.
+A file written once under a fresh name — a pasted image, a new board card —
+goes through `writeNewFile`. It opens the target itself with `wx`, writes,
+`fsync`s and closes: no temporary file and no rename, because a rename replaces
+whatever reached the name first, and in a synced folder that can be a card
+another Mac just made. The cost is that it is not atomic — a crash mid-write
+leaves part of a file nobody had yet. It makes the folder it needs;
+`createCard` has made and checked the status folder before.
 
 The rule holds by lint, not by memory: `no-restricted-imports` in
 `eslint.config.js` refuses `writeFile` from `fs/promises`, and `writeFile`,

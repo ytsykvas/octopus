@@ -94,4 +94,4 @@ anything changed underneath it.
 
 ## The board folder is not owned
 
-Everything above is about `~/.octopus`. The board's folder is the opposite case: it belongs to the user, to Finder, to an editor and to whatever syncs it, and all of them change it while the app runs. So nothing about it is kept between calls — every operation reads the folder again — and reading it writes nothing ([board.md](board.md)).
+Everything above is about `~/.octopus`. The board's folder is the opposite case: it belongs to the user, to Finder, to an editor and to whatever syncs it, and all of them change it while the app runs. So nothing about it is kept between calls — every operation reads the folder again — and reading it writes nothing ([board.md](board.md)). Every edit to a card's text re-reads the file and refuses (`cardChanged`) when it changed in between, rather than write over someone else's edit; a move and a removal take the file as it is.
