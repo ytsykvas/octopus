@@ -91,3 +91,7 @@ tab's `run.sh` for this repository sets it per workspace, under
 Editing these files from outside while the app runs is the same hazard reached
 another way: the app keeps its own copy in memory and will happily write over
 anything changed underneath it.
+
+## The board folder is not owned
+
+Everything above is about `~/.octopus`. The board's folder is the opposite case: it belongs to the user, to Finder, to an editor and to whatever syncs it, and all of them change it while the app runs. So nothing about it is kept between calls — every operation reads the folder again — and reading it writes nothing ([board.md](board.md)).

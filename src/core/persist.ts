@@ -74,6 +74,11 @@ export function isNotFound(error: unknown): boolean {
   return codeOf(error) === 'ENOENT'
 }
 
+/** Whether a filesystem failure met a file where a folder had to be. */
+export function isNotDirectory(error: unknown): boolean {
+  return codeOf(error) === 'ENOTDIR'
+}
+
 /** Whether a filesystem failure ran out of room: the disk is full, or the user's quota is. */
 export function isDiskFull(error: unknown): boolean {
   const code = codeOf(error)

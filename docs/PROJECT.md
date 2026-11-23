@@ -717,7 +717,7 @@ per row would be a network call per row on every refresh.
 
 ### 12.5 On-disk layout
 
-Everything under one directory:
+Everything but the board under one directory:
 
 ```
 ~/.octopus/
@@ -734,6 +734,8 @@ Everything under one directory:
     scripts/archive.sh
   workspaces/<slug>/<name>/  ← git worktree
 ```
+
+The board is the one thing stored outside it: a folder chosen in Settings, one folder per project, one per column, one markdown file per card ([data/board.md](data/board.md)).
 
 ---
 

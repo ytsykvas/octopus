@@ -1,6 +1,6 @@
 # Data on disk
 
-Everything the application stores lives under `~/.octopus`. Paths are built in
+Everything the application stores lives under `~/.octopus`, except the board: a folder the user chooses, described in [board.md](board.md). Paths are built in
 one place — [`src/core/paths.ts`](../../src/core/paths.ts) — so nothing anywhere
 else joins a home directory by hand.
 
@@ -32,17 +32,22 @@ else joins a home directory by hand.
   workspaces/<projectId>/<name>/     the git worktrees
 ```
 
-| File                                                       | Read it when                                                                                             |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [config.md](config.md)                                     | you are adding a setting or changing what `config.json` holds                                            |
-| [ownership.md](ownership.md)                               | you are wondering why two copies of the app cannot share a data root, or how writes are serialised       |
-| [state.md](state.md)                                       | you are adding a field to `state.json` or changing what a project, workspace or chat records             |
-| [transcripts-and-ports.md](transcripts-and-ports.md)       | you are working on what a conversation writes to disk, what is deliberately not stored, or the port pool |
-| [migrations-and-writes.md](migrations-and-writes.md)       | you are changing the schema's version or how a file reaches the disk                                     |
-| [scripts-and-instructions.md](scripts-and-instructions.md) | you are working on the three scripts or the seven instructions                                           |
-| [carried-files.md](carried-files.md)                       | you are working on the files copied from a checkout into a workspace                                     |
-| [repository-grants.md](repository-grants.md)               | you are working on what a repository may make the agent or the Run button do before anybody approved it  |
-| [env.md](env.md)                                           | you are working on a workspace's variables and the env file they are written into                        |
+```
+<board folder>/<project>/<status>/<card>.md   the board's cards, outside ~/.octopus: chosen in Settings, synced by whatever syncs that folder
+```
+
+| File                                                       | Read it when                                                                                                   |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [config.md](config.md)                                     | you are adding a setting or changing what `config.json` holds                                                  |
+| [ownership.md](ownership.md)                               | you are wondering why two copies of the app cannot share a data root, or how writes are serialised             |
+| [state.md](state.md)                                       | you are adding a field to `state.json` or changing what a project, workspace or chat records                   |
+| [transcripts-and-ports.md](transcripts-and-ports.md)       | you are working on what a conversation writes to disk, what is deliberately not stored, or the port pool       |
+| [migrations-and-writes.md](migrations-and-writes.md)       | you are changing the schema's version or how a file reaches the disk                                           |
+| [scripts-and-instructions.md](scripts-and-instructions.md) | you are working on the three scripts or the seven instructions                                                 |
+| [carried-files.md](carried-files.md)                       | you are working on the files copied from a checkout into a workspace                                           |
+| [repository-grants.md](repository-grants.md)               | you are working on what a repository may make the agent or the Run button do before anybody approved it        |
+| [env.md](env.md)                                           | you are working on a workspace's variables and the env file they are written into                              |
+| [board.md](board.md)                                       | you are working on the board's folder: what is read as a card, what is written, and why reading writes nothing |
 
 ## What is stored, and what is not
 
