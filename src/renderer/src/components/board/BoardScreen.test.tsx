@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import userEvent, { type UserEvent } from '@testing-library/user-event'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { BoardListing } from '@core/boardSchema.js'
 
@@ -9,11 +9,13 @@ import {
   boardCard,
   boardListing,
   boardProject,
+  cardDetail,
   givenBoard,
   ok,
   refusal,
   renderScreen
 } from '../../test/board.js'
+import { stubDialogElement } from '../../test/dialog.js'
 import { held } from '../../test/held.js'
 import { octopus } from '../../test/octopus.js'
 
@@ -200,5 +202,276 @@ describe('BoardScreen', () => {
 
     expect(await screen.findAllByRole('region')).toHaveLength(6)
     expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
+  })
+
+  describe('the card panel', () => {
+    beforeAll(stubDialogElement)
+
+    beforeEach(() => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.read).mockResolvedValue(ok(cardDetail()))
+    })
+
+    function twoCards(): void {
+      givenBoard([
+        boardCard({ ref: 'backlog/A.md', title: 'A' }),
+        boardCard({ ref: 'backlog/B.md', title: 'B' })
+      ])
+    }
+
+    function focusWindow(): void {
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+    }
+
+    async function openPanel(user: UserEvent, title = 'Fix login'): Promise<HTMLElement> {
+      await user.click(await screen.findByRole('button', { name: title }))
+      return screen.findByRole('complementary', { name: title })
+    }
+
+    async function chooseStatus(
+      user: UserEvent,
+      panel: HTMLElement,
+      status: string
+    ): Promise<void> {
+      await user.click(within(panel).getByRole('button', { name: 'Backlog' }))
+      await user.click(screen.getByRole('menuitemradio', { name: status }))
+    }
+
+    async function askToDelete(user: UserEvent, panel: HTMLElement): Promise<HTMLElement> {
+      await user.click(within(panel).getByRole('button', { name: 'More' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
+      return screen.findByRole('dialog', { name: /^Delete “.+”\?$/ })
+    }
+
+    it('opens the panel of the clicked card', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+
+      await openPanel(user)
+
+      expect(screen.getByRole('button', { name: 'Fix login' })).toHaveAttribute(
+        'aria-current',
+        'true'
+      )
+    })
+
+    it('closes the panel', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+
+      await user.click(within(panel).getByRole('button', { name: 'Close' }))
+
+      expect(screen.queryByRole('complementary')).toBeNull()
+    })
+
+    it('opens the panel of a card just created', async () => {
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(ok('testing/New.md'))
+      const user = userEvent.setup()
+      renderScreen()
+      const testing = await screen.findByRole('region', { name: 'Testing' })
+      givenBoard([
+        boardCard(),
+        boardCard({ ref: 'testing/New.md', status: 'testing', title: 'New' })
+      ])
+
+      await user.click(within(testing).getByRole('button', { name: 'New task' }))
+      await user.type(within(testing).getByRole('textbox', { name: 'Task title' }), 'New{Enter}')
+
+      expect(await screen.findByRole('complementary', { name: 'New' })).toBeInTheDocument()
+    })
+
+    it('keeps the open panel when the creation was refused', async () => {
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(
+        refusal('cardNameTaken', { name: 'New.md' })
+      )
+      const user = userEvent.setup()
+      const { props } = renderScreen()
+      await openPanel(user)
+      const testing = screen.getByRole('region', { name: 'Testing' })
+
+      await user.click(within(testing).getByRole('button', { name: 'New task' }))
+      await user.type(within(testing).getByRole('textbox', { name: 'Task title' }), 'New{Enter}')
+
+      await waitFor(() => {
+        expect(props.onError).toHaveBeenCalledWith('A file named “New.md” is already there.')
+      })
+      expect(screen.getByRole('complementary', { name: 'Fix login' })).toBeInTheDocument()
+    })
+
+    it('drops the panel of a card that left the listing, and shows it again when it is back', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      await openPanel(user)
+
+      givenBoard([])
+      focusWindow()
+      await waitFor(() => {
+        expect(screen.queryByRole('complementary')).toBeNull()
+      })
+      givenBoard([boardCard()])
+      focusWindow()
+
+      expect(await screen.findByRole('complementary', { name: 'Fix login' })).toBeInTheDocument()
+    })
+
+    it('follows a card moved by its status menu', async () => {
+      vi.mocked(octopus().board.move).mockResolvedValueOnce(ok('done/Fix login.md'))
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+      givenBoard([boardCard({ ref: 'done/Fix login.md', status: 'done' })])
+
+      await chooseStatus(user, panel, 'Done')
+
+      const done = screen.getByRole('region', { name: 'Done' })
+      expect(await within(done).findByRole('button', { name: 'Fix login' })).toHaveAttribute(
+        'aria-current',
+        'true'
+      )
+      expect(screen.getByRole('complementary', { name: 'Fix login' })).toBe(panel)
+    })
+
+    it('stays on the card when the move was refused', async () => {
+      vi.mocked(octopus().board.move).mockResolvedValueOnce(
+        refusal('cardMissing', { name: 'Fix login.md' })
+      )
+      const user = userEvent.setup()
+      const { props } = renderScreen()
+      const panel = await openPanel(user)
+
+      await chooseStatus(user, panel, 'Done')
+
+      await waitFor(() => {
+        expect(props.onError).toHaveBeenCalledWith('“Fix login.md” is no longer on disk.')
+      })
+      expect(screen.getByRole('complementary', { name: 'Fix login' })).toBeInTheDocument()
+    })
+
+    it('keeps the card opened meanwhile when a move finishes', async () => {
+      twoCards()
+      const sent = held<Result<string>>()
+      vi.mocked(octopus().board.move).mockReturnValueOnce(sent.promise)
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user, 'A')
+      await chooseStatus(user, panel, 'Done')
+
+      await openPanel(user, 'B')
+      await act(async () => {
+        sent.resolve(ok('done/A.md'))
+        await sent.promise
+      })
+
+      expect(screen.getByRole('complementary', { name: 'B' })).toBeInTheDocument()
+    })
+
+    it('keeps the panel closed when a move finishes after it', async () => {
+      const sent = held<Result<string>>()
+      vi.mocked(octopus().board.move).mockReturnValueOnce(sent.promise)
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+      givenBoard([boardCard({ ref: 'done/Fix login.md', status: 'done' })])
+      await chooseStatus(user, panel, 'Done')
+
+      await user.click(within(panel).getByRole('button', { name: 'Close' }))
+      await act(async () => {
+        sent.resolve(ok('done/Fix login.md'))
+        await sent.promise
+      })
+
+      expect(screen.queryByRole('complementary')).toBeNull()
+    })
+
+    it('deletes the open card after asking and closes the panel', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+
+      const dialog = await askToDelete(user, panel)
+      expect(dialog).toHaveAccessibleName('Delete “Fix login”?')
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+      expect(octopus().board.remove).toHaveBeenCalledWith('planner', 'backlog/Fix login.md')
+      await waitFor(() => {
+        expect(screen.queryByRole('complementary')).toBeNull()
+      })
+    })
+
+    it('keeps the card when the question is cancelled', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+
+      const dialog = await askToDelete(user, panel)
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+      expect(octopus().board.remove).not.toHaveBeenCalled()
+      expect(screen.getByRole('complementary', { name: 'Fix login' })).toBeInTheDocument()
+    })
+
+    it('keeps the panel when the delete was refused', async () => {
+      vi.mocked(octopus().board.remove).mockResolvedValueOnce(
+        refusal('cardMissing', { name: 'Fix login.md' })
+      )
+      const user = userEvent.setup()
+      const { props } = renderScreen()
+      const panel = await openPanel(user)
+
+      const dialog = await askToDelete(user, panel)
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() => {
+        expect(props.onError).toHaveBeenCalledWith('“Fix login.md” is no longer on disk.')
+      })
+      expect(screen.getByRole('complementary', { name: 'Fix login' })).toBeInTheDocument()
+    })
+
+    it('keeps the card opened meanwhile when a delete finishes', async () => {
+      twoCards()
+      const sent = held<Result<undefined>>()
+      vi.mocked(octopus().board.remove).mockReturnValueOnce(sent.promise)
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user, 'A')
+      const dialog = await askToDelete(user, panel)
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+      await openPanel(user, 'B')
+      await act(async () => {
+        sent.resolve(ok(undefined))
+        await sent.promise
+      })
+
+      expect(screen.getByRole('complementary', { name: 'B' })).toBeInTheDocument()
+    })
+
+    it('forgets the open card when the project changes', async () => {
+      const user = userEvent.setup()
+      const { rerender } = renderScreen()
+      await openPanel(user)
+
+      rerender({ project: boardProject({ id: 'ledger', name: 'ledger' }) })
+
+      expect(await screen.findAllByRole('region')).toHaveLength(6)
+      expect(screen.queryByRole('complementary')).toBeNull()
+    })
+
+    it('widens the panel', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+
+      within(panel).getByRole('separator', { name: 'Resize panel' }).focus()
+      await user.keyboard('{ArrowLeft}')
+
+      expect(within(panel).getByRole('separator', { name: 'Resize panel' })).toHaveAttribute(
+        'aria-valuenow',
+        '436'
+      )
+    })
   })
 })

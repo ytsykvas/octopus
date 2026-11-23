@@ -1,12 +1,13 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import i18n, { DEFAULT_LANGUAGE } from '../../i18n/index.js'
 import { boardCard } from '../../test/board.js'
 import { BoardCardTile, type BoardCardTileProps } from './BoardCardTile.js'
 
 function renderTile(props: Partial<BoardCardTileProps> = {}): BoardCardTileProps {
-  const all: BoardCardTileProps = { card: boardCard(), ...props }
+  const all: BoardCardTileProps = { card: boardCard(), open: false, onOpen: vi.fn(), ...props }
   render(
     <ul>
       <BoardCardTile {...all} />
@@ -89,6 +90,40 @@ describe('BoardCardTile', () => {
     renderTile({ card: boardCard({ ref: 'notes.md', loose: true, title: 'Notes' }) })
 
     expect(screen.getByRole('listitem')).toHaveTextContent(/^Notes$/)
+  })
+
+  it('is a button named by its title', () => {
+    renderTile()
+
+    expect(screen.getByRole('button', { name: 'Fix login' })).toBeInTheDocument()
+  })
+
+  it('says it is the open one', () => {
+    renderTile({ card: boardCard({ ref: 'backlog/A.md', title: 'A' }), open: true })
+    renderTile({ card: boardCard({ ref: 'backlog/B.md', title: 'B' }), open: false })
+
+    expect(screen.getByRole('button', { name: 'A' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: 'B' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('opens on a click', async () => {
+    const { onOpen } = renderTile()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Fix login' }))
+
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds nothing interactive inside the button', () => {
+    renderTile({
+      card: boardCard({
+        meta: { links: [], runs: [], priority: 'high', tag: 'bug' },
+        comments: 2,
+        malformed: true
+      })
+    })
+
+    expect(within(screen.getByRole('button')).queryAllByRole('button')).toEqual([])
   })
 
   describe('in Ukrainian', () => {

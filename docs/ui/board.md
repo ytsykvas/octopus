@@ -66,6 +66,30 @@ means the disk has moved on from the cards on screen, and the board should show 
 reported after that read, so the read cannot clear it, and a write whose board leaves before it
 settles — before its answer or during that read — reports nothing.
 
+## The card panel
+
+A click on a card opens its panel on the right — a panel rather than a modal, so the board stays
+in view and the next card is one click away — and a card just created opens at once. The header
+holds the status, priority and tag menus, More (Delete) and Close. Their items carry no icons:
+`DropdownMenu` draws the tick where an item's icon would be, so the value's icon sits on the
+trigger instead. Choosing the value a card already has writes nothing.
+
+**A move follows its card.** A status change moves the file into another folder, which gives it a
+new ref. Every move goes through `moveCard` in `BoardScreen` — the status menu's now, dragging's
+and ⌥↑/⌥↓'s once they are built — and the panel follows the new ref, but only while it still shows
+that card. The panel is keyed by the opening, not the ref, so a move keeps what the panel holds.
+The status menu puts the card first in its new column.
+
+**Delete asks first** and sends the file to the Trash through core; it closes the panel only when
+it was that card's. Copy description puts the text on the clipboard without the blank lines around
+it — useful on its own, and the way back to a description once a workspace's conversation has
+begun. A file that is not UTF-8 shows a warning in place of its description. The panel's width is
+dragged from its left edge, 320 to 720px, and not saved.
+
+`useCardDetail` reads the open card by project and ref, again on every listing `revision`, and
+keeps the previous detail while the same card is read again. A card removed outside is quiet
+(`cardMissing`): the next listing drops its panel, and the panel comes back if the file does.
+
 ## Drag and drop
 
 Not built yet: a card stays in the column its folder puts it in.

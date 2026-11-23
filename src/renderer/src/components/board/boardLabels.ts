@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { OctagonAlert, SignalHigh, SignalLow, SignalMedium } from 'lucide-react'
+import { Minus, OctagonAlert, SignalHigh, SignalLow, SignalMedium } from 'lucide-react'
 
 import type { BoardStatus, CardPriority } from '@core/boardSchema.js'
 
@@ -27,3 +27,6 @@ export const PRIORITY_LOOKS: Readonly<Record<CardPriority, PriorityLook>> = {
   medium: { icon: SignalMedium, tone: 'text-ink-soft' },
   low: { icon: SignalLow, tone: 'text-ink-faint' }
 }
+
+/** The priority trigger's look while the card has none; a card shows nothing then. */
+export const NO_PRIORITY_LOOK: PriorityLook = { icon: Minus, tone: 'text-ink-faint' }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { BoardListing, CardDraft } from '@core/boardSchema.js'
+import type { BoardListing, CardDraft, CardMove, CardPatch } from '@core/boardSchema.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { useErrorMessage } from './useErrorMessage.js'
@@ -17,6 +17,10 @@ export interface BoardController {
   readonly refresh: () => Promise<void>
   /** The new card's ref, or null when nothing was written. */
   readonly create: (draft: CardDraft) => Promise<string | null>
+  readonly update: (ref: string, patch: CardPatch) => Promise<boolean>
+  /** The card's new ref, or null when the move was refused. */
+  readonly move: (ref: string, move: CardMove) => Promise<string | null>
+  readonly remove: (ref: string) => Promise<boolean>
 }
 
 interface BoardSource {
@@ -159,6 +163,31 @@ export function useBoard(
     [source, settle]
   )
 
+  const update = useCallback(
+    async (ref: string, patch: CardPatch): Promise<boolean> => {
+      if (source === null) return false
+      return (await settle(window.octopus.board.update(source.projectId, ref, patch))).ok
+    },
+    [source, settle]
+  )
+
+  const move = useCallback(
+    async (ref: string, to: CardMove): Promise<string | null> => {
+      if (source === null) return null
+      const answer = await settle(window.octopus.board.move(source.projectId, ref, to))
+      return answer.ok ? answer.value : null
+    },
+    [source, settle]
+  )
+
+  const remove = useCallback(
+    async (ref: string): Promise<boolean> => {
+      if (source === null) return false
+      return (await settle(window.octopus.board.remove(source.projectId, ref))).ok
+    },
+    [source, settle]
+  )
+
   // A sync service writes while the window is elsewhere; coming back is when that matters.
   useWindowEvent('focus', () => void refresh(), { active: source !== null })
 
@@ -169,6 +198,9 @@ export function useBoard(
     failure: current?.failure ?? null,
     revision: current?.revision ?? 0,
     refresh,
-    create
+    create,
+    update,
+    move,
+    remove
   }
 }

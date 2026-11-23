@@ -1963,7 +1963,8 @@ export const de: Translation = {
       urgent: 'Dringend',
       high: 'Hoch',
       medium: 'Mittel',
-      low: 'Niedrig'
+      low: 'Niedrig',
+      none: 'Keine Priorität'
     },
     empty: {
       noFolderTitle: 'Wähle, wo die Aufgaben liegen',
@@ -1990,6 +1991,24 @@ export const de: Translation = {
       malformed: 'Der Kopf dieser Datei ist nicht lesbar; seine Felder werden nicht angezeigt.',
       notText:
         'Diese Datei ist kein UTF-8-Text. Sie wird mit ihrem Dateinamen gezeigt und hier nicht geändert.'
+    },
+    panel: {
+      close: 'Schließen',
+      status: 'Status',
+      priority: 'Priorität',
+      tag: 'Tag',
+      noTag: 'Kein Tag',
+      more: 'Mehr',
+      copy: 'Beschreibung kopieren',
+      copied: 'Kopiert',
+      remove: 'Löschen',
+      description: 'Beschreibung',
+      noDescription: 'Noch keine Beschreibung.',
+      cancel: 'Abbrechen'
+    },
+    remove: {
+      title: '„{{title}}“ löschen?',
+      body: 'Die Datei landet im Papierkorb und lässt sich von dort wiederherstellen.'
     }
   },
 

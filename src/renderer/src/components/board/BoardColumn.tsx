@@ -16,6 +16,8 @@ export interface BoardColumnProps {
   readonly creating: boolean
   readonly onCreating: (creating: boolean) => void
   readonly onCreate: (title: string) => void
+  readonly openRef: string | null
+  readonly onOpen: (ref: string) => void
 }
 
 export function BoardColumn({
@@ -23,12 +25,24 @@ export function BoardColumn({
   cards,
   creating,
   onCreating,
-  onCreate
+  onCreate,
+  openRef,
+  onOpen
 }: BoardColumnProps): React.JSX.Element {
   const { t } = useTranslation()
   const label = t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
   const ordered = cards.filter((card) => card.meta.order !== undefined)
   const loose = cards.filter((card) => card.meta.order === undefined)
+  const tile = (card: BoardCard): React.JSX.Element => (
+    <BoardCardTile
+      key={card.ref}
+      card={card}
+      open={card.ref === openRef}
+      onOpen={() => {
+        onOpen(card.ref)
+      }}
+    />
+  )
 
   return (
     <section
@@ -76,9 +90,7 @@ export function BoardColumn({
               />
             </li>
           )}
-          {ordered.map((card) => (
-            <BoardCardTile key={card.ref} card={card} />
-          ))}
+          {ordered.map(tile)}
           {ordered.length > 0 && loose.length > 0 && (
             <li
               role="separator"
@@ -90,9 +102,7 @@ export function BoardColumn({
               <span aria-hidden className="bg-line h-px flex-1" />
             </li>
           )}
-          {loose.map((card) => (
-            <BoardCardTile key={card.ref} card={card} />
-          ))}
+          {loose.map(tile)}
         </ul>
       )}
     </section>

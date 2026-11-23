@@ -2,7 +2,7 @@ import { render } from '@testing-library/react'
 import { createElement } from 'react'
 import { vi } from 'vitest'
 
-import type { BoardCard, BoardListing } from '@core/boardSchema.js'
+import type { BoardCard, BoardListing, CardDetail } from '@core/boardSchema.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { BoardScreen, type BoardScreenProps } from '../components/board/BoardScreen.js'
@@ -26,6 +26,16 @@ export function boardCard(overrides: Partial<BoardCard> = {}): BoardCard {
     malformed: false,
     notText: false,
     comments: 0,
+    ...overrides
+  }
+}
+
+export function cardDetail(overrides: Partial<CardDetail> = {}): CardDetail {
+  return {
+    ...boardCard(),
+    description: '# Fix login\n\nThe form forgets the e-mail.\n',
+    thread: [],
+    attachments: [],
     ...overrides
   }
 }
@@ -86,6 +96,9 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
     revision: 1,
     refresh: vi.fn(() => Promise.resolve()),
     create: vi.fn(() => Promise.resolve('backlog/Fix login.md')),
+    update: vi.fn(() => Promise.resolve(true)),
+    move: vi.fn(() => Promise.resolve('done/Fix login.md')),
+    remove: vi.fn(() => Promise.resolve(true)),
     ...overrides
   }
 }

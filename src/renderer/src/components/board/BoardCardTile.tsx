@@ -9,6 +9,8 @@ import { PRIORITY_LOOKS } from './boardLabels.js'
 
 export interface BoardCardTileProps {
   readonly card: BoardCard
+  readonly open: boolean
+  readonly onOpen: () => void
 }
 
 function PriorityMark({ priority }: { readonly priority: CardPriority }): React.JSX.Element {
@@ -30,7 +32,7 @@ function looseFolder(card: BoardCard): string | null {
   return card.loose && slash !== -1 ? card.ref.slice(0, slash) : null
 }
 
-export function BoardCardTile({ card }: BoardCardTileProps): React.JSX.Element {
+export function BoardCardTile({ card, open, onOpen }: BoardCardTileProps): React.JSX.Element {
   const { t } = useTranslation()
   const { priority, tag } = card.meta
   // A file that is not UTF-8 has no header to read, so the two marks together add nothing.
@@ -43,8 +45,13 @@ export function BoardCardTile({ card }: BoardCardTileProps): React.JSX.Element {
   const secondLine = folder !== null || tag !== undefined || card.comments > 0 || warning !== null
 
   return (
-    <li>
-      <div className="border-line bg-surface rounded-[var(--radius-control)] border px-2.5 py-2">
+    <li className="relative">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-current={open ? 'true' : undefined}
+        className={`focus-ring hover:border-line-strong w-full rounded-[var(--radius-control)] border px-2.5 py-2 text-left ${open ? 'border-accent/50 bg-canvas' : 'border-line bg-surface'}`}
+      >
         <span className="flex gap-2">
           {/* A spacer without a priority, so the titles of a column line up. */}
           {priority === undefined ? (
@@ -85,7 +92,7 @@ export function BoardCardTile({ card }: BoardCardTileProps): React.JSX.Element {
             )}
           </span>
         )}
-      </div>
+      </button>
     </li>
   )
 }

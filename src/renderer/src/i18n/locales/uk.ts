@@ -1930,7 +1930,8 @@ export const uk: Translation = {
       urgent: 'Терміново',
       high: 'Високий',
       medium: 'Середній',
-      low: 'Низький'
+      low: 'Низький',
+      none: 'Без пріоритету'
     },
     empty: {
       noFolderTitle: 'Оберіть, де лежать задачі',
@@ -1956,6 +1957,24 @@ export const uk: Translation = {
       comments_other: '{{count}} коментаря',
       malformed: 'Шапку цього файлу не прочитано, тож її поля не показано.',
       notText: 'Цей файл — не текст UTF-8. Його показано за назвою файлу, і тут він не змінюється.'
+    },
+    panel: {
+      close: 'Закрити',
+      status: 'Статус',
+      priority: 'Пріоритет',
+      tag: 'Тег',
+      noTag: 'Без тегу',
+      more: 'Ще',
+      copy: 'Скопіювати опис',
+      copied: 'Скопійовано',
+      remove: 'Видалити',
+      description: 'Опис',
+      noDescription: 'Опису ще немає.',
+      cancel: 'Скасувати'
+    },
+    remove: {
+      title: 'Видалити «{{title}}»?',
+      body: 'Файл піде в Кошик, звідти його можна відновити.'
     }
   },
   errors: {
