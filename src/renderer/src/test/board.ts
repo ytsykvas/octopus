@@ -3,35 +3,18 @@ import { createElement } from 'react'
 import { vi } from 'vitest'
 
 import type { BoardCard, BoardListing } from '@core/boardSchema.js'
-import type { Project } from '@core/store.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { BoardScreen, type BoardScreenProps } from '../components/board/BoardScreen.js'
 import type { BoardController } from '../hooks/useBoard.js'
 import { octopus } from './octopus.js'
+import { project as boardProject } from './projects.js'
 
 /** The project every board test is about. */
 export const PROJECT_ID = 'planner'
 
-export function boardProject(overrides: Partial<Project> = {}): Project {
-  return {
-    id: PROJECT_ID,
-    name: 'planner',
-    repoPath: '/Users/someone/code/planner',
-    baseBranch: 'origin/main',
-    branchPrefix: 'ytsykvas',
-    envFile: '.env',
-    approvedSettings: [],
-    approvedScripts: [],
-    envProfile: 'default',
-    trustRepoScripts: false,
-    trustRepository: false,
-    preferLocal: [],
-    disabledSkillDefaults: [],
-    color: 'blue',
-    ...overrides
-  }
-}
+/** The board's project: the one every renderer suite starts from. */
+export { boardProject }
 
 export function boardCard(overrides: Partial<BoardCard> = {}): BoardCard {
   return {

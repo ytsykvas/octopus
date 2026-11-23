@@ -2,29 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Project } from '@core/store.js'
-
+import { project } from '../test/projects.js'
 import { ProjectTabs } from './ProjectTabs.js'
-
-function project(overrides: Partial<Project> = {}): Project {
-  return {
-    id: 'planner',
-    name: 'planner',
-    repoPath: '/Users/someone/code/planner',
-    baseBranch: 'origin/main',
-    branchPrefix: 'ytsykvas',
-    envFile: '.env',
-    approvedSettings: [],
-    approvedScripts: [],
-    envProfile: 'default',
-    trustRepoScripts: false,
-    trustRepository: false,
-    preferLocal: [],
-    disabledSkillDefaults: [],
-    color: 'blue',
-    ...overrides
-  }
-}
 
 type ProjectTabsProps = React.ComponentProps<typeof ProjectTabs>
 
