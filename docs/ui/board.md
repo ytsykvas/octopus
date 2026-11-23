@@ -48,10 +48,13 @@ Only ⌘⇧N and a digit under ⌘ or ⌃ work on the board. ⌘1–⌘9 switch 
 ⌘⇧N, a toast's Show and a status-bar row open a workspace, and so leave for Octopus. The rest —
 ⌘T, ⌘⇧D, ⌥1 — act on a conversation or a pane the board does not show.
 
-The title bar shows the project's board folder where the repository's path stands on Octopus,
-with no branch and none of the controls at its right; with no folder chosen it shows the app's
-name. A loose card whose file sits in a folder that is not a status shows that folder's name
-first on its second line, so a renamed status folder is visible rather than silently emptied.
+The title bar shows the folder the board reads where the repository's path stands on Octopus, with
+no branch and none of the controls at its right; with no folder chosen it shows the app's name. That
+folder is the one on disk, which core finds by name regardless of case, so `BoardScreen` writes it
+into a slot App leaves in the bar (`titleSlot`) rather than App building it from the project's name;
+the slot is empty while the first read is out or has failed. A loose card whose file sits in a
+folder that is not a status shows that folder's name first on its second line, so a renamed status
+folder is visible rather than silently emptied.
 
 ## Drag and drop
 

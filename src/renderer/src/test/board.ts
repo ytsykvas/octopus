@@ -65,6 +65,7 @@ export function renderScreen(overrides: Partial<BoardScreenProps> = {}): {
     boardFolder: '/tmp/board',
     onPickFolder: vi.fn(),
     onError: vi.fn(),
+    titleSlot: null,
     ...overrides
   }
   const view = render(createElement(BoardScreen, props))

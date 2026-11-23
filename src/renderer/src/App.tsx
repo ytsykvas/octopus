@@ -37,7 +37,6 @@ import { useErrorMessage } from './hooks/useErrorMessage.js'
 import { usePendingIn } from './hooks/usePendingIn.js'
 import { useShownWorkspace } from './hooks/useShownWorkspace.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
-import { boardFolderName } from '@core/boardNames.js'
 
 import { useAttachedFiles } from './hooks/useAttachedFiles.js'
 import { useCodeNotes } from './hooks/useCodeNotes.js'
@@ -162,6 +161,9 @@ export function App(): React.JSX.Element {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   // Not persisted, like the list's fold: which screen is in front lasts for the session.
   const [screen, setScreen] = useState<Screen>('octopus')
+  // Filled by the board itself: core finds its folder by name regardless of case, so only the
+  // board knows the path it actually reads.
+  const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null)
   const [pickingRepository, setPickingRepository] = useState(false)
   /* Read off the same check that decides whether the picker opens at all, and
      kept only for as long as it is open — see `addFromGitHub`. */
@@ -947,11 +949,8 @@ export function App(): React.JSX.Element {
     />
   )
 
-  // The board's own folder, in the place the repository's path takes on the other screen.
-  const boardPath =
+  const showsBoardFolder =
     screen === 'board' && selectedProject !== null && config !== null && config.boardFolder !== ''
-      ? `${config.boardFolder.replace(/\/+$/, '')}/${boardFolderName(selectedProject.name)}`
-      : null
 
   return (
     // The bar's height as a variable, for what floats in the corner above it.
@@ -963,10 +962,13 @@ export function App(): React.JSX.Element {
           a pane's colour reaching up here made the window look like it started
           in the wrong place. */}
       <header className="titlebar-drag border-line flex h-11 shrink-0 items-center gap-3 border-b pr-3 pl-[5.5rem]">
-        {/* The project's name is not repeated here: the sidebar beside the
-            window always shows it. */}
-        {boardPath !== null ? (
-          <span className="text-ink-faint min-w-0 truncate font-mono text-[11px]">{boardPath}</span>
+        {/* The project's name is not repeated here: the project strip beside
+            the window always shows it. */}
+        {showsBoardFolder ? (
+          <span
+            ref={setTitleSlot}
+            className="text-ink-faint min-w-0 truncate font-mono text-[11px]"
+          />
         ) : selectedProject && screen === 'octopus' ? (
           <span className="text-ink-faint min-w-0 truncate font-mono text-[11px]">
             {selectedProject.repoPath}
@@ -1192,6 +1194,7 @@ export function App(): React.JSX.Element {
               boardFolder={config?.boardFolder ?? null}
               onPickFolder={() => void pickBoardFolder()}
               onError={setError}
+              titleSlot={titleSlot}
             />
           ) : !selectedProject ? (
             centerPane

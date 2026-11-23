@@ -4152,16 +4152,23 @@ describe('the board screen', () => {
     expect(offstage()?.style.width).toBe(width)
   })
 
-  it('shows the board folder in the title bar', async () => {
-    await onTheBoard()
+  it('shows the folder the board reads in the title bar', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board' })
+    })
+    vi.mocked(window.octopus.board.list).mockResolvedValue({
+      ok: true,
+      value: { folder: '/tmp/board/Planner', cards: [] }
+    })
+    const user = await openApp()
+    await user.click(await findTab('PL'))
 
-    expect(await screen.findByText('/tmp/board/planner')).toBeInTheDocument()
-  })
+    await user.click(screen.getByRole('button', { name: 'Board' }))
 
-  it('drops a slash at the end of the board folder', async () => {
-    await onTheBoard({ boardFolder: '/tmp/board/' })
-
-    expect(await screen.findByText('/tmp/board/planner')).toBeInTheDocument()
+    expect(await screen.findByText('/tmp/board/Planner')).toBeInTheDocument()
+    expect(screen.queryByText('/tmp/board/planner')).toBeNull()
   })
 
   it('asks for a folder and shows the app name while there is none', async () => {
