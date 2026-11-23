@@ -18,7 +18,7 @@ import {
   utimes,
   writeFile
 } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { hostname as osHostname, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -35,6 +35,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
 import { descriptionOf, readMeta } from './boardCard.js'
+import { machineLabel } from './boardNames.js'
+import { CARD_TEXT_MAX } from './boardSchema.js'
 import {
   ABANDONED,
   COMPACTION_WATCH_SETTINGS,
@@ -18742,6 +18744,31 @@ describe('running a board card', () => {
     })
   })
 
+  it('starts one workspace for a card run twice at once', async () => {
+    const { service, projectId } = await withBoard('# Fix login\n')
+
+    // Either call may reach the board line first; exactly one of them makes the workspace.
+    const launches = await Promise.all([
+      service.runCard(projectId, 'backlog/A.md'),
+      service.runCard(projectId, 'backlog/A.md')
+    ])
+
+    await expect(service.listWorkspaces(projectId)).resolves.toHaveLength(1)
+    expect(launches.map((launch) => launch.created).sort()).toEqual([false, true])
+    expect(new Set(launches.map((launch) => launch.workspaceId)).size).toBe(1)
+  })
+
+  it('starts a new workspace for a card whose workspace was removed', async () => {
+    const { service, projectId } = await withBoard('# Fix login\n')
+    const first = await service.runCard(projectId, 'backlog/A.md')
+    await service.removeWorkspaceById(first.workspaceId, { force: true, deleteBranch: true })
+
+    const again = await service.runCard(projectId, 'backlog/A.md')
+
+    expect(again.created).toBe(true)
+    await expect(service.listWorkspaces(projectId)).resolves.toHaveLength(1)
+  })
+
   it('starts a workspace with an empty draft from a card with no text', async () => {
     const { service, projectId } = await withBoard('')
 
@@ -18752,7 +18779,7 @@ describe('running a board card', () => {
   })
 
   it('refuses a card longer than a message can be, and creates nothing', async () => {
-    const card = '# A\n\n' + 'x'.repeat(100_001)
+    const card = '# A\n\n' + 'x'.repeat(CARD_TEXT_MAX + 1)
     const { service, projectId, file } = await withBoard(card)
 
     await expect(service.runCard(projectId, 'backlog/A.md')).rejects.toMatchObject({
@@ -18957,20 +18984,40 @@ describe('running a board card', () => {
     expect(onDiagnostic).not.toHaveBeenCalled()
   })
 
-  it('still returns the workspace when the run cannot be recorded', async () => {
-    const onDiagnostic = vi.fn()
-    const { service, projectId, file } = await withBoard('# Fix login\n', {
-      onDiagnostic,
-      hostname: () => {
-        throw new Error('no host')
-      }
+  it("records the machine's own name when none is given", async () => {
+    const { projectId, file } = await withBoard('# Fix login\n')
+    const own = await createService({
+      ...paths(dir),
+      commandExec: respondTo('claude', CLAUDE_SIGNED_IN)
     })
 
-    const launch = await service.runCard(projectId, 'backlog/A.md')
+    await own.runCard(projectId, 'backlog/A.md')
 
-    expect(launch.workspaceId).toBe((await only(service, projectId)).id)
-    await expect(runsIn(file)).resolves.toEqual([])
-    expect(onDiagnostic).toHaveBeenCalledWith(new Error('no host'))
+    await expect(runsIn(file)).resolves.toEqual([
+      expect.objectContaining({ machine: machineLabel(osHostname()) })
+    ])
+  })
+
+  it('still returns the workspace when the card cannot take the run', async () => {
+    const onDiagnostic = vi.fn()
+    const column = (): string => join(dir, 'board', 'planner', 'backlog')
+    const { service, projectId, file } = await withBoard('# Fix login\n', {
+      onDiagnostic,
+      commandExec: async (command) => {
+        if (command !== 'claude') throw new Error('not installed')
+        await chmod(column(), 0o555)
+        return CLAUDE_SIGNED_IN
+      }
+    })
+    try {
+      const launch = await service.runCard(projectId, 'backlog/A.md')
+
+      expect(launch.workspaceId).toBe((await only(service, projectId)).id)
+      await expect(runsIn(file)).resolves.toEqual([])
+      expect(onDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'EACCES' }))
+    } finally {
+      await chmod(column(), 0o755)
+    }
   })
 
   it('answers without the run when the account check hangs', async () => {

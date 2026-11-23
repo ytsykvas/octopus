@@ -524,7 +524,6 @@ interface CardSight {
   readonly tag: WorkspaceKind | undefined
 }
 
-/** How long "Run" waits for the account and the card before answering without the run recorded. */
 const RECORD_RUN_MS = 5_000
 
 /**
@@ -5178,6 +5177,38 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return present(seen.sight, 'the card runCard read')
   }
 
+  // A run still making its workspace, by card id: the link is committed only once the
+  // workspace is, and a second click in between would otherwise make a second one.
+  const cardRuns = new Map<string, Promise<CardLaunch>>()
+
+  async function startFromCard(
+    projectId: string,
+    layout: BoardLayout,
+    card: CardSight
+  ): Promise<CardLaunch> {
+    const created = await createIn(projectId, card.id)
+    const detours: (KindDetour | null)[] = [created.detour ?? null]
+    if (card.tag !== undefined) {
+      detours.push(await rekindById(created.id, card.tag).catch(reportNull))
+    }
+    const name = cardWorkspaceName(card.title)
+    if (name !== null) detours.push(await renameById(created.id, name).catch(reportNull))
+
+    // After the rename, so the branch recorded is the final one. Nothing after the
+    // creation removes the workspace: one with a pool name beats a refusal.
+    await within(
+      RECORD_RUN_MS,
+      recordRun(projectId, layout, card.id, requireWorkspace(created.id)).catch(onDiagnostic)
+    )
+
+    return {
+      workspaceId: created.id,
+      draft: card.description,
+      detour: detours.find((detour) => detour !== null) ?? null,
+      created: true
+    }
+  }
+
   function reportNull(error: unknown): null {
     onDiagnostic(error)
     return null
@@ -6703,26 +6734,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         }
       }
 
-      const created = await createIn(projectId, card.id)
-      const detours: (KindDetour | null)[] = [created.detour ?? null]
-      if (card.tag !== undefined) {
-        detours.push(await rekindById(created.id, card.tag).catch(reportNull))
-      }
-      const name = cardWorkspaceName(card.title)
-      if (name !== null) detours.push(await renameById(created.id, name).catch(reportNull))
+      const running = cardRuns.get(card.id)
+      if (running !== undefined) return { ...(await running), detour: null, created: false }
 
-      // After the rename, so the branch recorded is the final one. Nothing after the
-      // creation removes the workspace: one with a pool name beats a refusal.
-      await within(
-        RECORD_RUN_MS,
-        recordRun(projectId, layout, card.id, requireWorkspace(created.id)).catch(onDiagnostic)
-      )
-
-      return {
-        workspaceId: created.id,
-        draft: card.description,
-        detour: detours.find((detour) => detour !== null) ?? null,
-        created: true
+      const launch = startFromCard(projectId, layout, card)
+      cardRuns.set(card.id, launch)
+      try {
+        return await launch
+      } finally {
+        cardRuns.delete(card.id)
       }
     },
 

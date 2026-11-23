@@ -212,14 +212,16 @@ helper its config names.
 `runCard` composes three things the window otherwise asks for one at a time:
 create, change the kind to the card's tag, rename to the card's title
 (`cardWorkspaceName`, which declines a title with fewer than three Latin letters
-or digits, since `workspaceSlug` keeps only `[a-z0-9]` and two such names would
-share a slug). The kind change and the rename are best-effort: a refusal is
-logged and the workspace keeps the default kind or its pool name. Nothing after
-the creation removes the workspace — one with a random name beats a refusal.
-The card is read and given an id in one `editCard` call in the project's board
-line, so an id another Mac wrote meanwhile is kept. The run is recorded in the
-card by id, under a 5-second bound, so a slow `claude auth status` never holds
-the button.
+or digits, since `workspaceSlug` turns every other character into `_` and two
+such titles of the same length would share a slug). The kind change and the
+rename are best-effort: a refusal is logged and the workspace keeps the default
+kind or its pool name. Nothing after the creation removes the workspace — one
+with a random name beats a refusal. The card is read and given an id in one
+`editCard` call in the project's board line, so an id another Mac wrote
+meanwhile is kept. A second run of the card while the first is still making its
+workspace waits for that one and answers it, rather than making another. The run
+is recorded in the card by id, under a 5-second bound, so a slow `claude auth
+status` never holds the button.
 
 ## An operation that fails cleans up after itself
 
