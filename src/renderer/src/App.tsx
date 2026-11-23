@@ -1340,8 +1340,10 @@ export function App(): React.JSX.Element {
           reveal={diffReveal}
           onError={setError}
           // The room the pane must leave alone. Folded away, the list takes
-          // none of it — and the pane may have that room too.
-          leftWidth={TAB_STRIP_WIDTH + (listShown ? sidebarWidth : 0)}
+          // none of it — and the pane may have that room too. Not so on the
+          // board, where the pane is offstage: widening it there would resize
+          // every terminal in it.
+          leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
         />
       </div>
 

@@ -4134,6 +4134,24 @@ describe('the board screen', () => {
     )
   })
 
+  it('keeps the right pane its width behind the board', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board', rightPanelWidth: 500 })
+    })
+    givenBoard([boardCard()])
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await screen.findByText('bob')
+    const width = rightPane().style.width
+
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+    await screen.findByRole('region', { name: 'Backlog' })
+
+    expect(offstage()?.style.width).toBe(width)
+  })
+
   it('shows the board folder in the title bar', async () => {
     await onTheBoard()
 
