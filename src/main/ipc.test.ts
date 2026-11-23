@@ -453,6 +453,7 @@ describe('channel table', () => {
     'board:comment',
     'board:move',
     'board:remove',
+    'board:run',
     'dialog:pickSkill',
     'dialog:pickMarkdown',
     'dialog:pickFiles',
@@ -4084,6 +4085,27 @@ describe('board channels', () => {
     for (const answer of answers) {
       expect(answer).toMatchObject({ ok: false, code: 'valueRefused' })
     }
+  })
+
+  it('runs a card through the service', async () => {
+    const launch = { workspaceId: 'p/anna', draft: '# A', detour: null, created: true }
+    const runCard = vi.spyOn(service, 'runCard').mockResolvedValue(launch)
+
+    await expect(invoke('board:run', 'p', 'backlog/A.md')).resolves.toEqual({
+      ok: true,
+      value: launch
+    })
+    expect(runCard).toHaveBeenCalledWith('p', 'backlog/A.md')
+  })
+
+  it('refuses a run of a ref outside the board', async () => {
+    const runCard = vi.spyOn(service, 'runCard')
+
+    await expect(invoke('board:run', 'p', '../x.md')).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    expect(runCard).not.toHaveBeenCalled()
   })
 })
 

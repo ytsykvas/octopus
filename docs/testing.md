@@ -222,6 +222,9 @@ delivery, the fake has to record what it was told.
 a card; main passes `shell.trashItem`, and the default deletes. A test hands a
 spy, or removes from a board in its temporary directory.
 
+`hostname` is injected as well (`ServiceOptions.hostname`), so a board card's
+run records a fixed machine label rather than the machine's own name.
+
 ## Core tests drive real git
 
 Not a mock. Each test builds a repository in a temporary directory and runs

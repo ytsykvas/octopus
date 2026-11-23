@@ -155,6 +155,8 @@ export interface CardLaunch {
   readonly workspaceId: string
   readonly draft: string | null
   readonly detour: KindDetour | null
+  /** False when one started from the card was already here: the window must keep its drafts. */
+  readonly created: boolean
 }
 export interface BoardChangedEvent {
   readonly projectId: string

@@ -67,6 +67,10 @@ Reading — the board, one card — writes nothing, not even a folder: the files
 
 A removal goes to the Trash: main hands `shell.trashItem` to the service as `discardPath`, and `boardFiles.ts` deletes no card itself. The service's default, used by tests, deletes.
 
+## Runs
+
+`runCard` writes the card an `id` if it has none and appends one entry to `runs`: `started` (the workspace's `createdAt`, the entry's key), `device` (this installation's `config.deviceId`, which decides "another machine"), `machine` (the hostname without `.local`, a label only), `branch` after the rename, and the signed-in Claude account. An empty account list is not written. The id is written before the workspace is made, so a card whose creation failed keeps an id and no run.
+
 ## Order
 
 A card's place in its column is its `order`: cards that have one come first, lowest first, and the rest follow by name. A drop writes a number between its new neighbours' — dropped among cards with no `order`, right after the last one that has — into the moved card and nothing else, so one drag writes one file; a new card takes one less than the first.

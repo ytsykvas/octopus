@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { rm } from 'node:fs/promises'
-import { availableParallelism } from 'node:os'
+import { availableParallelism, hostname as osHostname } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { z } from 'zod'
@@ -21,7 +21,7 @@ import {
   query as defaultQuery
 } from '@anthropic-ai/claude-agent-sdk'
 
-import { type CommandExec, defaultExec } from './accounts.js'
+import { checkClaudeAccount, type CommandExec, defaultExec } from './accounts.js'
 import {
   ABANDONED,
   type AgentSession,
@@ -270,16 +270,24 @@ import {
   renameCard as renameCardIn,
   saveDescription as saveDescriptionIn,
   updateCard as updateCardIn,
+  editCard,
+  findCard,
   type BoardLayout
 } from './boardFiles.js'
-import type {
-  BoardListing,
-  CardDetail,
-  CardDraft,
-  CardMove,
-  CardPatch,
-  DescriptionSave
+import {
+  BoardError,
+  CARD_TEXT_MAX,
+  type BoardListing,
+  type CardDetail,
+  type CardDraft,
+  type CardLaunch,
+  type CardMove,
+  type CardPatch,
+  type DescriptionSave
 } from './boardSchema.js'
+import { parseCard, setMeta, upsertRun } from './boardCard.js'
+import { cardWorkspaceName, machineLabel } from './boardNames.js'
+import { present } from './present.js'
 import {
   ensureStore,
   importFromPath,
@@ -509,6 +517,16 @@ const IDLE_SWEEP_MS = 60_000
 // exited, so a refusal waits this long for that end before it counts as one.
 const LET_GO_GRACE_MS = 500
 
+interface CardSight {
+  readonly id: string
+  readonly title: string
+  readonly description: string
+  readonly tag: WorkspaceKind | undefined
+}
+
+/** How long "Run" waits for the account and the card before answering without the run recorded. */
+const RECORD_RUN_MS = 5_000
+
 /**
  * The events that mean the model itself spoke — what a session's headers are
  * refreshed by. Deltas count: they are the response in progress.
@@ -651,6 +669,8 @@ export interface ServiceOptions {
   readonly uuid?: () => string
   /** Current time as an ISO string; a parameter so records are predictable in tests. */
   readonly now?: () => string
+  /** The machine's name, as a card's runs label it; a parameter so tests get a fixed one. */
+  readonly hostname?: () => string
   /**
    * Where a removed card goes. Core cannot reach the Trash — that is Electron's — so main hands in
    * `shell.trashItem`; the default deletes, which is what a test of the removal wants.
@@ -1386,6 +1406,8 @@ export interface OctopusService {
   moveCard(projectId: string, ref: string, move: CardMove): Promise<string>
   /** To the Trash in the app (`discardPath`). */
   removeCard(projectId: string, ref: string): Promise<void>
+  /** Starts a workspace from a board card, or answers the one already started from it here. */
+  runCard(projectId: string, ref: string): Promise<CardLaunch>
 
   /** The skills one of the two stores holds, for a settings section. */
   listSkills(store: Store): Promise<SkillEntry[]>
@@ -2022,6 +2044,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   const writeEntry = options.appendEntry ?? appendEntry
   const uuid = options.uuid ?? randomUUID
   const now = options.now ?? ((): string => new Date().toISOString())
+  const hostname = options.hostname ?? osHostname
   const discardPath = options.discardPath ?? ((path: string): Promise<void> => rm(path))
   const onDiagnostic = options.onDiagnostic ?? ((): void => undefined)
 
@@ -5128,6 +5151,66 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return findLayout(config.boardFolder, requireProject(projectId).name)
   }
 
+  // One change rather than a read then a write: the change sees the file as it is at
+  // the write, so an id another Mac wrote meanwhile is kept, not overwritten.
+  async function sightCard(
+    projectId: string,
+    layout: BoardLayout,
+    ref: string
+  ): Promise<CardSight> {
+    const seen: { sight: CardSight | null } = { sight: null }
+    await boardWork(projectId, () =>
+      editCard(layout, ref, (raw, name) => {
+        const card = parseCard(raw, name)
+        const description = card.description.trim()
+        if (description.length > CARD_TEXT_MAX) {
+          throw new BoardError(
+            'cardTooLong',
+            { name },
+            `${name} is longer than ${String(CARD_TEXT_MAX)} characters.`
+          )
+        }
+        const id = card.meta.id ?? uuid()
+        seen.sight = { id, title: card.title, description, tag: card.meta.tag }
+        return card.meta.id === undefined ? setMeta(raw, { id }, name) : raw
+      })
+    )
+    return present(seen.sight, 'the card runCard read')
+  }
+
+  function reportNull(error: unknown): null {
+    onDiagnostic(error)
+    return null
+  }
+
+  async function recordRun(
+    projectId: string,
+    layout: BoardLayout,
+    id: string,
+    workspace: Workspace
+  ): Promise<void> {
+    const { email } = await checkClaudeAccount(commandExec)
+    await boardWork(projectId, async () => {
+      // By id, not by the ref it was run from: making the workspace takes
+      // seconds, and the card may have been moved or deleted meanwhile.
+      const ref = await findCard(layout, id)
+      if (ref === null) return
+      await editCard(layout, ref, (raw, name) =>
+        upsertRun(
+          raw,
+          workspace.createdAt,
+          {
+            device: config.deviceId,
+            machine: machineLabel(hostname()),
+            branch: workspace.branch,
+            accounts: email === null ? [] : [email]
+          },
+          name
+        )
+      )
+    })
+  }
+
   /** Where one kind of library item lives in a store; a path, made on demand. */
   function libraryDir(store: Store, kind: LibraryKind): string {
     return libraryDirOf(storeRoot(store), kind)
@@ -6598,6 +6681,49 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return boardWork(projectId, async () => {
         await removeCardIn(await layoutOf(projectId), ref, discardPath)
       })
+    },
+    async runCard(projectId, ref) {
+      const layout = await layoutOf(projectId)
+      const card = await sightCard(projectId, layout, ref)
+
+      const linked = workspacesOfProject(state, projectId).find(
+        (workspace) => workspace.card === card.id
+      )
+      if (linked !== undefined) {
+        // Given again while nothing has been sent: the first draft lived only in
+        // the window, and a restart lost it.
+        const untouched = allChatsOfWorkspace(state, linked.id).every(
+          (chat) => chat.sessionId === null
+        )
+        return {
+          workspaceId: linked.id,
+          draft: untouched ? card.description : null,
+          detour: null,
+          created: false
+        }
+      }
+
+      const created = await createIn(projectId, card.id)
+      const detours: (KindDetour | null)[] = [created.detour ?? null]
+      if (card.tag !== undefined) {
+        detours.push(await rekindById(created.id, card.tag).catch(reportNull))
+      }
+      const name = cardWorkspaceName(card.title)
+      if (name !== null) detours.push(await renameById(created.id, name).catch(reportNull))
+
+      // After the rename, so the branch recorded is the final one. Nothing after the
+      // creation removes the workspace: one with a pool name beats a refusal.
+      await within(
+        RECORD_RUN_MS,
+        recordRun(projectId, layout, card.id, requireWorkspace(created.id)).catch(onDiagnostic)
+      )
+
+      return {
+        workspaceId: created.id,
+        draft: card.description,
+        detour: detours.find((detour) => detour !== null) ?? null,
+        created: true
+      }
     },
 
     async skillsForChat(chatId) {

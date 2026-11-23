@@ -320,7 +320,10 @@ export function installOctopusStub(): Api {
       saveDescription: vi.fn(() => ok(undefined)),
       comment: vi.fn(() => ok(undefined)),
       move: vi.fn(() => ok('done/Fix login.md')),
-      remove: vi.fn(() => ok(undefined))
+      remove: vi.fn(() => ok(undefined)),
+      run: vi.fn(() =>
+        ok({ workspaceId: 'planner/anna', draft: null, detour: null, created: false })
+      )
     },
 
     skills: {

@@ -551,6 +551,7 @@ describe('channel names', () => {
       () => method('board', 'remove')('p' as never, 'backlog/a.md' as never),
       'board:remove'
     ],
+    ['board.run', () => method('board', 'run')('p' as never, 'backlog/a.md' as never), 'board:run'],
     [
       'library.list',
       () => method('library', 'list')({ kind: 'global' } as never, 'command' as never),
