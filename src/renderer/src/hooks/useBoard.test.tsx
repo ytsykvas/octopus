@@ -371,4 +371,124 @@ describe('useBoard', () => {
 
     expect(onError).not.toHaveBeenCalled()
   })
+
+  describe('writes', () => {
+    it('creates a card and reads the board again', async () => {
+      givenBoard([])
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const made = await act(() => result.current.create({ status: 'backlog', title: 'Fix login' }))
+
+      expect(made).toBe('backlog/Fix login.md')
+      expect(octopus().board.create).toHaveBeenCalledWith('planner', {
+        status: 'backlog',
+        title: 'Fix login'
+      })
+      expect(list()).toHaveBeenCalledTimes(2)
+      expect(onError).toHaveBeenLastCalledWith(null)
+    })
+
+    it('reads the board again after a refused write', async () => {
+      givenBoard([])
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(
+        refusal('cardNameTaken', { name: 'Fix login.md' })
+      )
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const made = await act(() => result.current.create({ status: 'backlog', title: 'Fix login' }))
+
+      expect(made).toBeNull()
+      expect(onError).toHaveBeenCalledWith('A file named “Fix login.md” is already there.')
+      expect(list()).toHaveBeenCalledTimes(2)
+    })
+
+    it('drops a write answered after the project changed', async () => {
+      givenBoard([boardCard()])
+      const sent = held<Result<string>>()
+      vi.mocked(octopus().board.create).mockReturnValueOnce(sent.promise)
+      const { result, rerender, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      let made: Promise<string | null> = Promise.resolve(null)
+      act(() => {
+        made = result.current.create({ status: 'backlog', title: 'Fix login' })
+      })
+      const next = holdNextRead()
+
+      rerender({ projectId: 'ledger', folder: '/tmp/board', onError })
+      await act(async () => {
+        sent.resolve(refusal('cardNameTaken', { name: 'Fix login.md' }))
+        await made
+      })
+      await act(async () => {
+        next.resolve(ok(B))
+        await next.promise
+      })
+
+      expect(result.current.listing?.cards[0]?.title).toBe('B')
+      expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('drops a refusal whose board left while it was read again', async () => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(
+        refusal('cardNameTaken', { name: 'Fix login.md' })
+      )
+      const { result, rerender, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      const reread = holdNextRead()
+      let made: Promise<string | null> = Promise.resolve(null)
+      act(() => {
+        made = result.current.create({ status: 'backlog', title: 'Fix login' })
+      })
+      await waitFor(() => {
+        expect(list()).toHaveBeenCalledTimes(2)
+      })
+
+      rerender({ projectId: 'ledger', folder: '/tmp/board', onError })
+      await act(async () => {
+        reread.resolve(ok(A))
+        await made
+      })
+
+      expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('keeps a refusal in the banner when the read after it clears an earlier failure', async () => {
+      list()
+        .mockResolvedValueOnce(ok(A))
+        .mockResolvedValueOnce(refusal('cardMissing', { name: 'Fix login.md' }))
+        .mockResolvedValueOnce(ok(A))
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(
+        refusal('cardNameTaken', { name: 'Fix login.md' })
+      )
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      await act(() => result.current.refresh())
+
+      await act(() => result.current.create({ status: 'backlog', title: 'Fix login' }))
+
+      expect(onError).toHaveBeenLastCalledWith('A file named “Fix login.md” is already there.')
+    })
+
+    it('writes nothing without a folder', async () => {
+      const { result } = renderBoard({ folder: '' })
+
+      const made = await act(() => result.current.create({ status: 'backlog', title: 'Fix login' }))
+
+      expect(made).toBeNull()
+      expect(octopus().board.create).not.toHaveBeenCalled()
+    })
+  })
 })

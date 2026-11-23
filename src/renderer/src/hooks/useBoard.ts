@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { BoardListing } from '@core/boardSchema.js'
+import type { BoardListing, CardDraft } from '@core/boardSchema.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { useErrorMessage } from './useErrorMessage.js'
@@ -15,6 +15,8 @@ export interface BoardController {
   /** +1 for every read that worked, changed or not — what the card detail re-reads on (B202b). */
   readonly revision: number
   readonly refresh: () => Promise<void>
+  /** The new card's ref, or null when nothing was written. */
+  readonly create: (draft: CardDraft) => Promise<string | null>
 }
 
 interface BoardSource {
@@ -130,6 +132,33 @@ export function useBoard(
     if (source !== null) await read(source, live.current)
   }, [source, read])
 
+  // Every write ends here and reads the board again: a refusal usually means the disk has moved
+  // on from the cards on screen. The refusal is reported after that read, which may clear the
+  // banner; the signal is taken before the answer, so a write outlived by its board stays quiet.
+  const settle = useCallback(
+    async <T>(sent: Promise<Result<T>>): Promise<Result<T>> => {
+      const signal = live.current
+      const answer = await sent
+      if (!signal.aborted) {
+        if (answer.ok) report.current(null)
+        await refresh()
+      }
+      // Asked again, not once up front: the board may leave while it is read again.
+      if (!answer.ok && !signal.aborted) report.current(describe.current(answer))
+      return answer
+    },
+    [report, describe, refresh]
+  )
+
+  const create = useCallback(
+    async (draft: CardDraft): Promise<string | null> => {
+      if (source === null) return null
+      const answer = await settle(window.octopus.board.create(source.projectId, draft))
+      return answer.ok ? answer.value : null
+    },
+    [source, settle]
+  )
+
   // A sync service writes while the window is elsewhere; coming back is when that matters.
   useWindowEvent('focus', () => void refresh(), { active: source !== null })
 
@@ -139,6 +168,7 @@ export function useBoard(
     listing: current?.listing ?? null,
     failure: current?.failure ?? null,
     revision: current?.revision ?? 0,
-    refresh
+    refresh,
+    create
   }
 }

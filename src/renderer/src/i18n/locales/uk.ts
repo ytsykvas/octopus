@@ -1945,7 +1945,9 @@ export const uk: Translation = {
       columnText: 'Задач із цим статусом ще немає.'
     },
     column: {
-      byName: 'За назвою'
+      byName: 'За назвою',
+      newTask: 'Нова задача',
+      newTaskPlaceholder: 'Назва задачі'
     },
     card: {
       comments_one: '{{count}} коментар',

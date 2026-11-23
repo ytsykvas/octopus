@@ -1,7 +1,10 @@
+import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { BoardCard, BoardStatus } from '@core/boardSchema.js'
+import { type BoardCard, type BoardStatus, CARD_TITLE_MAX } from '@core/boardSchema.js'
 
+import { NameEditor } from '../NameEditor.js'
+import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardCardTile } from './BoardCardTile.js'
 import { STATUS_LABEL_KEYS } from './boardLabels.js'
@@ -10,9 +13,18 @@ export interface BoardColumnProps {
   readonly status: BoardStatus
   /** Already sorted: `cardsByStatus` sorts every column. */
   readonly cards: readonly BoardCard[]
+  readonly creating: boolean
+  readonly onCreating: (creating: boolean) => void
+  readonly onCreate: (title: string) => void
 }
 
-export function BoardColumn({ status, cards }: BoardColumnProps): React.JSX.Element {
+export function BoardColumn({
+  status,
+  cards,
+  creating,
+  onCreating,
+  onCreate
+}: BoardColumnProps): React.JSX.Element {
   const { t } = useTranslation()
   const label = t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
   const ordered = cards.filter((card) => card.meta.order !== undefined)
@@ -26,8 +38,18 @@ export function BoardColumn({ status, cards }: BoardColumnProps): React.JSX.Elem
       <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">
         <h2 className="section-label">{label}</h2>
         <span className="text-ink-faint text-[11px] tabular-nums">{cards.length}</span>
+        <span className="ml-auto">
+          <IconButton
+            label={t('board.column.newTask')}
+            onClick={() => {
+              onCreating(true)
+            }}
+          >
+            <Plus aria-hidden size={14} />
+          </IconButton>
+        </span>
       </header>
-      {cards.length === 0 ? (
+      {cards.length === 0 && !creating ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
           <Placeholder compact art={false} title={t('board.empty.columnTitle')}>
             {t('board.empty.columnText')}
@@ -38,6 +60,22 @@ export function BoardColumn({ status, cards }: BoardColumnProps): React.JSX.Elem
           aria-label={label}
           className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2"
         >
+          {creating && (
+            <li>
+              <NameEditor
+                initial=""
+                placeholder={t('board.column.newTaskPlaceholder')}
+                maxLength={CARD_TITLE_MAX}
+                onCommit={(title) => {
+                  onCreating(false)
+                  onCreate(title)
+                }}
+                onCancel={() => {
+                  onCreating(false)
+                }}
+              />
+            </li>
+          )}
           {ordered.map((card) => (
             <BoardCardTile key={card.ref} card={card} />
           ))}

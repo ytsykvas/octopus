@@ -5,7 +5,15 @@ import { describe, expect, it, vi } from 'vitest'
 import type { BoardListing } from '@core/boardSchema.js'
 
 import type { Result } from '../../../../preload/index.js'
-import { boardCard, boardListing, givenBoard, ok, refusal, renderScreen } from '../../test/board.js'
+import {
+  boardCard,
+  boardListing,
+  boardProject,
+  givenBoard,
+  ok,
+  refusal,
+  renderScreen
+} from '../../test/board.js'
 import { held } from '../../test/held.js'
 import { octopus } from '../../test/octopus.js'
 
@@ -125,5 +133,72 @@ describe('BoardScreen', () => {
     await waitFor(() => {
       expect(slot).toHaveTextContent(/^\/tmp\/board\/Planner$/)
     })
+  })
+
+  it('creates a task in the column it was asked in', async () => {
+    givenBoard([])
+    const user = userEvent.setup()
+    renderScreen()
+    const testing = await screen.findByRole('region', { name: 'Testing' })
+
+    await user.click(within(testing).getByRole('button', { name: 'New task' }))
+    await user.type(within(testing).getByRole('textbox', { name: 'Task title' }), 'New{Enter}')
+
+    expect(octopus().board.create).toHaveBeenCalledWith('planner', {
+      status: 'testing',
+      title: 'New'
+    })
+    expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
+    await waitFor(() => {
+      expect(octopus().board.list).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('shows the new card once the board is read again', async () => {
+    givenBoard([])
+    const user = userEvent.setup()
+    renderScreen()
+    const testing = await screen.findByRole('region', { name: 'Testing' })
+    givenBoard([boardCard({ ref: 'testing/New.md', status: 'testing', title: 'New' })])
+
+    await user.click(within(testing).getByRole('button', { name: 'New task' }))
+    await user.type(within(testing).getByRole('textbox', { name: 'Task title' }), 'New{Enter}')
+
+    expect(await within(testing).findByText('New')).toBeInTheDocument()
+  })
+
+  it('moves the field to the column whose + was pressed', async () => {
+    givenBoard([])
+    const user = userEvent.setup()
+    renderScreen()
+    const backlog = await screen.findByRole('region', { name: 'Backlog' })
+    const testing = screen.getByRole('region', { name: 'Testing' })
+
+    await user.click(within(backlog).getByRole('button', { name: 'New task' }))
+    await user.type(within(backlog).getByRole('textbox', { name: 'Task title' }), 'A')
+    await user.click(within(testing).getByRole('button', { name: 'New task' }))
+
+    expect(octopus().board.create).toHaveBeenCalledWith('planner', {
+      status: 'backlog',
+      title: 'A'
+    })
+    expect(within(testing).getByRole('textbox', { name: 'Task title' })).toHaveFocus()
+    expect(within(backlog).queryByRole('textbox', { name: 'Task title' })).toBeNull()
+    await waitFor(() => {
+      expect(octopus().board.list).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('drops the new-task field when the project changes', async () => {
+    givenBoard([])
+    const user = userEvent.setup()
+    const { rerender } = renderScreen()
+    const testing = await screen.findByRole('region', { name: 'Testing' })
+    await user.click(within(testing).getByRole('button', { name: 'New task' }))
+
+    rerender({ project: boardProject({ id: 'ledger', name: 'ledger' }) })
+
+    expect(await screen.findAllByRole('region')).toHaveLength(6)
+    expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
   })
 })

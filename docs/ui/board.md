@@ -56,6 +56,16 @@ the slot is empty while the first read is out or has failed. A loose card whose 
 folder that is not a status shows that folder's name first on its second line, so a renamed status
 folder is visible rather than silently emptied.
 
+## Creating a task
+
+The + in a column's header opens a field above its first card. It is `NameEditor`, so Enter or a
+click elsewhere creates the task and Escape or an empty title creates nothing — the same field
+every rename in the window uses. The new card goes to the top of its column: it is what was just
+thought of. Every write, worked or refused, reads the board again (`settle`): a refusal usually
+means the disk has moved on from the cards on screen, and the board should show it. A refusal is
+reported after that read, so the read cannot clear it, and a write whose board leaves before it
+settles — before its answer or during that read — reports nothing.
+
 ## Drag and drop
 
 Not built yet: a card stays in the column its folder puts it in.

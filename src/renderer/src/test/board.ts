@@ -85,6 +85,7 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
     failure: null,
     revision: 1,
     refresh: vi.fn(() => Promise.resolve()),
+    create: vi.fn(() => Promise.resolve('backlog/Fix login.md')),
     ...overrides
   }
 }

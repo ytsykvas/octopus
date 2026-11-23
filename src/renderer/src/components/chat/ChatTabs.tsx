@@ -273,7 +273,7 @@ function TabButton({
           // the field opens on what the tab says, which is what makes a small
           // correction a small edit rather than a retype.
           initial={named}
-          // The one cap in the app that bounds a name rather than a body, so
+          // A cap that bounds a name rather than a body, so
           // the field carries it: past it the strip is holding a sentence, and
           // learning that from a refusal a round trip later is worse than the
           // box simply stopping.

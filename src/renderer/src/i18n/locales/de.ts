@@ -1978,7 +1978,9 @@ export const de: Translation = {
       columnText: 'Noch keine Aufgabe mit diesem Status.'
     },
     column: {
-      byName: 'Nach Name'
+      byName: 'Nach Name',
+      newTask: 'Neue Aufgabe',
+      newTaskPlaceholder: 'Titel der Aufgabe'
     },
     card: {
       comments_one: '{{count}} Kommentar',

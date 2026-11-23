@@ -121,4 +121,20 @@ describe('NameEditor', () => {
 
     expect(screen.getByTitle('Enter to save, Escape to cancel')).toBe(field)
   })
+
+  it('names an empty field by what it asks for', () => {
+    render(<NameEditor initial="" placeholder="Task title" onCommit={vi.fn()} onCancel={vi.fn()} />)
+
+    expect(screen.getByRole('textbox', { name: 'Task title' })).toHaveAttribute(
+      'placeholder',
+      'Task title'
+    )
+  })
+
+  it('has no placeholder when none is given', () => {
+    const { field } = renderEditor()
+
+    expect(field).not.toHaveAttribute('placeholder')
+    expect(field).not.toHaveAttribute('aria-label')
+  })
 })
