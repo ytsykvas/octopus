@@ -323,6 +323,11 @@ cares about failure says so.
 vi.mocked(window.octopus.projects.list).mockResolvedValue({ ok: false, error: 'nope' })
 ```
 
+The project a suite starts from comes from
+[`test/projects.ts`](../src/renderer/src/test/projects.ts) — `project(overrides)`,
+id `planner` — rather than a copy per file: six copies had grown, and a new
+required field on `Project` meant editing every one.
+
 **Query by role, label, title or text — never by class name.** A test that
 asserts on styling breaks on every refactor while proving nothing. This is what
 makes a 100% threshold on UI survivable.

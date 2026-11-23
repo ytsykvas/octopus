@@ -5,34 +5,14 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PROJECT_COLORS } from '@core/colors.js'
 import { PROJECT_ICONS } from '@core/icons.js'
 import type { SourceView } from '@core/sourceItems.js'
-import type { Project } from '@core/store.js'
 
 import type { Result } from '../../../preload/index.js'
+import { project } from '../test/projects.js'
 import { stubDialogElement } from '../test/dialog.js'
 import { octopus } from '../test/octopus.js'
 import { ProjectSettings } from './ProjectSettings.js'
 
 type ProjectSettingsProps = React.ComponentProps<typeof ProjectSettings>
-
-function project(overrides: Partial<Project> = {}): Project {
-  return {
-    id: 'planner',
-    name: 'planner',
-    repoPath: '/Users/someone/code/planner',
-    baseBranch: 'origin/main',
-    branchPrefix: 'ytsykvas',
-    envFile: '.env',
-    approvedSettings: [],
-    approvedScripts: [],
-    envProfile: 'default',
-    trustRepoScripts: false,
-    trustRepository: false,
-    preferLocal: [],
-    disabledSkillDefaults: [],
-    color: 'blue',
-    ...overrides
-  }
-}
 
 async function renderDialog(
   overrides: Partial<ProjectSettingsProps> = {}

@@ -17,11 +17,11 @@ import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
 import type { ScriptKind } from '@core/scripts.js'
-import type { Project } from '@core/store.js'
 import type { ThemeName } from '@core/types.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import type { Result } from '../../preload/index.js'
+import { project } from './test/projects.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
 import { chat, emitAgentEvent, givenChats, TURN_DONE } from './test/chat.js'
@@ -49,26 +49,6 @@ vi.mock('./components/Terminal.js', () => ({
 
 // Every dialog in the app opens itself with `showModal()`, which jsdom leaves out.
 beforeAll(stubDialogElement)
-
-function project(overrides: Partial<Project> = {}): Project {
-  return {
-    id: 'planner',
-    name: 'planner',
-    repoPath: '/Users/someone/code/planner',
-    baseBranch: 'origin/main',
-    branchPrefix: 'ytsykvas',
-    envFile: '.env',
-    approvedSettings: [],
-    approvedScripts: [],
-    envProfile: 'default',
-    trustRepoScripts: false,
-    trustRepository: false,
-    preferLocal: [],
-    disabledSkillDefaults: [],
-    color: 'blue',
-    ...overrides
-  }
-}
 
 function config(overrides: Partial<Config> = {}): Config {
   return {

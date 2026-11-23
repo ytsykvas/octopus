@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { RemoteRepository, RepositoryList } from '@core/github.js'
 import type { Project } from '@core/store.js'
 
+import { project } from '../test/projects.js'
 import type { Result } from '../../../preload/index.js'
 import { stubDialogElement } from '../test/dialog.js'
 import { RepositoryPicker } from './RepositoryPicker.js'
@@ -21,26 +22,6 @@ function repository(overrides: Partial<RemoteRepository> = {}): RemoteRepository
     updatedAt: '2026-08-01T00:00:00.000Z',
     defaultBranchRef: { name: 'main' },
     ...overrides
-  }
-}
-
-/** What a finished clone comes back as. */
-function cloned(): Project {
-  return {
-    id: 'planner',
-    name: 'planner',
-    repoPath: '/Users/someone/code/planner',
-    baseBranch: 'origin/main',
-    branchPrefix: 'ytsykvas',
-    envFile: '.env',
-    approvedSettings: [],
-    approvedScripts: [],
-    envProfile: 'default',
-    trustRepoScripts: false,
-    trustRepository: false,
-    preferLocal: [],
-    disabledSkillDefaults: [],
-    color: 'blue'
   }
 }
 
@@ -285,7 +266,7 @@ describe('RepositoryPicker', () => {
     offer(chosen, repository({ name: 'ledger', nameWithOwner: 'ytsykvas/ledger' }))
     vi.mocked(window.octopus.projects.addFromGitHub).mockResolvedValue({
       ok: true,
-      value: cloned()
+      value: project()
     })
     const user = userEvent.setup()
     const props = await renderPicker()
@@ -347,7 +328,7 @@ describe('RepositoryPicker', () => {
         code: 'cloneFailed',
         params: { repository: 'ytsykvas/planner' }
       })
-      .mockResolvedValue({ ok: true, value: cloned() })
+      .mockResolvedValue({ ok: true, value: project() })
     const user = userEvent.setup()
     const props = await renderPicker()
     await screen.findByText('ytsykvas/planner')
