@@ -2,6 +2,8 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { BoardCard } from '@core/boardSchema.js'
+
 import { boardCard } from '../../test/board.js'
 import { BoardColumn, type BoardColumnProps } from './BoardColumn.js'
 
@@ -14,6 +16,7 @@ function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
     onCreate: vi.fn(),
     openRef: null,
     onOpen: vi.fn(),
+    marksOf: () => null,
     ...props
   }
   render(<BoardColumn {...all} />)
@@ -135,6 +138,16 @@ describe('BoardColumn', () => {
     await userEvent.click(screen.getByRole('button', { name: 'B' }))
 
     expect(onOpen).toHaveBeenCalledWith('backlog/B.md')
+  })
+
+  it('asks each card for its marks', () => {
+    const fix = card('Fix login')
+    const marksOf = vi.fn((asked: BoardCard) => <span>{`mark of ${asked.title}`}</span>)
+
+    renderColumn({ cards: [fix], marksOf })
+
+    expect(screen.getByText('mark of Fix login')).toBeInTheDocument()
+    expect(marksOf).toHaveBeenCalledWith(fix)
   })
 
   it('shows the field above the cards', () => {

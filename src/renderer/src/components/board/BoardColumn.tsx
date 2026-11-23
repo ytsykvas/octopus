@@ -18,6 +18,7 @@ export interface BoardColumnProps {
   readonly onCreate: (title: string) => void
   readonly openRef: string | null
   readonly onOpen: (ref: string) => void
+  readonly marksOf: (card: BoardCard) => React.JSX.Element | null
 }
 
 export function BoardColumn({
@@ -27,7 +28,8 @@ export function BoardColumn({
   onCreating,
   onCreate,
   openRef,
-  onOpen
+  onOpen,
+  marksOf
 }: BoardColumnProps): React.JSX.Element {
   const { t } = useTranslation()
   const label = t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
@@ -41,6 +43,7 @@ export function BoardColumn({
       onOpen={() => {
         onOpen(card.ref)
       }}
+      marks={marksOf(card)}
     />
   )
 

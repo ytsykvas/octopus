@@ -11,6 +11,7 @@ export interface BoardCardTileProps {
   readonly card: BoardCard
   readonly open: boolean
   readonly onOpen: () => void
+  readonly marks: React.JSX.Element | null
 }
 
 function PriorityMark({ priority }: { readonly priority: CardPriority }): React.JSX.Element {
@@ -32,7 +33,12 @@ function looseFolder(card: BoardCard): string | null {
   return card.loose && slash !== -1 ? card.ref.slice(0, slash) : null
 }
 
-export function BoardCardTile({ card, open, onOpen }: BoardCardTileProps): React.JSX.Element {
+export function BoardCardTile({
+  card,
+  open,
+  onOpen,
+  marks
+}: BoardCardTileProps): React.JSX.Element {
   const { t } = useTranslation()
   const { priority, tag } = card.meta
   // A file that is not UTF-8 has no header to read, so the two marks together add nothing.
@@ -42,7 +48,8 @@ export function BoardCardTile({ card, open, onOpen }: BoardCardTileProps): React
       ? t('board.card.malformed')
       : null
   const folder = looseFolder(card)
-  const secondLine = folder !== null || tag !== undefined || card.comments > 0 || warning !== null
+  const secondLine =
+    folder !== null || tag !== undefined || marks !== null || card.comments > 0 || warning !== null
 
   return (
     <li className="relative">
@@ -77,6 +84,7 @@ export function BoardCardTile({ card, open, onOpen }: BoardCardTileProps): React
                 {t(`workspaces.kinds.${tag}.short`)}
               </span>
             )}
+            {marks}
             {card.comments > 0 && (
               <span
                 role="img"

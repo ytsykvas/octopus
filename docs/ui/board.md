@@ -148,6 +148,19 @@ screen asks; opening the one here asks nothing. The button is disabled while its
 command does the opposite on purpose — it sends — because a card is a task the reader may still
 edit.
 
+## Marks
+
+The second line of a card says what is happening to the work, first match wins: a workspace on
+this machine started from the card — its status mark, mood word and pull request mark, the same
+components the list draws; any run without an end whose `device` is another installation's — "In
+work on <machine>", even when a later run has ended; the last run merged — "Merged"; the last run
+ended, or a run of this installation without an end and no workspace here — "Workspace removed"
+(its summary was lost at the removal; nothing is written). The live workspace wins over the file
+because it is what is happening now. The pull requests come from App's own `useBranchRequests`; a
+request older than the hundred most recent is not in that answer, and the card then shows no
+request mark. Until the workspace list has loaded, a run of this installation reads as removed for
+a moment.
+
 ## Known limitations
 
 - Every read lists and reads every file of the project's folder; a folder of thousands of large

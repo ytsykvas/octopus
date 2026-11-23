@@ -1279,6 +1279,7 @@ export function App(): React.JSX.Element {
               workspaces={projectWorkspaces}
               deviceId={deviceId}
               onRun={runCard}
+              requests={branchRequests.byBranch}
             />
           ) : !selectedProject ? (
             centerPane

@@ -1995,6 +1995,11 @@ export const uk: Translation = {
       elsewhereBody:
         'Цю задачу почав інший мак і ще не завершив. Усе одно створити другий воркспейс тут?',
       elsewhereConfirm: 'Почати тут'
+    },
+    marks: {
+      merged: 'Влито',
+      removed: 'Воркспейс видалено',
+      elsewhere: 'У роботі на {{machine}}'
     }
   },
   errors: {

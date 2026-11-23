@@ -177,7 +177,8 @@ conversation is `interrupted`, then whether any has `started`. Interrupted wins
 over finished: one conversation left mid-command is the reason to go back. Two marks side by side would make the list busier than the thing it
 describes, and `warning` is the one worth crossing the window for, because that
 turn has stopped and is waiting on you. A workspace holding several
-conversations draws one dot each inside the tile instead.
+conversations draws one dot each inside the tile instead. `StatusMark` is exported: a board card
+draws the same mark for the workspace started from it.
 
 **The strip down a card's left edge is the kind of work** — one of twelve,
 `feature` until somebody picks another (`workspaceKinds.ts`). It is the card's

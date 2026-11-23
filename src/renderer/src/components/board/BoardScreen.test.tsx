@@ -9,6 +9,7 @@ import {
   boardCard,
   boardListing,
   boardProject,
+  BRANCH_REQUEST,
   cardDetail,
   draftStore,
   givenBoard,
@@ -21,6 +22,14 @@ import { held } from '../../test/held.js'
 import { octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
 import type { BoardScreenProps } from './BoardScreen.js'
+
+const ID = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
+const ELSEWHERE: CardRunEntry = {
+  started: '2026-11-21T12:00:00.000Z',
+  device: 'device-two',
+  machine: 'Mac-Two',
+  branch: 'octopus/feature/anna'
+}
 
 describe('BoardScreen', () => {
   it('draws nothing before the config arrives', () => {
@@ -699,14 +708,6 @@ describe('BoardScreen', () => {
     })
 
     describe('running a card', () => {
-      const ID = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
-      const ELSEWHERE: CardRunEntry = {
-        started: '2026-11-21T12:00:00.000Z',
-        device: 'device-two',
-        machine: 'Mac-Two',
-        branch: 'octopus/feature/anna'
-      }
-
       async function openWith(
         meta: CardMeta,
         overrides: Partial<BoardScreenProps> = {}
@@ -778,6 +779,62 @@ describe('BoardScreen', () => {
         expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Open workspace' })).toBeNull()
       })
+    })
+  })
+
+  describe('the marks on a card', () => {
+    const STARTED = boardCard({ meta: { id: ID, links: [], runs: [] } })
+
+    it('marks a card with the workspace started from it', async () => {
+      givenBoard([STARTED])
+      renderScreen({
+        workspaces: [workspaceView('anna', { card: ID, status: 'waiting_permission' })]
+      })
+
+      expect(await screen.findByRole('button', { name: /^Fix login/ })).toHaveTextContent(
+        'Needs your answer'
+      )
+    })
+
+    it('shows the pull request of that workspace', async () => {
+      givenBoard([STARTED])
+      renderScreen({
+        workspaces: [workspaceView('anna', { card: ID })],
+        requests: new Map([['ytsykvas/anna', BRANCH_REQUEST]])
+      })
+
+      expect(
+        within(await screen.findByRole('button', { name: /^Fix login/ })).getByRole('img', {
+          name: 'Pull request #7 — checks passed'
+        })
+      ).toBeInTheDocument()
+    })
+
+    it('does not mark a card with a workspace started from another card', async () => {
+      givenBoard([STARTED])
+      renderScreen({
+        workspaces: [workspaceView('anna', { card: '7d3e9a10-2b4c-4f8e-8a1d-5c6b7e8f9a0b' })]
+      })
+
+      expect(await screen.findByRole('button', { name: /^Fix login/ })).toHaveTextContent(
+        /^Fix login$/
+      )
+    })
+
+    it('marks a card in work on another Mac', async () => {
+      givenBoard([boardCard({ meta: { links: [], runs: [ELSEWHERE] } })])
+      renderScreen()
+
+      expect(await screen.findByText('In work on Mac-Two')).toBeInTheDocument()
+    })
+
+    it('marks as removed a run this Mac left open with no workspace here', async () => {
+      givenBoard([
+        boardCard({ meta: { links: [], runs: [{ ...ELSEWHERE, device: 'device-one' }] } })
+      ])
+      renderScreen()
+
+      expect(await screen.findByText('Workspace removed')).toBeInTheDocument()
     })
   })
 })
