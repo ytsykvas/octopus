@@ -201,7 +201,7 @@ export function App(): React.JSX.Element {
   const attention = useAttention(
     projects.all,
     workspaces.flat,
-    selectedWorkspaceId,
+    screen === 'octopus' ? selectedWorkspaceId : null,
     config?.notificationSound === true ? config.notificationSoundId : null
   )
 

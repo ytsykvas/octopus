@@ -4232,6 +4232,22 @@ describe('the board screen', () => {
     expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
   })
 
+  it('tells of the workspace left open behind the board', async () => {
+    givenChats([chat({ id: 'c-1', title: 'One', sessionId: 's-1' })])
+    const user = await onAnna()
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    emitAgentEvent({ type: 'finished' }, 'c-1', 'planner/anna')
+
+    expect(await screen.findByRole('region', { name: 'Finished' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Octopus' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Finished' })).toBeNull()
+    })
+  })
+
   it('brings the list back from the foot of the board', async () => {
     const user = await onTheBoard()
     expect(screen.queryByRole('button', { name: 'Hide workspaces' })).toBeNull()

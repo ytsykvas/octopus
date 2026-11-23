@@ -39,7 +39,9 @@ for the session. With no projects at all both screens show the same pane offerin
 On the board the workspace list is not drawn and the right pane is folded **offstage**, not
 unmounted: its terminals and servers belong to their workspaces and keep running. The fold's
 button reads "Show workspaces" there and goes back to Octopus with the list open. The chat
-unmounts; its composer files its draft on the way out, as on any switch.
+unmounts; its composer files its draft on the way out, as on any switch. The workspace left
+selected is not on screen there, so its agents' news arrives as a toast and a mark on the project's
+tab, and is cleared when Octopus shows that workspace again.
 
 Only ⌘⇧N and a digit under ⌘ or ⌃ work on the board. ⌘1–⌘9 switch the board's project; ⌃1–⌃9,
 ⌘⇧N, a toast's Show and a status-bar row open a workspace, and so leave for Octopus. The rest —
