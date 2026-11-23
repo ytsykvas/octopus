@@ -10,6 +10,7 @@ import {
   type CardMove
 } from '@core/boardSchema.js'
 import type { Project } from '@core/store.js'
+import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useBoard } from '../../hooks/useBoard.js'
 import { type OpenCard, useCardDetail } from '../../hooks/useCardDetail.js'
@@ -19,6 +20,7 @@ import { Button } from '../Button.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardColumn } from './BoardColumn.js'
 import type { DescriptionDraft } from './boardDrafts.js'
+import { linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.js'
 import { CardPanel, PANEL_WIDTH } from './CardPanel.js'
 
 export interface BoardScreenProps {
@@ -33,6 +35,11 @@ export interface BoardScreenProps {
   readonly draftOf: (ref: string) => DescriptionDraft | null
   readonly onDraft: (ref: string, draft: DescriptionDraft | null) => void
   readonly onDraftMoved: (from: string, to: string) => void
+  /** This project's workspaces on this machine — what a card may have been started into. */
+  readonly workspaces: readonly WorkspaceView[]
+  /** This installation's `config.deviceId`: a run from any other is another machine's. */
+  readonly deviceId: string
+  readonly onRun: (projectId: string, ref: string) => Promise<void>
 }
 
 export function BoardScreen({
@@ -43,7 +50,10 @@ export function BoardScreen({
   titleSlot,
   draftOf,
   onDraft,
-  onDraftMoved
+  onDraftMoved,
+  workspaces,
+  deviceId,
+  onRun
 }: BoardScreenProps): React.JSX.Element | null {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -76,6 +86,7 @@ export function BoardScreen({
     board.revision
   )
   const panelKey = open?.session ?? 0
+  const linkedBy = useMemo(() => linkedByCard(workspaces), [workspaces])
 
   /** Every move of a card goes through here (status menu now, drag B204, ⌥↑/⌥↓ B205). */
   const moveCard = useCallback(
@@ -107,6 +118,24 @@ export function BoardScreen({
     [confirm, t, remove]
   )
 
+  const runCard = useCallback(
+    async (projectId: string, card: BoardCard, linked: WorkspaceView | null): Promise<void> => {
+      // Asked only before starting a second workspace; opening the one here asks nothing.
+      const elsewhere = linked === null ? openRunElsewhere(card.meta.runs, deviceId) : undefined
+      if (elsewhere !== undefined) {
+        const { confirmed } = await confirm({
+          title: t('board.run.elsewhereTitle', { machine: elsewhere.machine }),
+          message: t('board.run.elsewhereBody'),
+          confirmLabel: t('board.run.elsewhereConfirm'),
+          cancelLabel: t('board.panel.cancel')
+        })
+        if (!confirmed) return
+      }
+      await onRun(projectId, card.ref)
+    },
+    [confirm, deviceId, onRun, t]
+  )
+
   const openCardAt = (ref: string): void => {
     openings.current += 1
     setOpen({ ref, session: openings.current })
@@ -118,6 +147,8 @@ export function BoardScreen({
     onDraft(ref, null)
     openCardAt(ref)
   }
+
+  const linked = openCard === null ? null : linkedTo(openCard, linkedBy)
 
   if (boardFolder === null) return null
   if (boardFolder === '')
@@ -186,6 +217,8 @@ export function BoardScreen({
           }}
           onMove={(to) => void moveCard(openCard.ref, to)}
           onRemove={() => void removeCard(openCard)}
+          linked={linked}
+          onRun={() => runCard(project.id, openCard, linked)}
         />
       )}
       {dialog}

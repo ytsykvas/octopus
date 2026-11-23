@@ -134,6 +134,20 @@ Not built yet: the board has no keys of its own.
 
 Not built yet: every card of the project is shown.
 
+## Run
+
+**Run** makes a workspace from the card (`board:run`), switches to it and puts the card's
+description into its first conversation's field — never sent. **Open workspace** takes its place
+when a workspace on this machine was started from the card, and goes through the same call: the
+core answers with that workspace and, while none of its conversations has started, the
+description again, because the first draft lived only in the window. A draft goes only into an
+empty field (`offerDraft`), so text somebody typed there stays. Before a second workspace is
+started for a card another installation has an open run of (`device`, not the hostname), the
+screen asks; opening the one here asks nothing. The button is disabled while its call is out, and
+`App` starts one run at a time: the panel closed and opened again offers the button afresh. Help's
+command does the opposite on purpose — it sends — because a card is a task the reader may still
+edit.
+
 ## Known limitations
 
 - Every read lists and reads every file of the project's folder; a folder of thousands of large

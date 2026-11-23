@@ -2011,7 +2011,9 @@ export const de: Translation = {
       changed:
         'Die Beschreibung hat sich auf der Festplatte geändert, während du sie bearbeitet hast.',
       reload: 'Neu laden',
-      overwrite: 'Überschreiben'
+      overwrite: 'Überschreiben',
+      run: 'Ausführen',
+      openWorkspace: 'Workspace öffnen'
     },
     remove: {
       title: '„{{title}}“ löschen?',
@@ -2022,6 +2024,12 @@ export const de: Translation = {
       placeholder: 'Kommentar schreiben… ⌘↩ zum Senden',
       empty: 'Keine Kommentare.',
       add: 'Kommentar hinzufügen'
+    },
+    run: {
+      elsewhereTitle: 'Schon in Arbeit auf {{machine}}',
+      elsewhereBody:
+        'Ein anderer Mac hat diese Aufgabe begonnen und nicht beendet. Trotzdem hier einen zweiten Workspace anlegen?',
+      elsewhereConfirm: 'Hier starten'
     }
   },
 

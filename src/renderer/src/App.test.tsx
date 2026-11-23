@@ -13,6 +13,7 @@ import { StrictMode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { GitHubAccount } from '@core/accounts.js'
+import type { BoardCard, CardLaunch } from '@core/boardSchema.js'
 import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { RemoteRepository } from '@core/github.js'
@@ -4474,5 +4475,205 @@ describe('the board screen', () => {
 
     expect(await screen.findByText('Let’s find something to work on')).toBeInTheDocument()
     expect(screen.queryAllByRole('region', { name: 'Backlog' })).toEqual([])
+  })
+
+  describe('running a card', () => {
+    const ID = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
+    const DRAFT = '# Fix login\n\nThe form forgets the e-mail.'
+    const STARTED = boardCard({ meta: { id: ID, links: [], runs: [] } })
+
+    function givenPlanner(...names: readonly string[]): void {
+      vi.mocked(window.octopus.workspaces.list).mockImplementation((projectId: string) =>
+        Promise.resolve({
+          ok: true,
+          value:
+            projectId === 'planner'
+              ? names.map((name) => workspaceView(name, name === 'anna' ? { card: ID } : {}))
+              : []
+        })
+      )
+    }
+
+    function givenLaunch(launch: Partial<CardLaunch>): void {
+      vi.mocked(window.octopus.board.run).mockResolvedValue(
+        ok({ workspaceId: 'planner/carl', draft: DRAFT, detour: null, created: true, ...launch })
+      )
+    }
+
+    async function openCard(
+      user: ReturnType<typeof userEvent.setup>,
+      card: BoardCard
+    ): Promise<HTMLElement> {
+      givenBoard([card])
+      vi.mocked(window.octopus.board.read).mockResolvedValue(ok(cardDetail({ meta: card.meta })))
+      await user.click(screen.getByRole('button', { name: 'Board' }))
+      await user.click(await screen.findByRole('button', { name: /^Fix login/ }))
+      return screen.findByRole('complementary', { name: 'Fix login' })
+    }
+
+    async function inPlanner(
+      ...names: readonly string[]
+    ): Promise<ReturnType<typeof userEvent.setup>> {
+      givenTwoProjects()
+      vi.mocked(window.octopus.config.get).mockResolvedValue({
+        ok: true,
+        value: config({ boardFolder: '/tmp/board' })
+      })
+      givenPlanner(...names)
+      const user = await openApp()
+      await user.click(await findTab('PL'))
+      return user
+    }
+
+    it('runs a card into a new workspace with its description in the composer, unsent', async () => {
+      const user = await inPlanner('anna', 'bob')
+      const panel = await openCard(user, boardCard())
+      givenLaunch({})
+      givenPlanner('anna', 'bob', 'carl')
+
+      await user.click(within(panel).getByRole('button', { name: 'Run' }))
+
+      expect(await screen.findByRole('textbox')).toHaveValue(DRAFT)
+      expect(screen.getByRole('textbox')).toHaveFocus()
+      expect(window.octopus.board.run).toHaveBeenCalledWith('planner', 'backlog/Fix login.md')
+      expect(window.octopus.chats.send).not.toHaveBeenCalled()
+      expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
+    })
+
+    it('puts the text into the empty composer of the workspace started from the card', async () => {
+      const user = await inPlanner('anna', 'bob')
+      const panel = await openCard(user, STARTED)
+      givenLaunch({ workspaceId: 'planner/anna', created: false })
+
+      await user.click(within(panel).getByRole('button', { name: 'Open workspace' }))
+
+      expect(await screen.findByRole('textbox')).toHaveValue(DRAFT)
+    })
+
+    it("leaves the text typed in that workspace's composer alone", async () => {
+      const user = await inPlanner('anna', 'bob')
+      await user.click(await screen.findByText('anna'))
+      await user.type(await screen.findByRole('textbox'), 'my own words')
+      const panel = await openCard(user, STARTED)
+      givenLaunch({ workspaceId: 'planner/anna', created: false })
+
+      await user.click(within(panel).getByRole('button', { name: 'Open workspace' }))
+
+      expect(await screen.findByRole('textbox')).toHaveValue('my own words')
+    })
+
+    it("puts the text into that workspace's field left empty", async () => {
+      const user = await inPlanner('anna', 'bob')
+      await user.click(await screen.findByText('anna'))
+      await screen.findByRole('textbox')
+      const panel = await openCard(user, STARTED)
+      givenLaunch({ workspaceId: 'planner/anna', created: false })
+
+      await user.click(within(panel).getByRole('button', { name: 'Open workspace' }))
+
+      expect(await screen.findByRole('textbox')).toHaveValue(DRAFT)
+    })
+
+    it('opens the workspace with nothing put in once its conversation has started', async () => {
+      const user = await inPlanner('anna', 'bob')
+      const panel = await openCard(user, STARTED)
+      givenLaunch({ workspaceId: 'planner/anna', draft: null, created: false })
+
+      await user.click(within(panel).getByRole('button', { name: 'Open workspace' }))
+
+      expect(await screen.findByRole('textbox')).toHaveValue('')
+      expect(screen.queryByRole('region', { name: 'Backlog' })).toBeNull()
+    })
+
+    it('says when the branch had to go round the tag', async () => {
+      const user = await inPlanner('anna', 'bob')
+      const panel = await openCard(user, boardCard())
+      givenLaunch({ detour: { blocker: 'octopus/fix', branch: 'octopus/carl' } })
+      givenPlanner('anna', 'bob', 'carl')
+
+      await user.click(within(panel).getByRole('button', { name: 'Run' }))
+
+      expect(
+        await screen.findByText(
+          'octopus/fix already exists, and git cannot file a branch under another, so the branch is octopus/carl.'
+        )
+      ).toBeInTheDocument()
+      expect(screen.getByRole('textbox')).toHaveValue(DRAFT)
+    })
+
+    it('shows the reason when a run is refused', async () => {
+      const user = await inPlanner('anna', 'bob')
+      const panel = await openCard(user, boardCard())
+      vi.mocked(window.octopus.board.run).mockResolvedValue({
+        ok: false,
+        error: 'x',
+        code: 'cardMissing',
+        params: { name: 'Fix login.md' }
+      })
+
+      await user.click(within(panel).getByRole('button', { name: 'Run' }))
+
+      expect(await screen.findByText('“Fix login.md” is no longer on disk.')).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'Backlog' })).toBeInTheDocument()
+    })
+
+    it('clears the refusal and runs again on the next press', async () => {
+      const user = await inPlanner('anna', 'bob')
+      const panel = await openCard(user, boardCard())
+      vi.mocked(window.octopus.board.run).mockResolvedValueOnce({
+        ok: false,
+        error: 'x',
+        code: 'cardMissing',
+        params: { name: 'Fix login.md' }
+      })
+      await user.click(within(panel).getByRole('button', { name: 'Run' }))
+      await screen.findByText('“Fix login.md” is no longer on disk.')
+      vi.mocked(window.octopus.board.run).mockReturnValue(pending<Result<CardLaunch>>().promise)
+
+      await user.click(within(panel).getByRole('button', { name: 'Run' }))
+
+      expect(window.octopus.board.run).toHaveBeenCalledTimes(2)
+      expect(screen.queryByText('“Fix login.md” is no longer on disk.')).toBeNull()
+    })
+
+    it('runs at once a card this Mac left open', async () => {
+      const user = await inPlanner('anna', 'bob')
+      const panel = await openCard(
+        user,
+        boardCard({
+          meta: {
+            links: [],
+            runs: [
+              {
+                started: '2026-11-21T12:00:00.000Z',
+                device: config().deviceId,
+                machine: 'Mac-One',
+                branch: 'octopus/feature/anna'
+              }
+            ]
+          }
+        })
+      )
+      vi.mocked(window.octopus.board.run).mockReturnValue(pending<Result<CardLaunch>>().promise)
+
+      await user.click(within(panel).getByRole('button', { name: 'Run' }))
+
+      expect(window.octopus.board.run).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    it('starts no second run while the first is under way', async () => {
+      const user = await inPlanner('anna', 'bob')
+      const first = await openCard(user, boardCard())
+      vi.mocked(window.octopus.board.run).mockReturnValue(pending<Result<CardLaunch>>().promise)
+
+      await user.click(within(first).getByRole('button', { name: 'Run' }))
+      await user.click(within(first).getByRole('button', { name: 'Close' }))
+      await user.click(screen.getByRole('button', { name: /^Fix login/ }))
+      const second = await screen.findByRole('complementary', { name: 'Fix login' })
+      await user.click(within(second).getByRole('button', { name: 'Run' }))
+
+      expect(window.octopus.board.run).toHaveBeenCalledTimes(1)
+    })
   })
 })

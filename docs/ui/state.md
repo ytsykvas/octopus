@@ -58,9 +58,9 @@ window's business. So is what the window holds per workspace — drafts, review 
 quotes from a pull request, notes from the viewer, attached files, open files
 and the conversation strip — and workspace ids come back: a removed workspace's
 name returns to the pool, and a project added again gets its old slug. There is
-one window, so an id comes back only through `createWorkspace`, and that is
-where `App` calls `forgetWorkspaces` for it — the call that guarantees a clean
-start. `forgetWorkspaces` hands a `WorkspaceMatch` to each store's `forget`
+one window, so an id comes back only through a creation — `createWorkspace` or a
+card's Run — and both open it through `showFresh`, which is where `App` calls
+`forgetWorkspaces` for it — the call that guarantees a clean start. `forgetWorkspaces` hands a `WorkspaceMatch` to each store's `forget`
 (`hooks/workspaceSlots.ts`). It also runs when `useWorkspaces.remove` or
 `useProjects.remove` answers `true`, so nothing is held for an id that is gone;
 that call cannot be the guarantee, because removing the open workspace unmounts
@@ -158,6 +158,9 @@ the latch in a ref rather than in state, because state is what a second press in
 the same tick would not have seen yet, and exposes `creating` for the buttons to
 show. Two presses do worse than make two workspaces: both read the same list of
 taken names, so the second is refused over a path the first has claimed.
+A card's Run is guarded the same way, by a ref in `App` (`launching`): the panel
+closed and opened again offers the button afresh, and a second press must not
+start a second run.
 
 A button that stops responding also has to say why. The `+` swaps its plus for a
 turning mark while it waits — a still, dimmed icon reads as the app having hung
@@ -171,6 +174,11 @@ that moment is the task, not a name for it; the name stays a double-click away.
 The caret is taken once: `App` forgets the workspace was new as soon as the
 selection leaves it, so coming back later does not pull the caret out of
 wherever it was.
+
+A workspace a board card's **Run** made opens the same way, through the same
+`showFresh(projectId, workspaceId, draft)`, with the card's text already in that
+field. One already started from the card is opened as it is, nothing of it
+forgotten, and the text is offered only to an empty field (`offerDraft`).
 
 The empty conversation also offers the **set of variables** the workspace runs
 against, beside a `Runs against` label, whenever the project has more than one —

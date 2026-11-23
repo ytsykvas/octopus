@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { boardCard, boardController, cardDetail, refusal } from '../../test/board.js'
+import { workspaceView } from '../../test/workspaces.js'
 import { CardPanel, type CardPanelProps } from './CardPanel.js'
 
 let writeText: ReturnType<typeof vi.fn>
@@ -31,6 +32,8 @@ function renderPanel(props: Partial<CardPanelProps> = {}): CardPanelProps {
     onClose: vi.fn(),
     onMove: vi.fn(),
     onRemove: vi.fn(),
+    linked: null,
+    onRun: vi.fn(() => Promise.resolve()),
     ...props
   }
   render(<CardPanel {...all} />)
@@ -281,5 +284,48 @@ describe('CardPanel', () => {
 
     expect(screen.getByText('First')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+  })
+
+  it('offers Run for a card not started here', async () => {
+    const { onRun } = renderPanel()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+
+    expect(onRun).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Open workspace' })).toBeNull()
+  })
+
+  it('offers to open the workspace started from the card here', async () => {
+    const { onRun } = renderPanel({
+      linked: workspaceView('anna', { card: '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11' })
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open workspace' }))
+
+    expect(onRun).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Run' })).toBeNull()
+  })
+
+  it('disables the button while the run is under way', async () => {
+    let finish: () => void = () => undefined
+    renderPanel({
+      onRun: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    })
+    const button = screen.getByRole('button', { name: 'Run' })
+
+    await userEvent.click(button)
+
+    expect(button).toBeDisabled()
+    act(() => {
+      finish()
+    })
+    await waitFor(() => {
+      expect(button).toBeEnabled()
+    })
   })
 })

@@ -191,6 +191,11 @@ never shown in the one beside it; the rules are in
 on the way out** — a report per keystroke would put a `setState` in `App` under
 every key pressed, with the log re-rendering behind it.
 
+A draft can also arrive from the board: **Run** files the card's text under the
+workspace's first tab (`FIRST_TAB`, exported for this) through `offerDraft`,
+which writes only into a slot that is empty, so text somebody typed is never
+replaced.
+
 **The stop button follows the conversation, not the pane.** `busy` is this
 pane's own events **or** the conversation's status, so a turn left running is
 still stoppable when you come back to it. The conversation's rather than its

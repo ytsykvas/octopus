@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BoardListing, CardDetail } from '@core/boardSchema.js'
+import type { BoardListing, CardDetail, CardMeta, CardRunEntry } from '@core/boardSchema.js'
 
 import type { Result } from '../../../../preload/index.js'
 import {
@@ -19,6 +19,8 @@ import {
 import { stubDialogElement } from '../../test/dialog.js'
 import { held } from '../../test/held.js'
 import { octopus } from '../../test/octopus.js'
+import { workspaceView } from '../../test/workspaces.js'
+import type { BoardScreenProps } from './BoardScreen.js'
 
 describe('BoardScreen', () => {
   it('draws nothing before the config arrives', () => {
@@ -694,6 +696,88 @@ describe('BoardScreen', () => {
         'aria-valuenow',
         '436'
       )
+    })
+
+    describe('running a card', () => {
+      const ID = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
+      const ELSEWHERE: CardRunEntry = {
+        started: '2026-11-21T12:00:00.000Z',
+        device: 'device-two',
+        machine: 'Mac-Two',
+        branch: 'octopus/feature/anna'
+      }
+
+      async function openWith(
+        meta: CardMeta,
+        overrides: Partial<BoardScreenProps> = {}
+      ): Promise<{ readonly user: UserEvent; readonly props: BoardScreenProps }> {
+        givenBoard([boardCard({ meta })])
+        vi.mocked(octopus().board.read).mockResolvedValue(ok(cardDetail({ meta })))
+        const user = userEvent.setup()
+        const { props } = renderScreen(overrides)
+        await user.click(await screen.findByRole('button', { name: /^Fix login/ }))
+        await screen.findByRole('complementary', { name: 'Fix login' })
+        return { user, props }
+      }
+
+      it('asks before running a card still in work on another Mac', async () => {
+        const { user, props } = await openWith({ links: [], runs: [ELSEWHERE] })
+
+        await user.click(screen.getByRole('button', { name: 'Run' }))
+        const question = await screen.findByRole('dialog', { name: 'Already in work on Mac-Two' })
+        await user.click(within(question).getByRole('button', { name: 'Cancel' }))
+        expect(props.onRun).not.toHaveBeenCalled()
+
+        await user.click(screen.getByRole('button', { name: 'Run' }))
+        await user.click(await screen.findByRole('button', { name: 'Start here' }))
+        expect(props.onRun).toHaveBeenCalledWith('planner', 'backlog/Fix login.md')
+      })
+
+      it("runs at once a card whose open run is this Mac's", async () => {
+        const { user, props } = await openWith({
+          links: [],
+          runs: [{ ...ELSEWHERE, device: 'device-one' }]
+        })
+
+        await user.click(screen.getByRole('button', { name: 'Run' }))
+
+        expect(props.onRun).toHaveBeenCalledTimes(1)
+        expect(screen.queryByRole('dialog')).toBeNull()
+      })
+
+      it('runs at once a card whose run elsewhere has ended', async () => {
+        const { user, props } = await openWith({
+          links: [],
+          runs: [{ ...ELSEWHERE, ended: '2026-11-21T13:00:00.000Z' }]
+        })
+
+        await user.click(screen.getByRole('button', { name: 'Run' }))
+
+        expect(props.onRun).toHaveBeenCalledTimes(1)
+        expect(screen.queryByRole('dialog')).toBeNull()
+      })
+
+      it('opens the workspace started here without asking', async () => {
+        const { user, props } = await openWith(
+          { id: ID, links: [], runs: [ELSEWHERE] },
+          { workspaces: [workspaceView('anna', { card: ID })] }
+        )
+
+        await user.click(screen.getByRole('button', { name: 'Open workspace' }))
+
+        expect(props.onRun).toHaveBeenCalledWith('planner', 'backlog/Fix login.md')
+        expect(screen.queryByRole('dialog')).toBeNull()
+      })
+
+      it('offers Run for a card a workspace here did not start', async () => {
+        await openWith(
+          { id: ID, links: [], runs: [] },
+          { workspaces: [workspaceView('anna', { card: '7d3e9a10-2b4c-4f8e-8a1d-5c6b7e8f9a0b' })] }
+        )
+
+        expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Open workspace' })).toBeNull()
+      })
     })
   })
 })
