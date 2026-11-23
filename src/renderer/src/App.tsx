@@ -102,6 +102,15 @@ function takesText(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
 }
 
+/** Where the error banner belongs: the screen in front and what is selected on it. */
+function selectionKey(
+  screen: Screen,
+  projectId: string | null,
+  workspaceId: string | null
+): string {
+  return `${screen}/${projectId ?? ''}/${workspaceId ?? ''}`
+}
+
 /** ⌘⇧N, or a digit under ⌘ or ⌃ — the window's shortcuts that still work on the board. */
 function isBoardPassThrough(event: KeyboardEvent): boolean {
   if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'n') return true
@@ -176,7 +185,9 @@ export function App(): React.JSX.Element {
   }
 
   /*
-   * The error banner follows the selection out, and no further.
+   * The error banner follows the selection out, and no further — and the
+   * screen is part of the selection: the board's banner is not about the
+   * conversation behind it.
    *
    * One transient failure — a config write that lost a race, a `gh` not signed
    * in yet, a rename git refused — used to pin a red sentence to the top of the
@@ -187,7 +198,7 @@ export function App(): React.JSX.Element {
    * The hooks clear it themselves on entry to a new attempt, which is the
    * other half: a fresh error told apart from an old one.
    */
-  const selection = `${selectedProjectId ?? ''}/${selectedWorkspaceId ?? ''}`
+  const selection = selectionKey(screen, selectedProjectId, selectedWorkspaceId)
   const [shownSelection, setShownSelection] = useState(selection)
   if (selection !== shownSelection) {
     setShownSelection(selection)
@@ -397,7 +408,7 @@ export function App(): React.JSX.Element {
       // Moved by the creation itself, so the banner is already about where it
       // lands: a creation that went round a branch named after its kind says
       // so there, and clearing on the move would wipe it as it was written.
-      setShownSelection(`${projectId}/${made}`)
+      setShownSelection(selectionKey('octopus', projectId, made))
       setFreshWorkspaceId(made)
       setScreen('octopus')
     },
@@ -1117,10 +1128,7 @@ export function App(): React.JSX.Element {
                 void plugins.readInstalled()
               }}
               screen={screen}
-              onScreen={(next) => {
-                setScreen(next)
-                setError(null)
-              }}
+              onScreen={setScreen}
             />
 
             {listShown && (

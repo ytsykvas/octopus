@@ -37,11 +37,12 @@ from the scrolling list. Which screen is in front is not stored: like the list's
 for the session. With no projects at all both screens show the same pane offering to add one.
 
 On the board the workspace list is not drawn and the right pane is folded **offstage**, not
-unmounted: its terminals and servers belong to their workspaces and keep running. The fold's
-button reads "Show workspaces" there and goes back to Octopus with the list open. The chat
-unmounts; its composer files its draft on the way out, as on any switch. The workspace left
-selected is not on screen there, so its agents' news arrives as a toast and a mark on the project's
-tab, and is cleared when Octopus shows that workspace again.
+unmounted: its terminals and servers belong to their workspaces and keep running. The fold's button
+reads "Show workspaces" there and goes back to Octopus with the list open. The chat unmounts; its
+composer files its draft on the way out, as on any switch. The workspace left selected is not on
+screen there, so its agents' news arrives as a toast and a mark on the project's tab, and is cleared
+when Octopus shows that workspace again. An error banner stays with the screen it was raised on:
+every way off the board clears it, as a change of selection does.
 
 Only ⌘⇧N and a digit under ⌘ or ⌃ work on the board. ⌘1–⌘9 switch the board's project; ⌃1–⌃9,
 ⌘⇧N, a toast's Show and a status-bar row open a workspace, and so leave for Octopus. The rest —

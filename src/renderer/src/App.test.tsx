@@ -4097,11 +4097,13 @@ describe('the board screen', () => {
     screen.getByRole('button', { name: 'Changes', hidden: true }).closest('section')
 
   /** Planner open on Octopus with its workspace `anna` selected, and a board folder chosen. */
-  async function onAnna(): Promise<ReturnType<typeof userEvent.setup>> {
+  async function onAnna(
+    overrides: Partial<Config> = {}
+  ): Promise<ReturnType<typeof userEvent.setup>> {
     givenTwoProjects()
     vi.mocked(window.octopus.config.get).mockResolvedValue({
       ok: true,
-      value: config({ boardFolder: '/tmp/board' })
+      value: config({ boardFolder: '/tmp/board', ...overrides })
     })
     givenBoard([boardCard()])
     const user = await openApp()
@@ -4299,6 +4301,37 @@ describe('the board screen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Octopus' }))
 
+    expect(screen.queryByText('Something went wrong: No window')).toBeNull()
+  })
+
+  it("forgets the board's error when the list's button leaves it", async () => {
+    const user = await onTheBoard({ boardFolder: '' })
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: false,
+      error: 'No window'
+    })
+    await user.click(await screen.findByRole('button', { name: 'Choose folder…' }))
+    expect(await screen.findByText('Something went wrong: No window')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show workspaces' }))
+
+    expect(await screen.findByText('bob')).toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong: No window')).toBeNull()
+  })
+
+  it("forgets the board's error on ⌃digit to the open workspace", async () => {
+    const user = await onAnna({ boardFolder: '' })
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+    vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({
+      ok: false,
+      error: 'No window'
+    })
+    await user.click(await screen.findByRole('button', { name: 'Choose folder…' }))
+    expect(await screen.findByText('Something went wrong: No window')).toBeInTheDocument()
+
+    await user.keyboard('{Control>}1{/Control}')
+
+    expect(await screen.findByText('ytsykvas/anna')).toBeInTheDocument()
     expect(screen.queryByText('Something went wrong: No window')).toBeNull()
   })
 
