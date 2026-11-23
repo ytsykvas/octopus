@@ -25,6 +25,8 @@ interface NameEditorProps {
    * back as a refusal from the far side of the bridge.
    */
   readonly maxLength?: number
+  /** What an empty field asks for, and its accessible name — the Board's new-task field. */
+  readonly placeholder?: string
 }
 
 /**
@@ -40,7 +42,8 @@ export function NameEditor({
   onCancel,
   onClear,
   className = 'input focus-ring',
-  maxLength
+  maxLength,
+  placeholder
 }: NameEditorProps): React.JSX.Element {
   const { t } = useTranslation()
   const [draft, setDraft] = useState(initial)
@@ -61,6 +64,8 @@ export function NameEditor({
       autoFocus
       value={draft}
       maxLength={maxLength}
+      placeholder={placeholder}
+      aria-label={placeholder}
       title={t('sidebar.renameHint')}
       spellCheck={false}
       onChange={(event) => {

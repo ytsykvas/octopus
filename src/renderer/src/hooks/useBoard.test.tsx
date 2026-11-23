@@ -371,4 +371,50 @@ describe('useBoard', () => {
 
     expect(onError).not.toHaveBeenCalled()
   })
+
+  describe('writes', () => {
+    it('creates a card and reads the board again', async () => {
+      givenBoard([])
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const made = await act(() => result.current.create({ status: 'backlog', title: 'Fix login' }))
+
+      expect(made).toBe('backlog/Fix login.md')
+      expect(octopus().board.create).toHaveBeenCalledWith('planner', {
+        status: 'backlog',
+        title: 'Fix login'
+      })
+      expect(list()).toHaveBeenCalledTimes(2)
+      expect(onError).toHaveBeenLastCalledWith(null)
+    })
+
+    it('reads the board again after a refused write', async () => {
+      givenBoard([])
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(
+        refusal('cardNameTaken', { name: 'Fix login.md' })
+      )
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const made = await act(() => result.current.create({ status: 'backlog', title: 'Fix login' }))
+
+      expect(made).toBeNull()
+      expect(onError).toHaveBeenCalledWith('A file named “Fix login.md” is already there.')
+      expect(list()).toHaveBeenCalledTimes(2)
+    })
+
+    it('writes nothing without a folder', async () => {
+      const { result } = renderBoard({ folder: '' })
+
+      const made = await act(() => result.current.create({ status: 'backlog', title: 'Fix login' }))
+
+      expect(made).toBeNull()
+      expect(octopus().board.create).not.toHaveBeenCalled()
+    })
+  })
 })

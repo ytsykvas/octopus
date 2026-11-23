@@ -2417,7 +2417,9 @@ export const en = {
       columnText: 'No task has this status yet.'
     },
     column: {
-      byName: 'By name'
+      byName: 'By name',
+      newTask: 'New task',
+      newTaskPlaceholder: 'Task title'
     },
     card: {
       comments_one: '{{count}} comment',

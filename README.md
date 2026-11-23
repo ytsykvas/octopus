@@ -205,7 +205,7 @@ Everything lives under `~/.octopus`: `config.json`, `state.json`, the saved
 prompts in `prompts.json`, one JSONL transcript per conversation, the
 per-project scripts, env and prompts, and the worktrees themselves. Nothing is written inside your repository except the worktree and its
 branch — see [docs/data/](docs/data/README.md). Removing a workspace offers to delete
-that branch with it, ticked by default.
+that branch with it, ticked by default. The one exception is the board folder chosen in Settings → General, where the Board keeps each project's tasks as Markdown files, one folder per column.
 
 ## Development
 

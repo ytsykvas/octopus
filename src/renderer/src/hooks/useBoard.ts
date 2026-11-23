@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { BoardListing } from '@core/boardSchema.js'
+import type { BoardListing, CardDraft } from '@core/boardSchema.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { useErrorMessage } from './useErrorMessage.js'
@@ -15,6 +15,8 @@ export interface BoardController {
   /** +1 for every read that worked, changed or not — what the card detail re-reads on (B202b). */
   readonly revision: number
   readonly refresh: () => Promise<void>
+  /** The new card's ref, or null when nothing was written. */
+  readonly create: (draft: CardDraft) => Promise<string | null>
 }
 
 interface BoardSource {
@@ -130,6 +132,26 @@ export function useBoard(
     if (source !== null) await read(source, live.current)
   }, [source, read])
 
+  // Every write ends here: the banner says how it went, and the board is read again either way —
+  // the usual refusal is a file that is gone, and the board should show it.
+  const settle = useCallback(
+    async <T>(answer: Result<T>): Promise<Result<T>> => {
+      report.current(answer.ok ? null : describe.current(answer))
+      await refresh()
+      return answer
+    },
+    [report, describe, refresh]
+  )
+
+  const create = useCallback(
+    async (draft: CardDraft): Promise<string | null> => {
+      if (source === null) return null
+      const answer = await settle(await window.octopus.board.create(source.projectId, draft))
+      return answer.ok ? answer.value : null
+    },
+    [source, settle]
+  )
+
   // A sync service writes while the window is elsewhere; coming back is when that matters.
   useWindowEvent('focus', () => void refresh(), { active: source !== null })
 
@@ -139,6 +161,7 @@ export function useBoard(
     listing: current?.listing ?? null,
     failure: current?.failure ?? null,
     revision: current?.revision ?? 0,
-    refresh
+    refresh,
+    create
   }
 }

@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
 import { cardsByStatus } from '@core/boardOrder.js'
-import { BOARD_STATUSES } from '@core/boardSchema.js'
+import { BOARD_STATUSES, type BoardStatus } from '@core/boardSchema.js'
 import type { Project } from '@core/store.js'
 
 import { useBoard } from '../../hooks/useBoard.js'
@@ -36,6 +36,14 @@ export function BoardScreen({
   // Every hook stays above the first return: B202a–B206 hang theirs on `columns`, and a hook
   // below a return breaks the rules of hooks the moment the screen changes state.
   const columns = useMemo(() => cardsByStatus(board.listing?.cards ?? []), [board.listing])
+  const [creatingIn, setCreatingIn] = useState<BoardStatus | null>(null)
+  // What the screen holds for one project is not carried into the next one's board.
+  const projectId = project?.id ?? null
+  const [shownProjectId, setShownProjectId] = useState(projectId)
+  if (projectId !== shownProjectId) {
+    setShownProjectId(projectId)
+    setCreatingIn(null)
+  }
 
   if (boardFolder === null) return null
   if (boardFolder === '')
@@ -72,7 +80,16 @@ export function BoardScreen({
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 overflow-x-auto">
         {BOARD_STATUSES.map((status) => (
-          <BoardColumn key={status} status={status} cards={columns[status]} />
+          <BoardColumn
+            key={status}
+            status={status}
+            cards={columns[status]}
+            creating={creatingIn === status}
+            onCreating={(on) => {
+              setCreatingIn(on ? status : null)
+            }}
+            onCreate={(title) => void board.create({ status, title })}
+          />
         ))}
       </div>
       {titleSlot !== null && createPortal(board.listing.folder, titleSlot)}

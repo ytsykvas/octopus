@@ -1,11 +1,19 @@
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 
 import { boardCard } from '../../test/board.js'
 import { BoardColumn, type BoardColumnProps } from './BoardColumn.js'
 
 function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
-  const all: BoardColumnProps = { status: 'backlog', cards: [], ...props }
+  const all: BoardColumnProps = {
+    status: 'backlog',
+    cards: [],
+    creating: false,
+    onCreating: vi.fn(),
+    onCreate: vi.fn(),
+    ...props
+  }
   render(<BoardColumn {...all} />)
   return all
 }
@@ -61,5 +69,61 @@ describe('BoardColumn', () => {
     renderColumn({ cards: [card('A'), card('B')] })
 
     expect(screen.queryByRole('separator')).toBeNull()
+  })
+
+  it("asks for a new task's title", async () => {
+    const { onCreating } = renderColumn()
+
+    await userEvent.click(screen.getByRole('button', { name: 'New task' }))
+
+    expect(onCreating).toHaveBeenCalledWith(true)
+  })
+
+  it('creates the task typed in', async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    renderColumn({
+      creating: true,
+      onCreating: (creating) => calls.push(`creating ${String(creating)}`),
+      onCreate: (title) => calls.push(`create ${title}`)
+    })
+
+    await user.type(screen.getByRole('textbox', { name: 'Task title' }), 'Fix login{Enter}')
+
+    expect(calls).toEqual(['creating false', 'create Fix login'])
+  })
+
+  it('creates nothing from an empty title', async () => {
+    const user = userEvent.setup()
+    const { onCreating, onCreate } = renderColumn({ creating: true })
+
+    await user.type(screen.getByRole('textbox', { name: 'Task title' }), '{Enter}')
+
+    expect(onCreate).not.toHaveBeenCalled()
+    expect(onCreating).toHaveBeenCalledWith(false)
+  })
+
+  it('drops the field on Escape', async () => {
+    const user = userEvent.setup()
+    const { onCreating, onCreate } = renderColumn({ creating: true })
+
+    await user.type(screen.getByRole('textbox', { name: 'Task title' }), 'Fix{Escape}')
+
+    expect(onCreating).toHaveBeenCalledWith(false)
+    expect(onCreate).not.toHaveBeenCalled()
+  })
+
+  it('shows the field in an empty column instead of the empty state', () => {
+    renderColumn({ cards: [], creating: true })
+
+    expect(screen.getByRole('textbox', { name: 'Task title' })).toBeInTheDocument()
+    expect(screen.queryByText('Nothing here')).toBeNull()
+  })
+
+  it('shows the field above the cards', () => {
+    renderColumn({ cards: [card('A', 0), card('B', 1)], creating: true })
+
+    const [first] = screen.getAllByRole('listitem')
+    expect(first).toContainElement(screen.getByRole('textbox', { name: 'Task title' }))
   })
 })
