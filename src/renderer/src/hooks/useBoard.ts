@@ -132,12 +132,17 @@ export function useBoard(
     if (source !== null) await read(source, live.current)
   }, [source, read])
 
-  // Every write ends here: the banner says how it went, and the board is read again either way —
-  // the usual refusal is a file that is gone, and the board should show it.
+  // Every write ends here and reads the board again: a refusal usually means the disk has moved
+  // on from the cards on screen. The refusal is reported after that read, which may clear the
+  // banner; the signal is taken before the answer, so a write outlived by its board stays quiet.
   const settle = useCallback(
-    async <T>(answer: Result<T>): Promise<Result<T>> => {
-      report.current(answer.ok ? null : describe.current(answer))
+    async <T>(sent: Promise<Result<T>>): Promise<Result<T>> => {
+      const signal = live.current
+      const answer = await sent
+      if (signal.aborted) return answer
+      if (answer.ok) report.current(null)
       await refresh()
+      if (!answer.ok) report.current(describe.current(answer))
       return answer
     },
     [report, describe, refresh]
@@ -146,7 +151,7 @@ export function useBoard(
   const create = useCallback(
     async (draft: CardDraft): Promise<string | null> => {
       if (source === null) return null
-      const answer = await settle(await window.octopus.board.create(source.projectId, draft))
+      const answer = await settle(window.octopus.board.create(source.projectId, draft))
       return answer.ok ? answer.value : null
     },
     [source, settle]

@@ -19,18 +19,18 @@ interface NameEditorProps {
   /**
    * The most characters the name may hold, where something bounds it.
    *
-   * Passed in rather than fixed here: this field is shared by three things and
-   * only one of them has a cap. Where there is one, the field stopping is what
+   * Passed in rather than fixed here: not every name this field edits has a
+   * cap. Where there is one, the field stopping is what
    * every rename box does — the alternative is an ordinary keystroke coming
    * back as a refusal from the far side of the bridge.
    */
   readonly maxLength?: number
-  /** What an empty field asks for, and its accessible name — the Board's new-task field. */
+  /** Also the field's accessible name: a field with no visible label has nothing else. */
   readonly placeholder?: string
 }
 
 /**
- * Inline rename, shared by projects and workspaces.
+ * An inline name field, for a rename or a new task's title.
  *
  * Commits on blur as well as on Enter: clicking away is a common way to mean
  * "done", and losing the edit there would be surprising. An empty name cancels

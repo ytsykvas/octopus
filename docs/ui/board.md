@@ -61,8 +61,10 @@ folder is visible rather than silently emptied.
 The + in a column's header opens a field above its first card. It is `NameEditor`, so Enter or a
 click elsewhere creates the task and Escape or an empty title creates nothing — the same field
 every rename in the window uses. The new card goes to the top of its column: it is what was just
-thought of. Every write, worked or refused, reads the board again (`settle`), because the usual
-refusal is a file that is no longer there and the board should show it.
+thought of. Every write, worked or refused, reads the board again (`settle`): a refusal usually
+means the disk has moved on from the cards on screen, and the board should show it. A refusal is
+reported after that read, so the read cannot clear it, and a write answered after its board left
+reports nothing.
 
 ## Drag and drop
 

@@ -491,8 +491,8 @@ with zod before it goes anywhere.** TypeScript guarantees nothing across a
 process boundary: the renderer is a separate process that displays agent
 output, and a compromised or simply buggy one must not reach a command line.
 
-**A bound a person can reach is on the field as well.** The chat title is the
-one cap in the app that bounds a **name** rather than a body, and the field
+**A bound a person can reach is on the field as well.** The chat title and the
+card title are the caps that bound a **name** rather than a body, and each field
 carries the same number the boundary parses with — bounded only at the far end,
 an ordinary keystroke came back as a refusal a round trip later. The bodies are
 deliberately not bounded that way: `maxLength` on a textarea truncates a paste
