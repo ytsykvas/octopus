@@ -163,6 +163,8 @@ export function ProjectTabs({
   )
 }
 
+// Neutral when chosen: the accent tint is the plugins tile's at rest, and two tinted tiles side by
+// side would not say which screen is in front.
 function ScreenTile({
   screen,
   active,
@@ -182,7 +184,7 @@ function ScreenTile({
       title={label}
       aria-label={label}
       aria-current={active ? 'page' : undefined}
-      className={`focus-ring flex size-10 items-center justify-center rounded-[10px] transition-colors ${active ? 'bg-accent/12 text-accent' : 'text-ink-soft hover:bg-muted'}`}
+      className={`focus-ring flex size-10 items-center justify-center rounded-[10px] transition-colors ${active ? 'bg-muted text-ink' : 'text-ink-faint hover:text-ink'}`}
     >
       <Icon aria-hidden size={19} />
     </button>

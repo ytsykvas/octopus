@@ -224,8 +224,8 @@ function findTab(letters: string): Promise<HTMLElement> {
 }
 
 /** The right pane: a `<section>`, which carries no role to reach it by. */
-function rightPane(): HTMLElement {
-  const section = screen.getByRole('button', { name: 'Changes' }).closest('section')
+function rightPane({ hidden = false }: { readonly hidden?: boolean } = {}): HTMLElement {
+  const section = screen.getByRole('button', { name: 'Changes', hidden }).closest('section')
   if (!section) throw new Error('the right pane is not in the window')
   return section
 }
@@ -4092,10 +4092,6 @@ describe('the board screen', () => {
     return user
   }
 
-  /** The right pane, folded or not: hidden from the accessibility tree while offstage. */
-  const offstage = (): HTMLElement | null =>
-    screen.getByRole('button', { name: 'Changes', hidden: true }).closest('section')
-
   /** Planner open on Octopus with its workspace `anna` selected, and a board folder chosen. */
   async function onAnna(
     overrides: Partial<Config> = {}
@@ -4129,7 +4125,7 @@ describe('the board screen', () => {
     await onTheBoard()
     await screen.findByRole('region', { name: 'Backlog' })
 
-    expect(offstage()).toHaveAttribute('aria-hidden', 'true')
+    expect(rightPane({ hidden: true })).toHaveAttribute('aria-hidden', 'true')
     expect(window.octopus.config.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ rightPanelOpen: false })
     )
@@ -4150,7 +4146,7 @@ describe('the board screen', () => {
     await user.click(screen.getByRole('button', { name: 'Board' }))
     await screen.findByRole('region', { name: 'Backlog' })
 
-    expect(offstage()?.style.width).toBe(width)
+    expect(rightPane({ hidden: true }).style.width).toBe(width)
   })
 
   it('shows the folder the board reads in the title bar', async () => {
@@ -4233,7 +4229,7 @@ describe('the board screen', () => {
     expect(window.octopus.config.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ rightPanelTab: 'diff' })
     )
-    expect(offstage()).toHaveAttribute('aria-hidden', 'true')
+    expect(rightPane({ hidden: true })).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('leaves the board for a new workspace made by ⌘⇧N', async () => {
