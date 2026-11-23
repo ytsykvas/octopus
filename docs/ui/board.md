@@ -63,8 +63,8 @@ click elsewhere creates the task and Escape or an empty title creates nothing �
 every rename in the window uses. The new card goes to the top of its column: it is what was just
 thought of. Every write, worked or refused, reads the board again (`settle`): a refusal usually
 means the disk has moved on from the cards on screen, and the board should show it. A refusal is
-reported after that read, so the read cannot clear it, and a write answered after its board left
-reports nothing.
+reported after that read, so the read cannot clear it, and a write whose board leaves before it
+settles — before its answer or during that read — reports nothing.
 
 ## Drag and drop
 

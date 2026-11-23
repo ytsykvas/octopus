@@ -139,10 +139,12 @@ export function useBoard(
     async <T>(sent: Promise<Result<T>>): Promise<Result<T>> => {
       const signal = live.current
       const answer = await sent
-      if (signal.aborted) return answer
-      if (answer.ok) report.current(null)
-      await refresh()
-      if (!answer.ok) report.current(describe.current(answer))
+      if (!signal.aborted) {
+        if (answer.ok) report.current(null)
+        await refresh()
+      }
+      // Asked again, not once up front: the board may leave while it is read again.
+      if (!answer.ok && !signal.aborted) report.current(describe.current(answer))
       return answer
     },
     [report, describe, refresh]

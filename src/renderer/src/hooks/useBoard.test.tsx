@@ -436,6 +436,33 @@ describe('useBoard', () => {
       expect(onError).not.toHaveBeenCalled()
     })
 
+    it('drops a refusal whose board left while it was read again', async () => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(
+        refusal('cardNameTaken', { name: 'Fix login.md' })
+      )
+      const { result, rerender, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      const reread = holdNextRead()
+      let made: Promise<string | null> = Promise.resolve(null)
+      act(() => {
+        made = result.current.create({ status: 'backlog', title: 'Fix login' })
+      })
+      await waitFor(() => {
+        expect(list()).toHaveBeenCalledTimes(2)
+      })
+
+      rerender({ projectId: 'ledger', folder: '/tmp/board', onError })
+      await act(async () => {
+        reread.resolve(ok(A))
+        await made
+      })
+
+      expect(onError).not.toHaveBeenCalled()
+    })
+
     it('keeps a refusal in the banner when the read after it clears an earlier failure', async () => {
       list()
         .mockResolvedValueOnce(ok(A))
