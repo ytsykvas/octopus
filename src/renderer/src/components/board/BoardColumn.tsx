@@ -18,7 +18,7 @@ export interface BoardColumnProps {
   readonly onCreate: (title: string) => void
   readonly openRef: string | null
   readonly onOpen: (ref: string) => void
-  readonly marksOf: (card: BoardCard) => React.ReactNode
+  readonly marksOf: (card: BoardCard) => React.JSX.Element | null
 }
 
 export function BoardColumn({

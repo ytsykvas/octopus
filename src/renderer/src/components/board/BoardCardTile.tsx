@@ -11,7 +11,7 @@ export interface BoardCardTileProps {
   readonly card: BoardCard
   readonly open: boolean
   readonly onOpen: () => void
-  readonly marks: React.ReactNode
+  readonly marks: React.JSX.Element | null
 }
 
 function PriorityMark({ priority }: { readonly priority: CardPriority }): React.JSX.Element {

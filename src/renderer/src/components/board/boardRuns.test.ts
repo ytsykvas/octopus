@@ -105,6 +105,10 @@ describe('cardMark', () => {
     expect(cardMark(card, linked, none, 'device-one')?.kind).toBe('live')
   })
 
+  it("prefers the live workspace over another Mac's open run", () => {
+    expect(cardMark(withRuns([ELSEWHERE, RUN], ID), linked, none, 'device-one')?.kind).toBe('live')
+  })
+
   it('marks a task in work on another Mac', () => {
     expect(cardMark(withRuns([ELSEWHERE]), none, none, 'device-one')).toEqual({
       kind: 'elsewhere',

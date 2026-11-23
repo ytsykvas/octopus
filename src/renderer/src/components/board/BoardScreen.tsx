@@ -92,7 +92,7 @@ export function BoardScreen({
   const panelKey = open?.session ?? 0
   const linkedBy = useMemo(() => linkedByCard(workspaces), [workspaces])
   const marksOf = useCallback(
-    (card: BoardCard): React.ReactNode => {
+    (card: BoardCard): React.JSX.Element | null => {
       const mark = cardMark(card, linkedBy, requests, deviceId)
       return mark === null ? null : <CardMarks mark={mark} />
     },
