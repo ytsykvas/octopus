@@ -79,6 +79,26 @@ describe('BoardCardTile', () => {
     expect(screen.getByRole('listitem')).toHaveTextContent(/^Fix login$/)
   })
 
+  it('names the folder of a loose card', () => {
+    renderTile({ card: boardCard({ ref: 'ideas/x.md', loose: true, title: 'x' }) })
+
+    const item = screen.getByRole('listitem')
+    expect(item).toHaveTextContent('x')
+    expect(item).toHaveTextContent('ideas')
+  })
+
+  it('names no folder for a loose card at the project root', () => {
+    renderTile({ card: boardCard({ ref: 'notes.md', loose: true, title: 'Notes' }) })
+
+    expect(screen.getByRole('listitem')).toHaveTextContent(/^Notes$/)
+  })
+
+  it('names no folder for a card in a status folder', () => {
+    renderTile({ card: boardCard() })
+
+    expect(screen.getByRole('listitem')).toHaveTextContent(/^Fix login$/)
+  })
+
   describe('in Ukrainian', () => {
     // Unmounted first: switching back under a mounted tile re-renders it outside act.
     afterEach(async () => {

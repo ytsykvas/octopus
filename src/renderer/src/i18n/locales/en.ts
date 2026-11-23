@@ -13,6 +13,8 @@ export const en = {
     empty: 'Nothing here yet. Add a repository with the "+" button.',
     pick: 'Pick a project on the far left.',
     addProject: 'Add repository',
+    screenOctopus: 'Octopus',
+    screenBoard: 'Board',
     // The dot on a project's tab when one of its agents finished out of sight.
     projectDone: 'An agent finished here while you were away',
     addFromDisk: 'From disk…',
@@ -1807,6 +1809,10 @@ export const en = {
     cloneDirectoryHint:
       'Repositories added from GitHub are cloned here. Each gets its own directory named after the repository.',
     cloneDirectoryUnset: 'Not set — you will be asked on the first clone.',
+    boardFolder: 'Board folder',
+    boardFolderHint:
+      "Each project's tasks live in a folder named after it, one subfolder per column. A folder iCloud syncs keeps the board the same on every Mac.",
+    boardFolderUnset: 'Not set',
     change: 'Change…',
 
     settingSources: 'Instruction sources',

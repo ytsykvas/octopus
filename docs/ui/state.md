@@ -4,6 +4,9 @@ Hooks own everything that talks to IPC — `useProjects`, `useWorkspaces`,
 `useChat`, `useRateLimit`, `usePlugins`, `useBoard` and the rest. A component that lays out a window should not also
 know what an IPC failure looks like.
 
+Which screen is in front — Octopus or the Board — is App state that is not
+saved, like the workspace list's fold.
+
 Two small hooks hold the clocks. `useVisibleInterval(tick, ms, active)` is
 "now, and every so often, while somebody can see it" — the account's limits and
 the status bar's resource reading both run on it.

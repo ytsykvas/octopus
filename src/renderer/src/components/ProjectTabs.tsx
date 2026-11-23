@@ -1,4 +1,12 @@
-import { CloudDownload, FolderOpen, Pencil, Puzzle, Trash2 } from 'lucide-react'
+import {
+  CloudDownload,
+  FolderOpen,
+  Pencil,
+  Puzzle,
+  SquareKanban,
+  SquareTerminal,
+  Trash2
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { initials } from '@core/initials.js'
@@ -13,6 +21,8 @@ import { DropdownMenu } from './DropdownMenu.js'
 import { DropLine } from './DropLine.js'
 import { LETTERS, TILE_WASH } from './projectTint.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
+
+export type Screen = 'octopus' | 'board'
 
 interface ProjectTabsProps {
   readonly projects: readonly Project[]
@@ -32,6 +42,9 @@ interface ProjectTabsProps {
   /** An installed plugin reports that it would not load. */
   readonly pluginTrouble: boolean
   readonly onOpenPlugins: () => void
+  /** Which of the two screens the window shows (docs/ui/board.md). */
+  readonly screen: Screen
+  readonly onScreen: (screen: Screen) => void
 }
 
 /**
@@ -60,7 +73,9 @@ export function ProjectTabs({
   busy,
   pluginsOpen,
   pluginTrouble,
-  onOpenPlugins
+  onOpenPlugins,
+  screen,
+  onScreen
 }: ProjectTabsProps): React.JSX.Element {
   const { t } = useTranslation()
   const reorder = useDragReorder(
@@ -124,11 +139,53 @@ export function ProjectTabs({
       {/* A foot of its own rather than the end of the list above: the list
           scrolls, and a tile at the bottom of it would ride up and down with
           the number of projects. The plugins are the agent's, not a
-          project's, so they sit apart from the projects. */}
-      <div className="shrink-0 py-2 pl-2.5">
+          project's, so they sit apart from the projects. The switch between
+          the two screens sits here too: it is about the window, not about a
+          project. */}
+      <div className="flex shrink-0 flex-col gap-1 py-2 pl-2.5">
+        <ScreenTile
+          screen="octopus"
+          active={screen === 'octopus'}
+          onSelect={() => {
+            onScreen('octopus')
+          }}
+        />
+        <ScreenTile
+          screen="board"
+          active={screen === 'board'}
+          onSelect={() => {
+            onScreen('board')
+          }}
+        />
         <PluginsTile open={pluginsOpen} trouble={pluginTrouble} onOpen={onOpenPlugins} />
       </div>
     </nav>
+  )
+}
+
+function ScreenTile({
+  screen,
+  active,
+  onSelect
+}: {
+  readonly screen: Screen
+  readonly active: boolean
+  readonly onSelect: () => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+  const label = t(screen === 'octopus' ? 'sidebar.screenOctopus' : 'sidebar.screenBoard')
+  const Icon = screen === 'octopus' ? SquareTerminal : SquareKanban
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      title={label}
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
+      className={`focus-ring flex size-10 items-center justify-center rounded-[10px] transition-colors ${active ? 'bg-accent/12 text-accent' : 'text-ink-soft hover:bg-muted'}`}
+    >
+      <Icon aria-hidden size={19} />
+    </button>
   )
 }
 

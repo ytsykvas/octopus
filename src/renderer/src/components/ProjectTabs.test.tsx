@@ -22,6 +22,8 @@ function renderTabs(overrides: Partial<ProjectTabsProps> = {}): ProjectTabsProps
     pluginsOpen: false,
     pluginTrouble: false,
     onOpenPlugins: vi.fn(),
+    screen: 'octopus',
+    onScreen: vi.fn(),
     ...overrides
   }
 
@@ -251,6 +253,53 @@ describe('ProjectTabs', () => {
     renderTabs({ projects: [], activeProjectId: null })
 
     expect(screen.getByTitle('Add repository')).toBeEnabled()
+  })
+
+  describe('the screen switch', () => {
+    it('offers both screens at the foot of the strip', () => {
+      renderTabs()
+
+      expect(screen.getByRole('button', { name: 'Octopus' })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+      expect(screen.getByRole('button', { name: 'Board' })).not.toHaveAttribute('aria-current')
+    })
+
+    it('switches to the board', async () => {
+      const user = userEvent.setup()
+      const props = renderTabs()
+
+      await user.click(screen.getByRole('button', { name: 'Board' }))
+
+      expect(props.onScreen).toHaveBeenCalledWith('board')
+    })
+
+    it('switches back to Octopus', async () => {
+      const user = userEvent.setup()
+      const props = renderTabs({ screen: 'board' })
+
+      await user.click(screen.getByRole('button', { name: 'Octopus' }))
+
+      expect(props.onScreen).toHaveBeenCalledWith('octopus')
+    })
+
+    it('marks the board as the screen in front', () => {
+      renderTabs({ screen: 'board' })
+
+      expect(screen.getByRole('button', { name: 'Board' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('button', { name: 'Octopus' })).not.toHaveAttribute('aria-current')
+    })
+
+    it('keeps the switch above the plugins', () => {
+      renderTabs()
+
+      const octopus = screen.getByRole('button', { name: 'Octopus' })
+      const board = screen.getByRole('button', { name: 'Board' })
+      const plugins = screen.getByRole('button', { name: 'Plugins' })
+      expect(octopus.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(board.compareDocumentPosition(plugins) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
   })
 
   describe('the plugins tile', () => {

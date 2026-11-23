@@ -24,6 +24,12 @@ function PriorityMark({ priority }: { readonly priority: CardPriority }): React.
   )
 }
 
+/** The folder a loose card lies in, when it lies in one: a renamed status folder shows up here. */
+function looseFolder(card: BoardCard): string | null {
+  const slash = card.ref.indexOf('/')
+  return card.loose && slash !== -1 ? card.ref.slice(0, slash) : null
+}
+
 export function BoardCardTile({ card }: BoardCardTileProps): React.JSX.Element {
   const { t } = useTranslation()
   const { priority, tag } = card.meta
@@ -33,7 +39,8 @@ export function BoardCardTile({ card }: BoardCardTileProps): React.JSX.Element {
     : card.malformed
       ? t('board.card.malformed')
       : null
-  const secondLine = tag !== undefined || card.comments > 0 || warning !== null
+  const folder = looseFolder(card)
+  const secondLine = folder !== null || tag !== undefined || card.comments > 0 || warning !== null
 
   return (
     <li>
@@ -49,6 +56,7 @@ export function BoardCardTile({ card }: BoardCardTileProps): React.JSX.Element {
         </span>
         {secondLine && (
           <span className="text-ink-faint mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-5 text-[11px]">
+            {folder !== null && <span>{folder}</span>}
             {tag !== undefined && (
               <span
                 className="font-medium"

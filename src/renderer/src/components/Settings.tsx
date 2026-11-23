@@ -258,6 +258,15 @@ function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
       >
         {(id) => <SoundChoice id={id} config={config} onChange={onChange} />}
       </Field>
+
+      <Field label={t('settings.boardFolder')} hint={t('settings.boardFolderHint')}>
+        <DirectoryField
+          value={config.boardFolder}
+          placeholder={t('settings.boardFolderUnset')}
+          title={t('settings.boardFolder')}
+          onPick={(boardFolder) => void onChange({ boardFolder })}
+        />
+      </Field>
     </div>
   )
 }
