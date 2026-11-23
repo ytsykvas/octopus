@@ -22,6 +22,7 @@ import {
   codeOf,
   describeError,
   InvalidFileError,
+  isAlreadyThere,
   isDiskFull,
   isNotDirectory,
   keepBackup,
@@ -119,6 +120,21 @@ describe('isNotDirectory', () => {
     expect(isNotDirectory(new Error('ENOTDIR'))).toBe(false)
     expect(isNotDirectory('ENOTDIR')).toBe(false)
     expect(isNotDirectory(null)).toBe(false)
+  })
+})
+
+describe('isAlreadyThere', () => {
+  const failure = (code: string): Error => Object.assign(new Error(code), { code })
+
+  it('recognises a name already taken', () => {
+    expect(isAlreadyThere(failure('EEXIST'))).toBe(true)
+  })
+
+  it('leaves every other failure alone', () => {
+    expect(isAlreadyThere(failure('ENOENT'))).toBe(false)
+    expect(isAlreadyThere(new Error('EEXIST'))).toBe(false)
+    expect(isAlreadyThere('EEXIST')).toBe(false)
+    expect(isAlreadyThere(null)).toBe(false)
   })
 })
 
@@ -396,6 +412,33 @@ describe('writeNewFile', () => {
     await writeNewFile(path, Uint8Array.from([1]))
 
     expect([...(await readFile(path))]).toEqual([1])
+  })
+
+  it('writes text as UTF-8', async () => {
+    const path = join(dir, 'a.md')
+    await writeNewFile(path, '# Виправити логін\n')
+
+    await expect(readFile(path, 'utf8')).resolves.toBe('# Виправити логін\n')
+  })
+
+  // `wx` is O_EXCL: a link at the name is a name taken, never a door to write through.
+  it('refuses a link planted at the name', async () => {
+    const outside = join(dir, 'outside.txt')
+    const path = join(dir, 'a.md')
+    await writeFile(outside, 'KEEP')
+    await symlink(outside, path)
+
+    await expect(writeNewFile(path, '# A\n')).rejects.toMatchObject({ code: 'EEXIST' })
+    await expect(readFile(outside, 'utf8')).resolves.toBe('KEEP')
+    expect((await lstat(path)).isSymbolicLink()).toBe(true)
+  })
+
+  it('syncs the contents before it closes', async () => {
+    const sync = await spyOnSync()
+
+    await writeNewFile(join(dir, 'a.md'), '# A\n')
+
+    expect(sync).toHaveBeenCalledTimes(1)
   })
 })
 

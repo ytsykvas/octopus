@@ -1,26 +1,17 @@
 /**
- * Atomic reading and writing of validated JSON files.
+ * Reading and writing the files core keeps: validated JSON, text, and fresh names.
  *
  * Shared by both the config and the state store, so the persistence mechanics
  * live in one place (§11.3 docs/PROJECT.md).
  *
- * The guarantee: the file on disk is either the old version or the new one,
- * never a truncated mix. Achieved by writing to a temporary file and renaming,
- * which is atomic on POSIX.
+ * The guarantee for a file replaced: on disk it is either the old version or the
+ * new one, never a truncated mix. Achieved by writing to a temporary file and
+ * renaming, which is atomic on POSIX. A fresh name (`writeNewFile`) has no old
+ * version to keep, and is not atomic.
  */
 
 import { randomBytes } from 'node:crypto'
-import {
-  copyFile,
-  link,
-  mkdir,
-  open,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile
-} from 'node:fs/promises'
+import { copyFile, link, mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import type { z } from 'zod'
@@ -77,6 +68,11 @@ export function isNotFound(error: unknown): boolean {
 /** Whether a filesystem failure met a file where a folder had to be. */
 export function isNotDirectory(error: unknown): boolean {
   return codeOf(error) === 'ENOTDIR'
+}
+
+/** Whether a filesystem failure found the name already taken. */
+export function isAlreadyThere(error: unknown): boolean {
+  return codeOf(error) === 'EEXIST'
 }
 
 /** Whether a filesystem failure ran out of room: the disk is full, or the user's quota is. */
@@ -188,14 +184,21 @@ export async function writeTextFile(
 }
 
 /**
- * Writes bytes to a path that must not exist yet — a fresh name, never a replacement.
+ * Writes to a path that must not exist yet — a fresh name, never a replacement.
  *
- * Nothing to make atomic: no reader knows the name before this returns. `wx` turns two
- * names colliding into a failure rather than one file silently replacing another.
+ * `wx` turns two names colliding into a failure where the rename `writeTextFile` ends with
+ * would replace a file silently — on a synced folder, a card another Mac just made. No
+ * rename, so not atomic: a crash mid-write leaves part of a file nobody had yet, accepted.
  */
-export async function writeNewFile(filePath: string, bytes: Uint8Array): Promise<void> {
+export async function writeNewFile(filePath: string, contents: string | Uint8Array): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
-  await writeFile(filePath, bytes, { flag: 'wx' })
+  const handle = await open(filePath, 'wx')
+  try {
+    await handle.writeFile(contents)
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
 }
 
 /**
