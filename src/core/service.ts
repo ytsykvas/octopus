@@ -5722,6 +5722,83 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     }
   }
 
+  async function createIn(projectId: string, card: string | null): Promise<CreatedWorkspace> {
+    const project = requireProject(projectId)
+    const exec = makeExec(project.repoPath)
+
+    const detours: KindDetour[] = []
+    // Cut from the base in effect, which the repository may state.
+    const created = await createWorkspace(await liveProject(project), state, exec, {
+      root: dataRoot,
+      answers: listening,
+      fetchExec: makeExec(project.repoPath, FETCH_OPTIONS),
+      onDetour: (detour) => detours.push(detour),
+      choosePort: claimNewPort,
+      card
+    })
+
+    try {
+      // Inside the rollback, not after it: a worktree missing the files it
+      // cannot run without is a workspace that will fail its first build, and
+      // undoing it says so at the one moment somebody is watching.
+      const { envFile } = await prepare(project, created)
+      const workspace = { ...created, envFileApplied: envFile }
+      await commit((current) => addWorkspace(current, workspace))
+      // Beside the record, never in it: the state holds what the branch is,
+      // not how it came to be so.
+      const [detour] = detours
+      return detour === undefined ? workspace : { ...workspace, detour }
+    } catch (error) {
+      await rollbackWorkspace(created, exec)
+      throw error
+    } finally {
+      // Not before the commit: until then this set is all that holds the block.
+      portsInFlight.delete(created.port)
+    }
+  }
+
+  function renameById(workspaceId: string, name: string): Promise<KindDetour | null> {
+    return branchWork(workspaceId, async () => {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      const exec = makeExec(project.repoPath)
+
+      const detours: KindDetour[] = []
+      const renamed = await renameWorkspace(
+        workspace,
+        project,
+        name,
+        exec,
+        // The siblings, for the collision a branch cannot catch: two names can
+        // differ as branches and still name one database.
+        workspacesOfProject(state, workspace.projectId),
+        (detour) => detours.push(detour)
+      )
+      await commitMove(workspace, renamed, exec)
+      return detours[0] ?? null
+    })
+  }
+
+  // Not refused while an agent works, as a rename is not: `git branch -m`
+  // carries the worktree with it, and the agent's branch guard reads the
+  // branch from the record on every call.
+  function rekindById(workspaceId: string, kind: WorkspaceKind): Promise<KindDetour | null> {
+    return branchWork(workspaceId, async () => {
+      const workspace = requireWorkspace(workspaceId)
+      const project = requireProject(workspace.projectId)
+
+      const exec = makeExec(project.repoPath)
+
+      const detours: KindDetour[] = []
+      const changed = await rekindWorkspace(workspace, project, kind, exec, (detour) =>
+        detours.push(detour)
+      )
+      await commitMove(workspace, changed, exec)
+      return detours[0] ?? null
+    })
+  }
+
   return {
     getConfig() {
       return config
@@ -6722,80 +6799,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       )
     },
 
-    async createWorkspaceIn(projectId) {
-      const project = requireProject(projectId)
-      const exec = makeExec(project.repoPath)
-
-      const detours: KindDetour[] = []
-      // Cut from the base in effect, which the repository may state.
-      const created = await createWorkspace(await liveProject(project), state, exec, {
-        root: dataRoot,
-        answers: listening,
-        fetchExec: makeExec(project.repoPath, FETCH_OPTIONS),
-        onDetour: (detour) => detours.push(detour),
-        choosePort: claimNewPort
-      })
-
-      try {
-        // Inside the rollback, not after it: a worktree missing the files it
-        // cannot run without is a workspace that will fail its first build, and
-        // undoing it says so at the one moment somebody is watching.
-        const { envFile } = await prepare(project, created)
-        const workspace = { ...created, envFileApplied: envFile }
-        await commit((current) => addWorkspace(current, workspace))
-        // Beside the record, never in it: the state holds what the branch is,
-        // not how it came to be so.
-        const [detour] = detours
-        return detour === undefined ? workspace : { ...workspace, detour }
-      } catch (error) {
-        await rollbackWorkspace(created, exec)
-        throw error
-      } finally {
-        // Not before the commit: until then this set is all that holds the block.
-        portsInFlight.delete(created.port)
-      }
+    createWorkspaceIn(projectId) {
+      return createIn(projectId, null)
     },
 
     renameWorkspaceById(workspaceId, name) {
-      return branchWork(workspaceId, async () => {
-        const workspace = requireWorkspace(workspaceId)
-        const project = requireProject(workspace.projectId)
-
-        const exec = makeExec(project.repoPath)
-
-        const detours: KindDetour[] = []
-        const renamed = await renameWorkspace(
-          workspace,
-          project,
-          name,
-          exec,
-          // The siblings, for the collision a branch cannot catch: two names can
-          // differ as branches and still name one database.
-          workspacesOfProject(state, workspace.projectId),
-          (detour) => detours.push(detour)
-        )
-        await commitMove(workspace, renamed, exec)
-        return detours[0] ?? null
-      })
+      return renameById(workspaceId, name)
     },
 
-    // Not refused while an agent works, as a rename is not: `git branch -m`
-    // carries the worktree with it, and the agent's branch guard reads the
-    // branch from the record on every call.
     setWorkspaceKind(workspaceId, kind) {
-      return branchWork(workspaceId, async () => {
-        const workspace = requireWorkspace(workspaceId)
-        const project = requireProject(workspace.projectId)
-
-        const exec = makeExec(project.repoPath)
-
-        const detours: KindDetour[] = []
-        const changed = await rekindWorkspace(workspace, project, kind, exec, (detour) =>
-          detours.push(detour)
-        )
-        await commitMove(workspace, changed, exec)
-        return detours[0] ?? null
-      })
+      return rekindById(workspaceId, kind)
     },
 
     removeWorkspaceById(workspaceId, options) {
