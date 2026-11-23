@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { boardCard, boardController, cardDetail } from '../../test/board.js'
+import { boardCard, boardController, cardDetail, refusal } from '../../test/board.js'
 import { CardPanel, type CardPanelProps } from './CardPanel.js'
 
 let writeText: ReturnType<typeof vi.fn>
@@ -22,6 +22,7 @@ function renderPanel(props: Partial<CardPanelProps> = {}): CardPanelProps {
   const all: CardPanelProps = {
     card: boardCard(),
     detail: cardDetail(),
+    failure: null,
     board: boardController(),
     width: 420,
     onWidth: vi.fn(),
@@ -169,6 +170,23 @@ describe('CardPanel', () => {
   it('cannot copy before the description arrives', () => {
     renderPanel({ detail: null })
 
+    expect(screen.getByRole('button', { name: 'Copy description' })).toBeDisabled()
+    expect(screen.queryByRole('region', { name: 'Description' })).toBeNull()
+  })
+
+  it('cannot copy a file that is not UTF-8', () => {
+    renderPanel({
+      card: boardCard({ notText: true }),
+      detail: cardDetail({ notText: true, description: '' })
+    })
+
+    expect(screen.getByRole('button', { name: 'Copy description' })).toBeDisabled()
+  })
+
+  it('says why the card could not be read', () => {
+    renderPanel({ detail: null, failure: refusal('cardOutside', { name: 'x.md' }) })
+
+    expect(screen.getByText('“x.md” is not inside the board folder.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy description' })).toBeDisabled()
     expect(screen.queryByRole('region', { name: 'Description' })).toBeNull()
   })

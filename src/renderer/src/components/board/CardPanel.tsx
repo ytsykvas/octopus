@@ -12,8 +12,10 @@ import {
 } from '@core/boardSchema.js'
 import { KIND_COLORS, WORKSPACE_KINDS, type WorkspaceKind } from '@core/workspaceKinds.js'
 
+import type { Failure } from '../../../../preload/index.js'
 import type { BoardController } from '../../hooks/useBoard.js'
 import { useCopy } from '../../hooks/useCopy.js'
+import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { Button } from '../Button.js'
 import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
 import { IconButton } from '../paneControls.js'
@@ -34,6 +36,7 @@ export interface CardPanelProps {
   /** From the listing: the header draws at once, before the detail arrives. */
   readonly card: BoardCard
   readonly detail: CardDetail | null
+  readonly failure: Failure | null
   readonly board: BoardController
   readonly width: number
   readonly onWidth: (width: number) => void
@@ -115,6 +118,7 @@ function CopyDescription({
 export function CardPanel({
   card,
   detail,
+  failure,
   board,
   width,
   onWidth,
@@ -123,6 +127,7 @@ export function CardPanel({
   onRemove
 }: CardPanelProps): React.JSX.Element {
   const { t } = useTranslation()
+  const describeFailure = useErrorMessage()
   const statusLabel = (status: BoardStatus): string =>
     t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
   const priorityLabel = (value: CardPriority | null): string =>
@@ -231,8 +236,9 @@ export function CardPanel({
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">
         <h2 className="text-ink text-[15px] font-semibold break-words">{card.title}</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <CopyDescription description={detail?.description ?? null} />
+          <CopyDescription description={card.notText ? null : (detail?.description ?? null)} />
         </div>
+        {failure !== null && <Callout tone="warning">{describeFailure(failure)}</Callout>}
         {detail !== null &&
           (card.notText ? (
             <Callout tone="warning">{t('board.card.notText')}</Callout>

@@ -1,5 +1,5 @@
 import { act, renderHook, type RenderHookResult, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi, type Mock, type MockedFunction } from 'vitest'
+import { describe, expect, it, vi, type MockedFunction } from 'vitest'
 
 import type { CardDetail } from '@core/boardSchema.js'
 
@@ -7,32 +7,24 @@ import type { Result } from '../../../preload/index.js'
 import { cardDetail, ok, refusal } from '../test/board.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
-import { useCardDetail } from './useCardDetail.js'
+import { type CardDetailState, type OpenCard, useCardDetail } from './useCardDetail.js'
 
 interface Props {
   projectId: string | null
-  ref: string | null
+  open: OpenCard | null
   revision: number
-  onError: (message: string | null) => void
 }
+
+const OPEN: OpenCard = { ref: 'backlog/Fix login.md', session: 1 }
 
 function renderDetail(
   overrides: Partial<Props> = {}
-): RenderHookResult<CardDetail | null, Props> & { readonly onError: Mock } {
-  const onError = vi.fn()
-  const view = renderHook(
-    (props: Props) => useCardDetail(props.projectId, props.ref, props.revision, props.onError),
-    {
-      initialProps: {
-        projectId: 'planner',
-        ref: 'backlog/Fix login.md',
-        revision: 1,
-        onError,
-        ...overrides
-      }
-    }
-  )
-  return { ...view, onError }
+): RenderHookResult<CardDetailState, Props> & { readonly props: Props } {
+  const props: Props = { projectId: 'planner', open: OPEN, revision: 1, ...overrides }
+  const view = renderHook((p: Props) => useCardDetail(p.projectId, p.open, p.revision), {
+    initialProps: props
+  })
+  return { ...view, props }
 }
 
 function read(): MockedFunction<typeof window.octopus.board.read> {
@@ -46,6 +38,16 @@ function holdNextRead(): ReturnType<typeof held<Result<CardDetail>>> {
   return answer
 }
 
+async function settled(
+  answer: ReturnType<typeof holdNextRead>,
+  value: Result<CardDetail>
+): Promise<void> {
+  await act(async () => {
+    answer.resolve(value)
+    await answer.promise
+  })
+}
+
 describe('useCardDetail', () => {
   it('reads the open card', async () => {
     read().mockResolvedValue(ok(cardDetail()))
@@ -53,17 +55,20 @@ describe('useCardDetail', () => {
     const { result } = renderDetail()
 
     await waitFor(() => {
-      expect(result.current?.description).toBe('# Fix login\n\nThe form forgets the e-mail.\n')
+      expect(result.current.detail?.description).toBe(
+        '# Fix login\n\nThe form forgets the e-mail.\n'
+      )
     })
+    expect(result.current.failure).toBeNull()
     expect(read()).toHaveBeenCalledWith('planner', 'backlog/Fix login.md')
   })
 
   it('reads nothing without a card', async () => {
-    const { result } = renderDetail({ ref: null })
+    const { result } = renderDetail({ open: null })
     await act(() => Promise.resolve())
 
     expect(read()).not.toHaveBeenCalled()
-    expect(result.current).toBeNull()
+    expect(result.current).toEqual({ detail: null, failure: null })
   })
 
   it('reads nothing without a project', async () => {
@@ -71,109 +76,147 @@ describe('useCardDetail', () => {
     await act(() => Promise.resolve())
 
     expect(read()).not.toHaveBeenCalled()
-    expect(result.current).toBeNull()
+    expect(result.current).toEqual({ detail: null, failure: null })
   })
 
   it('keeps the detail while the same card is read again', async () => {
     read().mockResolvedValueOnce(ok(cardDetail()))
-    const { result, rerender, onError } = renderDetail()
+    const { result, rerender, props } = renderDetail()
     await waitFor(() => {
-      expect(result.current).not.toBeNull()
+      expect(result.current.detail).not.toBeNull()
     })
     const again = holdNextRead()
 
-    rerender({ projectId: 'planner', ref: 'backlog/Fix login.md', revision: 2, onError })
+    rerender({ ...props, revision: 2 })
 
-    expect(result.current?.description).toBe('# Fix login\n\nThe form forgets the e-mail.\n')
+    expect(result.current.detail?.title).toBe('Fix login')
     expect(read()).toHaveBeenCalledTimes(2)
-    await act(async () => {
-      again.resolve(ok(cardDetail()))
-      await again.promise
-    })
+    await settled(again, ok(cardDetail()))
   })
 
-  it('shows nothing of the previous card', async () => {
+  it('keeps the detail of a card that moved, and reads it at its new ref', async () => {
     read().mockResolvedValueOnce(ok(cardDetail()))
-    const { result, rerender, onError } = renderDetail()
+    const { result, rerender, props } = renderDetail()
     await waitFor(() => {
-      expect(result.current).not.toBeNull()
+      expect(result.current.detail).not.toBeNull()
     })
     const next = holdNextRead()
 
-    rerender({ projectId: 'planner', ref: 'done/B.md', revision: 1, onError })
+    rerender({ ...props, open: { ref: 'done/Fix login.md', session: 1 } })
 
-    expect(result.current).toBeNull()
-    await act(async () => {
-      next.resolve(ok(cardDetail({ ref: 'done/B.md' })))
-      await next.promise
+    expect(result.current.detail?.title).toBe('Fix login')
+    expect(read()).toHaveBeenLastCalledWith('planner', 'done/Fix login.md')
+    await settled(next, ok(cardDetail({ ref: 'done/Fix login.md' })))
+  })
+
+  it('shows nothing of another opening, even of the same card', async () => {
+    read().mockResolvedValueOnce(ok(cardDetail()))
+    const { result, rerender, props } = renderDetail()
+    await waitFor(() => {
+      expect(result.current.detail).not.toBeNull()
     })
+    const next = holdNextRead()
+
+    rerender({ ...props, open: { ...OPEN, session: 2 } })
+
+    expect(result.current.detail).toBeNull()
+    await settled(next, ok(cardDetail()))
   })
 
   it('shows nothing of the previous project', async () => {
     read().mockResolvedValueOnce(ok(cardDetail()))
-    const { result, rerender, onError } = renderDetail()
+    const { result, rerender, props } = renderDetail()
     await waitFor(() => {
-      expect(result.current).not.toBeNull()
+      expect(result.current.detail).not.toBeNull()
     })
     const next = holdNextRead()
 
-    rerender({ projectId: 'ledger', ref: 'backlog/Fix login.md', revision: 1, onError })
+    rerender({ ...props, projectId: 'ledger' })
 
-    expect(result.current).toBeNull()
-    await act(async () => {
-      next.resolve(ok(cardDetail()))
-      await next.promise
-    })
+    expect(result.current.detail).toBeNull()
+    await settled(next, ok(cardDetail()))
   })
 
   it('goes quiet about a card removed outside', async () => {
     read().mockResolvedValue(refusal('cardMissing', { name: 'Fix login.md' }))
 
-    const { result, onError } = renderDetail()
+    const { result } = renderDetail()
 
     await waitFor(() => {
       expect(read()).toHaveBeenCalledTimes(1)
     })
     await act(() => Promise.resolve())
-    expect(result.current).toBeNull()
-    expect(onError).not.toHaveBeenCalled()
+    expect(result.current).toEqual({ detail: null, failure: null })
   })
 
-  it('reports any other failure', async () => {
-    read().mockResolvedValue(refusal('cardOutside', { name: 'x.md' }))
+  it('forgets the detail of a card removed outside since', async () => {
+    read()
+      .mockResolvedValueOnce(ok(cardDetail()))
+      .mockResolvedValueOnce(refusal('cardMissing', { name: 'Fix login.md' }))
+    const { result, rerender, props } = renderDetail()
+    await waitFor(() => {
+      expect(result.current.detail).not.toBeNull()
+    })
 
-    const { onError } = renderDetail()
+    rerender({ ...props, revision: 2 })
 
     await waitFor(() => {
-      expect(onError).toHaveBeenCalledWith('“x.md” is not inside the board folder.')
+      expect(result.current.detail).toBeNull()
     })
+    expect(result.current.failure).toBeNull()
+  })
+
+  it('holds any other failure for the panel', async () => {
+    const outside = refusal('cardOutside', { name: 'x.md' })
+    read().mockResolvedValue(outside)
+
+    const { result } = renderDetail()
+
+    await waitFor(() => {
+      expect(result.current.failure).toEqual(outside)
+    })
+    expect(result.current.detail).toBeNull()
+  })
+
+  it('forgets the failure once the card reads again', async () => {
+    read()
+      .mockResolvedValueOnce(refusal('cardOutside', { name: 'x.md' }))
+      .mockResolvedValueOnce(ok(cardDetail()))
+    const { result, rerender, props } = renderDetail()
+    await waitFor(() => {
+      expect(result.current.failure).not.toBeNull()
+    })
+
+    rerender({ ...props, revision: 2 })
+
+    await waitFor(() => {
+      expect(result.current.detail).not.toBeNull()
+    })
+    expect(result.current.failure).toBeNull()
   })
 
   it('drops an answer a newer read overtook', async () => {
     const first = holdNextRead()
     read().mockResolvedValueOnce(ok(cardDetail({ title: 'B' })))
-    const { result, rerender, onError } = renderDetail()
+    const { result, rerender, props } = renderDetail()
 
-    rerender({ projectId: 'planner', ref: 'backlog/Fix login.md', revision: 2, onError })
+    rerender({ ...props, revision: 2 })
     await waitFor(() => {
-      expect(result.current?.title).toBe('B')
+      expect(result.current.detail?.title).toBe('B')
     })
-    await act(async () => {
-      first.resolve(ok(cardDetail({ title: 'A' })))
-      await first.promise
-    })
+    await settled(first, ok(cardDetail({ title: 'A' })))
 
-    expect(result.current?.title).toBe('B')
+    expect(result.current.detail?.title).toBe('B')
   })
 
-  it('does not read again when handed a new onError', async () => {
+  it('does not read again for an equal opening', async () => {
     read().mockResolvedValue(ok(cardDetail()))
-    const { result, rerender } = renderDetail()
+    const { result, rerender, props } = renderDetail()
     await waitFor(() => {
-      expect(result.current).not.toBeNull()
+      expect(result.current.detail).not.toBeNull()
     })
 
-    rerender({ projectId: 'planner', ref: 'backlog/Fix login.md', revision: 1, onError: vi.fn() })
+    rerender({ ...props, open: { ...OPEN } })
     await act(() => Promise.resolve())
 
     expect(read()).toHaveBeenCalledTimes(1)

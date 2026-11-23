@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BoardListing } from '@core/boardSchema.js'
+import type { BoardListing, CardDetail } from '@core/boardSchema.js'
 
 import type { Result } from '../../../../preload/index.js'
 import {
@@ -204,6 +204,19 @@ describe('BoardScreen', () => {
     expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
   })
 
+  it('drops the new-task field when the board folder changes', async () => {
+    givenBoard([])
+    const user = userEvent.setup()
+    const { rerender } = renderScreen()
+    const testing = await screen.findByRole('region', { name: 'Testing' })
+    await user.click(within(testing).getByRole('button', { name: 'New task' }))
+
+    rerender({ boardFolder: '/tmp/other' })
+
+    expect(await screen.findAllByRole('region')).toHaveLength(6)
+    expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
+  })
+
   describe('the card panel', () => {
     beforeAll(stubDialogElement)
 
@@ -311,6 +324,7 @@ describe('BoardScreen', () => {
       await waitFor(() => {
         expect(screen.queryByRole('complementary')).toBeNull()
       })
+      expect(octopus().board.read).toHaveBeenCalledTimes(1)
       givenBoard([boardCard()])
       focusWindow()
 
@@ -458,6 +472,109 @@ describe('BoardScreen', () => {
 
       expect(await screen.findAllByRole('region')).toHaveLength(6)
       expect(screen.queryByRole('complementary')).toBeNull()
+    })
+
+    it('forgets the open card when the board folder changes', async () => {
+      const user = userEvent.setup()
+      const { rerender } = renderScreen()
+      await openPanel(user)
+
+      rerender({ boardFolder: '/tmp/other' })
+
+      expect(await screen.findAllByRole('region')).toHaveLength(6)
+      expect(screen.queryByRole('complementary')).toBeNull()
+    })
+
+    it('keeps the description through a move', async () => {
+      vi.mocked(octopus().board.move).mockResolvedValueOnce(ok('done/Fix login.md'))
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+      await within(panel).findByRole('region', { name: 'Description' })
+      const reread = held<Result<CardDetail>>()
+      vi.mocked(octopus().board.read).mockReturnValueOnce(reread.promise)
+      givenBoard([boardCard({ ref: 'done/Fix login.md', status: 'done' })])
+
+      await chooseStatus(user, panel, 'Done')
+      await within(panel).findByRole('button', { name: 'Done' })
+
+      expect(within(panel).getByRole('region', { name: 'Description' })).toBeInTheDocument()
+      await act(async () => {
+        reread.resolve(ok(cardDetail({ ref: 'done/Fix login.md', status: 'done' })))
+        await reread.promise
+      })
+    })
+
+    it('shows nothing of the last card in the next one opened', async () => {
+      twoCards()
+      const user = userEvent.setup()
+      renderScreen()
+      const first = await openPanel(user, 'A')
+      await within(first).findByRole('region', { name: 'Description' })
+      await user.click(within(first).getByRole('button', { name: 'Close' }))
+      const next = held<Result<CardDetail>>()
+      vi.mocked(octopus().board.read).mockReturnValueOnce(next.promise)
+
+      const panel = await openPanel(user, 'B')
+
+      expect(within(panel).queryByRole('region', { name: 'Description' })).toBeNull()
+      await act(async () => {
+        next.resolve(ok(cardDetail({ ref: 'backlog/B.md', title: 'B' })))
+        await next.promise
+      })
+    })
+
+    it('says in the panel why the card could not be read', async () => {
+      vi.mocked(octopus().board.read).mockResolvedValue(refusal('cardOutside', { name: 'x.md' }))
+      const user = userEvent.setup()
+      const { props } = renderScreen()
+
+      const panel = await openPanel(user)
+
+      expect(
+        await within(panel).findByText('“x.md” is not inside the board folder.')
+      ).toBeInTheDocument()
+      expect(props.onError).not.toHaveBeenCalledWith('“x.md” is not inside the board folder.')
+    })
+
+    it('opens nothing on the next project for a card created on the last', async () => {
+      const sent = held<Result<string>>()
+      vi.mocked(octopus().board.create).mockReturnValueOnce(sent.promise)
+      const user = userEvent.setup()
+      const { rerender } = renderScreen()
+      const testing = await screen.findByRole('region', { name: 'Testing' })
+      givenBoard([
+        boardCard(),
+        boardCard({ ref: 'testing/New.md', status: 'testing', title: 'New' })
+      ])
+      await user.click(within(testing).getByRole('button', { name: 'New task' }))
+      await user.type(within(testing).getByRole('textbox', { name: 'Task title' }), 'New{Enter}')
+
+      rerender({ project: boardProject({ id: 'ledger', name: 'ledger' }) })
+      await screen.findByRole('button', { name: 'New' })
+      await act(async () => {
+        sent.resolve(ok('testing/New.md'))
+        await sent.promise
+      })
+
+      expect(screen.queryByRole('complementary')).toBeNull()
+    })
+
+    it("leaves the next project's panel alone when a move on the last finishes", async () => {
+      const sent = held<Result<string>>()
+      vi.mocked(octopus().board.move).mockReturnValueOnce(sent.promise)
+      const user = userEvent.setup()
+      const { rerender } = renderScreen()
+      await chooseStatus(user, await openPanel(user), 'Done')
+
+      rerender({ project: boardProject({ id: 'ledger', name: 'ledger' }) })
+      await openPanel(user)
+      await act(async () => {
+        sent.resolve(ok('done/Fix login.md'))
+        await sent.promise
+      })
+
+      expect(screen.getByRole('complementary', { name: 'Fix login' })).toBeInTheDocument()
     })
 
     it('widens the panel', async () => {

@@ -15,10 +15,10 @@ export interface BoardController {
   /** +1 for every read that worked, changed or not — what the card detail re-reads on (B202b). */
   readonly revision: number
   readonly refresh: () => Promise<void>
-  /** The new card's ref, or null when nothing was written. */
+  /** The new card's ref, or null when nothing was written or the board left before the answer. */
   readonly create: (draft: CardDraft) => Promise<string | null>
   readonly update: (ref: string, patch: CardPatch) => Promise<boolean>
-  /** The card's new ref, or null when the move was refused. */
+  /** The card's new ref, or null when the move was refused or the board left before the answer. */
   readonly move: (ref: string, move: CardMove) => Promise<string | null>
   readonly remove: (ref: string) => Promise<boolean>
 }
@@ -136,11 +136,11 @@ export function useBoard(
     if (source !== null) await read(source, live.current)
   }, [source, read])
 
-  // Every write ends here and reads the board again: a refusal usually means the disk has moved
-  // on from the cards on screen. The refusal is reported after that read, which may clear the
-  // banner; the signal is taken before the answer, so a write outlived by its board stays quiet.
+  // Every write reads the board again, and its refusal is reported after that read, which may clear
+  // the banner. The signal is taken before the answer: a write outlived by its board stays quiet
+  // and answers null, so the next board never opens or follows a card the last one wrote.
   const settle = useCallback(
-    async <T>(sent: Promise<Result<T>>): Promise<Result<T>> => {
+    async <T>(sent: Promise<Result<T>>): Promise<Result<T> | null> => {
       const signal = live.current
       const answer = await sent
       if (!signal.aborted) {
@@ -148,7 +148,8 @@ export function useBoard(
         await refresh()
       }
       // Asked again, not once up front: the board may leave while it is read again.
-      if (!answer.ok && !signal.aborted) report.current(describe.current(answer))
+      if (signal.aborted) return null
+      if (!answer.ok) report.current(describe.current(answer))
       return answer
     },
     [report, describe, refresh]
@@ -158,7 +159,7 @@ export function useBoard(
     async (draft: CardDraft): Promise<string | null> => {
       if (source === null) return null
       const answer = await settle(window.octopus.board.create(source.projectId, draft))
-      return answer.ok ? answer.value : null
+      return answer?.ok === true ? answer.value : null
     },
     [source, settle]
   )
@@ -166,7 +167,7 @@ export function useBoard(
   const update = useCallback(
     async (ref: string, patch: CardPatch): Promise<boolean> => {
       if (source === null) return false
-      return (await settle(window.octopus.board.update(source.projectId, ref, patch))).ok
+      return (await settle(window.octopus.board.update(source.projectId, ref, patch)))?.ok === true
     },
     [source, settle]
   )
@@ -175,7 +176,7 @@ export function useBoard(
     async (ref: string, to: CardMove): Promise<string | null> => {
       if (source === null) return null
       const answer = await settle(window.octopus.board.move(source.projectId, ref, to))
-      return answer.ok ? answer.value : null
+      return answer?.ok === true ? answer.value : null
     },
     [source, settle]
   )
@@ -183,7 +184,7 @@ export function useBoard(
   const remove = useCallback(
     async (ref: string): Promise<boolean> => {
       if (source === null) return false
-      return (await settle(window.octopus.board.remove(source.projectId, ref))).ok
+      return (await settle(window.octopus.board.remove(source.projectId, ref)))?.ok === true
     },
     [source, settle]
   )

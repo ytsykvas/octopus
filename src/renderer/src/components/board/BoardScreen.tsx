@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
@@ -12,7 +12,7 @@ import {
 import type { Project } from '@core/store.js'
 
 import { useBoard } from '../../hooks/useBoard.js'
-import { useCardDetail } from '../../hooks/useCardDetail.js'
+import { type OpenCard, useCardDetail } from '../../hooks/useCardDetail.js'
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { Button } from '../Button.js'
@@ -29,12 +29,6 @@ export interface BoardScreenProps {
   readonly onError: (message: string | null) => void
   /** Where the title bar takes the folder this board reads; null while it shows something else. */
   readonly titleSlot: HTMLElement | null
-}
-
-/** The card in the panel: `ref` follows it through moves; `session` grows with every opening and keys the panel. */
-interface OpenCard {
-  readonly ref: string
-  readonly session: number
 }
 
 export function BoardScreen({
@@ -54,11 +48,14 @@ export function BoardScreen({
   const columns = useMemo(() => cardsByStatus(board.listing?.cards ?? []), [board.listing])
   const [creatingIn, setCreatingIn] = useState<BoardStatus | null>(null)
   const [open, setOpen] = useState<OpenCard | null>(null)
-  // What the screen holds for one project is not carried into the next one's board.
+  // Never reused, not even after a close: the detail and the panel are keyed by it.
+  const openings = useRef(0)
+  // What the screen holds for one board — a project's, in one folder — is not carried into the next.
   const projectId = project?.id ?? null
-  const [shownProjectId, setShownProjectId] = useState(projectId)
-  if (projectId !== shownProjectId) {
-    setShownProjectId(projectId)
+  const boardKey = `${projectId ?? ''}\n${boardFolder ?? ''}`
+  const [shownBoard, setShownBoard] = useState(boardKey)
+  if (boardKey !== shownBoard) {
+    setShownBoard(boardKey)
     setCreatingIn(null)
     setOpen(null)
   }
@@ -66,7 +63,11 @@ export function BoardScreen({
   const [panelWidth, setPanelWidth] = useState(PANEL_WIDTH)
   const { confirm, dialog } = useConfirm()
   const openCard = board.listing?.cards.find((card) => card.ref === openRef) ?? null
-  const detail = useCardDetail(projectId, openCard?.ref ?? null, board.revision, onError)
+  const { detail, failure } = useCardDetail(
+    projectId,
+    openCard === null ? null : open,
+    board.revision
+  )
   const panelKey = open?.session ?? 0
 
   /** Every move of a card goes through here (status menu now, drag B204, ⌥↑/⌥↓ B205). */
@@ -98,7 +99,8 @@ export function BoardScreen({
   )
 
   const openCardAt = (ref: string): void => {
-    setOpen((current) => ({ ref, session: (current?.session ?? 0) + 1 }))
+    openings.current += 1
+    setOpen({ ref, session: openings.current })
   }
 
   const createIn = async (status: BoardStatus, title: string): Promise<void> => {
@@ -160,6 +162,7 @@ export function BoardScreen({
           key={panelKey}
           card={openCard}
           detail={detail}
+          failure={failure}
           board={board}
           width={panelWidth}
           onWidth={setPanelWidth}

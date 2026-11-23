@@ -436,6 +436,36 @@ describe('useBoard', () => {
       expect(onError).not.toHaveBeenCalled()
     })
 
+    it('answers every write that outlived its board as if it were refused', async () => {
+      givenBoard([boardCard()])
+      const created = held<Result<string>>()
+      const updated = held<Result<undefined>>()
+      const moved = held<Result<string>>()
+      const removed = held<Result<undefined>>()
+      vi.mocked(octopus().board.create).mockReturnValueOnce(created.promise)
+      vi.mocked(octopus().board.update).mockReturnValueOnce(updated.promise)
+      vi.mocked(octopus().board.move).mockReturnValueOnce(moved.promise)
+      vi.mocked(octopus().board.remove).mockReturnValueOnce(removed.promise)
+      const { result, rerender, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      const writes = Promise.all([
+        result.current.create({ status: 'backlog', title: 'Fix login' }),
+        result.current.update('backlog/Fix login.md', { priority: 'high' }),
+        result.current.move('backlog/Fix login.md', { status: 'done', index: 0 }),
+        result.current.remove('backlog/Fix login.md')
+      ])
+
+      rerender({ projectId: 'ledger', folder: '/tmp/board', onError })
+      created.resolve(ok('backlog/Fix login.md'))
+      updated.resolve(ok(undefined))
+      moved.resolve(ok('done/Fix login.md'))
+      removed.resolve(ok(undefined))
+
+      expect(await act(() => writes)).toEqual([null, false, null, false])
+    })
+
     it('drops a refusal whose board left while it was read again', async () => {
       givenBoard([boardCard()])
       vi.mocked(octopus().board.create).mockResolvedValueOnce(
