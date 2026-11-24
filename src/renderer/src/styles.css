@@ -773,7 +773,8 @@
      colour is carried by the fill. Drawn inside the card, out to its edge
      through the p-1.5, so the card's border stays 1px all round.
      `sideways-lr` reads bottom to top, as a spine does. The colour arrives as
-     `--kind-color`, set inline from the project palette. */
+     `--kind-color`, set inline from the project palette. The right margin adds
+     to the card's gap-1: 4px alone pressed the status tile against the strip. */
   .workspace-kind {
     display: flex;
     flex-shrink: 0;
@@ -781,7 +782,7 @@
     align-items: center;
     justify-content: center;
     width: 14px;
-    margin: -0.375rem 0 -0.375rem -0.375rem;
+    margin: -0.375rem 0.25rem -0.375rem -0.375rem;
     overflow: hidden;
     border-radius: calc(var(--radius-panel) - 1px) 0 0 calc(var(--radius-panel) - 1px);
     background-color: color-mix(in srgb, var(--kind-color) 38%, transparent);
