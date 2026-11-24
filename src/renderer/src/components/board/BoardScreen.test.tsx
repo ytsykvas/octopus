@@ -410,6 +410,66 @@ describe('BoardScreen', () => {
       expect(screen.getByRole('complementary', { name: 'Fix login' })).toBe(panel)
     })
 
+    it('brings the opened card out from under the panel', async () => {
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+      const user = userEvent.setup()
+      renderScreen()
+
+      await openPanel(user)
+
+      expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' })
+      expect(scroll.mock.contexts).toContain(screen.getByRole('button', { name: 'Fix login' }))
+    })
+
+    it('leaves the board where it was when the open card is read again', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      await openPanel(user)
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+      givenBoard([boardCard({ comments: 1 })])
+
+      focusWindow()
+
+      expect(await screen.findByText('1')).toBeInTheDocument()
+      expect(scroll).not.toHaveBeenCalled()
+    })
+
+    it('brings a moved card into view in its new column', async () => {
+      vi.mocked(octopus().board.move).mockResolvedValueOnce(ok('blocked/Fix login.md'))
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+      givenBoard([boardCard({ ref: 'blocked/Fix login.md', status: 'blocked' })])
+
+      await chooseStatus(user, panel, 'Blocked')
+
+      const blocked = screen.getByRole('region', { name: 'Blocked' })
+      const moved = await within(blocked).findByRole('button', { name: 'Fix login' })
+      await waitFor(() => {
+        expect(scroll.mock.contexts).toContain(moved)
+      })
+    })
+
+    it('opens a card the filter hides without scrolling to it', async () => {
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(ok('testing/New.md'))
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+      const user = userEvent.setup()
+      renderScreen({ filter: { ...EMPTY_BOARD_FILTER, query: 'login' } })
+      const testing = await screen.findByRole('region', { name: 'Testing' })
+      givenBoard([
+        boardCard(),
+        boardCard({ ref: 'testing/New.md', status: 'testing', title: 'New' })
+      ])
+
+      await user.click(within(testing).getByRole('button', { name: 'New task' }))
+      await user.type(within(testing).getByRole('textbox', { name: 'Task title' }), 'New{Enter}')
+
+      expect(await screen.findByRole('complementary', { name: 'New' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'New' })).toBeNull()
+      expect(scroll).not.toHaveBeenCalled()
+    })
+
     it('stays on the card when the move was refused', async () => {
       vi.mocked(octopus().board.move).mockResolvedValueOnce(
         refusal('cardMissing', { name: 'Fix login.md' })
@@ -1563,6 +1623,22 @@ describe('BoardScreen', () => {
 
       expect(screen.getByRole('complementary', { name: 'Notes' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Notes' })).toBeNull()
+    })
+  })
+
+  describe('scrolling sideways', () => {
+    it('turns a wheel sideways and leaves a swipe to the browser', async () => {
+      givenBoard([boardCard()])
+      renderScreen()
+      const backlog = await screen.findByRole('region', { name: 'Backlog' })
+      const row = backlog.parentElement!
+      const header = within(backlog).getByRole('heading', { name: 'Backlog' })
+
+      fireEvent.wheel(header, { deltaX: 40, deltaY: 3 })
+      expect(row.scrollLeft).toBe(0)
+
+      fireEvent.wheel(header, { deltaY: 120 })
+      expect(row.scrollLeft).toBe(120)
     })
   })
 })
