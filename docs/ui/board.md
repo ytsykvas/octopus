@@ -233,12 +233,14 @@ second line adds turns, active time and tokens in and out — written by `format
 
 Below the description, a card lists its links — the `links` key of its header. **+** opens a menu;
 "Add link" asks for one address in the app's own dialog and refuses, while it is typed, anything
-`isExternalUrl` refuses: an address that is not `http:` or `https:`, or that carries credentials —
-the rule `board:update` applies again. An address already in the list is not added twice, and at
+`isCardUrl` refuses: an address that is not `http:` or `https:`, that carries credentials or that is
+longer than 2,000 characters — the rule `board:update` applies again. An address already in the list is not added twice, and at
 twenty links the item is disabled, because `CardPatchSchema` refuses a longer list. A link opens in
 the system browser: the window hands a `target="_blank"` link to `setWindowOpenHandler`, which
 passes only web pages on. Each row has a button that removes the address; the whole list is written
-back at once. A file that is not UTF-8 has no section: its header cannot be changed.
+back at once. While it is written, the remove buttons and "Add link" are disabled: each change is
+built from the list on screen, which changes only once the board is read again, so a second one
+would bring back what the first removed. A file that is not UTF-8 has no section: its header cannot be changed.
 
 ## Known limitations
 

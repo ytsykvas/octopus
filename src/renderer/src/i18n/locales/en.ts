@@ -2475,8 +2475,9 @@ export const en = {
       add: 'Add',
       addLink: 'Add link',
       linkPrompt: 'Link',
-      linkInvalid: 'Only http and https links can be added.',
-      removeLink: 'Remove link',
+      linkInvalid:
+        'Only http and https links can be added, with no user name or password and up to 2,000 characters.',
+      removeLink: 'Remove {{url}}',
       empty: 'No links.'
     },
     run: {

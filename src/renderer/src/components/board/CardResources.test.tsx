@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -65,8 +65,23 @@ describe('CardResources', () => {
     await user.type(within(dialog).getByLabelText('Link'), 'javascript:alert(1)')
 
     expect(within(dialog).getByRole('button', { name: 'Add' })).toBeDisabled()
-    expect(screen.getByText('Only http and https links can be added.')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Only http and https links can be added, with no user name or password and up to 2,000 characters.'
+      )
+    ).toBeInTheDocument()
     expect(onLinks).not.toHaveBeenCalled()
+  })
+
+  it('refuses a link longer than a card keeps', async () => {
+    const user = userEvent.setup()
+    renderResources()
+
+    const dialog = await askForLink(user)
+    await user.click(within(dialog).getByLabelText('Link'))
+    await user.paste('https://a.example/' + 'x'.repeat(1983))
+
+    expect(within(dialog).getByRole('button', { name: 'Add' })).toBeDisabled()
   })
 
   it('adds nothing when the dialog is cancelled', async () => {
@@ -115,11 +130,46 @@ describe('CardResources', () => {
     const user = userEvent.setup()
     const { onLinks } = renderResources(['https://a.example/1', 'https://a.example/2'])
 
-    const [, second] = screen.getAllByRole('button', { name: 'Remove link' })
-    if (!second) throw new Error('no second link')
-    await user.click(second)
+    await user.click(screen.getByRole('button', { name: 'Remove https://a.example/2' }))
 
     expect(onLinks).toHaveBeenCalledWith(['https://a.example/1'])
+  })
+
+  it('takes no second change while one is being written', async () => {
+    const user = userEvent.setup()
+    let finish: (written: boolean) => void = () => undefined
+    const onLinks = vi.fn<CardResourcesProps['onLinks']>(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    renderResources(['https://a.example/1', 'https://a.example/2'], onLinks)
+
+    await user.click(screen.getByRole('button', { name: 'Remove https://a.example/1' }))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    expect(screen.getByRole('button', { name: 'Remove https://a.example/2' })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: 'Add link' })).toBeDisabled()
+    act(() => {
+      finish(true)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Remove https://a.example/2' })).toBeEnabled()
+    })
+    expect(onLinks).toHaveBeenCalledOnce()
+  })
+
+  it('takes no change while an added link is being written', async () => {
+    const user = userEvent.setup()
+    const onLinks = vi.fn<CardResourcesProps['onLinks']>(() => new Promise(() => undefined))
+    renderResources(['https://a.example/1'], onLinks)
+
+    const dialog = await askForLink(user)
+    await user.type(within(dialog).getByLabelText('Link'), 'https://a.example/2')
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }))
+
+    expect(screen.getByRole('button', { name: 'Remove https://a.example/1' })).toBeDisabled()
   })
 
   it('opens a link in the browser, not in the window', () => {

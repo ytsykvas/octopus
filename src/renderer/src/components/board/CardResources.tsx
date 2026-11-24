@@ -1,9 +1,8 @@
 import { Link, Plus, X } from 'lucide-react'
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { CARD_LINKS_MAX } from '@core/boardSchema.js'
-import { isExternalUrl } from '@core/externalUrls.js'
+import { CARD_LINKS_MAX, isCardUrl } from '@core/boardSchema.js'
 
 import { useAskText } from '../../hooks/useAskText.js'
 import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
@@ -18,6 +17,14 @@ export function CardResources({ links, onLinks }: CardResourcesProps): React.JSX
   const { t } = useTranslation()
   const headingId = useId()
   const { ask, dialog } = useAskText()
+  const [writing, setWriting] = useState(false)
+
+  // Each change is built from the list on screen, which a write updates only after the board is read again.
+  const write = async (next: string[]): Promise<void> => {
+    setWriting(true)
+    await onLinks(next)
+    setWriting(false)
+  }
 
   const addLink = async (): Promise<void> => {
     const url = await ask({
@@ -25,10 +32,10 @@ export function CardResources({ links, onLinks }: CardResourcesProps): React.JSX
       label: t('board.resources.linkPrompt'),
       confirmLabel: t('board.resources.add'),
       cancelLabel: t('board.panel.cancel'),
-      valid: isExternalUrl,
+      valid: isCardUrl,
       invalid: t('board.resources.linkInvalid')
     })
-    if (url !== null && !links.includes(url)) await onLinks([...links, url])
+    if (url !== null && !links.includes(url)) await write([...links, url])
   }
 
   const actions: readonly MenuAction[] = [
@@ -37,7 +44,7 @@ export function CardResources({ links, onLinks }: CardResourcesProps): React.JSX
       label: t('board.resources.addLink'),
       icon: <Link aria-hidden size={13} />,
       // CardPatchSchema refuses a longer list.
-      disabled: links.length >= CARD_LINKS_MAX,
+      disabled: writing || links.length >= CARD_LINKS_MAX,
       onSelect: () => void addLink()
     }
   ]
@@ -78,13 +85,14 @@ export function CardResources({ links, onLinks }: CardResourcesProps): React.JSX
                 href={url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-accent min-w-0 truncate"
+                className="focus-ring text-accent min-w-0 truncate rounded hover:underline"
               >
                 {url}
               </a>
               <IconButton
-                label={t('board.resources.removeLink')}
-                onClick={() => void onLinks(links.filter((other) => other !== url))}
+                label={t('board.resources.removeLink', { url })}
+                disabled={writing}
+                onClick={() => void write(links.filter((other) => other !== url))}
               >
                 <X aria-hidden size={12} />
               </IconButton>

@@ -33,9 +33,14 @@ export const CARD_TITLE_MAX = 200
 export const CARD_TEXT_MAX = 100_000
 export const CARD_LINKS_MAX = 20
 export const CARD_REF_MAX = 400
+export const CARD_URL_MAX = 2000
 
 /** A link the system may be asked to open, and no longer than a URL bar holds. */
-const ExternalUrlSchema = z.string().max(2000).refine(isExternalUrl)
+export function isCardUrl(url: string): boolean {
+  return url.length <= CARD_URL_MAX && isExternalUrl(url)
+}
+
+const ExternalUrlSchema = z.string().refine(isCardUrl)
 
 export const CardRunEntrySchema = z.looseObject({
   started: z.iso.datetime(),

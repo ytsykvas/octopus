@@ -2038,8 +2038,9 @@ export const de: Translation = {
       add: 'Hinzufügen',
       addLink: 'Link hinzufügen',
       linkPrompt: 'Link',
-      linkInvalid: 'Nur http- und https-Links können hinzugefügt werden.',
-      removeLink: 'Link entfernen',
+      linkInvalid:
+        'Nur http- und https-Links können hinzugefügt werden, ohne Benutzername oder Passwort und mit höchstens 2.000 Zeichen.',
+      removeLink: '{{url}} entfernen',
       empty: 'Keine Links.'
     },
     run: {

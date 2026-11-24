@@ -2003,8 +2003,9 @@ export const uk: Translation = {
       add: 'Додати',
       addLink: 'Додати посилання',
       linkPrompt: 'Посилання',
-      linkInvalid: 'Можна додати лише посилання http і https.',
-      removeLink: 'Прибрати посилання',
+      linkInvalid:
+        'Можна додати лише посилання http і https, без імені користувача й пароля і не довше за 2000 символів.',
+      removeLink: 'Прибрати {{url}}',
       empty: 'Посилань немає.'
     },
     run: {
