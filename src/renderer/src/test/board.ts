@@ -7,6 +7,7 @@ import type { BranchRequest } from '@core/pullRequestShapes.js'
 
 import type { Failure, Result } from '../../../preload/index.js'
 import { type DescriptionDraft, movedDraft, withDraft } from '../components/board/boardDrafts.js'
+import { EMPTY_BOARD_FILTER } from '../components/board/boardFilter.js'
 import { BoardScreen, type BoardScreenProps } from '../components/board/BoardScreen.js'
 import type { BoardController } from '../hooks/useBoard.js'
 import type { BoardDrag } from '../hooks/useBoardDrag.js'
@@ -98,6 +99,7 @@ export function renderScreen(overrides: Partial<BoardScreenProps> = {}): {
     deviceId: 'device-one',
     onRun: vi.fn(() => Promise.resolve()),
     requests: new Map(),
+    filter: EMPTY_BOARD_FILTER,
     ...overrides
   }
   const view = render(createElement(BoardScreen, props))

@@ -2415,12 +2415,20 @@ export const en = {
       failedTitle: 'The board could not be read',
       retry: 'Try again',
       columnTitle: 'Nothing here',
-      columnText: 'No task has this status yet.'
+      columnText: 'No task has this status yet.',
+      filteredText: 'No tasks match the filter.'
     },
     column: {
       byName: 'By name',
       newTask: 'New task',
-      newTaskPlaceholder: 'Task title'
+      newTaskPlaceholder: 'Task title',
+      count: '{{shown}} of {{total}}'
+    },
+    filter: {
+      search: 'Search tasks',
+      priority: 'Priority',
+      tag: 'Tag',
+      clear: 'Clear filters'
     },
     card: {
       comments_one: '{{count}} comment',

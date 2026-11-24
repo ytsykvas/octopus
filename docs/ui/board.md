@@ -52,12 +52,13 @@ status-bar row open a workspace, and so leave for Octopus. The rest —
 ⌘T, ⌘⇧D, ⌥1 — act on a conversation or a pane the board does not show.
 
 The title bar shows the folder the board reads where the repository's path stands on Octopus, with
-no branch and none of the controls at its right; with no folder chosen it shows the app's name. That
-folder is the one on disk, which core finds by name regardless of case, so `BoardScreen` writes it
-into a slot App leaves in the bar (`titleSlot`) rather than App building it from the project's name;
-the slot is empty while the first read is out or has failed. A loose card whose file sits in a
-folder that is not a status shows that folder's name first on its second line, so a renamed status
-folder is visible rather than silently emptied.
+no branch and, instead of the controls at its right, the [filter](#filter-and-search); with no
+folder chosen it shows the app's name and no filter. That folder is the one on disk, which core
+finds by name regardless of case, so `BoardScreen` writes it into a slot App leaves in the bar
+(`titleSlot`) rather than App building it from the project's name; the slot is empty while the first
+read is out or has failed. A loose card whose file sits in a folder that is not a status shows that
+folder's name first on its second line, so a renamed status folder is visible rather than silently
+emptied.
 
 ## Creating a task
 
@@ -158,6 +159,7 @@ and `л` work too.
 | `⌥↓` / `⌥↑`       | move the task one place down / up                             |
 | `Esc`             | close the panel; with it closed, let go of the focused task   |
 | `⌘⌫`              | delete the task, after asking                                 |
+| `/`               | put the focus in the search                                   |
 
 An open menu or popover — a status-bar list — keeps every key: its Escape listener is added after
 the board's, so the board checks for `[role="menu"]` and `[role="dialog"]` rather than
@@ -174,7 +176,17 @@ the card whose panel Esc closed. It does so only from the body: a key pressed wh
 
 ## Filter and search
 
-Not built yet: every card of the project is shown.
+The search field and the priority and tag menus sit at the right of the title bar while the board
+of a chosen project is in front (`BoardFilterBar`). The filter lives in `App`, is not saved, and
+starts empty for every other project: the reset happens during render, as the selection's does. A
+card stays when every word of the query (NFC, lower case) is in its title or in its tag's label in
+the current language, and its priority and tag are among those chosen, "none" included. Under a
+filter a column shows a fraction of its cards, so dragging and `⌥↑` / `⌥↓` are off — the
+neighbours a new position is computed from would be wrong — while the status still changes from
+the panel. A column's count reads "1 of 2", and a column the filter emptied says so instead of the
+ordinary empty state; a card it hides keeps its panel open, a card just created under it included.
+`/` puts the focus in the search under the same rule as the board's keys, and is read by its place
+too, unshifted, as C, J and K are; Escape clears the query alone and leaves the focus on the body.
 
 ## Run
 
@@ -223,3 +235,5 @@ second line adds turns, active time and tokens in and out — written by `format
   files reads slowly.
 - A card cannot be dragged from the keyboard: the browser's drag and drop has no keyboard path.
   ⌥↑/⌥↓ reorder one within a column, and the status menu in the card panel moves it to another.
+- The filter menus close after each choice, so several values take several openings, and they
+  announce their items as radios although several can be chosen.

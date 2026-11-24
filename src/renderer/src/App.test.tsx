@@ -4282,6 +4282,58 @@ describe('the board screen', () => {
     expect(await screen.findByRole('region', { name: 'Backlog' })).toBeInTheDocument()
   })
 
+  it('shows the board search in the title bar only on the board', async () => {
+    const user = await onTheBoard()
+    expect(await screen.findByRole('searchbox', { name: 'Search tasks' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Octopus' }))
+
+    expect(screen.queryByRole('searchbox', { name: 'Search tasks' })).toBeNull()
+  })
+
+  it('shows no board search without a board folder', async () => {
+    await onTheBoard({ boardFolder: '' })
+
+    expect(await screen.findByText('Choose where tasks live')).toBeInTheDocument()
+    expect(screen.queryByRole('searchbox', { name: 'Search tasks' })).toBeNull()
+  })
+
+  it('shows no board search without a project', async () => {
+    givenTwoProjects()
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ boardFolder: '/tmp/board' })
+    })
+    const user = await openApp()
+    await findTab('PL')
+
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+
+    expect(await screen.findByText('No project selected')).toBeInTheDocument()
+    expect(screen.queryByRole('searchbox', { name: 'Search tasks' })).toBeNull()
+  })
+
+  it('filters the board from the title bar', async () => {
+    const user = await onTheBoard()
+
+    await user.type(await screen.findByRole('searchbox', { name: 'Search tasks' }), 'zzz')
+
+    expect(await screen.findByText('No tasks match the filter.')).toBeInTheDocument()
+  })
+
+  it('forgets the board filter when another project is picked', async () => {
+    const user = await onTheBoard()
+    await user.type(await screen.findByRole('searchbox', { name: 'Search tasks' }), 'x')
+
+    await user.keyboard('{Meta>}2{/Meta}')
+    await waitFor(() => {
+      expect(window.octopus.board.list).toHaveBeenCalledWith('ledger')
+    })
+    await user.keyboard('{Meta>}1{/Meta}')
+
+    expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('')
+  })
+
   it('ignores the conversation shortcuts on the board', async () => {
     const user = await onTheBoard()
 

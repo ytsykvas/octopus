@@ -28,6 +28,7 @@ import { stubDialogElement } from '../../test/dialog.js'
 import { held } from '../../test/held.js'
 import { octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
+import { type BoardFilter, EMPTY_BOARD_FILTER } from './boardFilter.js'
 import type { BoardScreenProps } from './BoardScreen.js'
 
 const ID = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
@@ -1442,6 +1443,94 @@ describe('BoardScreen', () => {
       await user.keyboard('j')
 
       expect(document.body).toHaveFocus()
+    })
+  })
+
+  describe('the filter', () => {
+    const FIX = boardCard({
+      ref: 'backlog/Fix login.md',
+      title: 'Fix login',
+      meta: { links: [], runs: [], order: 1, priority: 'high' }
+    })
+    const NOTES = card('backlog/Notes.md', 'backlog', 2)
+    const DEPLOY = card('in progress/Deploy.md', 'in progress', 1)
+
+    async function show(filter: BoardFilter): Promise<{
+      readonly user: UserEvent
+      readonly rerender: (changes: Partial<BoardScreenProps>) => void
+    }> {
+      givenBoard([FIX, NOTES, DEPLOY])
+      const user = userEvent.setup()
+      const { rerender } = renderScreen({ filter })
+      await screen.findAllByRole('region')
+      return { user, rerender }
+    }
+
+    const task = (name: string | RegExp): HTMLElement => screen.getByRole('button', { name })
+
+    it('shows only the tasks that match and how many of how many', async () => {
+      await show({ ...EMPTY_BOARD_FILTER, query: 'login' })
+
+      expect(await screen.findByRole('button', { name: /Fix login/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Notes' })).toBeNull()
+      expect(
+        within(screen.getByRole('region', { name: 'Backlog' })).getByText('1 of 2')
+      ).toBeInTheDocument()
+      const inProgress = within(screen.getByRole('region', { name: 'In progress' }))
+      expect(inProgress.getByText('0 of 1')).toBeInTheDocument()
+      expect(inProgress.getByText('No tasks match the filter.')).toBeInTheDocument()
+    })
+
+    it('finds a task by the label of its tag', async () => {
+      givenBoard([
+        FIX,
+        boardCard({
+          ref: 'backlog/Tidy.md',
+          title: 'Tidy',
+          meta: { links: [], runs: [], order: 3, tag: 'refactor' }
+        })
+      ])
+      renderScreen({ filter: { ...EMPTY_BOARD_FILTER, query: 'refactoring' } })
+
+      expect(await screen.findByRole('button', { name: /Tidy/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Fix login/ })).toBeNull()
+    })
+
+    it('does not let a task be dragged while filtered', async () => {
+      await show({ ...EMPTY_BOARD_FILTER, priorities: ['high'] })
+
+      expect(task(/Fix login/).closest('li')).toHaveAttribute('draggable', 'false')
+    })
+
+    it('does not reorder with ⌥↓ while filtered', async () => {
+      const { user } = await show({ ...EMPTY_BOARD_FILTER, query: 'o' })
+      act(() => {
+        task(/Fix login/).focus()
+      })
+
+      await user.keyboard('{Alt>}{ArrowDown}{/Alt}')
+
+      expect(task('Notes')).toBeInTheDocument()
+      expect(octopus().board.move).not.toHaveBeenCalled()
+    })
+
+    it('walks only the tasks the filter shows', async () => {
+      const { user } = await show({ ...EMPTY_BOARD_FILTER, query: 'deploy' })
+
+      await user.keyboard('j')
+
+      expect(task('Deploy')).toHaveFocus()
+    })
+
+    it('keeps the open task in the panel when the filter hides it', async () => {
+      const { user, rerender } = await show(EMPTY_BOARD_FILTER)
+      await user.click(task('Notes'))
+      await screen.findByRole('complementary', { name: 'Notes' })
+
+      rerender({ filter: { ...EMPTY_BOARD_FILTER, query: 'login' } })
+
+      expect(screen.getByRole('complementary', { name: 'Notes' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Notes' })).toBeNull()
     })
   })
 })

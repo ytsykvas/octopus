@@ -9,6 +9,9 @@ saved, like the workspace list's fold. A card's unsaved description is App state
 (`boardDrafts`), keyed by project and card and handed up when the editor goes, like the
 composer's drafts.
 
+The board's filter is the window's, not the board's: `App` holds it so the title bar and the
+board read one value, and drops it during render when the selected project changes.
+
 Two small hooks hold the clocks. `useVisibleInterval(tick, ms, active)` is
 "now, and every so often, while somebody can see it" — the account's limits and
 the status bar's resource reading both run on it.

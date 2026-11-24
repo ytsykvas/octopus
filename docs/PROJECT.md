@@ -384,6 +384,7 @@ The log says the same at the row that started the agent: the row keeps spinning 
 | `←` `→`           | on the board: neighbouring column            |
 | `Esc`             | on the board: close the task                 |
 | `⌘⌫`              | on the board: delete the task                |
+| `/`               | on the board: search tasks                   |
 | `⌥1`–`⌥3`         | switch conversation                          |
 | `⌘T`              | new conversation                             |
 | `⌘⇧T`             | reopen the last closed conversation          |

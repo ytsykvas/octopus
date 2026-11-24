@@ -114,8 +114,13 @@ export function stepIndex(
   return card?.meta.order === undefined || next?.meta.order === undefined ? null : index + 1
 }
 
-/** The card a key landed on: its ref, null on the body, undefined on a control that owns it. */
+/** The card a key landed on: its ref, null on the body, undefined where something else owns it. */
 export function focusedCard(target: EventTarget | null): string | null | undefined {
+  // The same guard as App's: an open dialog owns every key.
+  if (document.querySelector('dialog[open]') !== null) return undefined
+  // An open menu or popover closes itself on Escape, but its listener was added after the
+  // board's, so `defaultPrevented` is still false there.
+  if (document.querySelector('[role="menu"], [role="dialog"]') !== null) return undefined
   if (target === document.body) return null
   return target instanceof HTMLElement ? target.dataset.cardRef : undefined
 }

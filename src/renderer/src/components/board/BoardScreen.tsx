@@ -25,6 +25,7 @@ import { Placeholder } from '../Placeholder.js'
 import { BoardColumn } from './BoardColumn.js'
 import type { DescriptionDraft } from './boardDrafts.js'
 import { statusOf } from './boardDrop.js'
+import { type BoardFilter, filterColumns, isFilterActive } from './boardFilter.js'
 import {
   boardKeyAction,
   type BoardKeyAction,
@@ -55,6 +56,7 @@ export interface BoardScreenProps {
   readonly deviceId: string
   readonly onRun: (projectId: string, ref: string) => Promise<void>
   readonly requests: ReadonlyMap<string, BranchRequest>
+  readonly filter: BoardFilter
 }
 
 /** Escaped: refs hold spaces and Cyrillic (FileTabs.tsx does the same). */
@@ -74,7 +76,8 @@ export function BoardScreen({
   workspaces,
   deviceId,
   onRun,
-  requests
+  requests,
+  filter
 }: BoardScreenProps): React.JSX.Element | null {
   const { t } = useTranslation()
   const describeFailure = useErrorMessage()
@@ -84,6 +87,11 @@ export function BoardScreen({
   // Every hook stays above the first return: B202a–B206 hang theirs on `columns`, and a hook
   // below a return breaks the rules of hooks the moment the screen changes state.
   const columns = useMemo(() => cardsByStatus(board.listing?.cards ?? []), [board.listing])
+  const filtering = isFilterActive(filter)
+  const visible = useMemo(
+    () => filterColumns(columns, filter, (tag) => t(`workspaces.kinds.${tag}.label`)),
+    [columns, filter, t]
+  )
   const [creatingIn, setCreatingIn] = useState<BoardStatus | null>(null)
   const [open, setOpen] = useState<OpenCard | null>(null)
   // Never reused, not even after a close: the detail and the panel are keyed by it.
@@ -130,13 +138,13 @@ export function BoardScreen({
     },
     [move, onDraftMoved]
   )
-  // Always on until B206 switches it off under a filter.
+  // Off under a filter: the neighbours a slot is counted from are not all shown.
   const drag = useBoardDrag(
     columns,
     (ref, to) => {
       void moveCard(ref, to)
     },
-    true
+    !filtering
   )
 
   const removeCard = useCallback(
@@ -209,7 +217,7 @@ export function BoardScreen({
         cardButton(action.ref)?.blur()
         return
       case 'focus': {
-        const next = nextFocus(cardRefs(columns), action.from, action.direction)
+        const next = nextFocus(cardRefs(visible), action.from, action.direction)
         if (next === null) return
         cardButton(next)?.focus()
         // A new opening, so the panel remounts and the editor of the card left hands its draft
@@ -240,17 +248,12 @@ export function BoardScreen({
   useWindowEvent(
     'keydown',
     (event) => {
-      // The same guard as App's: an open dialog owns every key.
-      if (document.querySelector('dialog[open]') !== null) return
-      // An open menu or popover closes itself on Escape, but its listener was added after this
-      // one, so `defaultPrevented` is still false here.
-      if (document.querySelector('[role="menu"], [role="dialog"]') !== null) return
       const focused = focusedCard(event.target)
       if (focused === undefined) return
       const action = boardKeyAction(event, {
         focused,
         open: openCard?.ref ?? null,
-        reorderable: true
+        reorderable: !filtering
       })
       if (action === null) return
       event.preventDefault()
@@ -299,7 +302,9 @@ export function BoardScreen({
           <BoardColumn
             key={status}
             status={status}
-            cards={columns[status]}
+            cards={visible[status]}
+            total={columns[status].length}
+            filtering={filtering}
             creating={creatingIn === status}
             onCreating={(on) => {
               setCreatingIn(on ? status : null)

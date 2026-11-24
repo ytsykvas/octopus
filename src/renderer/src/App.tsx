@@ -30,6 +30,8 @@ import {
   movedDraft,
   withDraft
 } from './components/board/boardDrafts.js'
+import { type BoardFilter, EMPTY_BOARD_FILTER } from './components/board/boardFilter.js'
+import { BoardFilterBar } from './components/board/BoardFilterBar.js'
 import { BoardScreen } from './components/board/BoardScreen.js'
 import { PluginsWindow } from './components/plugins/PluginsWindow.js'
 import { RightPanel } from './components/RightPanel.js'
@@ -227,6 +229,12 @@ export function App(): React.JSX.Element {
   if (selection !== shownSelection) {
     setShownSelection(selection)
     setError(null)
+  }
+  const [boardFilter, setBoardFilter] = useState<BoardFilter>(EMPTY_BOARD_FILTER)
+  const [filteredProjectId, setFilteredProjectId] = useState(selectedProjectId)
+  if (selectedProjectId !== filteredProjectId) {
+    setFilteredProjectId(selectedProjectId)
+    setBoardFilter(EMPTY_BOARD_FILTER)
   }
   /** Which section that dialog opens on, for the callers that know. */
   const [editingProjectSection, setEditingProjectSection] = useState<ProjectSection>('general')
@@ -1158,6 +1166,7 @@ export function App(): React.JSX.Element {
             </span>
           </>
         )}
+        {showsBoardFolder && <BoardFilterBar filter={boardFilter} onChange={setBoardFilter} />}
       </header>
 
       {/* Positioned for the right pane, which folds offstage against this row
@@ -1280,6 +1289,7 @@ export function App(): React.JSX.Element {
               deviceId={deviceId}
               onRun={runCard}
               requests={branchRequests.byBranch}
+              filter={boardFilter}
             />
           ) : !selectedProject ? (
             centerPane
