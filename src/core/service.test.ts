@@ -19273,14 +19273,14 @@ describe('settling a card run', () => {
     expect((await runsIn(second))[0]?.ended).toBeDefined()
   })
 
-  it('settles no card whose worktree the project removal could not remove', async () => {
+  it('settles a card whose worktree the project removal could not remove', async () => {
     const { service, projectId, file } = await ranOnce('# Fix login\n')
     const { path } = await only(service, projectId)
     await run('git', ['worktree', 'lock', path], { cwd: path })
 
     await service.removeProjectById(projectId)
 
-    expect((await runsIn(file))[0]?.ended).toBeUndefined()
+    expect((await runsIn(file))[0]).toMatchObject({ turns: 1, tokensIn: 100 })
   })
 
   it('settles no card when git refuses to remove the workspace', async () => {
@@ -19293,7 +19293,7 @@ describe('settling a card run', () => {
     expect((await runsIn(file))[0]?.ended).toBeUndefined()
   })
 
-  it('does not wait for a board that hangs', async () => {
+  it('does not wait for an account check that hangs', async () => {
     let reached = (): void => undefined
     const asked = new Promise<void>((resolve) => {
       reached = resolve
@@ -19413,6 +19413,38 @@ describe('noting pull requests in cards', () => {
         merged: T1
       }
     ])
+  })
+
+  it('marks the run merged when a request read open before is read merged', async () => {
+    let branch = ''
+    let state: 'OPEN' | 'MERGED' = 'OPEN'
+    const { service, projectId, file } = await withBoard('# Fix login\n', {
+      makeGh: () => (args) => oneRequest(LATER, () => branch, undefined, state)()(args),
+      now: () => T1
+    })
+    await service.runCard(projectId, 'backlog/A.md')
+    branch = (await only(service, projectId)).branch
+    await service.readBranchRequests(projectId)
+    state = 'MERGED'
+
+    await service.readBranchRequests(projectId)
+
+    expect((await runsIn(file))[0]?.merged).toBe(T1)
+  })
+
+  it('tries a card again once the board folder changes', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, board, file } = await runWithRequest('OPEN', { onDiagnostic })
+    await service.updateConfig({ boardFolder: join(dir, 'elsewhere') })
+    await service.readBranchRequests(projectId)
+    await service.updateConfig({ boardFolder: board })
+
+    await service.readBranchRequests(projectId)
+
+    expect(onDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'boardFolderUnreadable' })
+    )
+    expect((await runsIn(file))[0]?.pr).toBe('https://x/pull/7')
   })
 
   it('returns the list unchanged', async () => {

@@ -5294,7 +5294,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       : { pr: request.url }
   }
 
-  // The last request reading tried on a card, per workspace.
   const notedRequests = new Map<string, string>()
 
   async function notePullRequests(
@@ -5314,7 +5313,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   ): Promise<void> {
     const id = workspace.card
     if (id === null || request === undefined) return
-    const reading = `${request.url}|${request.state}`
+    const reading = `${config.boardFolder}|${request.url}|${request.state}`
     if (notedRequests.get(workspace.id) === reading) return
     // Before the attempt: a card that is gone or cannot be written is tried again
     // when the request changes, not on every poll.
@@ -6955,15 +6954,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             // Best-effort, one by one: a worktree already deleted from outside
             // must not stop the rest — or the project — from being removed. The
             // user has confirmed, so uncommitted work goes too.
-            const worktreeGone = await removeWorkspace(
+            await removeWorkspace(
               workspace,
               { repository, workspace: makeExec(workspace.path) },
               { force: true, deleteBranch: true }
-            ).then(
-              () => true,
-              () => false
-            )
-            if (worktreeGone) await settleCardRun(workspace, own, null)
+            ).catch(() => undefined)
+            // Whatever git said: the record and the transcripts go regardless.
+            await settleCardRun(workspace, own, null)
           })
         }
       }
@@ -7146,10 +7143,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
          */
 
         await discardWorkspace(workspace, execs, removal)
-        // Before the commit, after which the transcripts are deleted.
-        await settleCardRun(workspace, closing, requestSeen)
 
         await commit((current) => removeWorkspaceRecord(current, workspaceId))
+        // The last moment the transcripts are on disk.
+        await settleCardRun(workspace, closing, requestSeen)
         await discardHistories(closing)
         await discardSessionsOf(cliSessions)
         return cleanup
