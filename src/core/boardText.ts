@@ -90,3 +90,16 @@ export function threadOf(tail: string): CardComment[] {
   }
   return comments.map((comment) => ({ at: comment.at, text: comment.lines.join('\n').trim() }))
 }
+
+export function titleHead(description: string): string {
+  const lines = linesOf(description)
+  const first = lines.find((line) => line.text.trim() !== '')
+  if (first === undefined || !isTitleLine(first)) return ''
+  const kept = lines.find((line) => line.start > first.start && line.text.trim() !== '')
+  return description.slice(0, kept?.start ?? description.length)
+}
+
+export function withBody(head: string, body: string): string {
+  if (head === '' || body === '' || /\n[ \t]*\r?\n$/.test(head)) return head + body
+  return `${head.endsWith('\n') ? head : `${head}\n`}\n${body}`
+}

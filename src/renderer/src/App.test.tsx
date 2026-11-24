@@ -26,6 +26,7 @@ import { project } from './test/projects.js'
 import { boardCard, BRANCH_REQUEST, cardDetail, givenBoard, ok } from './test/board.js'
 import { fileDiff, workspaceDiff } from './test/diff.js'
 import { stubDialogElement } from './test/dialog.js'
+import { editorText } from './test/editor.js'
 import { chat, emitAgentEvent, givenChats, TURN_DONE } from './test/chat.js'
 import { disconnectedAccounts } from './test/octopus.js'
 import type { ResolvedScript } from '@core/repoSource.js'
@@ -4113,7 +4114,7 @@ describe('the board screen', () => {
     vi.mocked(window.octopus.board.read).mockResolvedValue(ok(cardDetail()))
     await user.click(await screen.findByRole('button', { name: 'Fix login' }))
     await user.click(await screen.findByRole('button', { name: 'Edit' }))
-    await user.type(screen.getByRole('textbox', { name: 'Description' }), '!')
+    await user.keyboard('!')
   }
 
   it('switches to the board and back', async () => {
@@ -4216,8 +4217,8 @@ describe('the board screen', () => {
     await user.click(screen.getByRole('button', { name: 'Board' }))
     await user.click(await screen.findByRole('button', { name: 'Fix login' }))
 
-    expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue(
-      '# Fix login\n\nThe form forgets the e-mail.\n!'
+    expect(editorText(await screen.findByRole('textbox', { name: 'Description' }))).toBe(
+      'The form forgets the e-mail.\n!'
     )
   })
 
@@ -4233,8 +4234,8 @@ describe('the board screen', () => {
     await user.click(within(panel).getByRole('button', { name: 'Close' }))
     await user.click(await screen.findByRole('button', { name: 'Fix login' }))
 
-    expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue(
-      '# Fix login\n\nThe form forgets the e-mail.\n!'
+    expect(editorText(await screen.findByRole('textbox', { name: 'Description' }))).toBe(
+      'The form forgets the e-mail.\n!'
     )
     expect(window.octopus.board.move).toHaveBeenCalledWith('planner', 'backlog/Fix login.md', {
       status: 'done',
@@ -4256,8 +4257,8 @@ describe('the board screen', () => {
     await user.keyboard('{Meta>}1{/Meta}')
     await user.click(await screen.findByRole('button', { name: 'Fix login' }))
 
-    expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue(
-      '# Fix login\n\nThe form forgets the e-mail.\n!'
+    expect(editorText(await screen.findByRole('textbox', { name: 'Description' }))).toBe(
+      'The form forgets the e-mail.\n!'
     )
   })
 
@@ -4343,6 +4344,24 @@ describe('the board screen', () => {
       expect.objectContaining({ rightPanelTab: 'diff' })
     )
     expect(rightPane({ hidden: true })).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('leaves a ⌥ digit typed in the description to the text', async () => {
+    vi.mocked(window.octopus.chats.list).mockResolvedValue({
+      ok: true,
+      value: [
+        chat({ workspaceId: 'planner/anna' }),
+        chat({ id: 'chat-2', workspaceId: 'planner/anna' })
+      ]
+    })
+    const user = await onAnna()
+    await screen.findByRole('button', { name: /^Claude 2: / })
+    await user.click(screen.getByRole('button', { name: 'Board' }))
+    await editFixLogin(user)
+
+    const field = screen.getByRole('textbox', { name: 'Description' })
+
+    expect(fireEvent.keyDown(field, { key: '™', code: 'Digit2', altKey: true })).toBe(true)
   })
 
   it('leaves the board for a new workspace made by ⌘⇧N', async () => {

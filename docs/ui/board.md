@@ -112,8 +112,14 @@ it belongs to the card, and the next read that works takes it away.
 
 ## Editing a description
 
-Edit opens the whole description, title line included, in a plain textarea with a preview —
-not a rich editor: the file is the source of truth and the agent reads the Markdown as written.
+Edit opens the description in `MarkdownEditor` with a preview — not a rich editor: the file is
+the source of truth and the agent reads the Markdown as written, so the editor holds that text
+and only draws it. Away from the lines the selection touches the syntax is hidden: headings,
+emphasis, quotes, links and code are styled, a `-` is a bullet and a `[ ]` a box that ticks the
+file. On those lines it stays, dimmed, to be edited. The toolbar and ⌘B, ⌘I, ⌘E, ⌘K write the
+characters a person would type. The title line at the top, with the blank lines after it, stays
+out of the editor (`titleHead`) and goes back in front of every change (`withBody`), since the
+tile is where a title is renamed; a description that does not open with one is edited whole.
 Saving sends `base`, the description as it was when the editor opened, not the whole file, so
 octopus's own header writes in the background do not count as a conflict. When the description
 changed on disk meanwhile, nothing is written, the banner stays out of it, and the editor offers

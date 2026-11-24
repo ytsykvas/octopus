@@ -25,6 +25,7 @@ import {
   renderScreen
 } from '../../test/board.js'
 import { stubDialogElement } from '../../test/dialog.js'
+import { editorText } from '../../test/editor.js'
 import { held } from '../../test/held.js'
 import { octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
@@ -651,7 +652,7 @@ describe('BoardScreen', () => {
 
       async function typeInto(user: UserEvent, panel: HTMLElement): Promise<void> {
         await user.click(await within(panel).findByRole('button', { name: 'Edit' }))
-        await user.type(within(panel).getByRole('textbox', { name: 'Description' }), '!')
+        await user.keyboard('!')
       }
 
       it('keeps an unsaved description when the panel closes', async () => {
@@ -663,8 +664,8 @@ describe('BoardScreen', () => {
         await user.click(within(panel).getByRole('button', { name: 'Close' }))
         const again = await openPanel(user, 'A')
 
-        expect(await within(again).findByRole('textbox', { name: 'Description' })).toHaveValue(
-          '# A\n!'
+        expect(editorText(await within(again).findByRole('textbox', { name: 'Description' }))).toBe(
+          '!'
         )
       })
 
@@ -692,8 +693,8 @@ describe('BoardScreen', () => {
         expect(within(other).queryByRole('textbox', { name: 'Description' })).toBeNull()
         const again = await openPanel(user, 'A')
 
-        expect(await within(again).findByRole('textbox', { name: 'Description' })).toHaveValue(
-          '# A\n!'
+        expect(editorText(await within(again).findByRole('textbox', { name: 'Description' }))).toBe(
+          '!'
         )
       })
 
@@ -714,10 +715,12 @@ describe('BoardScreen', () => {
         })
 
         expect(
-          await within(screen.getByRole('complementary', { name: 'A' })).findByRole('textbox', {
-            name: 'Description'
-          })
-        ).toHaveValue('# A\n!')
+          editorText(
+            await within(screen.getByRole('complementary', { name: 'A' })).findByRole('textbox', {
+              name: 'Description'
+            })
+          )
+        ).toBe('!')
       })
 
       it('opens a card created where a deleted one was without its draft', async () => {
@@ -1169,7 +1172,7 @@ describe('BoardScreen', () => {
       const user = await show(L0.cards, { ...draftStore() })
       await openPanel(user, 'a')
       await user.click(await screen.findByRole('button', { name: 'Edit' }))
-      await user.type(screen.getByRole('textbox', { name: 'Description' }), '!')
+      await user.keyboard('!')
       focus('a')
 
       await user.keyboard('j')
@@ -1178,8 +1181,8 @@ describe('BoardScreen', () => {
       await user.keyboard('k')
 
       await screen.findByRole('complementary', { name: 'a' })
-      const field = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Description' })
-      expect(field.value).toMatch(/!$/)
+      const field = await screen.findByRole('textbox', { name: 'Description' })
+      expect(editorText(field)).toMatch(/!$/)
     })
 
     it('moves a task down with ⌥↓', async () => {

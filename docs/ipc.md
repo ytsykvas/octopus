@@ -513,7 +513,9 @@ carries the same number the boundary parses with — bounded only at the far end
 an ordinary keystroke came back as a refusal a round trip later. The bodies are
 deliberately not bounded that way: `maxLength` on a textarea truncates a paste
 in silence, and quietly keeping the first 100,000 characters of somebody's file
-is worse than refusing it.
+is worse than refusing it. A card's description is the one body bounded at its
+field, and its editor refuses a change that would carry it past the bound whole,
+never keeping a part of it.
 
 **A refusal answers in words.** Most of these parses guard against a value the
 interface cannot produce, so nobody meets them — but a few bound something a

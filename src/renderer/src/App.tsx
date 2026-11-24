@@ -106,9 +106,9 @@ const NO_PROJECTS: readonly string[] = []
  * input through a hidden `textarea`, so a key pressed at a shell reaches this
  * as a textarea and belongs to the shell rather than to the window.
  *
- * No `isContentEditable`: nothing in the interface is one, and jsdom does not
- * implement the property — so the branch would be both speculative and
- * impossible to cover. Add it here the day a rich text surface appears.
+ * No `isContentEditable`: the one rich text surface, the board's description
+ * editor, is on a screen that returns before this is asked
+ * (`isBoardPassThrough`). Add it here the day one appears anywhere else.
  */
 function takesText(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement

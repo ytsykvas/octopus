@@ -2,19 +2,28 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CARD_TEXT_MAX, type DescriptionSave } from '@core/boardSchema.js'
-import { withoutTitle } from '@core/boardText.js'
+import { titleHead, withBody, withoutTitle } from '@core/boardText.js'
 
 import type { Failure } from '../../../../preload/index.js'
 import { useLatest } from '../../hooks/useLatest.js'
 import { Button } from '../Button.js'
 import { Markdown } from '../chat/Markdown.js'
+import { MarkdownEditor } from '../markdown/MarkdownEditor.js'
 import { Callout } from '../pr/Callout.js'
 import { Segmented } from '../Segmented.js'
 import type { DescriptionDraft } from './boardDrafts.js'
 
 interface Editing extends DescriptionDraft {
   readonly mode: 'edit' | 'preview'
+  readonly head: string
 }
+
+const opened = (text: string, base: string): Editing => ({
+  text,
+  base,
+  mode: 'edit',
+  head: titleHead(text)
+})
 
 export function CardDescription({
   description,
@@ -31,7 +40,7 @@ export function CardDescription({
   const { t } = useTranslation()
   const headingId = useId()
   const [editing, setEditing] = useState<Editing | null>(
-    draft === null ? null : { ...draft, mode: 'edit' }
+    draft === null ? null : opened(draft.text, draft.base)
   )
   // A restored draft is not a request to type: opening the card was a click or a key on the board.
   const [restored, setRestored] = useState(draft !== null)
@@ -85,7 +94,7 @@ export function CardDescription({
             size="sm"
             className="ml-auto"
             onClick={() => {
-              edit({ text: description, base: description, mode: 'edit' })
+              edit(opened(description, description))
               setConflict(false)
             }}
           >
@@ -110,30 +119,19 @@ export function CardDescription({
             }}
           />
           {editing.mode === 'edit' ? (
-            <textarea
+            <MarkdownEditor
+              label={t('board.panel.description')}
+              initial={editing.text.slice(editing.head.length)}
+              maxLength={CARD_TEXT_MAX - withBody(editing.head, '-').length + 1}
               autoFocus={!restored}
-              aria-label={t('board.panel.description')}
-              value={editing.text}
-              maxLength={CARD_TEXT_MAX}
-              spellCheck={false}
-              onChange={(event) => {
-                edit({ ...editing, text: event.target.value })
+              onChange={(body) => {
+                edit({ ...editing, text: withBody(editing.head, body) })
               }}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  close()
-                }
-                if (
-                  event.key === 'Enter' &&
-                  (event.metaKey || event.ctrlKey) &&
-                  !event.nativeEvent.isComposing
-                ) {
-                  event.preventDefault()
-                  if (!saving) void save(editing, editing.base)
-                }
+              onSave={(body) => {
+                if (!saving)
+                  void save({ ...editing, text: withBody(editing.head, body) }, editing.base)
               }}
-              className="input focus-ring h-auto min-h-[240px] resize-y py-1.5 font-mono text-[12px] leading-relaxed"
+              onCancel={close}
             />
           ) : (
             <div className="border-line min-h-[240px] rounded-[var(--radius-control)] border px-2.5 py-2">

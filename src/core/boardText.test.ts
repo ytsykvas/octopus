@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { retitled, splitBody, threadOf, titleOf, withoutTitle } from './boardText.js'
+import {
+  retitled,
+  splitBody,
+  threadOf,
+  titleHead,
+  titleOf,
+  withBody,
+  withoutTitle
+} from './boardText.js'
 
 const M = '<!-- octopus:comments -->'
 
@@ -78,6 +86,39 @@ describe('withoutTitle', () => {
     ['# T\r\n\r\nBody', 'Body']
   ])('strips the title from %j', (description, expected) => {
     expect(withoutTitle(description)).toBe(expected)
+  })
+})
+
+describe('titleHead', () => {
+  it.each([
+    ['# Title\n\n\nBody\n', '# Title\n\n\n'],
+    ['\n# Title\nBody', '\n# Title\n'],
+    ['# Only', '# Only'],
+    ['Body\n# Title\n', ''],
+    ['```\n# Not a title\n```\n', ''],
+    ['', '']
+  ])('reads the head of %j', (description, expected) => {
+    expect(titleHead(description)).toBe(expected)
+  })
+})
+
+describe('withBody', () => {
+  it.each([
+    ['', 'Body', 'Body'],
+    ['# T', '', '# T'],
+    ['# T\n\n', 'Body', '# T\n\nBody'],
+    ['# T\r\n\r\n', 'Body', '# T\r\n\r\nBody'],
+    ['# T\n', 'Body', '# T\n\nBody'],
+    ['# T', 'Body', '# T\n\nBody']
+  ])('puts %j and %j together', (head, body, expected) => {
+    expect(withBody(head, body)).toBe(expected)
+  })
+
+  it('gives back what titleHead split', () => {
+    const description = '# Fix login\n\nOld text.\n'
+    const head = titleHead(description)
+
+    expect(withBody(head, description.slice(head.length))).toBe(description)
   })
 })
 

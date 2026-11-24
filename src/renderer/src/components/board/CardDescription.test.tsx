@@ -6,6 +6,7 @@ import { CARD_TEXT_MAX, type DescriptionSave } from '@core/boardSchema.js'
 
 import type { Failure } from '../../../../preload/index.js'
 import { refusal } from '../../test/board.js'
+import { editorText } from '../../test/editor.js'
 import { held } from '../../test/held.js'
 import type { DescriptionDraft } from './boardDrafts.js'
 import { CardDescription } from './CardDescription.js'
@@ -53,14 +54,44 @@ describe('CardDescription', () => {
     expect(screen.getByRole('region', { name: 'Description' })).toBeInTheDocument()
   })
 
-  it('opens the whole description for editing', async () => {
+  it('opens the description for editing without its title line', async () => {
     renderDescription()
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
 
-    expect(field()).toHaveValue(OPENED)
+    expect(editorText(field())).toBe('Old text.\n')
     expect(field()).toHaveFocus()
-    expect(field()).toHaveAttribute('maxlength', String(CARD_TEXT_MAX))
+  })
+
+  it('opens the whole description when it does not start with its title', async () => {
+    renderDescription('Intro.\n\n# Fix login\n')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+    expect(editorText(field())).toBe('Intro.\n\n# Fix login\n')
+  })
+
+  it('puts a blank line between the title and a first description', async () => {
+    const user = userEvent.setup()
+    renderDescription('# Fix login\n')
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.keyboard('Body')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith({ text: '# Fix login\n\nBody', base: '# Fix login\n' })
+  })
+
+  it('stops the text at the card limit, title line included', async () => {
+    const user = userEvent.setup()
+    const full = `# T\n\n${'a'.repeat(CARD_TEXT_MAX - 6)}`
+    renderDescription(full)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.keyboard('bc')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith({ text: `${full}b`, base: full })
   })
 
   it('saves with ⌘Enter against the text it opened on', async () => {
@@ -72,7 +103,7 @@ describe('CardDescription', () => {
     await user.type(field(), 'New')
     await user.keyboard('{Meta>}{Enter}{/Meta}')
 
-    expect(onSave).toHaveBeenCalledWith({ text: 'New', base: OPENED })
+    expect(onSave).toHaveBeenCalledWith({ text: '# Fix login\n\nNew', base: OPENED })
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 
@@ -104,7 +135,7 @@ describe('CardDescription', () => {
     await user.type(field(), 'New')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(onSave).toHaveBeenCalledWith({ text: 'New', base: OPENED })
+    expect(onSave).toHaveBeenCalledWith({ text: '# Fix login\n\nNew', base: OPENED })
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 
@@ -137,7 +168,7 @@ describe('CardDescription', () => {
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.clear(field())
-    await user.type(field(), '# T\n\n**bold**')
+    await user.type(field(), '**bold**')
     await user.click(screen.getByRole('button', { name: 'Preview' }))
 
     expect(screen.getByText('bold').tagName).toBe('STRONG')
@@ -159,7 +190,7 @@ describe('CardDescription', () => {
       })
     )
 
-    expect(field()).toHaveValue('')
+    expect(editorText(field())).toBe('')
   })
 
   it('offers to reload or overwrite a description changed on disk', async () => {
@@ -177,7 +208,7 @@ describe('CardDescription', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Overwrite' })).toBeInTheDocument()
-    expect(field()).toHaveValue('New')
+    expect(editorText(field())).toBe('New')
   })
 
   it('overwrites on purpose', async () => {
@@ -191,7 +222,7 @@ describe('CardDescription', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Overwrite' }))
 
-    expect(onSave).toHaveBeenLastCalledWith({ text: 'New', base: null })
+    expect(onSave).toHaveBeenLastCalledWith({ text: '# Fix login\n\nNew', base: null })
     expect(onSave).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('textbox')).toBeNull()
   })
@@ -296,10 +327,10 @@ describe('CardDescription', () => {
     expect(onSave).toHaveBeenCalledTimes(2)
   })
 
-  it('opens on the draft it is handed', () => {
-    renderDescription(OPENED, { text: 'Kept', base: OPENED })
+  it('opens on the draft it is handed, its title line left out', () => {
+    renderDescription(OPENED, { text: '# Fix login\n\nKept', base: OPENED })
 
-    expect(field()).toHaveValue('Kept')
+    expect(editorText(field())).toBe('Kept')
   })
 
   it('leaves the focus alone when it opens on a draft', () => {
@@ -323,7 +354,7 @@ describe('CardDescription', () => {
     const { unmount } = renderDescription()
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
-    await user.type(field(), '!')
+    await user.keyboard('!')
     unmount()
 
     expect(onDraft).toHaveBeenCalledWith({ text: `${OPENED}!`, base: OPENED })
