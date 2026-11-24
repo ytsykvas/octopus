@@ -35,6 +35,7 @@ import {
   stepIndex
 } from './boardKeys.js'
 import { cardMark, linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.js'
+import { sidewaysDelta } from './boardScroll.js'
 import { CardMarks } from './CardMarks.js'
 import { CardPanel, PANEL_WIDTH } from './CardPanel.js'
 
@@ -202,6 +203,13 @@ export function BoardScreen({
     }
   }, [refocus])
 
+  const shownRef = openCard?.ref ?? null
+  // After the panel is drawn: it narrows the columns and may cover the card it opened for.
+  useLayoutEffect(() => {
+    if (shownRef !== null)
+      cardButton(shownRef)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [shownRef])
+
   const runKey = (action: BoardKeyAction): void => {
     switch (action.kind) {
       case 'create': {
@@ -297,7 +305,13 @@ export function BoardScreen({
   if (board.listing === null) return <div className="flex min-h-0 flex-1" />
   return (
     <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 overflow-x-auto">
+      <div
+        className="scrollbar-shown flex min-w-0 flex-1 overflow-x-auto"
+        onWheel={(event) => {
+          const delta = sidewaysDelta(event, event.target as Element)
+          if (delta !== null) event.currentTarget.scrollLeft += delta
+        }}
+      >
         {BOARD_STATUSES.map((status) => (
           <BoardColumn
             key={status}

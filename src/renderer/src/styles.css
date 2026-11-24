@@ -270,6 +270,27 @@
     color: var(--danger);
   }
 
+  /* macOS draws a native scrollbar only while it moves; a webkit one is always drawn.
+     The root's `scrollbar-*` switch webkit's rules off, so they are reset here and given back below. */
+  .scrollbar-shown {
+    scrollbar-color: auto;
+    scrollbar-width: auto;
+  }
+  .scrollbar-shown > * {
+    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-width: thin;
+  }
+  .scrollbar-shown::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scrollbar-shown::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 5px;
+    background-clip: padding-box;
+    background-color: var(--border-strong);
+  }
+
   /* Surface carrying a project's colour as a wash rather than a fill: the
      workspace list is read for long stretches, and a saturated ground behind
      it tires the eye. `--project-color` is set inline by the component. */

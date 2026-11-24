@@ -5,7 +5,7 @@
 `.panel` · `.row` / `.row-selected` · `.input` · `.error-box` · `.choice` /
 `.choice-danger` · `.section-label` · `.focus-ring` · `.titlebar-drag` ·
 `.project-tinted` · `.project-tinted-top` · `.bubble-sent` · `.tab-selected` /
-`.tab-idle`
+`.tab-idle` · `.scrollbar-shown`
 
 **`.choice` goes on every checkbox and radio**, and being absent from this list
 is why three of the six were left painted by the platform for months. Without
