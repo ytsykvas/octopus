@@ -839,5 +839,95 @@ describe('useBoard', () => {
       expect(octopus().board.comment).not.toHaveBeenCalled()
       expect(octopus().board.saveDescription).not.toHaveBeenCalled()
     })
+
+    it('attaches files and reads the board again', async () => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.attach).mockResolvedValueOnce(ok(2))
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const attached = await act(() => result.current.attach('backlog/Fix login.md'))
+
+      expect(attached).toBe(true)
+      expect(octopus().board.attach).toHaveBeenCalledWith('planner', 'backlog/Fix login.md')
+      expect(list()).toHaveBeenCalledTimes(2)
+    })
+
+    it('reports a refused attach', async () => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.attach).mockResolvedValueOnce(
+        refusal('cardMissing', { name: 'Fix login.md' })
+      )
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const attached = await act(() => result.current.attach('backlog/Fix login.md'))
+
+      expect(attached).toBe(false)
+      expect(onError).toHaveBeenLastCalledWith('“Fix login.md” is no longer on disk.')
+    })
+
+    it("shows a card's file and the card in Finder", async () => {
+      givenBoard([boardCard()])
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      const ref = 'backlog/Fix login.md'
+
+      const shown = [
+        await act(() => result.current.revealFile(ref, 'a.txt')),
+        await act(() => result.current.revealCard(ref))
+      ]
+
+      expect(shown).toEqual([true, true])
+      expect(octopus().board.revealFile).toHaveBeenCalledWith('planner', ref, 'a.txt')
+      expect(octopus().board.revealCard).toHaveBeenCalledWith('planner', ref)
+    })
+
+    it('answers an attach and a reveal that outlived their board as refused', async () => {
+      givenBoard([boardCard()])
+      const attached = held<Result<number>>()
+      const file = held<Result<undefined>>()
+      const card = held<Result<undefined>>()
+      vi.mocked(octopus().board.attach).mockReturnValueOnce(attached.promise)
+      vi.mocked(octopus().board.revealFile).mockReturnValueOnce(file.promise)
+      vi.mocked(octopus().board.revealCard).mockReturnValueOnce(card.promise)
+      const { result, rerender, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      const writes = Promise.all([
+        result.current.attach('backlog/Fix login.md'),
+        result.current.revealFile('backlog/Fix login.md', 'a.txt'),
+        result.current.revealCard('backlog/Fix login.md')
+      ])
+
+      rerender({ projectId: 'ledger', folder: '/tmp/board', onError })
+      attached.resolve(ok(1))
+      file.resolve(ok(undefined))
+      card.resolve(ok(undefined))
+
+      expect(await act(() => writes)).toEqual([false, false, false])
+    })
+
+    it('attaches and reveals nothing without a folder', async () => {
+      const { result } = renderBoard({ folder: '' })
+
+      const answers = [
+        await act(() => result.current.attach('a')),
+        await act(() => result.current.revealFile('a', 'a.txt')),
+        await act(() => result.current.revealCard('a'))
+      ]
+
+      expect(answers).toEqual([false, false, false])
+      expect(octopus().board.attach).not.toHaveBeenCalled()
+      expect(octopus().board.revealFile).not.toHaveBeenCalled()
+      expect(octopus().board.revealCard).not.toHaveBeenCalled()
+    })
   })
 })

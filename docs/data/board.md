@@ -1,6 +1,6 @@
 # The board's folder
 
-The board is the one thing octopus keeps outside `~/.octopus`. Its cards are markdown files in a folder the user chooses in Settings, so whatever syncs that folder carries the board between Macs, and every card stays a file Finder and any editor can open. [`src/core/boardFiles.ts`](../../src/core/boardFiles.ts) is the only module that touches it.
+The board is the one thing octopus keeps outside `~/.octopus`. Its cards are markdown files in a folder the user chooses in Settings, so whatever syncs that folder carries the board between Macs, and every card stays a file Finder and any editor can open. [`src/core/boardFiles.ts`](../../src/core/boardFiles.ts) is the only module that touches it, and [`src/core/cardFiles.ts`](../../src/core/cardFiles.ts) for a card's files.
 
 ## Where it lives
 
@@ -80,6 +80,14 @@ One recursive watcher covers the whole board folder (`boardWatch.ts`). The first
 ## Order
 
 A card's place in its column is its `order`: cards that have one come first, lowest first, and the rest follow by name. A drop writes a number between its new neighbours' — dropped among cards with no `order`, right after the last one that has — into the moved card and nothing else, so one drag writes one file; a new card takes one less than the first.
+
+## Attachments
+
+A card's files live in `_attachments/<stem>/` in the project's folder, `<stem>` being the card's file name without `.md`, so they sync with the cards. They are copies of files picked in the system's open dialog in main; the window never names a path. A name already taken gets `-2`, `-3`… before its extension, compared as `sameName` compares, and the copy is made with `COPYFILE_EXCL`, so nothing is ever replaced. A picked file whose name the board would skip (`.env`, `_draft.png`, `x.tmp`) is not copied, since it would never be listed. The folder is made just before the first copy, so nothing is made when nothing is copied. A copy keeps the picked file's quarantine flag (`com.apple.quarantine`), which `copyFile` drops: without it Finder would run a downloaded `.command` without asking, and a copy whose flag cannot be written is removed. A folder of files that cannot be read makes its card unreadable as well, named by `boardFolderUnreadable`. A failure part-way leaves the files already copied: removing them from a folder iCloud may already be uploading is worse than an extra file.
+
+A file is only ever shown in Finder, never opened: a synced `.command` must not run on a click.
+
+Two cards with one stem (`backlog/a.md`, `ideas/a.md`) share one folder, and a removed card's folder stays — a new card of that name inherits it. Renaming a card's file in Finder leaves its files behind. Neither the listing nor a copy goes through a symbolic link; a link planted between the check and the copy is an accepted gap. A folder of files linked out of the board is refused with `cardOutside`, naming `_attachments/<stem>`.
 
 ## Known limitations
 

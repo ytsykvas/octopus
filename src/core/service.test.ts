@@ -18720,6 +18720,52 @@ describe('the board', () => {
       params: { name: 'Nope.md' }
     })
   })
+
+  it("lists a card's files when it is read", async () => {
+    await service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
+    await put(join(folder, '_attachments', 'Fix login', 'a.txt'), 'a')
+
+    await expect(service.readCard(projectId, 'backlog/Fix login.md')).resolves.toMatchObject({
+      attachments: ['a.txt']
+    })
+  })
+
+  it('copies picked files beside the card and answers where they are', async () => {
+    await service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
+    await writeFile(join(dir, 'shot.png'), 'png')
+    const shot = join(folder, '_attachments', 'Fix login', 'shot.png')
+
+    await expect(
+      service.addCardAttachments(projectId, 'backlog/Fix login.md', [join(dir, 'shot.png')])
+    ).resolves.toBe(1)
+    await expect(readFile(shot, 'utf8')).resolves.toBe('png')
+    await expect(
+      service.cardAttachmentPath(projectId, 'backlog/Fix login.md', 'shot.png')
+    ).resolves.toBe(shot)
+  })
+
+  it("names the card's folder of files when it cannot be read", async () => {
+    await service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
+    const files = join(folder, '_attachments', 'Fix login')
+    await mkdir(files, { recursive: true })
+    await chmod(files, 0o000)
+    try {
+      await expect(service.readCard(projectId, 'backlog/Fix login.md')).rejects.toMatchObject({
+        code: 'boardFolderUnreadable',
+        params: { path: files }
+      })
+    } finally {
+      await chmod(files, 0o755)
+    }
+  })
+
+  it('answers where a card is', async () => {
+    await service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
+
+    await expect(service.cardPath(projectId, 'backlog/Fix login.md')).resolves.toBe(
+      join(folder, 'backlog', 'Fix login.md')
+    )
+  })
 })
 
 describe('watching the board folder', () => {

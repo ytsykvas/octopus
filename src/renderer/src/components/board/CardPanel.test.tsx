@@ -149,6 +149,31 @@ describe('CardPanel', () => {
     expect(board.remove).not.toHaveBeenCalled()
   })
 
+  it('shows the card file in Finder from the More menu, above Delete', async () => {
+    const { board } = renderPanel()
+
+    await userEvent.click(screen.getByRole('button', { name: 'More' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Show in Finder',
+      'Delete'
+    ])
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Show in Finder' }))
+
+    expect(board.revealCard).toHaveBeenCalledWith('backlog/Fix login.md')
+  })
+
+  it('shows a file that is not UTF-8 in Finder', async () => {
+    const { board } = renderPanel({
+      card: boardCard({ notText: true }),
+      detail: cardDetail({ notText: true, description: '' })
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'More' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Show in Finder' }))
+
+    expect(board.revealCard).toHaveBeenCalledWith('backlog/Fix login.md')
+  })
+
   it('closes', async () => {
     const { onClose } = renderPanel()
 
@@ -313,6 +338,25 @@ describe('CardPanel', () => {
     expect(board.update).toHaveBeenCalledWith('backlog/Fix login.md', {
       links: ['https://a.example/x']
     })
+  })
+
+  it('attaches files through the board', async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel()
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Add files' }))
+
+    expect(board.attach).toHaveBeenCalledWith('backlog/Fix login.md')
+  })
+
+  it("shows a card's file in Finder through the board", async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel({ detail: cardDetail({ attachments: ['a.txt'] }) })
+
+    await user.click(screen.getByRole('button', { name: 'a.txt' }))
+
+    expect(board.revealFile).toHaveBeenCalledWith('backlog/Fix login.md', 'a.txt')
   })
 
   it("shows the card's links", () => {

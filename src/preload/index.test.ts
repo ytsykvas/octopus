@@ -553,6 +553,21 @@ describe('channel names', () => {
     ],
     ['board.run', () => method('board', 'run')('p' as never, 'backlog/a.md' as never), 'board:run'],
     [
+      'board.attach',
+      () => method('board', 'attach')('p' as never, 'backlog/a.md' as never),
+      'board:attach'
+    ],
+    [
+      'board.revealFile',
+      () => method('board', 'revealFile')('p' as never, 'backlog/a.md' as never, 'a.txt' as never),
+      'board:revealFile'
+    ],
+    [
+      'board.revealCard',
+      () => method('board', 'revealCard')('p' as never, 'backlog/a.md' as never),
+      'board:revealCard'
+    ],
+    [
       'library.list',
       () => method('library', 'list')({ kind: 'global' } as never, 'command' as never),
       'library:list'
@@ -827,7 +842,8 @@ describe('arguments reach main unchanged', () => {
     ['rename', ['p', 'backlog/a.md', 'T'], 'board:rename'],
     ['saveDescription', ['p', 'backlog/a.md', { text: 'x', base: null }], 'board:saveDescription'],
     ['comment', ['p', 'backlog/a.md', 'hi'], 'board:comment'],
-    ['create', ['p', { status: 'backlog', title: 'A' }], 'board:create']
+    ['create', ['p', { status: 'backlog', title: 'A' }], 'board:create'],
+    ['revealFile', ['p', 'backlog/a.md', 'a.txt'], 'board:revealFile']
   ])('board.%s passes every argument through', (name, args, channel) => {
     method('board', name)(...(args as never[]))
     expect(invoke).toHaveBeenCalledWith(channel, ...args)

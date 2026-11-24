@@ -324,7 +324,10 @@ export function installOctopusStub(): Api {
       remove: vi.fn(() => ok(undefined)),
       run: vi.fn(() =>
         ok({ workspaceId: 'planner/anna', draft: null, detour: null, created: false })
-      )
+      ),
+      attach: vi.fn(() => ok(0)),
+      revealFile: vi.fn(() => ok(undefined)),
+      revealCard: vi.fn(() => ok(undefined))
     },
 
     skills: {

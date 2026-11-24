@@ -1975,6 +1975,7 @@ export const uk: Translation = {
       more: 'Ще',
       copy: 'Скопіювати опис',
       copied: 'Скопійовано',
+      reveal: 'Показати у Finder',
       remove: 'Видалити',
       description: 'Опис',
       noDescription: 'Опису ще немає.',
@@ -2006,7 +2007,8 @@ export const uk: Translation = {
       linkInvalid:
         'Можна додати лише посилання http і https, без імені користувача й пароля і не довше за 2000 символів.',
       removeLink: 'Прибрати {{url}}',
-      empty: 'Посилань немає.'
+      empty: 'Немає посилань і файлів.',
+      addFiles: 'Додати файли'
     },
     run: {
       elsewhereTitle: 'Уже в роботі на {{machine}}',

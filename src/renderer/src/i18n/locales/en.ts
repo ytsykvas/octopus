@@ -2447,6 +2447,7 @@ export const en = {
       more: 'More',
       copy: 'Copy description',
       copied: 'Copied',
+      reveal: 'Show in Finder',
       remove: 'Delete',
       description: 'Description',
       noDescription: 'No description yet.',
@@ -2478,7 +2479,8 @@ export const en = {
       linkInvalid:
         'Only http and https links can be added, with no user name or password and up to 2,000 characters.',
       removeLink: 'Remove {{url}}',
-      empty: 'No links.'
+      empty: 'No links or files.',
+      addFiles: 'Add files'
     },
     run: {
       elsewhereTitle: 'Already in work on {{machine}}',

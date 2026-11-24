@@ -112,7 +112,14 @@ service of its own — so most of the usual surface does not exist. What does:
   its path is checked (`isCardRef`, and no link along it — `unlinkedInside`), a
   new card never replaces a file, a file that is not UTF-8 is never written,
   and the board's file code deletes no card: a removal is handed to the
-  caller, which in the app is the Trash.
+  caller, which in the app is the Trash. "Add files" copies into
+  `_attachments/<stem>/` only what was picked in the system's dialog in main,
+  never over a file and keeping its quarantine flag; no board channel takes a
+  path from the window. A card's files,
+  and the card itself, are only ever shown in Finder — never opened — because
+  the folder syncs and a `.command` from another machine must not run on a
+  click. A way to make the app copy from a path the window chose, write
+  through a link, or open a board file is worth reporting.
   `.octopus/` is the narrowest: exporting a project's
   settings writes there and nowhere else, through fixed path constants a test
   checks, and refuses a symbolic link that could redirect the write out of the

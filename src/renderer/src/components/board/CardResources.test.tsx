@@ -1,6 +1,6 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, type Mock, vi } from 'vitest'
 
 import { stubDialogElement } from '../../test/dialog.js'
 import { CardResources, type CardResourcesProps } from './CardResources.js'
@@ -9,10 +9,25 @@ beforeAll(stubDialogElement)
 
 function renderResources(
   links: readonly string[] = [],
-  onLinks = vi.fn<CardResourcesProps['onLinks']>(() => Promise.resolve(true))
-): { onLinks: typeof onLinks } {
-  render(<CardResources links={links} onLinks={onLinks} />)
-  return { onLinks }
+  onLinks = vi.fn<CardResourcesProps['onLinks']>(() => Promise.resolve(true)),
+  attachments: readonly string[] = []
+): {
+  onLinks: typeof onLinks
+  onAttach: Mock<CardResourcesProps['onAttach']>
+  onReveal: Mock<CardResourcesProps['onReveal']>
+} {
+  const onAttach = vi.fn<CardResourcesProps['onAttach']>()
+  const onReveal = vi.fn<CardResourcesProps['onReveal']>()
+  render(
+    <CardResources
+      links={links}
+      onLinks={onLinks}
+      attachments={attachments}
+      onAttach={onAttach}
+      onReveal={onReveal}
+    />
+  )
+  return { onLinks, onAttach, onReveal }
 }
 
 function linksUpTo(count: number): string[] {
@@ -26,11 +41,17 @@ async function askForLink(user: ReturnType<typeof userEvent.setup>): Promise<HTM
 }
 
 describe('CardResources', () => {
-  it('says there are no links yet', () => {
+  it('says there are no links or files yet, and nothing of the kind beside a link', () => {
     renderResources()
 
-    expect(screen.getByText('No links.')).toBeInTheDocument()
+    expect(screen.getByText('No links or files.')).toBeInTheDocument()
     expect(screen.queryByRole('list')).toBeNull()
+
+    cleanup()
+    renderResources(['https://a.example/1'])
+
+    expect(screen.queryByText('No links or files.')).toBeNull()
+    expect(screen.getAllByRole('list')).toHaveLength(1)
   })
 
   it('adds a link typed in the dialog', async () => {
@@ -179,5 +200,37 @@ describe('CardResources', () => {
     expect(link).toHaveAttribute('href', 'https://a.example/1')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noreferrer')
+  })
+
+  it('attaches files from the menu', async () => {
+    const user = userEvent.setup()
+    const { onAttach } = renderResources()
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Add files' }))
+
+    expect(onAttach).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a file in Finder on a click', async () => {
+    const user = userEvent.setup()
+    const { onReveal } = renderResources([], undefined, ['a.txt'])
+
+    const file = screen.getByRole('button', { name: 'a.txt' })
+    await user.click(file)
+
+    expect(onReveal).toHaveBeenCalledWith('a.txt')
+    expect(file).toHaveAttribute('title', 'Show in Finder')
+  })
+
+  it('lists files without links', () => {
+    renderResources([], undefined, ['a.txt', 'b.png'])
+
+    expect(screen.queryByText('No links or files.')).toBeNull()
+    expect(screen.queryAllByRole('link')).toEqual([])
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'a.txt',
+      'b.png'
+    ])
   })
 })

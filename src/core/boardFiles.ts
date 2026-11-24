@@ -55,7 +55,7 @@ export interface BoardLayout {
 
 const MARKDOWN = /\.md$/i
 
-function unreadable(path: string, reason: string): BoardError {
+export function unreadable(path: string, reason: string): BoardError {
   return new BoardError(
     'boardFolderUnreadable',
     { path, reason },
@@ -144,7 +144,7 @@ export async function guardRef(layout: BoardLayout, ref: string): Promise<string
 }
 
 // Missing is a state the window shows; any other failure is a fault worth its own message.
-function missing(error: unknown, ref: string): unknown {
+export function missing(error: unknown, ref: string): unknown {
   if (!isNotFound(error) && !isNotDirectory(error)) return error
   return new BoardError(
     'cardMissing',
@@ -401,9 +401,13 @@ export async function removeCard(
   ref: string,
   discard: (path: string) => Promise<void>
 ): Promise<void> {
+  await discard(await cardOnDisk(layout, ref))
+}
+
+export async function cardOnDisk(layout: BoardLayout, ref: string): Promise<string> {
   const path = await guardRef(layout, ref)
   await stamp(path, ref)
-  await discard(path)
+  return path
 }
 
 /** Of two cards with one id (a copy made in Finder), the first by path is the real one. */

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -91,6 +91,8 @@ interface Harness {
   readonly configBroadcasts: Config[]
   /** Paths handed to the system, in order. */
   readonly opened: string[]
+  /** Paths shown in Finder, in order. */
+  readonly revealed: string[]
   picked: PickedDirectory
   prefersDark: boolean
   /** What the system says about the next open; empty means it worked. */
@@ -116,6 +118,7 @@ function harness(): Harness {
   const draftEvents: DraftEvent[] = []
   const configBroadcasts: Config[] = []
   const opened: string[] = []
+  const revealed: string[] = []
   const dialogOptions: OpenDialogOptions[] = []
   const usageBroadcasts: UsageWindows[] = []
 
@@ -132,6 +135,7 @@ function harness(): Harness {
     draftEvents,
     configBroadcasts,
     opened,
+    revealed,
     dialogOptions,
     usageBroadcasts,
     picked: { canceled: true, filePaths: [] },
@@ -162,7 +166,8 @@ function harness(): Harness {
       openPath: (path) => {
         opened.push(path)
         return Promise.resolve(state.openRefusal)
-      }
+      },
+      showItemInFolder: (path) => revealed.push(path)
     }
   }
 
@@ -461,6 +466,9 @@ describe('channel table', () => {
     'board:move',
     'board:remove',
     'board:run',
+    'board:attach',
+    'board:revealFile',
+    'board:revealCard',
     'dialog:pickSkill',
     'dialog:pickMarkdown',
     'dialog:pickFiles',
@@ -4113,6 +4121,117 @@ describe('board channels', () => {
       code: 'valueRefused'
     })
     expect(runCard).not.toHaveBeenCalled()
+  })
+})
+
+describe('board resources', () => {
+  const ref = 'backlog/Fix login.md'
+  let projectId: string
+  let folder: string
+
+  beforeEach(async () => {
+    projectId = await addProject()
+    await mkdir(join(dir, 'board'))
+    await invoke('config:update', { boardFolder: join(dir, 'board') })
+    folder = join(dir, 'board', 'planner')
+    await invoke('board:create', projectId, { status: 'backlog', title: 'Fix login' })
+  })
+
+  it('copies the files picked in the dialog, never a path from the window', async () => {
+    await writeFile(join(dir, 'shot.png'), 'png')
+    bench.picked = { canceled: false, filePaths: [join(dir, 'shot.png')] }
+
+    await expect(invoke('board:attach', projectId, ref, '/etc/passwd')).resolves.toEqual({
+      ok: true,
+      value: 1
+    })
+    await expect(readdir(join(folder, '_attachments', 'Fix login'))).resolves.toEqual(['shot.png'])
+    expect(bench.dialogOptions.at(-1)).toEqual({ properties: ['openFile', 'multiSelections'] })
+  })
+
+  it('attaches nothing when the dialog is cancelled', async () => {
+    const add = vi.spyOn(service, 'addCardAttachments')
+
+    await expect(invoke('board:attach', projectId, ref)).resolves.toEqual({ ok: true, value: 0 })
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  it('opens the dialog when the window has gone', async () => {
+    bench.window = null
+
+    await expect(invoke('board:attach', projectId, ref)).resolves.toEqual({ ok: true, value: 0 })
+    expect(bench.dialogOptions).toHaveLength(1)
+  })
+
+  it('refuses an attach for a ref outside the board before any dialog', async () => {
+    const answers = [
+      await invoke('board:attach', projectId, '../x.md'),
+      await invoke('board:attach', '', ref)
+    ]
+
+    for (const answer of answers) {
+      expect(answer).toMatchObject({ ok: false, code: 'valueRefused' })
+    }
+    expect(bench.dialogOptions).toEqual([])
+  })
+
+  it('refuses an attach for a card that is gone before any dialog', async () => {
+    await expect(invoke('board:attach', projectId, 'backlog/Gone.md')).resolves.toMatchObject({
+      ok: false,
+      code: 'cardMissing'
+    })
+    expect(bench.dialogOptions).toEqual([])
+  })
+
+  it("shows a card's file in Finder and never opens it", async () => {
+    await mkdir(join(folder, '_attachments', 'Fix login'), { recursive: true })
+    await writeFile(join(folder, '_attachments', 'Fix login', 'a.txt'), 'a')
+
+    await expect(invoke('board:revealFile', projectId, ref, 'a.txt')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    expect(bench.revealed).toEqual([join(folder, '_attachments', 'Fix login', 'a.txt')])
+    expect(bench.opened).toEqual([])
+  })
+
+  it('refuses to reveal a name that is not a short string', async () => {
+    const answers = [
+      await invoke('board:revealFile', projectId, ref, 42),
+      await invoke('board:revealFile', projectId, ref, ''),
+      await invoke('board:revealFile', projectId, ref, 'x'.repeat(256)),
+      await invoke('board:revealFile', projectId, '../x.md', 'a.txt')
+    ]
+
+    for (const answer of answers) {
+      expect(answer).toMatchObject({ ok: false, code: 'valueRefused' })
+    }
+    expect(bench.revealed).toEqual([])
+  })
+
+  it('answers cardMissing for a file that is gone', async () => {
+    await expect(invoke('board:revealFile', projectId, ref, 'nope.txt')).resolves.toMatchObject({
+      ok: false,
+      code: 'cardMissing'
+    })
+    expect(bench.revealed).toEqual([])
+  })
+
+  it('shows the card itself in Finder', async () => {
+    await expect(invoke('board:revealCard', projectId, ref)).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    expect(bench.revealed).toEqual([join(folder, 'backlog', 'Fix login.md')])
+    expect(bench.opened).toEqual([])
+  })
+
+  it('refuses to reveal a card outside the board', async () => {
+    await expect(invoke('board:revealCard', projectId, '../x.md')).resolves.toMatchObject({
+      ok: false,
+      code: 'valueRefused'
+    })
+    expect(bench.revealed).toEqual([])
   })
 })
 

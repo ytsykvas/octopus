@@ -67,6 +67,7 @@ import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { NotesBodySchema } from '../core/notes.js'
 import { PromptDraftSchema, PromptIdSchema } from '../core/promptSchema.js'
 import {
+  ATTACHMENT_NAME_MAX,
   CardDraftSchema,
   CardMoveSchema,
   CardPatchSchema,
@@ -195,6 +196,8 @@ export interface IpcHost {
    * own shape, kept rather than normalised so nothing is lost on the way here.
    */
   readonly openPath: (path: string) => Promise<string>
+  /** Shows a file selected in Finder, without opening it. */
+  readonly showItemInFolder: (path: string) => void
 }
 
 /**
@@ -856,6 +859,41 @@ export function registerIpc(
   )
   host.handle('board:run', (_event, projectId: unknown, ref: unknown) =>
     attempt(() => service.runCard(ProjectIdSchema.parse(projectId), CardRefSchema.parse(ref)))
+  )
+  // The window names the card, never a file: what is copied into a synced folder is
+  // what the person picked in the system's own dialog.
+  host.handle('board:attach', (event, projectId: unknown, ref: unknown) =>
+    attempt(async () => {
+      const project = ProjectIdSchema.parse(projectId)
+      const card = CardRefSchema.parse(ref)
+      await service.cardPath(project, card)
+      const window = host.windowFor(event)
+      const picked = await host.showOpenDialog(
+        { properties: ['openFile', 'multiSelections'] },
+        window ?? undefined
+      )
+      if (picked.canceled) return 0
+      return service.addCardAttachments(project, card, picked.filePaths)
+    })
+  )
+  // Shown, never opened: a synced `.command` must not run on a click.
+  host.handle('board:revealFile', (_event, projectId: unknown, ref: unknown, name: unknown) =>
+    attempt(async () => {
+      host.showItemInFolder(
+        await service.cardAttachmentPath(
+          ProjectIdSchema.parse(projectId),
+          CardRefSchema.parse(ref),
+          z.string().min(1).max(ATTACHMENT_NAME_MAX).parse(name)
+        )
+      )
+    })
+  )
+  host.handle('board:revealCard', (_event, projectId: unknown, ref: unknown) =>
+    attempt(async () => {
+      host.showItemInFolder(
+        await service.cardPath(ProjectIdSchema.parse(projectId), CardRefSchema.parse(ref))
+      )
+    })
   )
 
   host.handle('skills:inRepository', (_event, workspaceId: string) =>

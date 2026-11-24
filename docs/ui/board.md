@@ -75,7 +75,7 @@ next board never opens or follows a card the last one wrote.
 
 A click on a card opens its panel on the right — a panel rather than a modal, so the board stays
 in view and the next card is one click away — and a card just created opens at once. The header
-holds the status, priority and tag menus, More (Delete) and Close. Their items carry no icons:
+holds the status, priority and tag menus, More (Show in Finder, Delete) and Close. Their items carry no icons:
 `DropdownMenu` draws the tick where an item's icon would be, so the value's look sits on the
 trigger instead: the priority's icon, the tag's colour. Choosing the value a card already has
 writes nothing.
@@ -241,6 +241,12 @@ passes only web pages on. Each row has a button that removes the address; the wh
 back at once. While it is written, the remove buttons and "Add link" are disabled: each change is
 built from the list on screen, which changes only once the board is read again, so a second one
 would bring back what the first removed. A file that is not UTF-8 has no section: its header cannot be changed.
+
+"Add files" asks main for the system's file dialog; the files appear in the list once the board is
+read again. A file's row shows it in Finder on a click, and the panel's More menu does the same for
+the card's own file, above Delete — a file that is not UTF-8 included. Nothing here opens a file.
+A picked file the board would not list — a hidden name, a folder, a link — is skipped without a
+word, and "Add files" asks first whether the card is still there, so a gone card opens no dialog.
 
 ## Known limitations
 

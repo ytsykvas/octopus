@@ -28,6 +28,7 @@ export type CardPriority = z.infer<typeof CardPrioritySchema>
 
 export const COMMENTS_MARKER = '<!-- octopus:comments -->'
 export const ATTACHMENTS_DIR = '_attachments'
+export const ATTACHMENT_NAME_MAX = 255
 export const CARD_TITLE_MAX = 200
 /** The composer's own limit (`ChatMessageSchema`): a description longer than this could not be sent to an agent. */
 export const CARD_TEXT_MAX = 100_000
