@@ -108,9 +108,9 @@ export async function findLayout(root: string, project: string): Promise<BoardLa
   await folderAt(root)
 
   const wanted = boardFolderName(project)
-  const names = (await entriesOf(root))
-    .map((entry) => entry.name)
-    .filter((name) => !isSkipped(name))
+  // Not filtered by `isSkipped`: the only skipped name `wanted` can match is one ending in `.tmp`,
+  // which `boardFolderName` gives a project called so — and that is the project's folder.
+  const names = (await entriesOf(root)).map((entry) => entry.name)
   const found = firstNamed(names, (name) => sameName(name, wanted))
   if (found === null)
     return { dir: join(root, wanted), exists: false, folders: byStatus((status) => status) }

@@ -150,6 +150,22 @@ describe('createBoardWatch', () => {
     expect(onChange.mock.calls).toEqual([['p1'], ['p2']])
   })
 
+  it('tells every project whose name gives the changed folder', () => {
+    board.sync(FOLDER, [PLANNER, { id: 'p4', name: 'Planner' }])
+    fake.fire('planner/backlog/a.md')
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
+
+    expect(onChange.mock.calls).toEqual([['p1'], ['p4']])
+  })
+
+  it('watches a project whose name ends in .tmp', () => {
+    board.sync(FOLDER, [{ id: 'p5', name: 'Release.tmp' }])
+    fake.fire('Release.tmp/backlog/a.md')
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
+
+    expect(onChange.mock.calls).toEqual([['p5']])
+  })
+
   it('ignores its own temporary files and hidden ones', () => {
     board.sync(FOLDER, [PLANNER])
     fake.fire('planner/backlog/a.md.3f9a.tmp')

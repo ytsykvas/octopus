@@ -56,12 +56,15 @@ export function createBoardWatch(deps: BoardWatchDeps): BoardWatch {
       for (const project of projects) schedule(project.id)
       return
     }
-    // Our own `*.tmp`, `.DS_Store`: nothing a card is made of. A card's files are.
-    if (filename.split('/').some((segment) => isSkipped(segment) && segment !== ATTACHMENTS_DIR))
-      return
+    // Our own `*.tmp`, `.DS_Store` inside a project: nothing a card is made of. A card's files are.
+    // The project's folder itself is not judged so: `Release.tmp` is a name `boardFolderName` gives.
+    const inside = filename.split('/').slice(1)
+    if (inside.some((segment) => isSkipped(segment) && segment !== ATTACHMENTS_DIR)) return
     const top = filename.replace(/\/[\s\S]*$/, '')
-    const project = projects.find((candidate) => sameName(boardFolderName(candidate.name), top))
-    if (project !== undefined) schedule(project.id)
+    // Two projects whose names give one folder share it, so each is told.
+    for (const project of projects) {
+      if (sameName(boardFolderName(project.name), top)) schedule(project.id)
+    }
   }
 
   return {
