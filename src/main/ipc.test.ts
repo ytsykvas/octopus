@@ -24,6 +24,8 @@ import type { RemoteRepository } from '../core/github.js'
 import type { DraftEvent } from '../core/pullRequestDraft.js'
 import { chatTranscript } from '../core/paths.js'
 import type { RemoteRefWatchDeps } from '../core/remoteRefs.js'
+import type { BoardChangedEvent } from '../core/boardSchema.js'
+import type { BoardWatchDeps } from '../core/boardWatch.js'
 import {
   createService as makeService,
   type OctopusService,
@@ -76,6 +78,8 @@ interface Harness {
   readonly statusEvents: WorkspaceStatusEvent[]
   /** Every workspace branch the remote was heard to move. */
   readonly pushedEvents: WorkspacePushedEvent[]
+  /** Every board folder heard to change on disk. */
+  readonly boardEvents: BoardChangedEvent[]
   readonly chatStatusEvents: ChatStatusEvent[]
   /** Every announcement that a workspace's set of conversations moved. */
   readonly chatsChangedEvents: ChatsChangedEvent[]
@@ -105,6 +109,7 @@ function harness(): Harness {
   const chatEvents: NumberedChatEvent[] = []
   const statusEvents: WorkspaceStatusEvent[] = []
   const pushedEvents: WorkspacePushedEvent[] = []
+  const boardEvents: BoardChangedEvent[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
   const chatsChangedEvents: ChatsChangedEvent[] = []
   const taskEvents: TasksEvent[] = []
@@ -120,6 +125,7 @@ function harness(): Harness {
     chatEvents,
     statusEvents,
     pushedEvents,
+    boardEvents,
     chatStatusEvents,
     chatsChangedEvents,
     taskEvents,
@@ -146,6 +152,7 @@ function harness(): Harness {
       broadcastChatEvent: (event) => chatEvents.push(event),
       broadcastWorkspaceStatus: (event) => statusEvents.push(event),
       broadcastWorkspacePushed: (event) => pushedEvents.push(event),
+      broadcastBoardChanged: (event) => boardEvents.push(event),
       broadcastUsageWindows: (windows) => usageBroadcasts.push(windows),
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
       broadcastChatsChanged: (event) => chatsChangedEvents.push(event),
@@ -4253,6 +4260,24 @@ describe('a workspace branch the remote moved', () => {
     expect(bench.pushedEvents).toEqual([
       { workspaceId: workspace.id, projectId: project.id, head: 'a'.repeat(40) }
     ])
+    await replacement.closeChats()
+  })
+})
+
+describe('a board folder that changed', () => {
+  it('reaches the windows', async () => {
+    let heard: BoardWatchDeps | null = null
+    const replacement = await useService({
+      boardWatch: (deps) => {
+        heard = deps
+        return { sync: () => undefined, close: () => undefined }
+      }
+    })
+
+    const deps = heard as BoardWatchDeps | null
+    deps?.onChange('p1')
+
+    expect(bench.boardEvents).toEqual([{ projectId: 'p1' }])
     await replacement.closeChats()
   })
 })

@@ -7,6 +7,7 @@ import {
   compareNames,
   isSkipped,
   machineLabel,
+  nameKey,
   safeStem,
   sameName,
   statusOfFolder,
@@ -52,6 +53,13 @@ describe('sameName', () => {
     ['a.md', 'b.md', false]
   ])('%j and %j → %s', (a, b, expected) => {
     expect(sameName(a, b)).toBe(expected)
+  })
+})
+
+describe('nameKey', () => {
+  it('is one key for the names sameName calls one', () => {
+    expect(nameKey('Planner')).toBe(nameKey('PLANNER'))
+    expect(nameKey('Planner')).not.toBe(nameKey('Planer'))
   })
 })
 

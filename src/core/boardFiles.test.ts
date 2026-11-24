@@ -266,6 +266,16 @@ describe('findLayout', () => {
       code: 'cardOutside'
     })
   })
+
+  it("finds a project's folder whose name ends in .tmp", async () => {
+    await given(join(root, 'Release.tmp', 'backlog', 'a.md'), '# A\n')
+
+    const layout = await findLayout(root, 'Release.tmp')
+
+    expect(layout.exists).toBe(true)
+    expect(layout.dir).toBe(join(root, 'Release.tmp'))
+    expect(refsOf(await listBoard(layout))).toEqual(['backlog/a.md'])
+  })
 })
 
 describe('guardRef', () => {

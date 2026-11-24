@@ -35,6 +35,7 @@ import type {
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
 import type {
+  BoardChangedEvent,
   BoardListing,
   CardDetail,
   CardDraft,
@@ -987,6 +988,16 @@ const api = {
 
   /** The board's cards: files in the folder chosen in Settings. */
   board: {
+    /** The project's board folder changed on disk, whoever changed it. */
+    onChanged: (handler: (event: BoardChangedEvent) => void): (() => void) => {
+      const listener = (_event: unknown, changed: BoardChangedEvent): void => {
+        handler(changed)
+      }
+      ipcRenderer.on('board:changed', listener)
+      return () => {
+        ipcRenderer.off('board:changed', listener)
+      }
+    },
     list: (projectId: string): Promise<Result<BoardListing>> =>
       ipcRenderer.invoke('board:list', projectId) as Promise<Result<BoardListing>>,
     read: (projectId: string, ref: string): Promise<Result<CardDetail>> =>

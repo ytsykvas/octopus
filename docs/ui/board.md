@@ -12,13 +12,15 @@ folder never races another Mac to create the same directories.
 board and another project's cards never show while the next one is read. A read counter keeps a
 late answer from overwriting a newer one. An unchanged listing keeps its object, so no card
 redraws, but `revision` moves on every read that worked: a changed description does not show in
-the listing, and the open card's detail re-reads on it. The window's `focus` reads again — a
-sync service writes while the window is elsewhere.
+the listing, and the open card's detail re-reads on it. The board reads again on `board:changed`
+for its project — the folder's watcher saying something on disk moved
+([data/board.md](../data/board.md#changes-from-outside)) — and on the window's `focus`, for a
+change no event reported: a sync service writes while the window is elsewhere.
 
 **Failures.** A first read that fails is the screen's own state, "The board could not be read"
 with Try again. A later failure keeps the cards and goes to the banner, and the next read that
 works clears it (`reported`). A later `boardFolderUnset` or `boardFolderUnreadable` means the
-folder itself is gone, so the cards go too and the screen says so. The banner belongs to the whole window, so every read — Try again and the focus re-read included — is abandoned when its board stops being shown: another project, a cleared folder or the screen gone. Its answer, a failure or a success, then reaches neither the board nor the banner.
+folder itself is gone, so the cards go too and the screen says so. The banner belongs to the whole window, so every read — Try again and the re-reads on `board:changed` and on focus included — is abandoned when its board stops being shown: another project, a cleared folder or the screen gone. Its answer, a failure or a success, then reaches neither the board nor the banner.
 
 **A card** is its priority as a labelled icon, its title in two lines, its tag in the kind's
 colour a quarter of the way to the ink (`LETTERS`, as the project tiles: raw pink and rose fail

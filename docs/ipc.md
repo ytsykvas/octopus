@@ -252,8 +252,9 @@ the row redraws itself from the write rather than from a second read.
 
 Every `ref` is parsed by `CardRefSchema` before it is a path, and every payload
 whole. The project id is a non-empty string (`ProjectIdSchema`); the service is
-what knows whether it names a project. Reads take no turn; writes to one project
-run one after another.
+what knows whether it names a project. Reads take no turn; writes to one board
+folder run one after another — two projects whose names give one folder share it
+— and an id that names no project is refused before it waits.
 
 | Channel                 | Arguments                   | Notes                                                                                                                   |
 | ----------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -376,6 +377,12 @@ push does wherever it came from, the built-in terminal included. `head` is the
 commit it moved to, so the pull request tab can tell GitHub's answer about this
 commit from its answer about the one before. A fetch that moves the branch
 announces it too, which costs one read and is true.
+
+**`board:changed`** carries `{ projectId }` when something under that project's
+board folder changed on disk — octopus itself, Finder, an editor, or another
+Mac through whatever syncs the folder. It names the project and nothing else,
+and the window reads the board again: a list of what changed would be a second
+copy of the folder to keep true.
 
 **`chats:status`** carries `{ chatId, workspaceId, status, interrupted, turnStartedAt }` — `interrupted` false on every one, since any move ends it, and said rather than assumed so the rule lives in core alone; the last when the turn under way began, kept by the service by the same rule the working line reads a log with (`turns.ts`), so the status bar can count a turn whose log no window has loaded. The twin of the
 one above, a level in: the tab strip draws a conversation while

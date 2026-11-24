@@ -767,6 +767,7 @@ describe('channel names', () => {
     'chats.onUsageWindows',
     'workspaces.onStatus',
     'workspaces.onPushed',
+    'board.onChanged',
     'workspaces.onDraft',
     'terminal.onData',
     'terminal.onExit',
@@ -1154,6 +1155,22 @@ describe('the rest of the surface', () => {
 
     stop()
     expect(off).toHaveBeenCalledWith('workspaces:pushed', expect.any(Function))
+  })
+
+  it('board.onChanged delivers the project and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('board', 'onChanged')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'board:changed')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    listener({}, { projectId: 'p1' })
+    expect(handler).toHaveBeenCalledWith({ projectId: 'p1' })
+
+    stop()
+    expect(off).toHaveBeenCalledWith('board:changed', expect.any(Function))
   })
 })
 

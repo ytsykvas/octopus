@@ -78,6 +78,11 @@ export function pushWorkspacePushed(targets: readonly PushTarget[], event: unkno
   pushAll(targets, 'workspaces:pushed', event)
 }
 
+/** A card was added, changed, moved or removed in a project's board folder, by anyone. */
+export function pushBoardChanged(targets: readonly PushTarget[], event: unknown): void {
+  pushAll(targets, 'board:changed', event)
+}
+
 export function pushUsageWindows(targets: readonly PushTarget[], windows: unknown): void {
   pushAll(targets, 'usage:windows', windows)
 }

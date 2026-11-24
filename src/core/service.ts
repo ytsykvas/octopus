@@ -278,6 +278,7 @@ import {
 import {
   BoardError,
   CARD_TEXT_MAX,
+  type BoardChangedEvent,
   type BoardListing,
   type CardDetail,
   type CardDraft,
@@ -287,8 +288,9 @@ import {
   type DescriptionSave
 } from './boardSchema.js'
 import { parseCard, readMeta, type RunFields, setMeta, upsertRun } from './boardCard.js'
+import { type BoardWatch, type BoardWatchDeps, createBoardWatch } from './boardWatch.js'
 import { foldRunUsage } from './boardRun.js'
-import { cardWorkspaceName, machineLabel } from './boardNames.js'
+import { boardFolderName, cardWorkspaceName, machineLabel, nameKey } from './boardNames.js'
 import { present } from './present.js'
 import {
   ensureStore,
@@ -630,6 +632,8 @@ export interface ServiceOptions {
    * moved branch belongs to, not when FSEvents gets round to saying so.
    */
   readonly refWatch?: (deps: RemoteRefWatchDeps) => RemoteRefWatch
+  /** What hears the board folder change; injected for the reason `refWatch` is. */
+  readonly boardWatch?: (deps: BoardWatchDeps) => BoardWatch
   /** How long a running conversation is given to reload its plugins. */
   readonly pluginReloadMs?: number
   /** How long a conversation stays at rest before it is said to be done. */
@@ -1946,6 +1950,8 @@ export interface OctopusService {
    * rather than on its next tick.
    */
   onWorkspacePushed(handler: (event: WorkspacePushedEvent) => void): () => void
+  /** A project's board folder changed on disk, by anyone: the window reads that board again. */
+  onBoardChanged(handler: (event: BoardChangedEvent) => void): () => void
   /**
    * The account's windows, whenever they move.
    *
@@ -1974,8 +1980,8 @@ export interface OctopusService {
    *
    * Called when the application quits, and by the tests before the temporary
    * directory they gave it goes: a write still running when `rm` starts is a
-   * failure in whichever test the runner tears down next. Lets go of the watch
-   * on the projects' refs as well, being the one place the service is shut.
+   * failure in whichever test the runner tears down next. Lets go of the watches
+   * on the projects' refs and on the board folder as well, being the one place the service is shut.
    *
    * Bounded by `SHUTDOWN_GRACE_MS`, so a session that will not close cannot
    * hold the application open. What ends at the ceiling is the **waiting** —
@@ -2078,6 +2084,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   })
   void refWatch.sync(state.projects)
 
+  const boardListeners = new Set<(event: BoardChangedEvent) => void>()
+  const boardWatch = (options.boardWatch ?? createBoardWatch)({
+    onChange: (projectId) => {
+      for (const listener of boardListeners) listener({ projectId })
+    }
+  })
+
   /*
    * A project's variables used to be one file. Giving each project its `envs/`
    * directory happens here, before anything can read one — the directory's
@@ -2089,6 +2102,12 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   for (const project of state.projects) await migrateEnvProfiles(project.id, dataRoot)
   let config: Config = await loadConfig(configPath)
+
+  /** Idempotent: the same folder with a live watcher only takes the project list. */
+  function syncBoardWatch(): void {
+    boardWatch.sync(config.boardFolder, state.projects)
+  }
+  syncBoardWatch()
 
   /** Live agent sessions, keyed by chat. A missing entry means "not started". */
   /**
@@ -2459,7 +2478,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       state = next
       // Added or removed is what matters, and a write that leaves the list
       // alone keeps the same array: most writes are a turn, not a project.
-      if (moved) void refWatch.sync(next.projects)
+      if (moved) {
+        void refWatch.sync(next.projects)
+        syncBoardWatch()
+      }
     })
   }
 
@@ -2482,7 +2504,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return configWrites(async () => {
       const next: Config = ConfigSchema.parse({ ...config, ...change(config) })
       await saveConfig(next, configPath)
+      const folderMoved = next.boardFolder !== config.boardFolder
       config = next
+      if (folderMoved) syncBoardWatch()
       return next
     })
   }
@@ -5145,8 +5169,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   const promptWrites = oneAtATime()
 
-  /** Board writes, one line per project: a move and a create read the whole column first. Keyed by id, not by card: `oneAtATimeEach` never frees a key, and a move changes the ref. */
-  const boardWork = oneAtATimeEach()
+  /** The queues behind `boardWork`, one per board folder; `oneAtATimeEach` never frees a key. */
+  const boardLines = oneAtATimeEach()
+
+  /**
+   * Board writes, one at a time per board folder: a move and a create read the whole column first,
+   * and two projects whose names give one folder write into it. Keyed by that folder as the volume
+   * compares names, never by card (a move changes the ref), and only once the project is known, so an
+   * id from anywhere is refused without leaving a queue behind.
+   */
+  async function boardWork<T>(projectId: string, task: () => Promise<T>): Promise<T> {
+    // `async`, so an unknown project is a rejection like every other refusal; `await` for `require-await`.
+    return await boardLines(nameKey(boardFolderName(requireProject(projectId).name)), task)
+  }
 
   function layoutOf(projectId: string): Promise<BoardLayout> {
     return findLayout(config.boardFolder, requireProject(projectId).name)
@@ -6757,6 +6792,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
 
     async listBoard(projectId) {
+      syncBoardWatch()
       const layout = await layoutOf(projectId)
       return { folder: layout.dir, cards: await listBoardIn(layout) }
     },
@@ -8334,6 +8370,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return () => pushedListeners.delete(handler)
     },
 
+    onBoardChanged(handler) {
+      boardListeners.add(handler)
+      return () => boardListeners.delete(handler)
+    },
+
     onChatsChanged(handler) {
       chatsChangedListeners.add(handler)
       return () => chatsChangedListeners.delete(handler)
@@ -8341,6 +8382,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
 
     async closeChats() {
       refWatch.close()
+      boardWatch.close()
       const live = [...sessions.values()]
       sessions.clear()
 

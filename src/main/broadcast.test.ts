@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   type PushTarget,
+  pushBoardChanged,
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
@@ -116,6 +117,14 @@ describe('what the main process pushes, and on which channel', () => {
     pushWorkspacePushed([window], event)
 
     expect(window.sent).toEqual([['workspaces:pushed', event]])
+  })
+
+  it('announces a change in a board folder', () => {
+    const window = target()
+
+    pushBoardChanged([window], { projectId: 'p1' })
+
+    expect(window.sent).toEqual([['board:changed', { projectId: 'p1' }]])
   })
 
   it('announces the account windows', () => {

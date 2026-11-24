@@ -18,7 +18,7 @@ The board is the one thing octopus keeps outside `~/.octopus`. Its cards are mar
     <any folder>/<any>.md    a loose card, shown in Backlog
 ```
 
-A project and its folder are matched by name (`boardFolderName`, then `sameName`, which ignores case and Unicode normalisation). Nothing stored links the two.
+A project and its folder are matched by name (`boardFolderName`, then `sameName`, which ignores case and Unicode normalisation). Nothing stored links the two. The project's folder is found whatever its name, one the scan would skip included — `Release.tmp` is a name `boardFolderName` gives — and two projects whose names give one folder share it, and their writes wait for each other.
 
 ## A card file
 
@@ -66,6 +66,10 @@ Reading — the board, one card — writes nothing, not even a folder: the files
 ## Removing a card
 
 A removal goes to the Trash: main hands `shell.trashItem` to the service as `discardPath`, and `boardFiles.ts` deletes no card itself. The service's default, used by tests, deletes.
+
+## Changes from outside
+
+One recursive watcher covers the whole board folder (`boardWatch.ts`). The first segment of a changed path names the project — every project whose folder it is — and after 300 ms without another change there the window is told to read that board again. A change to the board folder itself — FSEvents names it by its own name, which a project may share — tells every project. octopus's own temporary files and hidden names inside a project's folder are ignored; `_attachments` is not. The watcher is opened when the folder is chosen or the projects change, and checked again on every read of the board, so one that could not open — the folder not there yet — or that reported an error comes back the next time the board is read. A folder deleted and made again needs none of that: FSEvents watches the path, and its events keep coming. Reading the board when the window gains focus covers a change no event reported. A change made on another Mac arrives when the sync service writes it here, not before.
 
 ## Runs
 
