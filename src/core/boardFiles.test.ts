@@ -1151,3 +1151,42 @@ describe('findCard', () => {
     ).resolves.toBeNull()
   })
 })
+
+describe('names that arrive decomposed', () => {
+  const DECOMPOSED = 'Gro\u0308\u00dfe.md'
+  const COMPOSED = 'Gr\u00f6\u00dfe'
+
+  beforeEach(async () => {
+    await card(`backlog/${DECOMPOSED}`, '# Size\n')
+  })
+
+  it('lists and reads a card whose name arrived decomposed', async () => {
+    const layout = await layoutOf()
+
+    const cards = await listBoard(layout)
+
+    expect(cards.map((entry) => entry.ref)).toEqual([`backlog/${DECOMPOSED}`])
+    await expect(readCard(layout, `backlog/${DECOMPOSED}`)).resolves.toMatchObject({
+      title: 'Size'
+    })
+  })
+
+  it('keeps a decomposed name when it moves the card', async () => {
+    const ref = await moveCard(await layoutOf(), `backlog/${DECOMPOSED}`, {
+      status: 'done',
+      index: 0
+    })
+
+    expect(ref).toBe(`done/${DECOMPOSED}`)
+    await expect(readdir(join(P(), 'done'))).resolves.toEqual([DECOMPOSED])
+  })
+
+  it('counts a decomposed name as taken when it creates a card', async () => {
+    const ref = await createCard(await layoutOf(), { status: 'backlog', title: COMPOSED })
+
+    expect(ref).toBe(`backlog/${COMPOSED}-2.md`)
+    expect((await readdir(join(P(), 'backlog'))).sort()).toEqual(
+      [DECOMPOSED, `${COMPOSED}-2.md`].sort()
+    )
+  })
+})

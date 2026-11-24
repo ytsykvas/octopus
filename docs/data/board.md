@@ -93,6 +93,10 @@ Two cards with one stem (`backlog/a.md`, `ideas/a.md`) share one folder, and a r
 
 What iCloud does to this folder was measured on two Macs in B001 rather than read from documentation. A new card took about 9 seconds to reach the other Mac. After a card is moved to another folder, the maintainer assumes File → Revert To still offers its earlier versions; B001 did not check it. macOS guards Desktop and Documents: the built app says why it reads them (`NSDesktopFolderUsageDescription`, `NSDocumentsFolderUsageDescription` in `electron-builder.yml`), so a Mac that asks shows that reason ([releasing.md](../releasing.md)).
 
+### Names in two Unicode forms
+
+B001 saw names change form on the way: `Größe ändern.md` and `Їжак.md`, written composed (NFC) on one Mac, were listed decomposed (NFD, with U+0308) on the other, and a name created decomposed there arrived decomposed back. So one file can carry different bytes in its name on two Macs. The board keeps a card's name exactly as `readdir` gives it — a ref is never normalised, and nothing synced holds one: a workspace finds its card by the `id` in its header — and compares names with `sameName`, which composes both sides first. So such a card opens and moves under its own name, and a new card with the composed spelling of that title gets `-2`.
+
 ## Known limitations
 
 - A project is found by name: renamed, it shows the empty board of its new name until its folder is renamed too.
