@@ -297,6 +297,22 @@ describe('BoardScreen', () => {
       )
     })
 
+    it("changes a task's status from the keyboard", async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openPanel(user)
+      act(() => {
+        within(panel).getByRole('button', { name: 'Backlog' }).focus()
+      })
+
+      await user.keyboard('{Enter}{ArrowDown}{Enter}')
+
+      expect(octopus().board.move).toHaveBeenCalledWith('planner', 'backlog/Fix login.md', {
+        status: 'in progress',
+        index: 0
+      })
+    })
+
     it('closes the panel', async () => {
       const user = userEvent.setup()
       renderScreen()

@@ -222,8 +222,4 @@ second line adds turns, active time and tokens in and out — written by `format
 - Every read lists and reads every file of the project's folder; a folder of thousands of large
   files reads slowly.
 - A card cannot be dragged from the keyboard: the browser's drag and drop has no keyboard path.
-  ⌥↑/⌥↓ reorder one within a column; moving it to another takes the status menu, and so the mouse
-  (below).
-- The card panel's status, priority and tag menus cannot be worked from the keyboard: Tab
-  reaches a trigger and Enter opens it, but `DropdownMenu` has no arrow-key navigation, so the
-  item is picked with the mouse.
+  ⌥↑/⌥↓ reorder one within a column, and the status menu in the card panel moves it to another.

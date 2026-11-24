@@ -1,7 +1,9 @@
 import { Check } from 'lucide-react'
-import { Fragment, useCallback, useRef, useState } from 'react'
+import { Fragment, useCallback, useLayoutEffect, useRef, useState } from 'react'
 
 import { createPortal } from 'react-dom'
+
+import { present } from '@core/present.js'
 
 import { useCloseOnMove } from '../hooks/useCloseOnMove.js'
 import { useDismiss } from '../hooks/useDismiss.js'
@@ -111,6 +113,17 @@ const DESCRIPTION_HEIGHT = 32
 const SECTION_HEIGHT = 28
 const NOTE_HEIGHT = 48
 
+const STEPS = new Map<string, (at: number, count: number) => number>([
+  ['ArrowDown', (at, count) => (at + 1) % count],
+  ['ArrowUp', (at, count) => (at - 1 + count) % count],
+  ['Home', () => 0],
+  ['End', (_at, count) => count - 1]
+])
+
+function items(panel: HTMLElement): HTMLButtonElement[] {
+  return [...panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+}
+
 /**
  * A popup menu.
  *
@@ -133,6 +146,7 @@ export function DropdownMenu({
     left: number
     /** Where the panel is drawn, found from the trigger as it is opened. */
     host: Element
+    opener: HTMLElement
   } | null>(null)
   const container = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
@@ -141,12 +155,39 @@ export function DropdownMenu({
   const width = asked ?? (described ? DESCRIBED_WIDTH : PANEL_WIDTH)
 
   const close = useCallback(() => {
+    // Focus left in the panel would fall to the body as it unmounts.
+    if (panel.current?.contains(document.activeElement) === true) {
+      present(position, 'where the open menu was drawn').opener.focus()
+    }
     setOpen(false)
-  }, [])
+  }, [position])
 
   useDismiss(open, container, close, panel)
 
   useCloseOnMove(open, container, close)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const all = items(present(panel.current, 'the panel of the open menu'))
+    ;(all.find((item) => item.getAttribute('aria-checked') === 'true') ?? all[0])?.focus()
+  }, [open])
+
+  const walk = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key === 'Tab') {
+      // Cancelled: the panel is still in the page as Tab moves on, so the focus would land in it.
+      event.preventDefault()
+      close()
+      return
+    }
+    const step = STEPS.get(event.key)
+    if (step === undefined) return
+    const all = items(event.currentTarget)
+    const at = all.findIndex((item) => item === document.activeElement)
+    // Stopped: React carries the key through the portal to the row the trigger sits in.
+    event.preventDefault()
+    event.stopPropagation()
+    present(all[step(at, all.length)], 'a button of the open menu').focus()
+  }
 
   const openAt = (element: HTMLElement): void => {
     const rect = element.getBoundingClientRect()
@@ -177,7 +218,8 @@ export function DropdownMenu({
         Math.max(GAP, align === 'right' ? rect.right - width : rect.left),
         window.innerWidth - width - GAP
       ),
-      host: element.closest('dialog') ?? document.body
+      host: element.closest('dialog') ?? document.body,
+      opener: element
     })
 
     setOpen(true)
@@ -225,6 +267,7 @@ export function DropdownMenu({
           <div
             ref={panel}
             role="menu"
+            onKeyDown={walk}
             style={{ top: position.top, left: position.left, width, maxHeight }}
             className="overflow-y-auto border-line bg-canvas fixed z-50 rounded-[var(--radius-panel)] border p-1 shadow-[var(--shadow-pop)]"
           >
