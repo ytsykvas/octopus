@@ -718,12 +718,7 @@ describe('DiffPanel', () => {
       return comments
     }
 
-    /*
-     * jsdom implements `Range` and `Selection` but not `getBoundingClientRect`
-     * on a range — it lays nothing out, so it has no rectangle to answer with.
-     * The pane reads one to place the button, so without this every selection
-     * throws inside the handler and no button ever appears.
-     */
+    // setup.ts gives every range a zero box; the button's place is asserted against this one.
     beforeEach(() => {
       Range.prototype.getBoundingClientRect = () => new DOMRect(20, 100, 80, 16)
     })

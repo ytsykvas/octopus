@@ -2389,6 +2389,21 @@ export const en = {
         'Files are saved for a rewind when the agent edits them with Edit or Write. A command — a formatter, a code generator, git checkout, rm — changes files past those saves, so a rewind will not touch what it did. Before a command you may want to undo, commit or stash your work; the Changes tab shows what the files have gained and lost.'
     }
   },
+  markdownEditor: {
+    toolbar: 'Formatting',
+    heading: 'Heading',
+    bold: 'Bold (⌘B)',
+    italic: 'Italic (⌘I)',
+    strike: 'Strikethrough',
+    quote: 'Quote',
+    code: 'Code (⌘E)',
+    codeBlock: 'Code block',
+    link: 'Link (⌘K)',
+    bulletList: 'Bulleted list',
+    orderedList: 'Numbered list',
+    taskList: 'Task list',
+    done: 'Done'
+  },
   board: {
     statuses: {
       backlog: 'Backlog',

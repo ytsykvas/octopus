@@ -58,6 +58,11 @@ Object.defineProperty(window, 'matchMedia', {
 // in the component, which would be a branch no real window ever takes.
 Element.prototype.scrollIntoView = (): void => undefined
 
+// jsdom gives a Range no `getClientRects` or `getBoundingClientRect`, and CodeMirror
+// measures text through ranges.
+Range.prototype.getClientRects = (): DOMRectList => document.createElement('div').getClientRects()
+Range.prototype.getBoundingClientRect = (): DOMRect => new DOMRect()
+
 // jsdom has no ResizeObserver either, and the conversation log watches its
 // content for growth. Silent by default; a test that needs a resize to arrive
 // stubs its own.
