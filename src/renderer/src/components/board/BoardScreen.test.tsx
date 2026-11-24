@@ -974,9 +974,25 @@ describe('BoardScreen', () => {
     })
 
     it('leaves a file dragged in from Finder alone', () => {
-      fireEvent.drop(column('Done'), { dataTransfer: { types: ['Files'], files: [] } })
+      const finder = { types: ['Files'], files: [] }
 
+      // Not cancelled: the browser then shows the file cannot be dropped, and never fires drop.
+      expect(fireEvent.dragOver(li('a'), { dataTransfer: finder })).toBe(true)
+      expect(fireEvent.dragOver(column('Done'), { dataTransfer: finder })).toBe(true)
+      expect(screen.queryByTestId('drop-line')).toBeNull()
       expect(octopus().board.move).not.toHaveBeenCalled()
+    })
+
+    it('takes the line away when the pointer leaves the column for the panel', () => {
+      const data = transfer()
+      fireEvent.dragStart(li('a'), { dataTransfer: data })
+      fireEvent.dragOver(column('Testing'), { dataTransfer: data })
+
+      const leave = createEvent.dragLeave(column('Testing'), { dataTransfer: data })
+      Object.defineProperty(leave, 'relatedTarget', { value: document.body })
+      fireEvent(column('Testing'), leave)
+
+      expect(screen.queryByTestId('drop-line')).toBeNull()
     })
   })
 })

@@ -39,8 +39,17 @@ function dragEvent({
   clientY = 0,
   top = 0,
   height = 40,
-  types = [CARD_MIME]
-}: { clientY?: number; top?: number; height?: number; types?: string[] } = {}): {
+  types = [CARD_MIME],
+  related = null,
+  inside = false
+}: {
+  clientY?: number
+  top?: number
+  height?: number
+  types?: string[]
+  related?: Node | null
+  inside?: boolean
+} = {}): {
   readonly event: React.DragEvent
   readonly transfer: Transfer
   readonly preventDefault: Mock
@@ -54,7 +63,8 @@ function dragEvent({
     preventDefault,
     stopPropagation,
     dataTransfer: transfer,
-    currentTarget: { getBoundingClientRect: () => ({ top, height }) }
+    relatedTarget: related,
+    currentTarget: { getBoundingClientRect: () => ({ top, height }), contains: () => inside }
   } as unknown as React.DragEvent
   return { event, transfer, preventDefault, stopPropagation }
 }
@@ -296,6 +306,101 @@ describe('useBoardDrag', () => {
     expect(result.current.draggingRef).toBeNull()
     expect(result.current.dropEdge('p')).toBeNull()
     expect(result.current.overColumn).toBeNull()
+  })
+
+  it('leaves a card let go over its own tile where it is', () => {
+    const { result, onMove } = setUp()
+    start(result, 'a', 'backlog')
+    act(() => {
+      result.current.cardProps('p', 'in progress').onDragOver(dragEvent({ clientY: 30 }).event)
+    })
+
+    act(() => {
+      result.current.cardProps('a', 'backlog').onDragOver(dragEvent({ clientY: 30 }).event)
+    })
+    expect(result.current.dropEdge('p')).toBeNull()
+    expect(result.current.dropEdge('b')).toBeNull()
+    expect(result.current.dropEdge('v')).toBeNull()
+
+    act(() => {
+      result.current.cardProps('a', 'backlog').onDrop(dragEvent({ clientY: 30 }).event)
+    })
+    expect(onMove).not.toHaveBeenCalled()
+    expect(result.current.draggingRef).toBeNull()
+  })
+
+  it('leaves an unordered card let go over its own tile unordered', () => {
+    const { result, onMove } = setUp()
+    start(result, 'u', 'backlog')
+
+    act(() => {
+      result.current.cardProps('u', 'backlog').onDrop(dragEvent({ clientY: 5 }).event)
+    })
+
+    expect(onMove).not.toHaveBeenCalled()
+  })
+
+  it('takes the line away when the pointer leaves the column', () => {
+    const { result } = setUp()
+    start(result, 'a', 'backlog')
+    act(() => {
+      result.current.columnProps('testing').onDragOver(dragEvent().event)
+    })
+
+    act(() => {
+      result.current
+        .columnProps('testing')
+        .onDragLeave(dragEvent({ related: document.body, inside: false }).event)
+    })
+
+    expect(result.current.overColumn).toBeNull()
+    expect(result.current.draggingRef).toBe('a')
+  })
+
+  it('takes the line away when the pointer leaves the window', () => {
+    const { result } = setUp()
+    start(result, 'a', 'backlog')
+    act(() => {
+      result.current.cardProps('p', 'in progress').onDragOver(dragEvent({ clientY: 30 }).event)
+    })
+
+    act(() => {
+      result.current.columnProps('in progress').onDragLeave(dragEvent({ related: null }).event)
+    })
+
+    expect(result.current.dropEdge('p')).toBeNull()
+  })
+
+  it('keeps the line while the pointer moves within the column', () => {
+    const { result } = setUp()
+    start(result, 'a', 'backlog')
+    act(() => {
+      result.current.cardProps('p', 'in progress').onDragOver(dragEvent({ clientY: 30 }).event)
+    })
+
+    act(() => {
+      result.current
+        .columnProps('in progress')
+        .onDragLeave(dragEvent({ related: document.body, inside: true }).event)
+    })
+
+    expect(result.current.dropEdge('p')).toBe('below')
+  })
+
+  it('keeps the line of the column the pointer went on to', () => {
+    const { result } = setUp()
+    start(result, 'a', 'backlog')
+    act(() => {
+      result.current.columnProps('testing').onDragOver(dragEvent().event)
+    })
+
+    act(() => {
+      result.current
+        .columnProps('done')
+        .onDragLeave(dragEvent({ related: document.body, inside: false }).event)
+    })
+
+    expect(result.current.overColumn).toBe('testing')
   })
 
   it('does not start a drag while dragging is switched off', () => {

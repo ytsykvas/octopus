@@ -100,7 +100,7 @@ export function BoardScreen({
     [linkedBy, requests, deviceId]
   )
 
-  /** Every move of a card goes through here (status menu now, drag B204, ⌥↑/⌥↓ B205). */
+  /** Every move of a card goes through here (status menu and drag now, ⌥↑/⌥↓ B205). */
   const moveCard = useCallback(
     async (ref: string, to: CardMove): Promise<string | null> => {
       const moved = await move(ref, to)

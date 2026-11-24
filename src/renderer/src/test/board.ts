@@ -138,7 +138,7 @@ export function noDrag(): BoardDrag {
       onDrop: vi.fn(),
       onDragEnd: vi.fn()
     }),
-    columnProps: () => ({ onDragOver: vi.fn(), onDrop: vi.fn() }),
+    columnProps: () => ({ onDragOver: vi.fn(), onDragLeave: vi.fn(), onDrop: vi.fn() }),
     dropEdge: () => null,
     overColumn: null
   }

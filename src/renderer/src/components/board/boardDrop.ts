@@ -38,7 +38,6 @@ export function landingSlot(
   return dropSlot(without, over.edge === 'above' ? at : at + 1)
 }
 
-/** A drop here would change nothing on disk the user could see. */
 export function isOwnPlace(
   columns: BoardColumns,
   draggingRef: string,

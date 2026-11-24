@@ -124,15 +124,16 @@ stays in the field. Editing or deleting a comment is not offered.
 
 ## Drag and drop
 
-A card is dragged with the browser's own drag and drop, one state for every column
-(`useBoardDrag`). The drag carries its own type, `application/x-octopus-card`; a file from the
-Finder or dragged text has none, so the board never calls `preventDefault` for it and the browser
-shows that it cannot be dropped. The landing index is counted in the target column without the
-dragged card and cut to the ordered part (`dropSlot`; core does the same in `orderForDrop`), and
-the line is drawn under the card before that slot, which keeps it above the "By name" divider
-where the card really lands. A drop that would change nothing — an ordered card on its own slot,
-or a card alone in its column — writes nothing. The move goes through the screen's `moveCard`, so
-an open card stays open under its new path. `useDragReorder` is not reused: it keeps one list, its
+A card is dragged with the browser's own drag and drop, one state for every column (`useBoardDrag`).
+The drag carries its own type, `application/x-octopus-card`; a file from the Finder or dragged text
+has none, so the board's `dragover` never calls `preventDefault` for it and the browser shows that
+it cannot be dropped. The landing index is counted in the target column without the dragged card and
+cut to the ordered part (`dropSlot`; core does the same in `orderForDrop`), and the line is drawn
+under the card before that slot, which keeps it above the "By name" divider where the card really
+lands. Leaving a column for something outside it — the panel, the title bar — takes its line away. A
+drop that would change nothing — an ordered card on its own slot, a card alone in its column, or a
+card let go over its own tile — writes nothing. The move goes through the screen's `moveCard`, so an
+open card stays open under its new path. `useDragReorder` is not reused: it keeps one list, its
 `dragstart` gets no event to put the type on, and an empty list cannot take a drop.
 
 ## Keyboard

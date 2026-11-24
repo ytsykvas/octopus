@@ -23,6 +23,7 @@ export interface CardDragProps {
 
 export interface ColumnDropProps {
   readonly onDragOver: (event: React.DragEvent) => void
+  readonly onDragLeave: (event: React.DragEvent) => void
   readonly onDrop: (event: React.DragEvent) => void
 }
 
@@ -92,13 +93,15 @@ export function useBoardDrag(
         // The column under the card would otherwise overwrite this hover.
         event.stopPropagation()
         event.dataTransfer.dropEffect = 'move'
-        point(carried, status, landingSlot(columns, carried, status, onCard(ref, event)))
+        // Over its own tile the card has not left its place, whichever half the pointer is in.
+        if (carried === ref) setHover(null)
+        else point(carried, status, landingSlot(columns, carried, status, onCard(ref, event)))
       },
       onDrop: (event) => {
         event.preventDefault()
         event.stopPropagation()
         const carried = dragged(event)
-        if (carried === null) {
+        if (carried === null || carried === ref) {
           end()
           return
         }
@@ -114,6 +117,12 @@ export function useBoardDrag(
         event.preventDefault()
         event.dataTransfer.dropEffect = 'move'
         point(carried, status, landingSlot(columns, carried, status, null))
+      },
+      onDragLeave: (event) => {
+        // Fires for every child the pointer crosses; only this column's own line is taken away.
+        const to = event.relatedTarget
+        if (to instanceof Node && event.currentTarget.contains(to)) return
+        setHover((current) => (current?.status === status ? null : current))
       },
       onDrop: (event) => {
         event.preventDefault()
