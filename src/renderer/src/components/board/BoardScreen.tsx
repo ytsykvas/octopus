@@ -308,7 +308,7 @@ export function BoardScreen({
       <div
         className="scrollbar-shown flex min-w-0 flex-1 overflow-x-auto"
         onWheel={(event) => {
-          const delta = sidewaysDelta(event, event.target as Element)
+          const delta = sidewaysDelta(event, event.target)
           if (delta !== null) event.currentTarget.scrollLeft += delta
         }}
       >

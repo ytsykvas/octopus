@@ -421,6 +421,19 @@ describe('BoardScreen', () => {
       expect(scroll.mock.contexts).toContain(screen.getByRole('button', { name: 'Fix login' }))
     })
 
+    it('leaves the board where it was when the open card is read again', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      await openPanel(user)
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+      givenBoard([boardCard({ comments: 1 })])
+
+      focusWindow()
+
+      expect(await screen.findByText('1')).toBeInTheDocument()
+      expect(scroll).not.toHaveBeenCalled()
+    })
+
     it('brings a moved card into view in its new column', async () => {
       vi.mocked(octopus().board.move).mockResolvedValueOnce(ok('blocked/Fix login.md'))
       const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
@@ -438,8 +451,9 @@ describe('BoardScreen', () => {
       })
     })
 
-    it('opens a card just created that the filter hides', async () => {
+    it('opens a card the filter hides without scrolling to it', async () => {
       vi.mocked(octopus().board.create).mockResolvedValueOnce(ok('testing/New.md'))
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
       const user = userEvent.setup()
       renderScreen({ filter: { ...EMPTY_BOARD_FILTER, query: 'login' } })
       const testing = await screen.findByRole('region', { name: 'Testing' })
@@ -453,6 +467,7 @@ describe('BoardScreen', () => {
 
       expect(await screen.findByRole('complementary', { name: 'New' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'New' })).toBeNull()
+      expect(scroll).not.toHaveBeenCalled()
     })
 
     it('stays on the card when the move was refused', async () => {

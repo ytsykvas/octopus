@@ -271,14 +271,12 @@
   }
 
   /* macOS draws a native scrollbar only while it moves; a webkit one is always drawn.
-     The root's `scrollbar-*` switch webkit's rules off, so they are reset here and given back below. */
+     The inherited `scrollbar-color` switches webkit's rules off, so it is reset here and given back below. */
   .scrollbar-shown {
     scrollbar-color: auto;
-    scrollbar-width: auto;
   }
   .scrollbar-shown > * {
     scrollbar-color: var(--border-strong) transparent;
-    scrollbar-width: thin;
   }
   .scrollbar-shown::-webkit-scrollbar {
     width: 10px;

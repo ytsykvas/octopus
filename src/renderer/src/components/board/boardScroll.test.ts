@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { sidewaysDelta } from './boardScroll.js'
 
-const WHEEL = { deltaX: 0, deltaY: 120, shiftKey: false }
+const WHEEL = { deltaX: 0, deltaY: 120, shiftKey: false, ctrlKey: false }
 
 function list(scrollHeight: number, clientHeight: number): HTMLElement {
   const ul = document.createElement('ul')
@@ -30,10 +30,18 @@ describe('sidewaysDelta', () => {
     expect(sidewaysDelta({ ...WHEEL, shiftKey: true }, document.createElement('h2'))).toBeNull()
   })
 
+  it('leaves a pinch to the browser', () => {
+    expect(sidewaysDelta({ ...WHEEL, ctrlKey: true }, document.createElement('h2'))).toBeNull()
+  })
+
   it('leaves a swipe that is as sideways as it is vertical', () => {
     const header = document.createElement('h2')
 
-    expect(sidewaysDelta({ deltaX: 40, deltaY: -3, shiftKey: false }, header)).toBeNull()
-    expect(sidewaysDelta({ deltaX: 5, deltaY: 5, shiftKey: false }, header)).toBeNull()
+    expect(sidewaysDelta({ ...WHEEL, deltaX: 40, deltaY: -3 }, header)).toBeNull()
+    expect(sidewaysDelta({ ...WHEEL, deltaX: 5, deltaY: 5 }, header)).toBeNull()
+  })
+
+  it('turns a wheel sideways over what is not an element', () => {
+    expect(sidewaysDelta(WHEEL, null)).toBe(120)
   })
 })
