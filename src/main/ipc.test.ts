@@ -4229,7 +4229,7 @@ describe('board resources', () => {
     await expect(readdir(join(folder, '_attachments', 'Fix login'))).resolves.toEqual([])
   })
 
-  it('refuses to remove a name that is not a short string', async () => {
+  it('refuses a removal the schemas refuse', async () => {
     await mkdir(join(folder, '_attachments', 'Fix login'), { recursive: true })
     await writeFile(join(folder, '_attachments', 'Fix login', 'a.txt'), 'a')
     const answers = [

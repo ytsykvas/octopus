@@ -121,12 +121,17 @@ export async function attachmentPath(
   return path
 }
 
-/** Handed to the caller, as a card is: core cannot reach the Trash. */
 export async function removeAttachment(
   layout: BoardLayout,
   ref: string,
   name: string,
   discard: (path: string) => Promise<void>
 ): Promise<void> {
-  await discard(await attachmentPath(layout, ref, name))
+  await cardOnDisk(layout, ref)
+  const path = await attachmentPath(layout, ref, name)
+  // The Trash takes a folder whole, and the list shows only files: a folder here was never offered.
+  if (!(await lstat(path)).isFile()) {
+    throw new BoardError('cardMissing', { name }, `${name} is not one of the card's files`)
+  }
+  await discard(path)
 }

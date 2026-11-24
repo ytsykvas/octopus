@@ -15,7 +15,7 @@ export interface CardResourcesProps {
   readonly attachments: readonly string[]
   readonly onAttach: () => void
   readonly onReveal: (name: string) => void
-  readonly onRemoveFile: (name: string) => Promise<boolean>
+  readonly onRemoveFile: (name: string) => Promise<unknown>
 }
 
 export function CardResources({
