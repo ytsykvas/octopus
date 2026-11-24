@@ -369,28 +369,35 @@ The log says the same at the row that started the agent: the row keeps spinning 
 
 **Status bar — how everything is doing.** A 22px strip across the foot of the window, about every project rather than the open one, since the workspace list already speaks for that. On the left what wants attention: workspaces whose agent is working and those waiting on an answer, then the open pull requests of our workspaces — all of them, those that need action (a failed check, changes requested, a conflict) and those GitHub would merge now. On the right what is happening here: how long the turn in front has been running, and what octopus costs the machine — the whole tree under the main process, agents, dev servers and terminals included, since Electron itself is the cheap part. Every figure opens on a click to the workspaces behind it, and a row leads to its workspace: the waiting conversation in front, or the pull request tab for a request. The machine is asked every ten seconds and not at all while the window is hidden; the requests ride on the workspace list's own clock. A chevron at its right end folds it away, which stops those reads, and leaves one in the corner to bring it back; the choice is kept.
 
-**Board — the second screen.** Two tiles at the foot of the project strip switch between this layout and the Board: the selected project's tasks as six columns read from its folder inside the board folder, with the right pane folded offstage and the title bar showing that folder. Only ⌘⇧N and the digit shortcuts work there (docs/ui/board.md).
+**Board — the second screen.** Two tiles at the foot of the project strip switch between this layout and the Board: the selected project's tasks as six columns read from its folder inside the board folder, with the right pane folded offstage and the title bar showing that folder. Of the window's shortcuts only ⌘⇧N and the digits work there; the board has keys of its own (docs/ui/board.md).
 
 #### Shortcuts
 
-| Combination | Action                               |
-| ----------- | ------------------------------------ |
-| `⌘⇧N`       | new workspace, opened on its chat    |
-| `⌘1`–`⌘9`   | switch project                       |
-| `⌃1`–`⌃9`   | jump to a workspace                  |
-| `⌥↑` `⌥↓`   | move the focused workspace row       |
-| `⌥1`–`⌥3`   | switch conversation                  |
-| `⌘T`        | new conversation                     |
-| `⌘⇧T`       | reopen the last closed conversation  |
-| `⌘⇧E`       | files                                |
-| `⌘⇧D`       | changes                              |
-| `⌘⇧P`       | pull request                         |
-| `⌘W`        | close the file in front              |
-| `⌘C`        | in a file: copy the lines' reference |
-| `⌥⌘C`       | in the files: copy the whole path    |
-| `⌥⇧⌘C`      | in the files: copy the relative path |
-| `⌘O`        | open every step of the conversation  |
-| `⇧⇥`        | next mode                            |
+| Combination       | Action                                       |
+| ----------------- | -------------------------------------------- |
+| `⌘⇧N`             | new workspace, opened on its chat            |
+| `⌘1`–`⌘9`         | switch project                               |
+| `⌃1`–`⌃9`         | jump to a workspace                          |
+| `⌥↑` `⌥↓`         | move the focused workspace row or task       |
+| `C`               | on the board: new task in the focused column |
+| `↑` `↓` / `K` `J` | on the board: previous / next task           |
+| `←` `→`           | on the board: neighbouring column            |
+| `Esc`             | on the board: close the task                 |
+| `⌘⌫`              | on the board: delete the task                |
+| `⌥1`–`⌥3`         | switch conversation                          |
+| `⌘T`              | new conversation                             |
+| `⌘⇧T`             | reopen the last closed conversation          |
+| `⌘⇧E`             | files                                        |
+| `⌘⇧D`             | changes                                      |
+| `⌘⇧P`             | pull request                                 |
+| `⌘W`              | close the file in front                      |
+| `⌘C`              | in a file: copy the lines' reference         |
+| `⌥⌘C`             | in the files: copy the whole path            |
+| `⌥⇧⌘C`            | in the files: copy the relative path         |
+| `⌘O`              | open every step of the conversation          |
+| `⇧⇥`              | next mode                                    |
+
+The board's keys act only while the focus is on a task or on nothing, so a field or a button keeps its own keys.
 
 `⇧⇥` works in the composer's field only, and goes round `Manual` → `Accept edits` → plan → `Auto`, the order Claude Code's own shift+tab uses; anywhere else in the window it still moves the focus back.
 
