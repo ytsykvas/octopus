@@ -73,7 +73,8 @@ import {
   CardRefSchema,
   CardTitleSchema,
   CommentTextSchema,
-  DescriptionSaveSchema
+  DescriptionSaveSchema,
+  type BoardChangedEvent
 } from '../core/boardSchema.js'
 import { StoreSchema } from '../core/stores.js'
 import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core/plugins.js'
@@ -155,6 +156,8 @@ export interface IpcHost {
   readonly broadcastWorkspaceStatus: (event: WorkspaceStatusEvent) => void
   /** A workspace's branch moved on the remote: what the pull request pane reads on. */
   readonly broadcastWorkspacePushed: (event: WorkspacePushedEvent) => void
+  /** A project's board folder changed on disk. */
+  readonly broadcastBoardChanged: (event: BoardChangedEvent) => void
   /** The account's windows, whenever the service learns they moved. */
   readonly broadcastUsageWindows: (windows: UsageWindows) => void
   /**
@@ -1168,6 +1171,7 @@ export function registerIpc(
   })
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
   service.onWorkspacePushed(host.broadcastWorkspacePushed)
+  service.onBoardChanged(host.broadcastBoardChanged)
   service.onUsageWindows(host.broadcastUsageWindows)
   service.onChatStatus(host.broadcastChatStatus)
   service.onChatsChanged(host.broadcastChatsChanged)

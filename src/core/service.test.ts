@@ -80,6 +80,7 @@ import { BLOCK } from './scriptEnv.js'
 import { formatAside } from './sideQuestions.js'
 import { loadState, type Workspace } from './store.js'
 import { listWorktrees } from './worktree.js'
+import type { BoardWatchDeps } from './boardWatch.js'
 import type { RemoteRefWatch, RemoteRefWatchDeps } from './remoteRefs.js'
 import { type RemovalRequest, WorkspaceError } from './workspaces.js'
 
@@ -18699,6 +18700,117 @@ describe('the board', () => {
       code: 'cardMissing',
       params: { name: 'Nope.md' }
     })
+  })
+})
+
+describe('watching the board folder', () => {
+  function boardWatchSpy(): {
+    readonly factory: NonNullable<ServiceOptions['boardWatch']>
+    readonly syncs: [string, string[]][]
+    readonly closed: () => number
+    readonly deps: () => BoardWatchDeps
+  } {
+    const syncs: [string, string[]][] = []
+    let closed = 0
+    let heard: BoardWatchDeps | null = null
+    return {
+      factory: (deps) => {
+        heard = deps
+        return {
+          sync: (folder, projects) => {
+            syncs.push([folder, projects.map((project) => project.name)])
+          },
+          close: () => {
+            closed += 1
+          }
+        }
+      },
+      syncs,
+      closed: () => closed,
+      deps: () => {
+        if (heard === null) throw new Error('the service made no board watch')
+        return heard
+      }
+    }
+  }
+
+  let spy: ReturnType<typeof boardWatchSpy>
+  let spied: OctopusService
+  let repo: string
+  let board: string
+
+  beforeEach(async () => {
+    spy = boardWatchSpy()
+    spied = await createService({ ...paths(dir), boardWatch: spy.factory })
+    repo = join(dir, 'planner')
+    await initRepo(repo)
+    board = join(dir, 'board')
+    await mkdir(board)
+  })
+
+  it('watches from the start', () => {
+    expect(spy.syncs).toEqual([['', []]])
+  })
+
+  it('watches the folder once one is chosen', async () => {
+    await spied.updateConfig({ boardFolder: board })
+
+    expect(spy.syncs.at(-1)).toEqual([board, []])
+  })
+
+  it('does not sync again for a setting that leaves the folder alone', async () => {
+    await spied.updateConfig({ theme: 'dark' })
+
+    expect(spy.syncs).toHaveLength(1)
+  })
+
+  it('watches again when a project is added', async () => {
+    await spied.addProjectFromPath(repo)
+
+    expect(spy.syncs.at(-1)).toEqual(['', ['planner']])
+  })
+
+  it('follows a project renamed', async () => {
+    const { id } = await spied.addProjectFromPath(repo)
+    await spied.updateProjectById(id, { name: 'ledger' })
+
+    expect(spy.syncs.at(-1)).toEqual(['', ['ledger']])
+  })
+
+  it('checks the watcher on every read of the board', async () => {
+    const { id } = await spied.addProjectFromPath(repo)
+    await spied.updateConfig({ boardFolder: board })
+    const n = spy.syncs.length
+
+    await spied.listBoard(id)
+
+    expect(spy.syncs).toHaveLength(n + 1)
+    expect(spy.syncs.at(-1)).toEqual([board, ['planner']])
+  })
+
+  it('announces a change the watcher reports', () => {
+    const listener = vi.fn()
+    spied.onBoardChanged(listener)
+
+    spy.deps().onChange('p1')
+
+    expect(listener).toHaveBeenCalledWith({ projectId: 'p1' })
+  })
+
+  it('stops announcing to a listener that left', () => {
+    const listener = vi.fn()
+    const stop = spied.onBoardChanged(listener)
+    stop()
+
+    spy.deps().onChange('p1')
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('closes the watcher with the service', async () => {
+    await spied.closeChats()
+
+    expect(spy.closed()).toBe(1)
   })
 })
 

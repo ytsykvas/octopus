@@ -92,7 +92,8 @@ interface Watched {
   readonly repoPath: string
 }
 
-const defaultWatch: NonNullable<RemoteRefWatchDeps['watch']> = (path, options, listener) =>
+/** `fs.watch` in the shape both watchers take, so a test can hand in its own. */
+export const watchTree: NonNullable<RemoteRefWatchDeps['watch']> = (path, options, listener) =>
   watchFiles(path, options, (event, filename) => {
     listener(event, filename)
   })
@@ -100,7 +101,7 @@ const defaultWatch: NonNullable<RemoteRefWatchDeps['watch']> = (path, options, l
 const defaultReadFile = (path: string): Promise<string> => readText(path, 'utf8')
 
 export function createRemoteRefWatch(deps: RemoteRefWatchDeps): RemoteRefWatch {
-  const watch = deps.watch ?? defaultWatch
+  const watch = deps.watch ?? watchTree
   const readFile = deps.readFile ?? defaultReadFile
   const debounceMs = deps.debounceMs ?? REF_DEBOUNCE_MS
 

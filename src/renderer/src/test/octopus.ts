@@ -298,6 +298,7 @@ export function installOctopusStub(): Api {
     },
 
     board: {
+      onChanged: vi.fn(subscription),
       list: vi.fn(() => ok({ folder: '/board/planner', cards: [] })),
       read: vi.fn(() =>
         ok({

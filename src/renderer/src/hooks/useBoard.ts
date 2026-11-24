@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
 import type {
   BoardListing,
@@ -67,7 +67,7 @@ export function useBoard(
         : { projectId, key: `${projectId}\n${boardFolder}` },
     [projectId, boardFolder]
   )
-  /** The encoded board this hook reads, or null — what B301's subscription is gated on. */
+  /** The encoded board this hook reads, or null — what the subscription to changes on disk is gated on. */
   const key = source?.key ?? null
   const [state, setState] = useState<BoardState | null>(null)
   // The same state, readable at once by the next answer: written in `apply`, never read in render.
@@ -230,6 +230,17 @@ export function useBoard(
 
   // A sync service writes while the window is elsewhere; coming back is when that matters.
   useWindowEvent('focus', () => void refresh(), { active: source !== null })
+
+  // The newest `refresh`, so a new one does not resubscribe — the shape of `useBranchMoved`.
+  const reread = useEffectEvent(() => {
+    void refresh()
+  })
+  useEffect(() => {
+    if (key === null) return
+    return window.octopus.board.onChanged((event) => {
+      if (event.projectId === projectId) reread()
+    })
+  }, [key, projectId])
 
   // Only this key's answer: another project's cards never show while the next board is read.
   const current = state !== null && state.key === key ? state : null

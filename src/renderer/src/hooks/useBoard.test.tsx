@@ -1,7 +1,7 @@
 import { act, renderHook, type RenderHookResult, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi, type Mock, type MockedFunction } from 'vitest'
 
-import type { BoardListing } from '@core/boardSchema.js'
+import type { BoardChangedEvent, BoardListing } from '@core/boardSchema.js'
 
 import type { Result } from '../../../preload/index.js'
 import { boardCard, boardListing, givenBoard, ok, refusal } from '../test/board.js'
@@ -370,6 +370,81 @@ describe('useBoard', () => {
     })
 
     expect(onError).not.toHaveBeenCalled()
+  })
+
+  describe('changes on disk', () => {
+    /** Catches the board's subscription, so a test can report a change on disk. */
+    function listenFor(): {
+      readonly fire: (event: BoardChangedEvent) => void
+      readonly unsubscribe: Mock
+    } {
+      let saved: ((event: BoardChangedEvent) => void) | null = null
+      const unsubscribe = vi.fn()
+      vi.mocked(octopus().board.onChanged).mockImplementation((handler) => {
+        saved = handler
+        return unsubscribe
+      })
+      return {
+        fire: (event) => {
+          saved?.(event)
+        },
+        unsubscribe
+      }
+    }
+
+    it('reads the board again when its folder changed', async () => {
+      const disk = listenFor()
+      renderBoard()
+      await waitFor(() => {
+        expect(list()).toHaveBeenCalledTimes(1)
+      })
+
+      act(() => {
+        disk.fire({ projectId: 'planner' })
+      })
+
+      await waitFor(() => {
+        expect(list()).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    it("ignores a change in another project's folder", async () => {
+      const disk = listenFor()
+      renderBoard()
+      await waitFor(() => {
+        expect(list()).toHaveBeenCalledTimes(1)
+      })
+
+      act(() => {
+        disk.fire({ projectId: 'esl' })
+      })
+      await act(() => Promise.resolve())
+
+      expect(list()).toHaveBeenCalledTimes(1)
+    })
+
+    it('stops listening when it unmounts', () => {
+      const disk = listenFor()
+      const { unmount } = renderBoard()
+
+      unmount()
+
+      expect(disk.unsubscribe).toHaveBeenCalled()
+    })
+
+    it('listens to nothing without a project', async () => {
+      renderBoard({ projectId: null })
+      await act(() => Promise.resolve())
+
+      expect(octopus().board.onChanged).not.toHaveBeenCalled()
+    })
+
+    it('listens to nothing without a folder', async () => {
+      renderBoard({ folder: '' })
+      await act(() => Promise.resolve())
+
+      expect(octopus().board.onChanged).not.toHaveBeenCalled()
+    })
   })
 
   describe('writes', () => {

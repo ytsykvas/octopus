@@ -67,6 +67,10 @@ Reading — the board, one card — writes nothing, not even a folder: the files
 
 A removal goes to the Trash: main hands `shell.trashItem` to the service as `discardPath`, and `boardFiles.ts` deletes no card itself. The service's default, used by tests, deletes.
 
+## Changes from outside
+
+One recursive watcher covers the whole board folder (`boardWatch.ts`). The first segment of a changed path names the project, and after 300 ms without another change there the window is told to read that board again. octopus's own temporary files and hidden names are ignored; `_attachments` is not. The watcher is opened when the folder is chosen or the projects change, and checked again on every read of the board, so one that failed — the folder deleted and made again, a volume remounted — comes back the next time the board is read. Reading the board when the window gains focus covers a change no event reported. A change made on another Mac arrives when the sync service writes it here, not before.
+
 ## Runs
 
 `runCard` writes the card an `id` if it has none and appends one entry to `runs`: `started` (the workspace's `createdAt`, the entry's key), `device` (this installation's `config.deviceId`, which decides "another machine"), `machine` (the hostname without `.local`, a label only), `branch` after the rename, and the signed-in Claude account. An empty account list is not written. The id is written before the workspace is made, so a card whose creation failed keeps an id and no run.

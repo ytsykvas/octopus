@@ -12,8 +12,10 @@ folder never races another Mac to create the same directories.
 board and another project's cards never show while the next one is read. A read counter keeps a
 late answer from overwriting a newer one. An unchanged listing keeps its object, so no card
 redraws, but `revision` moves on every read that worked: a changed description does not show in
-the listing, and the open card's detail re-reads on it. The window's `focus` reads again — a
-sync service writes while the window is elsewhere.
+the listing, and the open card's detail re-reads on it. So does `board:changed` for this project
+— the folder's watcher saying something on disk moved
+([data/board.md](../data/board.md#changes-from-outside)) — and the window's `focus`, for a change
+no event reported: a sync service writes while the window is elsewhere.
 
 **Failures.** A first read that fails is the screen's own state, "The board could not be read"
 with Try again. A later failure keeps the cards and goes to the banner, and the next read that
