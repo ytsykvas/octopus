@@ -2472,6 +2472,17 @@ export const en = {
       merged: 'Merged',
       removed: 'Workspace removed',
       elsewhere: 'In work on {{machine}}'
+    },
+    runs: {
+      title: 'Runs',
+      merged: 'merged',
+      removed: 'workspace removed',
+      open: 'in work',
+      turns_one: '{{count}} turn',
+      turns_few: '{{count}} turns',
+      turns_many: '{{count}} turns',
+      turns_other: '{{count}} turns',
+      tokens: '{{input}} in / {{output}} out tokens'
     }
   },
   errors: {

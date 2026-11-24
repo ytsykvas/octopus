@@ -153,13 +153,27 @@ edit.
 The second line of a card says what is happening to the work, first match wins: a workspace on
 this machine started from the card — its status mark, mood word and pull request mark, the same
 components the list draws; any run without an end whose `device` is another installation's — "In
-work on <machine>", even when a later run has ended; the last run merged — "Merged"; the last run
+work on <machine>", even when a later run has ended; the latest run merged — "Merged"; the latest run
 ended, which the removal writes, or a run of this installation without an end and no workspace here
 — "Workspace removed" (a removal that could not write its summary; a slow one may land it later).
 The live workspace wins over the file because it is what is happening now. The pull requests come
 from App's own `useBranchRequests`; a request older than the hundred most recent is not in that
 answer, and the card then shows no request mark. Until the workspace list has loaded, a run of this
 installation reads as removed for a moment.
+
+## Runs
+
+The panel lists a card's runs newest first by `started` — not in file order, since a run whose
+first write failed is appended later; the marks take the latest run the same way. Each row gives
+the day, the machine label, and how the run stands — merged, workspace removed, or in work — with
+the pull request as a link (`#310`, or the address when it names no number). Unlike the marks,
+which ask only whether any workspace from the card is here, a row matches its own workspace: an
+open run of this installation is in work only while the workspace whose `createdAt` is its
+`started` is here. A run merged on another Mac reads "merged" while its workspace there lives, even
+as the card's mark still says "In work on <machine>". Once the removal writes the run's summary, a
+second line adds turns, active time and tokens in and out — written by `formatDuration` and
+`formatTokens`, as the usage card writes them — and the accounts seen. Neither line shows a cost
+(PROJECT.md §16).
 
 ## Known limitations
 

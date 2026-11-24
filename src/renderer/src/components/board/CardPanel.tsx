@@ -30,6 +30,7 @@ import type { DescriptionDraft } from './boardDrafts.js'
 import { NO_PRIORITY_LOOK, PRIORITY_LOOKS, STATUS_LABEL_KEYS } from './boardLabels.js'
 import { CardComments } from './CardComments.js'
 import { CardDescription } from './CardDescription.js'
+import { CardRuns } from './CardRuns.js'
 
 export const PANEL_WIDTH = 420
 export const PANEL_MIN = 320
@@ -57,6 +58,7 @@ export interface CardPanelProps {
   readonly linked: WorkspaceView | null
   /** Runs the card, or opens its workspace; the screen asks first when another Mac has it. */
   readonly onRun: () => Promise<void>
+  readonly deviceId: string
 }
 
 function choices<V extends string | null>(
@@ -140,7 +142,8 @@ export function CardPanel({
   onMove,
   onRemove,
   linked,
-  onRun
+  onRun,
+  deviceId
 }: CardPanelProps): React.JSX.Element {
   const { t } = useTranslation()
   const [renaming, setRenaming] = useState(false)
@@ -310,6 +313,7 @@ export function CardPanel({
                 onSave={(save) => board.saveDescription(card.ref, save)}
               />
             )}
+            <CardRuns runs={detail.meta.runs} deviceId={deviceId} linked={linked} />
             <CardComments thread={detail.thread} onAdd={(text) => board.comment(card.ref, text)} />
           </>
         )}

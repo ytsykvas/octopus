@@ -2000,6 +2000,17 @@ export const uk: Translation = {
       merged: 'Влито',
       removed: 'Воркспейс видалено',
       elsewhere: 'У роботі на {{machine}}'
+    },
+    runs: {
+      title: 'Запуски',
+      merged: 'влито',
+      removed: 'воркспейс видалено',
+      open: 'у роботі',
+      turns_one: '{{count}} хід',
+      turns_few: '{{count}} ходи',
+      turns_many: '{{count}} ходів',
+      turns_other: '{{count}} ходу',
+      tokens: '{{input}} вхідних / {{output}} вихідних токенів'
     }
   },
   errors: {
