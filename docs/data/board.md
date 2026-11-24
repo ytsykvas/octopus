@@ -18,7 +18,7 @@ The board is the one thing octopus keeps outside `~/.octopus`. Its cards are mar
     <any folder>/<any>.md    a loose card, shown in Backlog
 ```
 
-A project and its folder are matched by name (`boardFolderName`, then `sameName`, which ignores case and Unicode normalisation). Nothing stored links the two. The project's folder is found whatever its name, one the scan would skip included — `Release.tmp` is a name `boardFolderName` gives — and two projects whose names give one folder share it.
+A project and its folder are matched by name (`boardFolderName`, then `sameName`, which ignores case and Unicode normalisation). Nothing stored links the two. The project's folder is found whatever its name, one the scan would skip included — `Release.tmp` is a name `boardFolderName` gives — and two projects whose names give one folder share it, and their writes wait for each other.
 
 ## A card file
 

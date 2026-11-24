@@ -30,9 +30,14 @@ export function isSkipped(name: string): boolean {
   return name.startsWith('_') || name.startsWith('.') || /\.tmp$/i.test(name)
 }
 
+/** A name as a case-insensitive, normalisation-insensitive volume tells it apart. */
+export function nameKey(name: string): string {
+  return name.normalize('NFC').toLowerCase()
+}
+
 /** One name to a case-insensitive, normalisation-insensitive volume. */
 export function sameName(a: string, b: string): boolean {
-  return a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase()
+  return nameKey(a) === nameKey(b)
 }
 
 /** The order names are listed in: root collation, digits as numbers, NFC first. */

@@ -290,7 +290,7 @@ import {
 import { parseCard, readMeta, type RunFields, setMeta, upsertRun } from './boardCard.js'
 import { type BoardWatch, type BoardWatchDeps, createBoardWatch } from './boardWatch.js'
 import { foldRunUsage } from './boardRun.js'
-import { cardWorkspaceName, machineLabel } from './boardNames.js'
+import { boardFolderName, cardWorkspaceName, machineLabel, nameKey } from './boardNames.js'
 import { present } from './present.js'
 import {
   ensureStore,
@@ -5169,8 +5169,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    */
   const promptWrites = oneAtATime()
 
-  /** Board writes, one line per project: a move and a create read the whole column first. Keyed by id, not by card: `oneAtATimeEach` never frees a key, and a move changes the ref. */
-  const boardWork = oneAtATimeEach()
+  /** The queues behind `boardWork`, one per board folder; `oneAtATimeEach` never frees a key. */
+  const boardLines = oneAtATimeEach()
+
+  /**
+   * Board writes, one at a time per board folder: a move and a create read the whole column first,
+   * and two projects whose names give one folder write into it. Keyed by that folder as the volume
+   * compares names, never by card (a move changes the ref), and only once the project is known, so an
+   * id from anywhere is refused without leaving a queue behind.
+   */
+  async function boardWork<T>(projectId: string, task: () => Promise<T>): Promise<T> {
+    // `async`, so an unknown project is a rejection like every other refusal; `await` for `require-await`.
+    return await boardLines(nameKey(boardFolderName(requireProject(projectId).name)), task)
+  }
 
   function layoutOf(projectId: string): Promise<BoardLayout> {
     return findLayout(config.boardFolder, requireProject(projectId).name)

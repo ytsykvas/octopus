@@ -18675,6 +18675,25 @@ describe('the board', () => {
     )
   })
 
+  it('runs the writes of two projects that share a folder in turn', async () => {
+    const twinRepo = join(dir, 'other', 'Planner')
+    await initRepo(twinRepo)
+    const twin = (await service.addProjectFromPath(twinRepo)).id
+    const draft = { status: 'backlog', title: 'Fix login' } as const
+
+    // In one line the second sees the first's file and takes the next name; in two, both
+    // list the folder before either writes, and one is refused the name.
+    await expect(
+      Promise.all([service.createCard(projectId, draft), service.createCard(twin, draft)])
+    ).resolves.toEqual(['backlog/Fix login.md', 'backlog/Fix login-2.md'])
+  })
+
+  it('refuses a write to a project it does not know', async () => {
+    await expect(
+      service.createCard('nope', { status: 'backlog', title: 'Fix login' })
+    ).rejects.toMatchObject({ code: 'worktreeMissing' })
+  })
+
   it('hands a removed card to discardPath', async () => {
     const discardPath = vi.fn(() => Promise.resolve())
     const spied = await createService({ ...paths(dir), discardPath })

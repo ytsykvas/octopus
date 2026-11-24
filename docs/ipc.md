@@ -252,8 +252,9 @@ the row redraws itself from the write rather than from a second read.
 
 Every `ref` is parsed by `CardRefSchema` before it is a path, and every payload
 whole. The project id is a non-empty string (`ProjectIdSchema`); the service is
-what knows whether it names a project. Reads take no turn; writes to one project
-run one after another.
+what knows whether it names a project. Reads take no turn; writes to one board
+folder run one after another — two projects whose names give one folder share it
+— and an id that names no project is refused before it waits.
 
 | Channel                 | Arguments                   | Notes                                                                                                                   |
 | ----------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
