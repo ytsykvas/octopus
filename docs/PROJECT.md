@@ -69,12 +69,14 @@ Each workspace owns:
 
 ```
 task → workspace → agent works → diff → PR → merge → archive
-       (worktree    (isolated,    (review) (gh)        (worktree removed,
-        + branch     own session)                       history kept)
+       (worktree    (isolated,    (review) (gh)        (worktree, record and
+        + branch     own session)                       transcripts removed)
         + .env)
 ```
 
 A task can be a card on the board (§12.6): **Run** makes the workspace, tagged and named from the card, and puts the card's text into the composer unsent.
+
+A board card keeps a summary of the run — turns, tokens, the pull request; nothing else of the workspace survives (§15).
 
 ---
 
@@ -798,6 +800,8 @@ The layer boundaries are §11.1. What each core module does is
 ## 15. Out of scope for stage 1
 
 Monaco diff, OS notifications, workspace archiving, Linux builds, and signing and notarisation.
+
+The board does not change that: a card keeps a few figures of a run in its own file; the workspace's history is deleted as before.
 
 The whole of the pull request came in ahead of this list, and it is worth saying why rather than quietly deleting the line: §3 calls a branch and a pull request the unit of integration, and a workspace whose branch had no way out of the app was only half of that. Opening one arrived first; the checks, the review threads and merging followed, because a request the app can open and then cannot read is a loop that still ends in a browser.
 

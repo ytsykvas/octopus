@@ -309,7 +309,9 @@ and coming back still says `Merging…`. An answer that lands after the switch
 does not read the pane again, and a refusal reaches the banner as "In anna: …".
 The header's Merge and Close are held and named the same way. What does run
 either way, from the pane and from the header, is the read of the project's list
-of requests, which marks every branch rather than the one on screen.
+of requests, which marks every branch rather than the one on screen. The same
+read also notes a request in the card of a workspace started from the board; the
+window sees no difference.
 
 **The commit message is typed, and an empty one amends.** The field is the
 same one the create form carries — one component, because two fields for one idea

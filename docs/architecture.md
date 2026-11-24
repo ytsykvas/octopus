@@ -262,6 +262,9 @@ WorkspaceRow (click)
   → ensureRemovable, discardWorkspace   core/workspaces.ts: the refusal before
                                   anything is destroyed, then git; the service
                                   commits the record once both are done
+  → settleCardRun                 core/service.ts: a card's run gets its summary
+                                  while the transcripts are still there
+                                  (bounded, never fails the removal)
 ```
 
 Two things are worth noticing.
@@ -308,3 +311,8 @@ Three things do, all of them to somewhere the user already has an account:
 a base branch that is current — `git fetch` before a worktree is created. Each
 is given a deadline, because the alternative to a deadline is a button that
 waits for ever.
+
+The board adds a fourth way out, by proxy: its cards live in a folder the user
+chose, which a sync service may upload, and what octopus writes there — the
+machine label, the account e-mail, the branch, the pull request's address, turns
+and tokens — travels with it.
