@@ -1998,6 +1998,16 @@ export const uk: Translation = {
       empty: 'Коментарів немає.',
       add: 'Додати коментар'
     },
+    resources: {
+      title: 'Ресурси',
+      add: 'Додати',
+      addLink: 'Додати посилання',
+      linkPrompt: 'Посилання',
+      linkInvalid:
+        'Можна додати лише посилання http і https, без імені користувача й пароля і не довше за 2000 символів.',
+      removeLink: 'Прибрати {{url}}',
+      empty: 'Посилань немає.'
+    },
     run: {
       elsewhereTitle: 'Уже в роботі на {{machine}}',
       elsewhereBody:

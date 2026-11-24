@@ -10,7 +10,8 @@ import {
   CardTitleSchema,
   CommentTextSchema,
   DescriptionSaveSchema,
-  isCardRef
+  isCardRef,
+  isCardUrl
 } from './boardSchema.js'
 import { CodedError, isCoded } from './codedError.js'
 
@@ -42,6 +43,19 @@ describe('isCardRef', () => {
     ['a\u0000.md', false]
   ])('%j → %s', (ref, expected) => {
     expect(isCardRef(ref)).toBe(expected)
+  })
+})
+
+describe('isCardUrl', () => {
+  const at = (length: number): string => 'https://a.example/' + 'x'.repeat(length - 18)
+
+  it.each([
+    [at(2000), true],
+    [at(2001), false],
+    ['https://user@a.example/', false],
+    ['javascript:alert(1)', false]
+  ])('%j → %s', (url, expected) => {
+    expect(isCardUrl(url)).toBe(expected)
   })
 })
 
