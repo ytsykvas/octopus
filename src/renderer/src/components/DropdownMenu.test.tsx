@@ -1,11 +1,11 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { DropdownMenu, type MenuAction } from './DropdownMenu.js'
 
-function renderMenu(actions: readonly MenuAction[]): void {
-  render(
+function menu(actions: readonly MenuAction[]): React.JSX.Element {
+  return (
     <div>
       <button type="button">Somewhere else</button>
 
@@ -23,6 +23,13 @@ function renderMenu(actions: readonly MenuAction[]): void {
       />
     </div>
   )
+}
+
+function renderMenu(actions: readonly MenuAction[]): (next: readonly MenuAction[]) => void {
+  const { rerender } = render(menu(actions))
+  return (next) => {
+    rerender(menu(next))
+  }
 }
 
 function triggerButton(): HTMLElement {
@@ -568,6 +575,227 @@ describe('DropdownMenu', () => {
 
       expect(screen.getByRole('menuitem', { name: 'Rename' })).toBeInTheDocument()
       expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('from the keyboard', () => {
+    const item = (name: string): HTMLElement => screen.getByRole('menuitem', { name })
+
+    async function openFromKeyboard(user: UserEvent): Promise<void> {
+      act(() => {
+        triggerButton().focus()
+      })
+      await user.keyboard('{Enter}')
+    }
+
+    const three = (): MenuAction[] => [
+      { id: 'rename', label: 'Rename', onSelect: vi.fn() },
+      { id: 'open', label: 'Open in editor', onSelect: vi.fn() },
+      { id: 'delete', label: 'Delete', onSelect: vi.fn() }
+    ]
+
+    it('puts the focus on the first item it opens with', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+
+      await openFromKeyboard(user)
+
+      expect(item('Rename')).toHaveFocus()
+    })
+
+    it('puts the focus on the current choice', async () => {
+      const user = userEvent.setup()
+      renderMenu([
+        { id: 'plan', label: 'Plan only', selected: false, onSelect: vi.fn() },
+        { id: 'default', label: 'Ask first', selected: true, onSelect: vi.fn() }
+      ])
+
+      await openFromKeyboard(user)
+
+      expect(screen.getByRole('menuitemradio', { name: 'Ask first' })).toHaveFocus()
+    })
+
+    it('passes over an item that cannot be chosen, and leaves the focus be when none can', async () => {
+      const user = userEvent.setup()
+      const redraw = renderMenu([
+        { id: 'rename', label: 'Rename', disabled: true, onSelect: vi.fn() },
+        { id: 'open', label: 'Open in editor', onSelect: vi.fn() }
+      ])
+
+      await openFromKeyboard(user)
+      expect(item('Open in editor')).toHaveFocus()
+      await user.keyboard('{Escape}')
+      redraw([{ id: 'rename', label: 'Rename', disabled: true, onSelect: vi.fn() }])
+      await openFromKeyboard(user)
+
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+      expect(triggerButton()).toHaveFocus()
+    })
+
+    it('walks the items with the arrows, round both ends', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+      await openFromKeyboard(user)
+
+      await user.keyboard('{ArrowDown}')
+      expect(item('Open in editor')).toHaveFocus()
+      await user.keyboard('{ArrowDown}{ArrowDown}')
+      expect(item('Rename')).toHaveFocus()
+      await user.keyboard('{ArrowUp}')
+      expect(item('Delete')).toHaveFocus()
+      await user.keyboard('{ArrowUp}')
+      expect(item('Open in editor')).toHaveFocus()
+    })
+
+    it('passes over an item that cannot be chosen while walking', async () => {
+      const user = userEvent.setup()
+      renderMenu([
+        { id: 'rename', label: 'Rename', onSelect: vi.fn() },
+        { id: 'open', label: 'Open in editor', disabled: true, onSelect: vi.fn() },
+        { id: 'delete', label: 'Delete', onSelect: vi.fn() }
+      ])
+      await openFromKeyboard(user)
+
+      await user.keyboard('{ArrowDown}')
+
+      expect(item('Delete')).toHaveFocus()
+    })
+
+    it('jumps to the ends with Home and End, and leaves other keys alone', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+      await openFromKeyboard(user)
+
+      await user.keyboard('{End}')
+      expect(item('Delete')).toHaveFocus()
+      await user.keyboard('{Home}')
+      expect(item('Rename')).toHaveFocus()
+      expect(fireEvent.keyDown(item('Rename'), { key: 'x' })).toBe(true)
+    })
+
+    it('walks onto the button a row has of its own', async () => {
+      const user = userEvent.setup()
+      renderMenu([
+        {
+          id: 'gong',
+          label: 'Gong',
+          selected: true,
+          aside: { label: 'Listen to Gong', icon: '▶', onSelect: vi.fn() },
+          onSelect: vi.fn()
+        }
+      ])
+      await openFromKeyboard(user)
+
+      await user.keyboard('{ArrowDown}')
+
+      expect(screen.getByRole('button', { name: 'Listen to Gong' })).toHaveFocus()
+    })
+
+    it('keeps its arrows to itself', async () => {
+      const user = userEvent.setup()
+      const rowKeys = vi.fn()
+      render(
+        <div onKeyDown={rowKeys}>
+          <DropdownMenu
+            actions={three()}
+            trigger={({ onClick }) => (
+              <button type="button" onClick={onClick}>
+                Workspace actions
+              </button>
+            )}
+          />
+        </div>
+      )
+      await openFromKeyboard(user)
+      rowKeys.mockClear()
+
+      // Cancelled, or the arrow would scroll the panel or the page as well.
+      expect(fireEvent.keyDown(item('Rename'), { key: 'ArrowDown' })).toBe(false)
+
+      expect(item('Open in editor')).toHaveFocus()
+      expect(rowKeys).not.toHaveBeenCalled()
+    })
+
+    it('gives the focus back to the trigger on Escape, but only from inside the menu', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+      await openFromKeyboard(user)
+
+      await user.keyboard('{Escape}')
+      expect(triggerButton()).toHaveFocus()
+      await user.keyboard('{Enter}')
+      act(() => {
+        screen.getByRole('button', { name: 'Somewhere else' }).focus()
+      })
+      await user.keyboard('{Escape}')
+
+      expect(screen.queryByRole('menu')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Somewhere else' })).toHaveFocus()
+    })
+
+    it('gives the focus back to the trigger after a choice made with Enter', async () => {
+      const user = userEvent.setup()
+      const actions = three()
+      renderMenu(actions)
+      await openFromKeyboard(user)
+
+      await user.keyboard('{ArrowDown}{Enter}')
+
+      expect(actions[1]?.onSelect).toHaveBeenCalledOnce()
+      expect(screen.queryByRole('menu')).toBeNull()
+      expect(triggerButton()).toHaveFocus()
+    })
+
+    it('closes on Tab and leaves the focus on the trigger', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+      await openFromKeyboard(user)
+
+      await user.tab()
+
+      expect(screen.queryByRole('menu')).toBeNull()
+      expect(triggerButton()).toHaveFocus()
+    })
+
+    it('lets Escape and chords on to the window, and no other key', async () => {
+      const user = userEvent.setup()
+      const reached = vi.fn<(event: KeyboardEvent) => void>()
+      window.addEventListener('keydown', reached)
+      try {
+        renderMenu(three())
+        await openFromKeyboard(user)
+        reached.mockClear()
+
+        await user.keyboard('x{Meta>}t{/Meta}{Control>}t{/Control}{Alt>}t{/Alt}{Escape}')
+      } finally {
+        window.removeEventListener('keydown', reached)
+      }
+
+      const keys = reached.mock.calls.map(([event]) => event.key)
+      expect(keys).not.toContain('x')
+      expect(keys.filter((key) => key === 't')).toHaveLength(3)
+      expect(keys).toContain('Escape')
+    })
+
+    it('gives the focus to the trigger when nothing had it as the menu opened', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+      fireEvent.click(triggerButton())
+
+      await user.keyboard('{Escape}')
+
+      expect(triggerButton()).toHaveFocus()
+    })
+
+    it('gives the focus back without scrolling to it', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+      await openFromKeyboard(user)
+      const focus = vi.spyOn(triggerButton(), 'focus')
+
+      await user.keyboard('{Escape}')
+
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true })
     })
   })
 })

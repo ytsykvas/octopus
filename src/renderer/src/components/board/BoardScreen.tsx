@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
@@ -9,6 +9,7 @@ import {
   type BoardStatus,
   type CardMove
 } from '@core/boardSchema.js'
+import { present } from '@core/present.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -18,10 +19,20 @@ import { useBoardDrag } from '../../hooks/useBoardDrag.js'
 import { type OpenCard, useCardDetail } from '../../hooks/useCardDetail.js'
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
+import { useWindowEvent } from '../../hooks/useWindowEvent.js'
 import { Button } from '../Button.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardColumn } from './BoardColumn.js'
 import type { DescriptionDraft } from './boardDrafts.js'
+import { statusOf } from './boardDrop.js'
+import {
+  boardKeyAction,
+  type BoardKeyAction,
+  cardRefs,
+  focusedCard,
+  nextFocus,
+  stepIndex
+} from './boardKeys.js'
 import { cardMark, linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.js'
 import { CardMarks } from './CardMarks.js'
 import { CardPanel, PANEL_WIDTH } from './CardPanel.js'
@@ -44,6 +55,11 @@ export interface BoardScreenProps {
   readonly deviceId: string
   readonly onRun: (projectId: string, ref: string) => Promise<void>
   readonly requests: ReadonlyMap<string, BranchRequest>
+}
+
+/** Escaped: refs hold spaces and Cyrillic (FileTabs.tsx does the same). */
+function cardButton(ref: string): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>(`button[data-card-ref="${CSS.escape(ref)}"]`)
 }
 
 export function BoardScreen({
@@ -100,7 +116,7 @@ export function BoardScreen({
     [linkedBy, requests, deviceId]
   )
 
-  /** Every move of a card goes through here (status menu and drag now, ⌥↑/⌥↓ B205). */
+  /** Every move of a card goes through here: the status menu, the drag, ⌥↑/⌥↓. */
   const moveCard = useCallback(
     async (ref: string, to: CardMove): Promise<string | null> => {
       const moved = await move(ref, to)
@@ -167,6 +183,81 @@ export function BoardScreen({
     onDraft(ref, null)
     openCardAt(ref)
   }
+
+  // Put back only from the body: React keeps the focus on a tile it moves, but a loose card
+  // comes back from a move as a new node under a new ref, and a key pressed meanwhile may have
+  // put it in a field. A state, so the effect runs once the listing the move read back is drawn.
+  const [refocus, setRefocus] = useState<{ readonly ref: string } | null>(null)
+  useLayoutEffect(() => {
+    if (refocus !== null && document.activeElement === document.body) {
+      cardButton(refocus.ref)?.focus()
+    }
+  }, [refocus])
+
+  const runKey = (action: BoardKeyAction): void => {
+    switch (action.kind) {
+      case 'create': {
+        const status = action.from === null ? null : statusOf(columns, action.from)
+        setCreatingIn(status ?? 'backlog')
+        return
+      }
+      case 'close':
+        setOpen(null)
+        setRefocus({ ref: action.ref })
+        return
+      case 'blur':
+        cardButton(action.ref)?.blur()
+        return
+      case 'focus': {
+        const next = nextFocus(cardRefs(columns), action.from, action.direction)
+        if (next === null) return
+        cardButton(next)?.focus()
+        // A new opening, so the panel remounts and the editor of the card left hands its draft
+        // up (B203); none when the focus stayed put, or the same card would be read again.
+        if (openCard !== null && next !== openCard.ref) openCardAt(next)
+        return
+      }
+      case 'step': {
+        const status = present(statusOf(columns, action.ref), 'the column of a listed task')
+        const index = stepIndex(columns[status], action.ref, action.step)
+        if (index === null) return
+        void moveCard(action.ref, { status, index }).then((next) => {
+          if (next !== null) setRefocus({ ref: next })
+        })
+        return
+      }
+      case 'remove':
+        void removeCard(
+          present(
+            board.listing?.cards.find((card) => card.ref === action.ref),
+            'a listed task'
+          )
+        )
+        return
+    }
+  }
+
+  useWindowEvent(
+    'keydown',
+    (event) => {
+      // The same guard as App's: an open dialog owns every key.
+      if (document.querySelector('dialog[open]') !== null) return
+      // An open menu or popover closes itself on Escape, but its listener was added after this
+      // one, so `defaultPrevented` is still false here.
+      if (document.querySelector('[role="menu"], [role="dialog"]') !== null) return
+      const focused = focusedCard(event.target)
+      if (focused === undefined) return
+      const action = boardKeyAction(event, {
+        focused,
+        open: openCard?.ref ?? null,
+        reorderable: true
+      })
+      if (action === null) return
+      event.preventDefault()
+      runKey(action)
+    },
+    { active: board.listing !== null }
+  )
 
   const linked = openCard === null ? null : linkedTo(openCard, linkedBy)
 

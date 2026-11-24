@@ -40,6 +40,11 @@ classes and components are listed in the `ui-component` skill.
   through `useDismiss` and close when their anchor moves through
   `useCloseOnMove`, and a panel opened from inside a `<dialog>` is portalled
   into that dialog, or `showModal()` leaves it inert.
+- **A tooltip is a `title` attribute.** `TitleTooltips`, mounted once in
+  `main.tsx`, draws every one 300 ms after the pointer settles; never write a
+  tooltip component. It is the one floating panel without `useAnchoredPanel`:
+  it follows the pointer, takes no clicks and hides on any press, key, wheel or
+  scroll. Component tests do not mount it, so querying by title still works.
 - **Tests query by role, label, title or text**, never by class name. The
   selected row, tab and rail item carry `aria-current`.
 - **The renderer has its own vitest config.** Run one file with
