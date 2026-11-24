@@ -2042,6 +2042,8 @@ export const de: Translation = {
       linkInvalid:
         'Nur http- und https-Links können hinzugefügt werden, ohne Benutzername oder Passwort und mit höchstens 2.000 Zeichen.',
       removeLink: '{{url}} entfernen',
+      removeFile: '{{name}} löschen',
+      removeFileTitle: '„{{name}}“ löschen?',
       empty: 'Keine Links oder Dateien.',
       addFiles: 'Dateien hinzufügen'
     },

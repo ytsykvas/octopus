@@ -120,3 +120,13 @@ export async function attachmentPath(
   })
   return path
 }
+
+/** Handed to the caller, as a card is: core cannot reach the Trash. */
+export async function removeAttachment(
+  layout: BoardLayout,
+  ref: string,
+  name: string,
+  discard: (path: string) => Promise<void>
+): Promise<void> {
+  await discard(await attachmentPath(layout, ref, name))
+}

@@ -888,6 +888,15 @@ export function registerIpc(
       )
     })
   )
+  host.handle('board:removeFile', (_event, projectId: unknown, ref: unknown, name: unknown) =>
+    attempt(() =>
+      service.removeCardAttachment(
+        ProjectIdSchema.parse(projectId),
+        CardRefSchema.parse(ref),
+        z.string().min(1).max(ATTACHMENT_NAME_MAX).parse(name)
+      )
+    )
+  )
   host.handle('board:revealCard', (_event, projectId: unknown, ref: unknown) =>
     attempt(async () => {
       host.showItemInFolder(

@@ -276,7 +276,7 @@ import {
   findCard,
   type BoardLayout
 } from './boardFiles.js'
-import { addAttachments, attachmentPath, listAttachments } from './cardFiles.js'
+import { addAttachments, attachmentPath, listAttachments, removeAttachment } from './cardFiles.js'
 import {
   BoardError,
   CARD_TEXT_MAX,
@@ -1419,6 +1419,8 @@ export interface OctopusService {
   addCardAttachments(projectId: string, ref: string, sources: readonly string[]): Promise<number>
   /** Where one of a card's files is, for Finder to show. */
   cardAttachmentPath(projectId: string, ref: string, name: string): Promise<string>
+  /** One of a card's files to the Trash in the app (`discardPath`). */
+  removeCardAttachment(projectId: string, ref: string, name: string): Promise<void>
   /** Where a card's own file is, for Finder to show. */
   cardPath(projectId: string, ref: string): Promise<string>
 
@@ -6878,6 +6880,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
     async cardAttachmentPath(projectId, ref, name) {
       return attachmentPath(await layoutOf(projectId), ref, name)
+    },
+    removeCardAttachment(projectId, ref, name) {
+      return boardWork(projectId, async () => {
+        await removeAttachment(await layoutOf(projectId), ref, name, discardPath)
+      })
     },
     async cardPath(projectId, ref) {
       return cardOnDisk(await layoutOf(projectId), ref)

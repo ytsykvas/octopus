@@ -33,6 +33,7 @@ export interface BoardController {
   readonly comment: (ref: string, text: string) => Promise<boolean>
   readonly attach: (ref: string) => Promise<boolean>
   readonly revealFile: (ref: string, name: string) => Promise<boolean>
+  readonly removeFile: (ref: string, name: string) => Promise<boolean>
   readonly revealCard: (ref: string) => Promise<boolean>
 }
 
@@ -249,6 +250,16 @@ export function useBoard(
     [source, settle]
   )
 
+  const removeFile = useCallback(
+    async (ref: string, name: string): Promise<boolean> => {
+      if (source === null) return false
+      return (
+        (await settle(window.octopus.board.removeFile(source.projectId, ref, name)))?.ok === true
+      )
+    },
+    [source, settle]
+  )
+
   const revealCard = useCallback(
     async (ref: string): Promise<boolean> => {
       if (source === null) return false
@@ -287,6 +298,7 @@ export function useBoard(
     comment,
     attach,
     revealFile,
+    removeFile,
     revealCard
   }
 }

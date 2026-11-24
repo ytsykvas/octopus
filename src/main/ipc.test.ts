@@ -468,6 +468,7 @@ describe('channel table', () => {
     'board:run',
     'board:attach',
     'board:revealFile',
+    'board:removeFile',
     'board:revealCard',
     'dialog:pickSkill',
     'dialog:pickMarkdown',
@@ -4215,6 +4216,34 @@ describe('board resources', () => {
       code: 'cardMissing'
     })
     expect(bench.revealed).toEqual([])
+  })
+
+  it("removes a card's file", async () => {
+    await mkdir(join(folder, '_attachments', 'Fix login'), { recursive: true })
+    await writeFile(join(folder, '_attachments', 'Fix login', 'a.txt'), 'a')
+
+    await expect(invoke('board:removeFile', projectId, ref, 'a.txt')).resolves.toEqual({
+      ok: true,
+      value: undefined
+    })
+    await expect(readdir(join(folder, '_attachments', 'Fix login'))).resolves.toEqual([])
+  })
+
+  it('refuses to remove a name that is not a short string', async () => {
+    await mkdir(join(folder, '_attachments', 'Fix login'), { recursive: true })
+    await writeFile(join(folder, '_attachments', 'Fix login', 'a.txt'), 'a')
+    const answers = [
+      await invoke('board:removeFile', projectId, ref, 42),
+      await invoke('board:removeFile', projectId, ref, ''),
+      await invoke('board:removeFile', projectId, ref, 'x'.repeat(256)),
+      await invoke('board:removeFile', projectId, '../x.md', 'a.txt'),
+      await invoke('board:removeFile', '', ref, 'a.txt')
+    ]
+
+    for (const answer of answers) {
+      expect(answer).toMatchObject({ ok: false, code: 'valueRefused' })
+    }
+    await expect(readdir(join(folder, '_attachments', 'Fix login'))).resolves.toEqual(['a.txt'])
   })
 
   it('shows the card itself in Finder', async () => {

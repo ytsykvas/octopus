@@ -10,11 +10,13 @@ beforeAll(stubDialogElement)
 function renderResources(
   links: readonly string[] = [],
   onLinks = vi.fn<CardResourcesProps['onLinks']>(() => Promise.resolve(true)),
-  attachments: readonly string[] = []
+  attachments: readonly string[] = [],
+  onRemoveFile = vi.fn<CardResourcesProps['onRemoveFile']>(() => Promise.resolve(true))
 ): {
   onLinks: typeof onLinks
   onAttach: Mock<CardResourcesProps['onAttach']>
   onReveal: Mock<CardResourcesProps['onReveal']>
+  onRemoveFile: typeof onRemoveFile
 } {
   const onAttach = vi.fn<CardResourcesProps['onAttach']>()
   const onReveal = vi.fn<CardResourcesProps['onReveal']>()
@@ -25,9 +27,10 @@ function renderResources(
       attachments={attachments}
       onAttach={onAttach}
       onReveal={onReveal}
+      onRemoveFile={onRemoveFile}
     />
   )
-  return { onLinks, onAttach, onReveal }
+  return { onLinks, onAttach, onReveal, onRemoveFile }
 }
 
 function linksUpTo(count: number): string[] {
@@ -221,6 +224,57 @@ describe('CardResources', () => {
 
     expect(onReveal).toHaveBeenCalledWith('a.txt')
     expect(file).toHaveAttribute('title', 'Show in Finder')
+  })
+
+  it('deletes a file once asked', async () => {
+    const user = userEvent.setup()
+    const { onRemoveFile, onReveal } = renderResources([], undefined, ['a.txt', 'b.png'])
+
+    await user.click(screen.getByRole('button', { name: 'Delete b.png' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “b.png”?' })
+    expect(dialog).toHaveTextContent('The file goes to the Trash, where it can be restored.')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    expect(onRemoveFile).toHaveBeenCalledExactlyOnceWith('b.png')
+    expect(onReveal).not.toHaveBeenCalled()
+  })
+
+  it('keeps a file when the question is cancelled', async () => {
+    const user = userEvent.setup()
+    const { onRemoveFile } = renderResources([], undefined, ['a.txt'])
+
+    await user.click(screen.getByRole('button', { name: 'Delete a.txt' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “a.txt”?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(onRemoveFile).not.toHaveBeenCalled()
+  })
+
+  it('takes no second deletion while one is being written', async () => {
+    const user = userEvent.setup()
+    let finish: (removed: boolean) => void = () => undefined
+    const onRemoveFile = vi.fn<CardResourcesProps['onRemoveFile']>(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    renderResources([], undefined, ['a.txt', 'b.png'], onRemoveFile)
+
+    await user.click(screen.getByRole('button', { name: 'Delete a.txt' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Delete “a.txt”?' })).getByRole('button', {
+        name: 'Delete'
+      })
+    )
+
+    expect(screen.getByRole('button', { name: 'Delete b.png' })).toBeDisabled()
+    act(() => {
+      finish(true)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Delete b.png' })).toBeEnabled()
+    })
   })
 
   it('lists files without links', () => {

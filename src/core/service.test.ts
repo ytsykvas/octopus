@@ -18744,6 +18744,29 @@ describe('the board', () => {
     ).resolves.toBe(shot)
   })
 
+  it("hands a removed card's file to discardPath", async () => {
+    const discardPath = vi.fn(() => Promise.resolve())
+    const spied = await createService({ ...paths(dir), discardPath })
+    await put(join(folder, 'backlog/a.md'), '# A\n')
+    await put(join(folder, '_attachments', 'a', 'shot.png'), 'png')
+
+    await spied.removeCardAttachment(projectId, 'backlog/a.md', 'shot.png')
+
+    expect(discardPath).toHaveBeenCalledTimes(1)
+    expect(discardPath).toHaveBeenCalledWith(join(folder, '_attachments', 'a', 'shot.png'))
+  })
+
+  it("deletes a removed card's file when no discardPath is given", async () => {
+    await put(join(folder, 'backlog/a.md'), '# A\n')
+    await put(join(folder, '_attachments', 'a', 'shot.png'), 'png')
+
+    await service.removeCardAttachment(projectId, 'backlog/a.md', 'shot.png')
+
+    await expect(lstat(join(folder, '_attachments', 'a', 'shot.png'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
   it("names the card's folder of files when it cannot be read", async () => {
     await service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
     const files = join(folder, '_attachments', 'Fix login')

@@ -326,6 +326,7 @@ export function CardPanel({
                   attachments={detail.attachments}
                   onAttach={() => void board.attach(card.ref)}
                   onReveal={(name) => void board.revealFile(card.ref, name)}
+                  onRemoveFile={(name) => board.removeFile(card.ref, name)}
                 />
               </>
             )}

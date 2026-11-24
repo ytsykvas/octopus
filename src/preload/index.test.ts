@@ -563,6 +563,11 @@ describe('channel names', () => {
       'board:revealFile'
     ],
     [
+      'board.removeFile',
+      () => method('board', 'removeFile')('p' as never, 'backlog/a.md' as never, 'a.txt' as never),
+      'board:removeFile'
+    ],
+    [
       'board.revealCard',
       () => method('board', 'revealCard')('p' as never, 'backlog/a.md' as never),
       'board:revealCard'

@@ -368,6 +368,20 @@ describe('CardPanel', () => {
     expect(board.revealFile).toHaveBeenCalledWith('backlog/Fix login.md', 'a.txt')
   })
 
+  it("deletes a card's file through the board", async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel({ detail: cardDetail({ attachments: ['a.txt'] }) })
+
+    await user.click(screen.getByRole('button', { name: 'Delete a.txt' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Delete “a.txt”?' })).getByRole('button', {
+        name: 'Delete'
+      })
+    )
+
+    expect(board.removeFile).toHaveBeenCalledWith('backlog/Fix login.md', 'a.txt')
+  })
+
   it("shows the card's links", () => {
     renderPanel({ detail: cardDetail({ meta: { links: ['https://a.example/1'], runs: [] } }) })
 

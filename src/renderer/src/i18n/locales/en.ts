@@ -2479,6 +2479,8 @@ export const en = {
       linkInvalid:
         'Only http and https links can be added, with no user name or password and up to 2,000 characters.',
       removeLink: 'Remove {{url}}',
+      removeFile: 'Delete {{name}}',
+      removeFileTitle: 'Delete “{{name}}”?',
       empty: 'No links or files.',
       addFiles: 'Add files'
     },
