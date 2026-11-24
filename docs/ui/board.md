@@ -28,6 +28,13 @@ colour a quarter of the way to the ink (`LETTERS`, as the project tiles: raw pin
 file that is not UTF-8 text, which is listed by its file name and never written. Cards with an
 `order` come first; the rest follow in name order under a "By name" rule.
 
+**The columns scroll sideways** when they do not fit: six are 1632px, more than most windows give
+them once the card panel takes its 420. The row's scrollbar is always drawn (`.scrollbar-shown`),
+where macOS would show its own only while it moves. A vertical wheel over a header, an empty
+column or a column whose cards fit turns sideways (`sidewaysDelta`); Shift and a trackpad swipe
+already do. Opening a card brings it into view once the panel is drawn, and so does a move that
+takes the open card to another column.
+
 **Every hook in `BoardScreen` sits above its first return.** Later parts hang theirs on the
 columns, and a hook below a return breaks the rules of hooks the moment the state changes.
 

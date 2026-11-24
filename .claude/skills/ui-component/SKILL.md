@@ -82,7 +82,8 @@ over its own content.
   white square on the dark canvas;
 - `.section-label` — section heading (11px, weight 600, muted);
 - `.focus-ring` — visible keyboard focus;
-- `.titlebar-drag` — window drag region.
+- `.titlebar-drag` — window drag region;
+- `.scrollbar-shown` — a scroll box whose scrollbar macOS must not hide (its children keep the themed colour).
 
 The second copy of a run of utility classes is the moment to add a class here.
 Six copies of the field styling had already drifted by a few pixels of height —
