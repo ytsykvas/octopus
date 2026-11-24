@@ -1,14 +1,13 @@
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type BoardCard, type BoardStatus, CARD_TITLE_MAX } from '@core/boardSchema.js'
+import type { BoardCard, BoardStatus } from '@core/boardSchema.js'
 
 import type { BoardDrag } from '../../hooks/useBoardDrag.js'
 import { DropLine } from '../DropLine.js'
-import { NameEditor } from '../NameEditor.js'
 import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
-import { BoardCardTile } from './BoardCardTile.js'
+import { BoardCardTile, CARD_BOX, CardTitleField, TitleLead } from './BoardCardTile.js'
 import { STATUS_LABEL_KEYS } from './boardLabels.js'
 
 export interface BoardColumnProps {
@@ -91,14 +90,13 @@ export function BoardColumn({
       ) : (
         <ul
           aria-label={label}
-          className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2"
+          className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pt-1 pb-2"
         >
           {creating && (
-            <li>
-              <NameEditor
+            <li className={`${CARD_BOX} border-accent bg-surface flex gap-2`}>
+              <TitleLead />
+              <CardTitleField
                 initial=""
-                placeholder={t('board.column.newTaskPlaceholder')}
-                maxLength={CARD_TITLE_MAX}
                 onCommit={(title) => {
                   onCreating(false)
                   onCreate(title)

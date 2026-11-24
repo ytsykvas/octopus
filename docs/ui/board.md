@@ -64,12 +64,15 @@ emptied.
 
 The + in a column's header opens a field above its first card. It is `NameEditor`, so Enter or a
 click elsewhere creates the task and Escape or an empty title creates nothing — the same field
-every rename in the window uses. The new card goes to the top of its column: it is what was just
-thought of. Every write, worked or refused, reads the board again (`settle`): a refusal usually
-means the disk has moved on from the cards on screen, and the board should show it. A refusal is
-reported after that read, so the read cannot clear it, and a write whose board leaves before it
-settles — before its answer or during that read — reports nothing and answers as refused, so the
-next board never opens or follows a card the last one wrote.
+every rename in the window uses. It is drawn as the card it becomes (`CardTitleField`): the card's
+box, its accent edge the focus mark, the title where the card will show it. Not the window's input
+and ring: the ring sits outside the box, and the scrolling list cut it off at the top. The list
+keeps 4px above its first card for the ring a focused card draws. The new card goes to the top of
+its column: it is what was just thought of. Every write, worked or refused, reads the board again
+(`settle`): a refusal usually means the disk has moved on from the cards on screen, and the board
+should show it. A refusal is reported after that read, so the read cannot clear it, and a write
+whose board leaves before it settles — before its answer or during that read — reports nothing and
+answers as refused, so the next board never opens or follows a card the last one wrote.
 
 ## The card panel
 

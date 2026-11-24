@@ -1,12 +1,13 @@
 import { MessageSquare, TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { BoardCard, CardPriority } from '@core/boardSchema.js'
+import { type BoardCard, CARD_TITLE_MAX, type CardPriority } from '@core/boardSchema.js'
 import { KIND_COLORS } from '@core/workspaceKinds.js'
 
 import type { CardDragProps } from '../../hooks/useBoardDrag.js'
 import type { DropEdge } from '../../hooks/useDragReorder.js'
 import { DropLine } from '../DropLine.js'
+import { NameEditor } from '../NameEditor.js'
 import { LETTERS } from '../projectTint.js'
 import { PRIORITY_LOOKS } from './boardLabels.js'
 
@@ -29,6 +30,46 @@ function PriorityMark({ priority }: { readonly priority: CardPriority }): React.
       role="img"
       aria-label={t(`board.priorities.${priority}`)}
       className={`mt-[3px] shrink-0 ${tone}`}
+    />
+  )
+}
+
+export const CARD_BOX = 'w-full rounded-[var(--radius-control)] border px-2.5 py-2 text-left'
+
+/** A spacer without a priority, so the titles of a column line up. */
+export function TitleLead({
+  priority
+}: {
+  readonly priority?: CardPriority | undefined
+}): React.JSX.Element {
+  return priority === undefined ? (
+    <span aria-hidden className="w-3 shrink-0" />
+  ) : (
+    <PriorityMark priority={priority} />
+  )
+}
+
+export interface CardTitleFieldProps {
+  readonly initial: string
+  readonly onCommit: (title: string) => void
+  readonly onCancel: () => void
+}
+
+/** The title typed where a card shows it: its box's accent edge is the focus mark, so no ring. */
+export function CardTitleField({
+  initial,
+  onCommit,
+  onCancel
+}: CardTitleFieldProps): React.JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <NameEditor
+      initial={initial}
+      maxLength={CARD_TITLE_MAX}
+      placeholder={t('board.column.newTaskPlaceholder')}
+      onCommit={onCommit}
+      onCancel={onCancel}
+      className="text-ink placeholder:text-ink-faint min-w-0 flex-1 bg-transparent outline-none"
     />
   )
 }
@@ -73,15 +114,10 @@ export function BoardCardTile({
         data-card-ref={card.ref}
         aria-keyshortcuts="Enter Alt+ArrowUp Alt+ArrowDown Meta+Backspace"
         aria-current={open ? 'true' : undefined}
-        className={`focus-ring hover:border-line-strong w-full rounded-[var(--radius-control)] border px-2.5 py-2 text-left ${open ? 'border-accent/50 bg-canvas' : 'border-line bg-surface'}`}
+        className={`focus-ring hover:border-line-strong ${CARD_BOX} ${open ? 'border-accent/50 bg-canvas' : 'border-line bg-surface'}`}
       >
         <span className="flex gap-2">
-          {/* A spacer without a priority, so the titles of a column line up. */}
-          {priority === undefined ? (
-            <span aria-hidden className="w-3 shrink-0" />
-          ) : (
-            <PriorityMark priority={priority} />
-          )}
+          <TitleLead priority={priority} />
           <span className="text-ink line-clamp-2 min-w-0 break-words">{card.title}</span>
         </span>
         {secondLine && (
