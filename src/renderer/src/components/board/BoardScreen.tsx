@@ -231,6 +231,7 @@ export function BoardScreen({
           onRemove={() => void removeCard(openCard)}
           linked={linked}
           onRun={() => runCard(project.id, openCard, linked)}
+          deviceId={deviceId}
         />
       )}
       {dialog}

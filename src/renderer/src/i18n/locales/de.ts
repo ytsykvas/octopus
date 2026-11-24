@@ -2035,6 +2035,17 @@ export const de: Translation = {
       merged: 'Gemergt',
       removed: 'Workspace entfernt',
       elsewhere: 'In Arbeit auf {{machine}}'
+    },
+    runs: {
+      title: 'Durchläufe',
+      merged: 'gemergt',
+      removed: 'Workspace entfernt',
+      open: 'in Arbeit',
+      turns_one: '{{count}} Durchgang',
+      turns_few: '{{count}} Durchgänge',
+      turns_many: '{{count}} Durchgänge',
+      turns_other: '{{count}} Durchgänge',
+      tokens: '{{input}} Eingabe- / {{output}} Ausgabe-Tokens'
     }
   },
 

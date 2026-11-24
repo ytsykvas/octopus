@@ -770,6 +770,17 @@ describe('BoardScreen', () => {
         expect(screen.queryByRole('dialog')).toBeNull()
       })
 
+      it("lists this Mac's open run with no workspace here as removed", async () => {
+        await openWith({
+          links: [],
+          runs: [{ ...ELSEWHERE, device: 'device-one', machine: 'Mac-One' }]
+        })
+
+        expect(screen.getByRole('region', { name: 'Runs' })).toHaveTextContent(
+          'Mac-One · workspace removed'
+        )
+      })
+
       it('offers Run for a card a workspace here did not start', async () => {
         await openWith(
           { id: ID, links: [], runs: [] },

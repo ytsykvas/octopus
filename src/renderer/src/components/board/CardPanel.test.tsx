@@ -2,9 +2,19 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { CardRunEntry } from '@core/boardSchema.js'
+
 import { boardCard, boardController, cardDetail, refusal } from '../../test/board.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { CardPanel, type CardPanelProps } from './CardPanel.js'
+
+const RUN: CardRunEntry = {
+  started: '2026-11-21T12:00:00.000Z',
+  device: 'device-one',
+  machine: 'Mac-One',
+  branch: 'ytsykvas/anna'
+}
+const ENDED = '2026-11-22T12:00:00.000Z'
 
 let writeText: ReturnType<typeof vi.fn>
 
@@ -34,6 +44,7 @@ function renderPanel(props: Partial<CardPanelProps> = {}): CardPanelProps {
     onRemove: vi.fn(),
     linked: null,
     onRun: vi.fn(() => Promise.resolve()),
+    deviceId: 'device-one',
     ...props
   }
   render(<CardPanel {...all} />)
@@ -284,6 +295,24 @@ describe('CardPanel', () => {
 
     expect(screen.getByText('First')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+  })
+
+  it("lists the card's runs under its description", () => {
+    renderPanel({ detail: cardDetail({ meta: { links: [], runs: [{ ...RUN, ended: ENDED }] } }) })
+
+    const runs = screen.getByRole('region', { name: 'Runs' })
+    expect(screen.getByRole('region', { name: 'Description' }).compareDocumentPosition(runs)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+  })
+
+  it('passes the workspace here to the runs', () => {
+    renderPanel({
+      detail: cardDetail({ meta: { links: [], runs: [RUN] } }),
+      linked: workspaceView('anna', { createdAt: RUN.started })
+    })
+
+    expect(screen.getByRole('region', { name: 'Runs' })).toHaveTextContent('in work')
   })
 
   it('offers Run for a card not started here', async () => {

@@ -161,6 +161,15 @@ from App's own `useBranchRequests`; a request older than the hundred most recent
 answer, and the card then shows no request mark. Until the workspace list has loaded, a run of this
 installation reads as removed for a moment.
 
+## Runs
+
+The panel lists a card's runs newest first: the day, the machine label, and how the run stands —
+merged, workspace removed, or in work — with the pull request as a link (`#310`, or the address
+when it names no number). An open run of this installation counts as removed when no workspace
+here was started at that moment, the same rule the card's marks use. A finished run adds a second
+line: turns, active time and tokens in and out — written by `formatDuration` and `formatTokens`,
+as the usage card writes them — and the accounts seen. Neither line shows a cost (PROJECT.md §16).
+
 ## Known limitations
 
 - Every read lists and reads every file of the project's folder; a folder of thousands of large

@@ -56,3 +56,18 @@ export function cardMark(
   // Also a run this Mac left open with no workspace here: its summary was lost at the removal.
   return { kind: 'removed' }
 }
+
+export type RunState = 'merged' | 'removed' | 'open'
+
+export function runState(
+  run: CardRunEntry,
+  deviceId: string,
+  linked: WorkspaceView | null
+): RunState {
+  if (run.merged !== undefined) return 'merged'
+  if (run.ended !== undefined) return 'removed'
+  if (run.device !== deviceId) return 'open'
+  // A run of this installation is in work only while its workspace is here: a run's
+  // `started` is its workspace's `createdAt`. Otherwise the removal lost its summary.
+  return linked?.createdAt === run.started ? 'open' : 'removed'
+}

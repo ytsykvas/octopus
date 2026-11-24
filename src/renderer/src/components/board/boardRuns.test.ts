@@ -4,7 +4,7 @@ import type { BoardCard, CardRunEntry } from '@core/boardSchema.js'
 
 import { boardCard, BRANCH_REQUEST } from '../../test/board.js'
 import { workspaceView } from '../../test/workspaces.js'
-import { cardMark, linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.js'
+import { cardMark, linkedByCard, linkedTo, openRunElsewhere, runState } from './boardRuns.js'
 
 const ID = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
 const ELSEWHERE: CardRunEntry = {
@@ -13,6 +13,13 @@ const ELSEWHERE: CardRunEntry = {
   machine: 'Mac-Two',
   branch: 'octopus/feature/anna'
 }
+const RUN: CardRunEntry = {
+  ...ELSEWHERE,
+  device: 'device-one',
+  machine: 'Mac-One',
+  branch: 'ytsykvas/anna'
+}
+const ENDED = '2026-11-22T12:10:00.000Z'
 
 describe('linkedByCard', () => {
   it('maps each workspace by the card it was started from', () => {
@@ -68,13 +75,6 @@ describe('openRunElsewhere', () => {
 })
 
 describe('cardMark', () => {
-  const RUN: CardRunEntry = {
-    ...ELSEWHERE,
-    device: 'device-one',
-    machine: 'Mac-One',
-    branch: 'ytsykvas/anna'
-  }
-  const ENDED = '2026-11-22T12:10:00.000Z'
   const anna = workspaceView('anna', { card: ID })
   const linked = linkedByCard([anna])
   const none = new Map<string, never>()
@@ -143,5 +143,37 @@ describe('cardMark', () => {
 
   it('marks nothing on a card never run', () => {
     expect(cardMark(withRuns([]), none, none, 'device-one')).toBeNull()
+  })
+})
+
+describe('runState', () => {
+  const anna = workspaceView('anna', { card: ID, createdAt: RUN.started })
+
+  it('calls a merged run merged', () => {
+    expect(runState({ ...RUN, merged: ENDED, ended: ENDED }, 'device-one', null)).toBe('merged')
+  })
+
+  it('calls an ended run removed', () => {
+    expect(runState({ ...RUN, device: 'device-two', ended: ENDED }, 'device-one', null)).toBe(
+      'removed'
+    )
+  })
+
+  it("calls another Mac's open run in work", () => {
+    expect(runState({ ...RUN, device: 'device-two' }, 'device-one', null)).toBe('open')
+  })
+
+  it("calls this Mac's open run in work while its workspace is here", () => {
+    expect(runState(RUN, 'device-one', anna)).toBe('open')
+  })
+
+  it("calls this Mac's open run with no workspace removed", () => {
+    expect(runState(RUN, 'device-one', null)).toBe('removed')
+  })
+
+  it("calls this Mac's older open run removed beside a later workspace", () => {
+    const later = workspaceView('anna', { card: ID, createdAt: '2026-11-22T08:00:00.000Z' })
+
+    expect(runState(RUN, 'device-one', later)).toBe('removed')
   })
 })
