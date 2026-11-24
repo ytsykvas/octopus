@@ -1165,6 +1165,33 @@ describe('FilesPanel', () => {
       expect(tree).toHaveAttribute('aria-activedescendant', row('.env').id)
     })
 
+    it('keeps the keys pressed in its menu from the tree', async () => {
+      const user = userEvent.setup()
+      const { onOpen } = await menuOn('src')
+
+      await user.keyboard('{ArrowRight}{ArrowDown}{Enter}')
+
+      expect(row('src')).toHaveAttribute('aria-expanded', 'false')
+      expect(onOpen).not.toHaveBeenCalled()
+      // userEvent.setup() puts a clipboard of its own in place of the one beforeEach stubbed.
+      expect(await navigator.clipboard.readText()).toBe('src')
+    })
+
+    it('gives the focus back to the tree the menu was opened from', async () => {
+      const user = userEvent.setup()
+      answering()
+      renderPanel()
+      const tree = await shown()
+      act(() => {
+        tree.focus()
+      })
+      fireEvent.contextMenu(row('README.md'))
+
+      await user.keyboard('{Escape}')
+
+      expect(tree).toHaveFocus()
+    })
+
     describe('from the keyboard', () => {
       /* `ç` is what ⌥C types on macOS, so the key alone would never match:
          the shortcut has to be read from the physical key. */

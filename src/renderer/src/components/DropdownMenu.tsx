@@ -155,9 +155,10 @@ export function DropdownMenu({
   const width = asked ?? (described ? DESCRIBED_WIDTH : PANEL_WIDTH)
 
   const close = useCallback(() => {
-    // Focus left in the panel would fall to the body as it unmounts.
+    // Focus left in the panel would fall to the body as it unmounts. Not scrolled to:
+    // a scroll may be what closed the menu.
     if (panel.current?.contains(document.activeElement) === true) {
-      present(position, 'where the open menu was drawn').opener.focus()
+      present(position, 'where the open menu was drawn').opener.focus({ preventScroll: true })
     }
     setOpen(false)
   }, [position])
@@ -173,6 +174,11 @@ export function DropdownMenu({
   }, [open])
 
   const walk = (event: React.KeyboardEvent<HTMLElement>): void => {
+    // React carries a key through the portal to the trigger's ancestors (the file tree takes Enter);
+    // Escape and chords go on to the window, to useDismiss and App's shortcuts.
+    if (event.key !== 'Escape' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.stopPropagation()
+    }
     if (event.key === 'Tab') {
       // Cancelled: the panel is still in the page as Tab moves on, so the focus would land in it.
       event.preventDefault()
@@ -183,9 +189,7 @@ export function DropdownMenu({
     if (step === undefined) return
     const all = items(event.currentTarget)
     const at = all.findIndex((item) => item === document.activeElement)
-    // Stopped: React carries the key through the portal to the row the trigger sits in.
     event.preventDefault()
-    event.stopPropagation()
     present(all[step(at, all.length)], 'a button of the open menu').focus()
   }
 
@@ -219,7 +223,8 @@ export function DropdownMenu({
         window.innerWidth - width - GAP
       ),
       host: element.closest('dialog') ?? document.body,
-      opener: element
+      // Where the focus was, which is not the trigger for a file tree's row: the tree holds it.
+      opener: document.querySelector<HTMLElement>(':focus') ?? element
     })
 
     setOpen(true)

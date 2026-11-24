@@ -756,5 +756,46 @@ describe('DropdownMenu', () => {
       expect(screen.queryByRole('menu')).toBeNull()
       expect(triggerButton()).toHaveFocus()
     })
+
+    it('lets Escape and chords on to the window, and no other key', async () => {
+      const user = userEvent.setup()
+      const reached = vi.fn<(event: KeyboardEvent) => void>()
+      window.addEventListener('keydown', reached)
+      try {
+        renderMenu(three())
+        await openFromKeyboard(user)
+        reached.mockClear()
+
+        await user.keyboard('x{Meta>}t{/Meta}{Control>}t{/Control}{Alt>}t{/Alt}{Escape}')
+      } finally {
+        window.removeEventListener('keydown', reached)
+      }
+
+      const keys = reached.mock.calls.map(([event]) => event.key)
+      expect(keys).not.toContain('x')
+      expect(keys.filter((key) => key === 't')).toHaveLength(3)
+      expect(keys).toContain('Escape')
+    })
+
+    it('gives the focus to the trigger when nothing had it as the menu opened', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+      fireEvent.click(triggerButton())
+
+      await user.keyboard('{Escape}')
+
+      expect(triggerButton()).toHaveFocus()
+    })
+
+    it('gives the focus back without scrolling to it', async () => {
+      const user = userEvent.setup()
+      renderMenu(three())
+      await openFromKeyboard(user)
+      const focus = vi.spyOn(triggerButton(), 'focus')
+
+      await user.keyboard('{Escape}')
+
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    })
   })
 })
