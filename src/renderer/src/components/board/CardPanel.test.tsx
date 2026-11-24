@@ -1,10 +1,11 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CardRunEntry } from '@core/boardSchema.js'
 
 import { boardCard, boardController, cardDetail, refusal } from '../../test/board.js'
+import { stubDialogElement } from '../../test/dialog.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { CardPanel, type CardPanelProps } from './CardPanel.js'
 
@@ -17,6 +18,8 @@ const RUN: CardRunEntry = {
 const ENDED = '2026-11-22T12:00:00.000Z'
 
 let writeText: ReturnType<typeof vi.fn>
+
+beforeAll(stubDialogElement)
 
 beforeEach(() => {
   writeText = vi.fn(() => Promise.resolve())
@@ -295,6 +298,47 @@ describe('CardPanel', () => {
 
     expect(screen.getByText('First')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+  })
+
+  it('adds a link through the board', async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel({ detail: cardDetail() })
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Add link' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add link' })
+    await user.type(within(dialog).getByLabelText('Link'), 'https://a.example/x')
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }))
+
+    expect(board.update).toHaveBeenCalledWith('backlog/Fix login.md', {
+      links: ['https://a.example/x']
+    })
+  })
+
+  it("shows the card's links", () => {
+    renderPanel({ detail: cardDetail({ meta: { links: ['https://a.example/1'], runs: [] } }) })
+
+    expect(screen.getByRole('link', { name: 'https://a.example/1' })).toBeInTheDocument()
+  })
+
+  it('shows no resources before the detail arrives', () => {
+    renderPanel({ detail: null })
+
+    expect(screen.queryByRole('heading', { name: 'Resources' })).toBeNull()
+  })
+
+  it('offers no links on a file that is not UTF-8', () => {
+    renderPanel({
+      card: boardCard({ notText: true }),
+      detail: cardDetail({ notText: true, description: '' })
+    })
+
+    expect(screen.queryByRole('heading', { name: 'Resources' })).toBeNull()
+    expect(
+      screen.getByText(
+        'This file is not UTF-8 text. It is shown by its file name and is not changed here.'
+      )
+    ).toBeInTheDocument()
   })
 
   it("lists the card's runs under its description", () => {

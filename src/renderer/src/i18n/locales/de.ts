@@ -2033,6 +2033,15 @@ export const de: Translation = {
       empty: 'Keine Kommentare.',
       add: 'Kommentar hinzufügen'
     },
+    resources: {
+      title: 'Ressourcen',
+      add: 'Hinzufügen',
+      addLink: 'Link hinzufügen',
+      linkPrompt: 'Link',
+      linkInvalid: 'Nur http- und https-Links können hinzugefügt werden.',
+      removeLink: 'Link entfernen',
+      empty: 'Keine Links.'
+    },
     run: {
       elsewhereTitle: 'Schon in Arbeit auf {{machine}}',
       elsewhereBody:

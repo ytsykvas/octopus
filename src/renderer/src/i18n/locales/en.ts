@@ -2470,6 +2470,15 @@ export const en = {
       empty: 'No comments.',
       add: 'Add a comment'
     },
+    resources: {
+      title: 'Resources',
+      add: 'Add',
+      addLink: 'Add link',
+      linkPrompt: 'Link',
+      linkInvalid: 'Only http and https links can be added.',
+      removeLink: 'Remove link',
+      empty: 'No links.'
+    },
     run: {
       elsewhereTitle: 'Already in work on {{machine}}',
       elsewhereBody:

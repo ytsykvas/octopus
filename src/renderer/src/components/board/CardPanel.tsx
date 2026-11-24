@@ -30,6 +30,7 @@ import type { DescriptionDraft } from './boardDrafts.js'
 import { NO_PRIORITY_LOOK, PRIORITY_LOOKS, STATUS_LABEL_KEYS } from './boardLabels.js'
 import { CardComments } from './CardComments.js'
 import { CardDescription } from './CardDescription.js'
+import { CardResources } from './CardResources.js'
 import { CardRuns } from './CardRuns.js'
 
 export const PANEL_WIDTH = 420
@@ -306,12 +307,18 @@ export function CardPanel({
             {card.notText ? (
               <Callout tone="warning">{t('board.card.notText')}</Callout>
             ) : (
-              <CardDescription
-                description={detail.description}
-                draft={draft}
-                onDraft={onDraft}
-                onSave={(save) => board.saveDescription(card.ref, save)}
-              />
+              <>
+                <CardDescription
+                  description={detail.description}
+                  draft={draft}
+                  onDraft={onDraft}
+                  onSave={(save) => board.saveDescription(card.ref, save)}
+                />
+                <CardResources
+                  links={detail.meta.links}
+                  onLinks={(links) => board.update(card.ref, { links })}
+                />
+              </>
             )}
             <CardRuns runs={detail.meta.runs} deviceId={deviceId} linked={linked} />
             <CardComments thread={detail.thread} onAdd={(text) => board.comment(card.ref, text)} />
