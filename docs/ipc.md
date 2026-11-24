@@ -270,6 +270,7 @@ folder run one after another — two projects whose names give one folder share 
 | `board:run`             | `projectId`, `ref`          | starts a workspace from the card, or answers the one already started from it here (`CardLaunch`)                        |
 | `board:attach`          | `projectId`, `ref`          | copies what was picked in main's file dialog into the card's `_attachments/<stem>/`; how many, `0` when cancelled       |
 | `board:revealFile`      | `projectId`, `ref`, `name`  | shows one of the card's files selected in Finder, never opens it                                                        |
+| `board:removeFile`      | `projectId`, `ref`, `name`  | one of the card's files to the Trash, as `board:remove` sends the card                                                  |
 | `board:revealCard`      | `projectId`, `ref`          | shows the card's own file selected in Finder                                                                            |
 
 `board:run` answers the workspace, the card's description as a draft (null once

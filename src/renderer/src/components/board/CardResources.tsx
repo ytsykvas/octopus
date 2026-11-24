@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { CARD_LINKS_MAX, isCardUrl } from '@core/boardSchema.js'
 
 import { useAskText } from '../../hooks/useAskText.js'
+import { useConfirm } from '../../hooks/useConfirm.js'
 import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
 import { IconButton } from '../paneControls.js'
 
@@ -14,6 +15,7 @@ export interface CardResourcesProps {
   readonly attachments: readonly string[]
   readonly onAttach: () => void
   readonly onReveal: (name: string) => void
+  readonly onRemoveFile: (name: string) => Promise<unknown>
 }
 
 export function CardResources({
@@ -21,12 +23,15 @@ export function CardResources({
   onLinks,
   attachments,
   onAttach,
-  onReveal
+  onReveal,
+  onRemoveFile
 }: CardResourcesProps): React.JSX.Element {
   const { t } = useTranslation()
   const headingId = useId()
   const { ask, dialog } = useAskText()
   const [writing, setWriting] = useState(false)
+  const { confirm, dialog: question } = useConfirm()
+  const [removing, setRemoving] = useState(false)
 
   // Each change is built from the list on screen, which a write updates only after the board is read again.
   const write = async (next: string[]): Promise<void> => {
@@ -45,6 +50,21 @@ export function CardResources({
       invalid: t('board.resources.linkInvalid')
     })
     if (url !== null && !links.includes(url)) await write([...links, url])
+  }
+
+  // The list on screen changes only once the board is read again, so a second click would ask twice.
+  const removeFile = async (name: string): Promise<void> => {
+    const { confirmed } = await confirm({
+      title: t('board.resources.removeFileTitle', { name }),
+      message: t('board.remove.body'),
+      confirmLabel: t('board.panel.remove'),
+      cancelLabel: t('board.panel.cancel'),
+      destructive: true
+    })
+    if (!confirmed) return
+    setRemoving(true)
+    await onRemoveFile(name)
+    setRemoving(false)
   }
 
   const actions: readonly MenuAction[] = [
@@ -119,7 +139,7 @@ export function CardResources({
       {attachments.length > 0 && (
         <ul className="flex flex-col gap-1">
           {attachments.map((name) => (
-            <li key={name} className="flex items-center text-[12px]">
+            <li key={name} className="flex items-center gap-1.5 text-[12px]">
               <button
                 type="button"
                 title={t('board.panel.reveal')}
@@ -131,11 +151,19 @@ export function CardResources({
                 <Paperclip aria-hidden size={12} className="text-ink-faint shrink-0" />
                 <span className="truncate">{name}</span>
               </button>
+              <IconButton
+                label={t('board.resources.removeFile', { name })}
+                disabled={removing}
+                onClick={() => void removeFile(name)}
+              >
+                <X aria-hidden size={12} />
+              </IconButton>
             </li>
           ))}
         </ul>
       )}
       {dialog}
+      {question}
     </section>
   )
 }

@@ -262,6 +262,15 @@ describe('CardPanel', () => {
     expect(screen.queryByTitle('Enter to save, Escape to cancel')).toBeNull()
   })
 
+  it('offers no rename for a file that is not UTF-8 text', async () => {
+    const user = userEvent.setup()
+    renderPanel({ card: boardCard({ notText: true }), detail: cardDetail({ notText: true }) })
+
+    await user.dblClick(screen.getByRole('heading', { name: 'Fix login' }))
+
+    expect(screen.queryByTitle('Enter to save, Escape to cancel')).toBeNull()
+  })
+
   it('sends nothing for an unchanged name', async () => {
     const user = userEvent.setup()
     const { board } = renderPanel()
@@ -357,6 +366,20 @@ describe('CardPanel', () => {
     await user.click(screen.getByRole('button', { name: 'a.txt' }))
 
     expect(board.revealFile).toHaveBeenCalledWith('backlog/Fix login.md', 'a.txt')
+  })
+
+  it("deletes a card's file through the board", async () => {
+    const user = userEvent.setup()
+    const { board } = renderPanel({ detail: cardDetail({ attachments: ['a.txt'] }) })
+
+    await user.click(screen.getByRole('button', { name: 'Delete a.txt' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Delete “a.txt”?' })).getByRole('button', {
+        name: 'Delete'
+      })
+    )
+
+    expect(board.removeFile).toHaveBeenCalledWith('backlog/Fix login.md', 'a.txt')
   })
 
   it("shows the card's links", () => {

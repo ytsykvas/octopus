@@ -14,9 +14,15 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { promisify } from 'node:util'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { addAttachments, attachmentPath, isAttachmentName, listAttachments } from './cardFiles.js'
+import {
+  addAttachments,
+  attachmentPath,
+  isAttachmentName,
+  listAttachments,
+  removeAttachment
+} from './cardFiles.js'
 import { type BoardLayout, findLayout } from './boardFiles.js'
 
 const run = promisify(execFile)
@@ -350,5 +356,63 @@ describe('attachmentPath', () => {
         code: 'EACCES'
       })
     })
+  })
+})
+
+describe('removeAttachment', () => {
+  it("hands a card's file to discard and deletes nothing itself", async () => {
+    await given(files('a.txt'), 'a')
+    const discard = vi.fn(() => Promise.resolve())
+
+    await removeAttachment(layout, 'backlog/A.md', 'a.txt', discard)
+
+    expect(discard).toHaveBeenCalledTimes(1)
+    expect(discard).toHaveBeenCalledWith(files('a.txt'))
+    await expect(readFile(files('a.txt'), 'utf8')).resolves.toBe('a')
+  })
+
+  it('hands discard nothing for a name that climbs or a file that is gone', async () => {
+    const discard = vi.fn(() => Promise.resolve())
+
+    await expect(
+      removeAttachment(layout, 'backlog/A.md', '../A.md', discard)
+    ).rejects.toMatchObject({ code: 'cardOutside' })
+    await expect(
+      removeAttachment(layout, 'backlog/A.md', 'nope.txt', discard)
+    ).rejects.toMatchObject({ code: 'cardMissing' })
+    expect(discard).not.toHaveBeenCalled()
+  })
+
+  it('hands discard no folder, which the list never shows', async () => {
+    await given(files('sub', 'inner.txt'))
+    const discard = vi.fn(() => Promise.resolve())
+
+    await expect(removeAttachment(layout, 'backlog/A.md', 'sub', discard)).rejects.toMatchObject({
+      code: 'cardMissing',
+      params: { name: 'sub' }
+    })
+    expect(discard).not.toHaveBeenCalled()
+  })
+
+  it('hands discard no link, which would reach out of the board', async () => {
+    await given(join(root, 'elsewhere.txt'))
+    await mkdir(files(), { recursive: true })
+    await symlink(join(root, 'elsewhere.txt'), files('a.txt'))
+    const discard = vi.fn(() => Promise.resolve())
+
+    await expect(removeAttachment(layout, 'backlog/A.md', 'a.txt', discard)).rejects.toMatchObject({
+      code: 'cardOutside'
+    })
+    expect(discard).not.toHaveBeenCalled()
+  })
+
+  it('hands discard nothing of a card that is gone, as an attach refuses it', async () => {
+    await given(join(layout.dir, '_attachments', 'Gone', 'a.txt'))
+    const discard = vi.fn(() => Promise.resolve())
+
+    await expect(
+      removeAttachment(layout, 'backlog/Gone.md', 'a.txt', discard)
+    ).rejects.toMatchObject({ code: 'cardMissing', params: { name: 'Gone.md' } })
+    expect(discard).not.toHaveBeenCalled()
   })
 })

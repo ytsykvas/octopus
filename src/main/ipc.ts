@@ -208,6 +208,7 @@ export interface IpcHost {
  * workspace it claims.
  */
 const FilePathSchema = z.string().min(1).max(4096)
+const AttachmentNameSchema = z.string().min(1).max(ATTACHMENT_NAME_MAX)
 
 /**
  * Why a Run did not start, as the Scripts tab worded it.
@@ -883,10 +884,19 @@ export function registerIpc(
         await service.cardAttachmentPath(
           ProjectIdSchema.parse(projectId),
           CardRefSchema.parse(ref),
-          z.string().min(1).max(ATTACHMENT_NAME_MAX).parse(name)
+          AttachmentNameSchema.parse(name)
         )
       )
     })
+  )
+  host.handle('board:removeFile', (_event, projectId: unknown, ref: unknown, name: unknown) =>
+    attempt(() =>
+      service.removeCardAttachment(
+        ProjectIdSchema.parse(projectId),
+        CardRefSchema.parse(ref),
+        AttachmentNameSchema.parse(name)
+      )
+    )
   )
   host.handle('board:revealCard', (_event, projectId: unknown, ref: unknown) =>
     attempt(async () => {

@@ -1026,6 +1026,8 @@ const api = {
       ipcRenderer.invoke('board:attach', projectId, ref) as Promise<Result<number>>,
     revealFile: (projectId: string, ref: string, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('board:revealFile', projectId, ref, name) as Promise<Result<void>>,
+    removeFile: (projectId: string, ref: string, name: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('board:removeFile', projectId, ref, name) as Promise<Result<void>>,
     revealCard: (projectId: string, ref: string): Promise<Result<void>> =>
       ipcRenderer.invoke('board:revealCard', projectId, ref) as Promise<Result<void>>
   },

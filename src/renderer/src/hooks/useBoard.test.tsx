@@ -889,6 +889,40 @@ describe('useBoard', () => {
       expect(octopus().board.revealCard).toHaveBeenCalledWith('planner', ref)
     })
 
+    it("removes a card's file and reads the board again", async () => {
+      givenBoard([boardCard()])
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const removed = await act(() => result.current.removeFile('backlog/Fix login.md', 'a.txt'))
+
+      expect(removed).toBe(true)
+      expect(octopus().board.removeFile).toHaveBeenCalledWith(
+        'planner',
+        'backlog/Fix login.md',
+        'a.txt'
+      )
+      expect(octopus().board.list).toHaveBeenCalledTimes(2)
+    })
+
+    it('answers a removal of a file that outlived its board as refused', async () => {
+      givenBoard([boardCard()])
+      const sent = held<Result<undefined>>()
+      vi.mocked(octopus().board.removeFile).mockReturnValueOnce(sent.promise)
+      const { result, rerender, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      const removing = result.current.removeFile('backlog/Fix login.md', 'a.txt')
+
+      rerender({ projectId: 'ledger', folder: '/tmp/board', onError })
+      sent.resolve(ok(undefined))
+
+      expect(await act(() => removing)).toBe(false)
+    })
+
     it('answers an attach and a reveal that outlived their board as refused', async () => {
       givenBoard([boardCard()])
       const attached = held<Result<number>>()
@@ -921,10 +955,12 @@ describe('useBoard', () => {
       const answers = [
         await act(() => result.current.attach('a')),
         await act(() => result.current.revealFile('a', 'a.txt')),
-        await act(() => result.current.revealCard('a'))
+        await act(() => result.current.revealCard('a')),
+        await act(() => result.current.removeFile('a', 'a.txt'))
       ]
 
-      expect(answers).toEqual([false, false, false])
+      expect(answers).toEqual([false, false, false, false])
+      expect(octopus().board.removeFile).not.toHaveBeenCalled()
       expect(octopus().board.attach).not.toHaveBeenCalled()
       expect(octopus().board.revealFile).not.toHaveBeenCalled()
       expect(octopus().board.revealCard).not.toHaveBeenCalled()

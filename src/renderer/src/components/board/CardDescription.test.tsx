@@ -302,6 +302,22 @@ describe('CardDescription', () => {
     expect(field()).toHaveValue('Kept')
   })
 
+  it('leaves the focus alone when it opens on a draft', () => {
+    renderDescription(OPENED, { text: 'Kept', base: OPENED })
+
+    expect(field()).not.toHaveFocus()
+  })
+
+  it('takes the focus when a restored draft goes back to editing', async () => {
+    const user = userEvent.setup()
+    renderDescription(OPENED, { text: 'Kept', base: OPENED })
+
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+
+    expect(field()).toHaveFocus()
+  })
+
   it('hands the edit up on the way out', async () => {
     const user = userEvent.setup()
     const { unmount } = renderDescription()

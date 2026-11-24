@@ -2007,6 +2007,8 @@ export const uk: Translation = {
       linkInvalid:
         'Можна додати лише посилання http і https, без імені користувача й пароля і не довше за 2000 символів.',
       removeLink: 'Прибрати {{url}}',
+      removeFile: 'Видалити {{name}}',
+      removeFileTitle: 'Видалити «{{name}}»?',
       empty: 'Немає посилань і файлів.',
       addFiles: 'Додати файли'
     },

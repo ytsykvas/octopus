@@ -64,12 +64,15 @@ emptied.
 
 The + in a column's header opens a field above its first card. It is `NameEditor`, so Enter or a
 click elsewhere creates the task and Escape or an empty title creates nothing — the same field
-every rename in the window uses. The new card goes to the top of its column: it is what was just
-thought of. Every write, worked or refused, reads the board again (`settle`): a refusal usually
-means the disk has moved on from the cards on screen, and the board should show it. A refusal is
-reported after that read, so the read cannot clear it, and a write whose board leaves before it
-settles — before its answer or during that read — reports nothing and answers as refused, so the
-next board never opens or follows a card the last one wrote.
+every rename in the window uses. It is drawn as the card it becomes (`CardTitleField`): the card's
+box, its accent edge the focus mark, the title where the card will show it. Not the window's input
+and ring: the ring sits outside the box, and the scrolling list cut it off at the top. The list
+keeps 4px above its first card for the ring a focused card draws. The new card goes to the top of
+its column: it is what was just thought of. Every write, worked or refused, reads the board again
+(`settle`): a refusal usually means the disk has moved on from the cards on screen, and the board
+should show it. A refusal is reported after that read, so the read cannot clear it, and a write
+whose board leaves before it settles — before its answer or during that read — reports nothing and
+answers as refused, so the next board never opens or follows a card the last one wrote.
 
 ## The card panel
 
@@ -92,9 +95,14 @@ Another project or another board folder closes the panel and the new-task field.
 it was that card's. Copy description puts the whole description on the clipboard, its `# title`
 line included, with the whitespace around it trimmed. A file that is not UTF-8 shows a warning in
 place of its description and has nothing to copy or edit; its comments still show.
-A double-click on the title renames the card: only its `# ` line changes, and the file keeps its
-name, which is what other Macs and links know it by. The panel's width is dragged from its left edge,
-320 to 720px, and not saved.
+A double-click on the title renames the card, in the panel or on its tile — not a file that is not
+UTF-8, which core would refuse: only its `# ` line changes, and the file keeps its name, which is
+what other Macs and links know it by. The tile puts the new-task field where its title was, keeps
+its priority and second line around it, and cannot be dragged while the field is open. The
+double-click's first click opens the panel, as a workspace row's selects the row; the second does
+not open it again, which would remount the panel and read the card twice. Enter or Escape hands
+the focus back to the tile. The panel's width is dragged from its left edge, 320 to 720px, and not
+saved.
 
 `useCardDetail` reads the open card at its ref, again on every listing `revision`, and keeps the
 previous detail while the same opening is read again. A card removed outside is quiet
@@ -116,7 +124,9 @@ An edit not saved yet survives closing the panel, another card, a status change,
 screen switch: the editor hands it up once on the way out, as the composer does, and `App` keeps
 it by project and card (`boardDrafts`); a move carries it to the card's new ref, and a card
 created in place of a deleted one starts without it. The panel is keyed by the opening, so a move
-does not remount the editor.
+does not remount the editor. A restored edit opens without the focus, which Edit, or switching back
+from Preview, takes: the card was opened by a click or a key on the board, and the field would take
+the caret from the board's keys or from a tile's title field the same double-click opened.
 
 ## Comments
 
@@ -245,6 +255,11 @@ would bring back what the first removed. A file that is not UTF-8 has no section
 "Add files" asks main for the system's file dialog; the files appear in the list once the board is
 read again. A file's row shows it in Finder on a click, and the panel's More menu does the same for
 the card's own file, above Delete — a file that is not UTF-8 included. Nothing here opens a file.
+The row's ✕ asks first, as Delete does for the card, then sends the file to the Trash through
+core (`board:removeFile`); every Mac the folder syncs to loses it. While it is sent, every row's ✕
+is disabled: the row stays until the board is read again, and a second click would ask to delete a
+file already in the Trash. Only a file the list shows goes: a folder or a link under that name is
+refused, and so is a card no longer on disk, as "Add files" refuses it.
 A picked file the board would not list — a hidden name, a folder, a link — is skipped without a
 word, and "Add files" asks first whether the card is still there, so a gone card opens no dialog.
 

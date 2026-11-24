@@ -287,7 +287,7 @@ export function CardPanel({
         ) : (
           <h2
             onDoubleClick={() => {
-              setRenaming(true)
+              if (!card.notText) setRenaming(true)
             }}
             className="text-ink cursor-text text-[15px] font-semibold break-words"
           >
@@ -326,6 +326,7 @@ export function CardPanel({
                   attachments={detail.attachments}
                   onAttach={() => void board.attach(card.ref)}
                   onReveal={(name) => void board.revealFile(card.ref, name)}
+                  onRemoveFile={(name) => board.removeFile(card.ref, name)}
                 />
               </>
             )}

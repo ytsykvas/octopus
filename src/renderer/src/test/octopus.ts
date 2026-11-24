@@ -327,6 +327,7 @@ export function installOctopusStub(): Api {
       ),
       attach: vi.fn(() => ok(0)),
       revealFile: vi.fn(() => ok(undefined)),
+      removeFile: vi.fn(() => ok(undefined)),
       revealCard: vi.fn(() => ok(undefined))
     },
 

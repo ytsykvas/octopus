@@ -11,6 +11,7 @@ function renderTile(props: Partial<BoardCardTileProps> = {}): BoardCardTileProps
     card: boardCard(),
     open: false,
     onOpen: vi.fn(),
+    onRename: vi.fn(),
     marks: null,
     drag: noDrag().cardProps('backlog/Fix login.md', 'backlog'),
     dropEdge: null,
@@ -191,6 +192,145 @@ describe('BoardCardTile', () => {
       'Enter Alt+ArrowUp Alt+ArrowDown Meta+Backspace'
     )
     expect(button).toHaveAttribute('data-card-ref', 'backlog/Fix login.md')
+  })
+
+  it('renames on a double-click', async () => {
+    const user = userEvent.setup()
+    const { onRename } = renderTile()
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    const field = screen.getByRole('textbox', { name: 'Task title' })
+    expect(field).toHaveValue('Fix login')
+    expect(field).toHaveFocus()
+    await user.clear(field)
+    await user.type(field, 'Fix sign-in{Enter}')
+
+    expect(onRename).toHaveBeenCalledWith('Fix sign-in')
+    expect(screen.getByRole('button', { name: 'Fix login' })).toBeInTheDocument()
+  })
+
+  it('keeps the title on Escape', async () => {
+    const user = userEvent.setup()
+    const { onRename } = renderTile()
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    expect(screen.getByRole('textbox', { name: 'Task title' })).toHaveFocus()
+    await user.keyboard('X{Escape}')
+
+    expect(onRename).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Fix login' })).toBeInTheDocument()
+  })
+
+  it('keeps the rest of the card around the field', async () => {
+    const user = userEvent.setup()
+    renderTile({
+      card: boardCard({ meta: { links: [], runs: [], priority: 'urgent', tag: 'fix' } })
+    })
+
+    await user.dblClick(screen.getByRole('button'))
+
+    const tile = screen.getByRole('listitem')
+    expect(within(tile).getByRole('textbox', { name: 'Task title' })).toBeInTheDocument()
+    expect(within(tile).getByRole('img', { name: 'Urgent' })).toBeInTheDocument()
+    expect(within(tile).getByText('Fix')).toBeInTheDocument()
+  })
+
+  it('sends nothing for an unchanged title', async () => {
+    const user = userEvent.setup()
+    const { onRename } = renderTile()
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    expect(screen.getByRole('textbox', { name: 'Task title' })).toHaveValue('Fix login')
+    await user.keyboard('{Enter}')
+
+    expect(onRename).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Fix login' })).toBeInTheDocument()
+  })
+
+  it('cannot be dragged while its title is edited', async () => {
+    const user = userEvent.setup()
+    renderTile({
+      drag: { ...noDrag().cardProps('backlog/Fix login.md', 'backlog'), draggable: true }
+    })
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+
+    expect(screen.getByRole('listitem')).not.toHaveAttribute('draggable')
+  })
+
+  it('opens the card once on a double-click', async () => {
+    const user = userEvent.setup()
+    const { onOpen } = renderTile()
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no rename for a file that is not UTF-8 text', async () => {
+    const user = userEvent.setup()
+    renderTile({ card: boardCard({ notText: true }) })
+
+    await user.dblClick(screen.getByRole('button'))
+
+    expect(screen.queryByRole('textbox')).toBeNull()
+  })
+
+  it('gives the focus back to the tile when the field is done', async () => {
+    const user = userEvent.setup()
+    renderTile()
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    await user.keyboard('{Escape}')
+
+    expect(screen.getByRole('button', { name: 'Fix login' })).toHaveFocus()
+  })
+
+  it('gives the focus back once, not on every later render', async () => {
+    const user = userEvent.setup()
+    const props: BoardCardTileProps = {
+      card: boardCard(),
+      open: false,
+      onOpen: vi.fn(),
+      onRename: vi.fn(),
+      marks: null,
+      drag: noDrag().cardProps('backlog/Fix login.md', 'backlog'),
+      dropEdge: null,
+      dragging: false
+    }
+    const { rerender } = render(
+      <ul>
+        <BoardCardTile {...props} />
+      </ul>
+    )
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    await user.keyboard('{Escape}')
+
+    screen.getByRole('button', { name: 'Fix login' }).blur()
+    rerender(
+      <ul>
+        <BoardCardTile {...props} open />
+      </ul>
+    )
+
+    expect(screen.getByRole('button', { name: 'Fix login' })).not.toHaveFocus()
+  })
+
+  it('takes no focus by appearing', () => {
+    renderTile()
+
+    expect(screen.getByRole('button', { name: 'Fix login' })).not.toHaveFocus()
+  })
+
+  it('leaves the focus where a click away put it', async () => {
+    const user = userEvent.setup()
+    renderTile()
+    render(<button type="button">Elsewhere</button>)
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }))
+
+    expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus()
   })
 
   describe('in Ukrainian', () => {

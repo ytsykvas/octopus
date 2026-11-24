@@ -33,6 +33,8 @@ export function CardDescription({
   const [editing, setEditing] = useState<Editing | null>(
     draft === null ? null : { ...draft, mode: 'edit' }
   )
+  // A restored draft is not a request to type: opening the card was a click or a key on the board.
+  const [restored, setRestored] = useState(draft !== null)
   const [conflict, setConflict] = useState(false)
   const [saving, setSaving] = useState(false)
   // Handed up once, on the way out, as the composer does: a setState in App on every key would
@@ -50,6 +52,7 @@ export function CardDescription({
   const edit = (next: Editing | null): void => {
     latest.current = next
     setEditing(next)
+    setRestored(false)
   }
   const close = (): void => {
     edit(null)
@@ -108,7 +111,7 @@ export function CardDescription({
           />
           {editing.mode === 'edit' ? (
             <textarea
-              autoFocus
+              autoFocus={!restored}
               aria-label={t('board.panel.description')}
               value={editing.text}
               maxLength={CARD_TEXT_MAX}
