@@ -1,8 +1,15 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, createEvent, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BoardListing, CardDetail, CardMeta, CardRunEntry } from '@core/boardSchema.js'
+import type {
+  BoardCard,
+  BoardListing,
+  BoardStatus,
+  CardDetail,
+  CardMeta,
+  CardRunEntry
+} from '@core/boardSchema.js'
 
 import type { Result } from '../../../../preload/index.js'
 import {
@@ -846,6 +853,130 @@ describe('BoardScreen', () => {
       renderScreen()
 
       expect(await screen.findByText('Workspace removed')).toBeInTheDocument()
+    })
+  })
+
+  describe('dragging a card', () => {
+    interface Transfer {
+      readonly types: string[]
+      effectAllowed: string
+      dropEffect: string
+      setData: (type: string, value: string) => void
+    }
+
+    // jsdom has no DataTransfer, and `clientY` given to fireEvent never reaches a plain Event.
+    function transfer(): Transfer {
+      const types: string[] = []
+      return {
+        types,
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: (type) => {
+          types.push(type)
+        }
+      }
+    }
+
+    function dragOverAt(target: HTMLElement, clientY: number, data: Transfer): void {
+      const event = createEvent.dragOver(target, { dataTransfer: data })
+      Object.defineProperty(event, 'clientY', { value: clientY })
+      fireEvent(target, event)
+    }
+
+    function li(name: string): HTMLElement {
+      const item = screen.getByRole('button', { name }).closest('li')
+      if (item === null) throw new Error(`No list item for ${name}`)
+      return item
+    }
+
+    const column = (name: string): HTMLElement => screen.getByRole('region', { name })
+
+    const card = (ref: string, status: BoardStatus, order: number): BoardCard =>
+      boardCard({
+        ref,
+        status,
+        title: ref.slice(ref.indexOf('/') + 1, -'.md'.length),
+        meta: { links: [], runs: [], order }
+      })
+
+    beforeEach(async () => {
+      givenBoard([
+        card('backlog/a.md', 'backlog', 1),
+        card('backlog/b.md', 'backlog', 2),
+        card('in progress/p.md', 'in progress', 1)
+      ])
+      renderScreen()
+      await screen.findAllByRole('region')
+    })
+
+    it('draws the drop line under a card the pointer is in the lower half of', () => {
+      const data = transfer()
+      vi.spyOn(li('p'), 'getBoundingClientRect').mockReturnValue({ top: 0, height: 40 } as DOMRect)
+
+      fireEvent.dragStart(li('a'), { dataTransfer: data })
+      dragOverAt(li('p'), 30, data)
+
+      expect(within(li('p')).getByTestId('drop-line')).toHaveAttribute('data-edge', 'below')
+      expect(li('a')).toHaveAttribute('data-dragging', 'true')
+    })
+
+    it('draws the drop line in an empty column', () => {
+      const data = transfer()
+
+      fireEvent.dragStart(li('a'), { dataTransfer: data })
+      fireEvent.dragOver(column('Testing'), { dataTransfer: data })
+
+      expect(within(column('Testing')).getByTestId('drop-line')).toHaveAttribute(
+        'data-edge',
+        'above'
+      )
+    })
+
+    it('moves the file when a card is dropped on an empty column', async () => {
+      const data = transfer()
+      vi.mocked(octopus().board.move).mockResolvedValue(ok('testing/a.md'))
+
+      fireEvent.dragStart(li('a'), { dataTransfer: data })
+      fireEvent.dragOver(column('Testing'), { dataTransfer: data })
+      fireEvent.drop(column('Testing'), { dataTransfer: data })
+
+      expect(octopus().board.move).toHaveBeenCalledWith('planner', 'backlog/a.md', {
+        status: 'testing',
+        index: 0
+      })
+      await waitFor(() => {
+        expect(octopus().board.list).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    it('keeps the panel on a card dragged to another column', async () => {
+      const user = userEvent.setup()
+      vi.mocked(octopus().board.read).mockResolvedValue(
+        ok(cardDetail({ ref: 'backlog/a.md', title: 'a' }))
+      )
+      await user.click(screen.getByRole('button', { name: 'a' }))
+      await screen.findByRole('complementary', { name: 'a' })
+      vi.mocked(octopus().board.move).mockResolvedValue(ok('testing/a.md'))
+      givenBoard([
+        card('testing/a.md', 'testing', 1),
+        card('backlog/b.md', 'backlog', 2),
+        card('in progress/p.md', 'in progress', 1)
+      ])
+      const data = transfer()
+
+      fireEvent.dragStart(li('a'), { dataTransfer: data })
+      fireEvent.drop(column('Testing'), { dataTransfer: data })
+
+      expect(
+        await within(column('Testing')).findByRole('button', { name: 'a' })
+      ).toBeInTheDocument()
+      expect(screen.getByRole('complementary', { name: 'a' })).toBeInTheDocument()
+    })
+
+    it('leaves a file dragged in from Finder alone', () => {
+      fireEvent.drop(column('Done'), { dataTransfer: { types: ['Files'], files: [] } })
+
+      expect(octopus().board.move).not.toHaveBeenCalled()
     })
   })
 })

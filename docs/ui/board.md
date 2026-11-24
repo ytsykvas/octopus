@@ -77,8 +77,8 @@ trigger instead: the priority's icon, the tag's colour. Choosing the value a car
 writes nothing.
 
 **A move follows its card.** A status change moves the file into another folder, which gives it a
-new ref. Every move goes through `moveCard` in `BoardScreen` — the status menu's now, dragging's
-and ⌥↑/⌥↓'s once they are built — and the panel follows the new ref, but only while it still shows
+new ref. Every move goes through `moveCard` in `BoardScreen` — the status menu's and dragging's
+now, ⌥↑/⌥↓'s once they are built — and the panel follows the new ref, but only while it still shows
 that card. The panel and its detail are keyed by the opening, not the ref, so a move keeps what
 the panel holds and shows, and an opening's number is never reused, so a card opened after a close
 never shows the last one's description. The status menu puts the card first in its new column.
@@ -124,7 +124,16 @@ stays in the field. Editing or deleting a comment is not offered.
 
 ## Drag and drop
 
-Not built yet: a card stays in the column its folder puts it in.
+A card is dragged with the browser's own drag and drop, one state for every column
+(`useBoardDrag`). The drag carries its own type, `application/x-octopus-card`; a file from the
+Finder or dragged text has none, so the board never calls `preventDefault` for it and the browser
+shows that it cannot be dropped. The landing index is counted in the target column without the
+dragged card and cut to the ordered part (`dropSlot`; core does the same in `orderForDrop`), and
+the line is drawn under the card before that slot, which keeps it above the "By name" divider
+where the card really lands. A drop that would change nothing — an ordered card on its own slot,
+or a card alone in its column — writes nothing. The move goes through the screen's `moveCard`, so
+an open card stays open under its new path. `useDragReorder` is not reused: it keeps one list, its
+`dragstart` gets no event to put the type on, and an empty list cannot take a drop.
 
 ## Keyboard
 
@@ -179,3 +188,6 @@ second line adds turns, active time and tokens in and out — written by `format
 
 - Every read lists and reads every file of the project's folder; a folder of thousands of large
   files reads slowly.
+- A card cannot be dragged from the keyboard: the browser's drag and drop has no keyboard path.
+  The status menu in the card panel moves a card to another column; no key reorders one within
+  a column yet.

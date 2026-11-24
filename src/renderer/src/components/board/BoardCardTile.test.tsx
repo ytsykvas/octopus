@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import i18n, { DEFAULT_LANGUAGE } from '../../i18n/index.js'
-import { boardCard } from '../../test/board.js'
+import { boardCard, noDrag } from '../../test/board.js'
 import { BoardCardTile, type BoardCardTileProps } from './BoardCardTile.js'
 
 function renderTile(props: Partial<BoardCardTileProps> = {}): BoardCardTileProps {
@@ -12,6 +12,9 @@ function renderTile(props: Partial<BoardCardTileProps> = {}): BoardCardTileProps
     open: false,
     onOpen: vi.fn(),
     marks: null,
+    drag: noDrag().cardProps('backlog/Fix login.md', 'backlog'),
+    dropEdge: null,
+    dragging: false,
     ...props
   }
   render(
@@ -147,6 +150,36 @@ describe('BoardCardTile', () => {
     })
 
     expect(within(screen.getByRole('button')).queryAllByRole('button')).toEqual([])
+  })
+
+  it('marks the tile being dragged', () => {
+    renderTile({ card: boardCard({ ref: 'backlog/A.md', title: 'A' }), dragging: true })
+    renderTile({ card: boardCard({ ref: 'backlog/B.md', title: 'B' }), dragging: false })
+
+    const [dragged, still] = screen.getAllByRole('listitem')
+    expect(dragged).toHaveAttribute('data-dragging', 'true')
+    expect(still).not.toHaveAttribute('data-dragging')
+  })
+
+  it('draws the drop line beside the button, not in it', () => {
+    renderTile({ dropEdge: 'below' })
+
+    expect(screen.getByTestId('drop-line')).toHaveAttribute('data-edge', 'below')
+    expect(within(screen.getByRole('button')).queryByTestId('drop-line')).toBeNull()
+  })
+
+  it('draws no drop line while nothing would land beside it', () => {
+    renderTile({ dropEdge: null })
+
+    expect(screen.queryByTestId('drop-line')).toBeNull()
+  })
+
+  it('lets the tile be dragged when the drag allows it', () => {
+    renderTile({
+      drag: { ...noDrag().cardProps('backlog/Fix login.md', 'backlog'), draggable: true }
+    })
+
+    expect(screen.getByRole('listitem')).toHaveAttribute('draggable', 'true')
   })
 
   describe('in Ukrainian', () => {

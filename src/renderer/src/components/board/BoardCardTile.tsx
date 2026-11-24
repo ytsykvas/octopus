@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next'
 import type { BoardCard, CardPriority } from '@core/boardSchema.js'
 import { KIND_COLORS } from '@core/workspaceKinds.js'
 
+import type { CardDragProps } from '../../hooks/useBoardDrag.js'
+import type { DropEdge } from '../../hooks/useDragReorder.js'
+import { DropLine } from '../DropLine.js'
 import { LETTERS } from '../projectTint.js'
 import { PRIORITY_LOOKS } from './boardLabels.js'
 
@@ -12,6 +15,9 @@ export interface BoardCardTileProps {
   readonly open: boolean
   readonly onOpen: () => void
   readonly marks: React.JSX.Element | null
+  readonly drag: CardDragProps
+  readonly dropEdge: DropEdge | null
+  readonly dragging: boolean
 }
 
 function PriorityMark({ priority }: { readonly priority: CardPriority }): React.JSX.Element {
@@ -37,7 +43,10 @@ export function BoardCardTile({
   card,
   open,
   onOpen,
-  marks
+  marks,
+  drag,
+  dropEdge,
+  dragging
 }: BoardCardTileProps): React.JSX.Element {
   const { t } = useTranslation()
   const { priority, tag } = card.meta
@@ -52,7 +61,12 @@ export function BoardCardTile({
     folder !== null || tag !== undefined || marks !== null || card.comments > 0 || warning !== null
 
   return (
-    <li className="relative">
+    <li
+      {...drag}
+      data-dragging={dragging ? 'true' : undefined}
+      className={`relative ${dragging ? 'opacity-50' : ''}`}
+    >
+      {dropEdge !== null && <DropLine edge={dropEdge} />}
       <button
         type="button"
         onClick={onOpen}
