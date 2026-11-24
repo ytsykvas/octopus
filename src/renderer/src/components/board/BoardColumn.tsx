@@ -15,6 +15,9 @@ export interface BoardColumnProps {
   readonly status: BoardStatus
   /** Already sorted: `cardsByStatus` sorts every column. */
   readonly cards: readonly BoardCard[]
+  /** The cards of this status before the filter: `cards` may be a part of them. */
+  readonly total: number
+  readonly filtering: boolean
   readonly creating: boolean
   readonly onCreating: (creating: boolean) => void
   readonly onCreate: (title: string) => void
@@ -27,6 +30,8 @@ export interface BoardColumnProps {
 export function BoardColumn({
   status,
   cards,
+  total,
+  filtering,
   creating,
   onCreating,
   onCreate,
@@ -62,7 +67,9 @@ export function BoardColumn({
     >
       <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">
         <h2 className="section-label">{label}</h2>
-        <span className="text-ink-faint text-[11px] tabular-nums">{cards.length}</span>
+        <span className="text-ink-faint text-[11px] tabular-nums">
+          {filtering ? t('board.column.count', { shown: cards.length, total }) : cards.length}
+        </span>
         <span className="ml-auto">
           <IconButton
             label={t('board.column.newTask')}
@@ -78,7 +85,7 @@ export function BoardColumn({
         <div className="relative flex min-h-0 flex-1 flex-col">
           {drag.overColumn === status && <DropLine edge="above" />}
           <Placeholder compact art={false} title={t('board.empty.columnTitle')}>
-            {t('board.empty.columnText')}
+            {total === 0 ? t('board.empty.columnText') : t('board.empty.filteredText')}
           </Placeholder>
         </div>
       ) : (

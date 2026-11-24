@@ -11,6 +11,8 @@ function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
   const all: BoardColumnProps = {
     status: 'backlog',
     cards: [],
+    total: props.cards?.length ?? 0,
+    filtering: false,
     creating: false,
     onCreating: vi.fn(),
     onCreate: vi.fn(),
@@ -170,5 +172,36 @@ describe('BoardColumn', () => {
     renderColumn({ status: 'testing', cards: [], drag: { ...noDrag(), overColumn: 'done' } })
 
     expect(screen.queryByTestId('drop-line')).toBeNull()
+  })
+
+  it('counts the shown tasks of all under a filter', () => {
+    renderColumn({ cards: [card('A', 0)], total: 3, filtering: true })
+
+    expect(
+      within(screen.getByRole('region', { name: 'Backlog' })).getByText('1 of 3')
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the count plain without a filter', () => {
+    renderColumn({ cards: [card('A', 0), card('B', 1)], total: 2, filtering: false })
+
+    const region = screen.getByRole('region', { name: 'Backlog' })
+    expect(within(region).getByText('2')).toBeInTheDocument()
+    expect(within(region).queryByText(/of/)).toBeNull()
+  })
+
+  it('says the filter hid every task', () => {
+    renderColumn({ cards: [], total: 2, filtering: true })
+
+    expect(screen.getByText('Nothing here')).toBeInTheDocument()
+    expect(screen.getByText('No tasks match the filter.')).toBeInTheDocument()
+    expect(screen.queryByText('No task has this status yet.')).toBeNull()
+  })
+
+  it('keeps the new task field under a filter that hid everything', () => {
+    renderColumn({ cards: [], total: 2, filtering: true, creating: true })
+
+    expect(screen.getByRole('textbox', { name: 'Task title' })).toBeInTheDocument()
+    expect(screen.queryByText('No tasks match the filter.')).toBeNull()
   })
 })

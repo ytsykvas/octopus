@@ -1976,12 +1976,20 @@ export const de: Translation = {
       failedTitle: 'Das Board konnte nicht gelesen werden',
       retry: 'Erneut versuchen',
       columnTitle: 'Nichts hier',
-      columnText: 'Noch keine Aufgabe mit diesem Status.'
+      columnText: 'Noch keine Aufgabe mit diesem Status.',
+      filteredText: 'Keine Aufgaben passen zum Filter.'
     },
     column: {
       byName: 'Nach Name',
       newTask: 'Neue Aufgabe',
-      newTaskPlaceholder: 'Titel der Aufgabe'
+      newTaskPlaceholder: 'Titel der Aufgabe',
+      count: '{{shown}} von {{total}}'
+    },
+    filter: {
+      search: 'Aufgaben suchen',
+      priority: 'Priorität',
+      tag: 'Tag',
+      clear: 'Filter zurücksetzen'
     },
     card: {
       comments_one: '{{count}} Kommentar',

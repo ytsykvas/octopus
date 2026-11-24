@@ -1943,12 +1943,20 @@ export const uk: Translation = {
       failedTitle: 'Не вдалося прочитати дошку',
       retry: 'Спробувати ще раз',
       columnTitle: 'Порожньо',
-      columnText: 'Задач із цим статусом ще немає.'
+      columnText: 'Задач із цим статусом ще немає.',
+      filteredText: 'Немає задач за фільтром.'
     },
     column: {
       byName: 'За назвою',
       newTask: 'Нова задача',
-      newTaskPlaceholder: 'Назва задачі'
+      newTaskPlaceholder: 'Назва задачі',
+      count: '{{shown}} з {{total}}'
+    },
+    filter: {
+      search: 'Пошук задач',
+      priority: 'Пріоритет',
+      tag: 'Тег',
+      clear: 'Скинути фільтри'
     },
     card: {
       comments_one: '{{count}} коментар',
