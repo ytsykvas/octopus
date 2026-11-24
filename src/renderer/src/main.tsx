@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './App.js'
+import { TitleTooltips } from './components/TitleTooltips.js'
 import './i18n/index.js'
 import './styles.css'
 
@@ -14,5 +15,6 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <App />
+    <TitleTooltips />
   </StrictMode>
 )
