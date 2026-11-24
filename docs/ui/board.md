@@ -95,12 +95,14 @@ Another project or another board folder closes the panel and the new-task field.
 it was that card's. Copy description puts the whole description on the clipboard, its `# title`
 line included, with the whitespace around it trimmed. A file that is not UTF-8 shows a warning in
 place of its description and has nothing to copy or edit; its comments still show.
-A double-click on the title renames the card, in the panel or on its tile: only its `# ` line
-changes, and the file keeps its name, which is what other Macs and links know it by. The tile puts
-the new-task field where its title was, keeps its priority and second line around it, and cannot be
-dragged while the field is open; the double-click's first click has opened the panel, as a
-workspace row's selects the row. The panel's width is dragged from its left edge, 320 to 720px, and
-not saved.
+A double-click on the title renames the card, in the panel or on its tile — not a file that is not
+UTF-8, which core would refuse: only its `# ` line changes, and the file keeps its name, which is
+what other Macs and links know it by. The tile puts the new-task field where its title was, keeps
+its priority and second line around it, and cannot be dragged while the field is open. The
+double-click's first click opens the panel, as a workspace row's selects the row; the second does
+not open it again, which would remount the panel and read the card twice. Enter or Escape hands
+the focus back to the tile. The panel's width is dragged from its left edge, 320 to 720px, and not
+saved.
 
 `useCardDetail` reads the open card at its ref, again on every listing `revision`, and keeps the
 previous detail while the same opening is read again. A card removed outside is quiet
@@ -122,7 +124,9 @@ An edit not saved yet survives closing the panel, another card, a status change,
 screen switch: the editor hands it up once on the way out, as the composer does, and `App` keeps
 it by project and card (`boardDrafts`); a move carries it to the card's new ref, and a card
 created in place of a deleted one starts without it. The panel is keyed by the opening, so a move
-does not remount the editor.
+does not remount the editor. A restored edit opens without the focus, which Edit, or switching back
+from Preview, takes: the card was opened by a click or a key on the board, and the field would take
+the caret from the board's keys or from a tile's title field the same double-click opened.
 
 ## Comments
 

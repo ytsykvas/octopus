@@ -287,7 +287,7 @@ export function CardPanel({
         ) : (
           <h2
             onDoubleClick={() => {
-              setRenaming(true)
+              if (!card.notText) setRenaming(true)
             }}
             className="text-ink cursor-text text-[15px] font-semibold break-words"
           >

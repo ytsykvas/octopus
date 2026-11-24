@@ -7,7 +7,7 @@ import type { BoardDrag } from '../../hooks/useBoardDrag.js'
 import { DropLine } from '../DropLine.js'
 import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
-import { BoardCardTile, CARD_BOX, CardTitleField, TitleLead } from './BoardCardTile.js'
+import { BoardCardTile, CARD_FIELD_BOX, CardTitleField, TitleLead } from './BoardCardTile.js'
 import { STATUS_LABEL_KEYS } from './boardLabels.js'
 
 export interface BoardColumnProps {
@@ -98,7 +98,7 @@ export function BoardColumn({
           className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pt-1 pb-2"
         >
           {creating && (
-            <li className={`${CARD_BOX} border-accent bg-surface flex gap-2`}>
+            <li className={`${CARD_FIELD_BOX} flex gap-2`}>
               <TitleLead />
               <CardTitleField
                 initial=""

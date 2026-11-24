@@ -262,6 +262,15 @@ describe('CardPanel', () => {
     expect(screen.queryByTitle('Enter to save, Escape to cancel')).toBeNull()
   })
 
+  it('offers no rename for a file that is not UTF-8 text', async () => {
+    const user = userEvent.setup()
+    renderPanel({ card: boardCard({ notText: true }), detail: cardDetail({ notText: true }) })
+
+    await user.dblClick(screen.getByRole('heading', { name: 'Fix login' }))
+
+    expect(screen.queryByTitle('Enter to save, Escape to cancel')).toBeNull()
+  })
+
   it('sends nothing for an unchanged name', async () => {
     const user = userEvent.setup()
     const { board } = renderPanel()

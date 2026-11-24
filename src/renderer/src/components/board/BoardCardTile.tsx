@@ -1,5 +1,5 @@
 import { MessageSquare, TriangleAlert } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { type BoardCard, CARD_TITLE_MAX, type CardPriority } from '@core/boardSchema.js'
@@ -37,6 +37,9 @@ function PriorityMark({ priority }: { readonly priority: CardPriority }): React.
 }
 
 export const CARD_BOX = 'w-full rounded-[var(--radius-control)] border px-2.5 py-2 text-left'
+
+/** The open card's fill: a new card opens once created, and a double-clicked one is already open. */
+export const CARD_FIELD_BOX = `${CARD_BOX} border-accent bg-canvas`
 
 /** A spacer without a priority, so the titles of a column line up. */
 export function TitleLead({
@@ -94,6 +97,11 @@ export function BoardCardTile({
 }: BoardCardTileProps): React.JSX.Element {
   const { t } = useTranslation()
   const [renaming, setRenaming] = useState(false)
+  const ended = useRef(false)
+  const end = (): void => {
+    ended.current = true
+    setRenaming(false)
+  }
   const { priority, tag } = card.meta
   // A file that is not UTF-8 has no header to read, so the two marks together add nothing.
   const warning = card.notText
@@ -154,26 +162,34 @@ export function BoardCardTile({
     >
       {dropEdge !== null && <DropLine edge={dropEdge} />}
       {renaming ? (
-        <div className={`${CARD_BOX} border-accent bg-surface`}>
+        <div className={CARD_FIELD_BOX}>
           {body(
             <CardTitleField
               initial={card.title}
               onCommit={(title) => {
-                setRenaming(false)
+                end()
                 if (title !== card.title) onRename(title)
               }}
-              onCancel={() => {
-                setRenaming(false)
-              }}
+              onCancel={end}
             />
           )}
         </div>
       ) : (
         <button
           type="button"
-          onClick={onOpen}
+          // A double-click's second click would open the card again: the panel remounts and
+          // a restored description draft takes the focus from the title field.
+          onClick={(event) => {
+            if (event.detail < 2) onOpen()
+          }}
           onDoubleClick={() => {
-            setRenaming(true)
+            if (!card.notText) setRenaming(true)
+          }}
+          // On the body only: a click away that ended the edit put the focus where it meant to.
+          ref={(button) => {
+            if (button === null || !ended.current) return
+            ended.current = false
+            if (document.activeElement === document.body) button.focus()
           }}
           data-card-ref={card.ref}
           aria-keyshortcuts="Enter Alt+ArrowUp Alt+ArrowDown Meta+Backspace"
