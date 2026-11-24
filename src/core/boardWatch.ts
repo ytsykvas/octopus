@@ -1,3 +1,5 @@
+import { basename } from 'node:path'
+
 import { boardFolderName, isSkipped, sameName } from './boardNames.js'
 import { ATTACHMENTS_DIR } from './boardSchema.js'
 import { type RefWatcher, type RemoteRefWatchDeps, watchTree } from './remoteRefs.js'
@@ -47,8 +49,10 @@ export function createBoardWatch(deps: BoardWatchDeps): BoardWatch {
     )
   }
 
-  function listen(_event: string, filename: string | null): void {
-    if (filename === null) {
+  function listen(root: string, filename: string | null): void {
+    // FSEvents names the watched folder itself by its own name, which a project may share:
+    // like no name at all, any board may have changed.
+    if (filename === null || filename === root) {
       for (const project of projects) schedule(project.id)
       return
     }
@@ -66,9 +70,12 @@ export function createBoardWatch(deps: BoardWatchDeps): BoardWatch {
       if (folder === watched?.folder) return
       stop()
       if (folder === '') return
+      const root = basename(folder)
       let watcher: RefWatcher
       try {
-        watcher = watch(folder, { recursive: true, persistent: false }, listen)
+        watcher = watch(folder, { recursive: true, persistent: false }, (_event, filename) => {
+          listen(root, filename)
+        })
       } catch {
         // Gone or not ours to read: the next sync — every read of the board — tries again.
         return

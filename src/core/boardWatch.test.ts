@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createBoardWatch } from './boardWatch.js'
+import { BOARD_DEBOUNCE_MS, createBoardWatch } from './boardWatch.js'
 import type { RefWatcher, RemoteRefWatchDeps } from './remoteRefs.js'
 
 /** A `watch` that hands the test the listener and counts what was closed. */
@@ -86,7 +86,7 @@ describe('createBoardWatch', () => {
   it('names the project whose folder changed', () => {
     board.sync(FOLDER, [PLANNER])
     fake.fire('planner/backlog/a.md')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange.mock.calls).toEqual([['p1']])
   })
@@ -94,7 +94,7 @@ describe('createBoardWatch', () => {
   it("finds the project's folder whatever its case or normalisation", () => {
     board.sync(FOLDER, [{ id: 'p3', name: 'Gr\u00f6\u00dfe' }])
     fake.fire('gro\u0308\u00dfe/done/x.md')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange.mock.calls).toEqual([['p3']])
   })
@@ -106,7 +106,7 @@ describe('createBoardWatch', () => {
     fake.fire('planner/backlog/a.md')
     vi.advanceTimersByTime(100)
     fake.fire('planner/backlog/a.md')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange).toHaveBeenCalledTimes(1)
   })
@@ -115,7 +115,7 @@ describe('createBoardWatch', () => {
     board.sync(FOLDER, [PLANNER])
     fake.fire('planner/backlog/a.md')
     fake.fire('planner/backlog/b.md')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange.mock.calls).toEqual([['p1']])
   })
@@ -123,7 +123,7 @@ describe('createBoardWatch', () => {
   it('waits the whole quiet period', () => {
     board.sync(FOLDER, [PLANNER])
     fake.fire('planner/a.md')
-    vi.advanceTimersByTime(299)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS - 1)
 
     expect(onChange).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1)
@@ -145,7 +145,7 @@ describe('createBoardWatch', () => {
     board.sync(FOLDER, [PLANNER, ESL])
     fake.fire('planner/a.md')
     fake.fire('esl/b.md')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange.mock.calls).toEqual([['p1'], ['p2']])
   })
@@ -154,7 +154,7 @@ describe('createBoardWatch', () => {
     board.sync(FOLDER, [PLANNER])
     fake.fire('planner/backlog/a.md.3f9a.tmp')
     fake.fire('planner/.DS_Store')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange).not.toHaveBeenCalled()
   })
@@ -162,7 +162,7 @@ describe('createBoardWatch', () => {
   it("counts a change among a card's attachments", () => {
     board.sync(FOLDER, [PLANNER])
     fake.fire('planner/_attachments/a/mockup.png')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange.mock.calls).toEqual([['p1']])
   })
@@ -170,7 +170,7 @@ describe('createBoardWatch', () => {
   it('ignores a folder no project owns', () => {
     board.sync(FOLDER, [PLANNER])
     fake.fire('other/a.md')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange).not.toHaveBeenCalled()
   })
@@ -178,16 +178,24 @@ describe('createBoardWatch', () => {
   it('tells every project when the event names no file', () => {
     board.sync(FOLDER, [PLANNER, ESL])
     fake.fire(null)
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange.mock.calls).toEqual([['p1'], ['p2']])
+  })
+
+  it('tells every project, not only its namesake, when the board folder itself changed', () => {
+    board.sync(FOLDER, [ESL, { id: 'p3', name: 'board' }])
+    fake.fire('board')
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
+
+    expect(onChange.mock.calls).toEqual([['p2'], ['p3']])
   })
 
   it('follows the project list without watching again', () => {
     board.sync(FOLDER, [PLANNER])
     board.sync(FOLDER, [ESL])
     fake.fire('esl/a.md')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(fake.paths).toEqual(['/board'])
     expect(onChange.mock.calls).toEqual([['p2']])
@@ -222,7 +230,7 @@ describe('createBoardWatch', () => {
     board.sync('/b', [PLANNER])
     fake.fail('/a')
     fake.fire('planner/a.md', '/b')
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(fake.closed).toEqual(['/a'])
     expect(onChange.mock.calls).toEqual([['p1']])
@@ -248,7 +256,7 @@ describe('createBoardWatch', () => {
     board.sync(FOLDER, [PLANNER])
     fake.fire('planner/a.md')
     board.close()
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(BOARD_DEBOUNCE_MS)
 
     expect(onChange).not.toHaveBeenCalled()
     expect(fake.closed).toEqual(['/board'])

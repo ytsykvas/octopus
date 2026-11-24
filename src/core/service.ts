@@ -2084,6 +2084,13 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   })
   void refWatch.sync(state.projects)
 
+  const boardListeners = new Set<(event: BoardChangedEvent) => void>()
+  const boardWatch = (options.boardWatch ?? createBoardWatch)({
+    onChange: (projectId) => {
+      for (const listener of boardListeners) listener({ projectId })
+    }
+  })
+
   /*
    * A project's variables used to be one file. Giving each project its `envs/`
    * directory happens here, before anything can read one — the directory's
@@ -2096,12 +2103,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   for (const project of state.projects) await migrateEnvProfiles(project.id, dataRoot)
   let config: Config = await loadConfig(configPath)
 
-  const boardListeners = new Set<(event: BoardChangedEvent) => void>()
-  const boardWatch = (options.boardWatch ?? createBoardWatch)({
-    onChange: (projectId) => {
-      for (const listener of boardListeners) listener({ projectId })
-    }
-  })
   /** Idempotent: the same folder with a live watcher only takes the project list. */
   function syncBoardWatch(): void {
     boardWatch.sync(config.boardFolder, state.projects)
