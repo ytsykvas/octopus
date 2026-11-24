@@ -55,4 +55,17 @@ describe('the packaged app', () => {
       }
     })
   })
+
+  it('says why it asks for the Desktop and Documents', async () => {
+    expect(await builderConfig()).toMatchObject({
+      mac: {
+        extendInfo: {
+          NSDesktopFolderUsageDescription:
+            'Octopus reads and writes the task board folder you chose on your Desktop.',
+          NSDocumentsFolderUsageDescription:
+            'Octopus reads and writes the task board folder you chose in Documents.'
+        }
+      }
+    })
+  })
 })

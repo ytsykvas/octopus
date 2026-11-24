@@ -214,6 +214,8 @@ whole section exists for.
       EnableNodeOptionsEnvironmentVariable and EnableNodeCliInspectArguments
       Disabled, EnableEmbeddedAsarIntegrityValidation and OnlyLoadAppFromAsar
       Enabled;
+- [ ] `/usr/libexec/PlistBuddy -c "Print :NSDesktopFolderUsageDescription" dist/mac-arm64/Octopus.app/Contents/Info.plist`
+      prints the board's reason — without it macOS may refuse the Desktop silently;
 - [ ] `codesign --verify --deep --strict dist/mac-arm64/Octopus.app` prints nothing.
 
 The PATH item deserves the suspicion. A GUI launch inherits launchd's
@@ -221,6 +223,11 @@ environment, where PATH is roughly `/usr/bin:/bin:/usr/sbin:/sbin` — Homebrew
 and `~/.local/bin` are both absent, so `gh` and `claude` disappear while the
 app's own terminal keeps finding them, because that path goes through the login
 shell on purpose. `core/loginShell.ts` repairs it at startup.
+
+In B001 (macOS 27.2.1) neither Electron nor a process in Octopus's terminal was
+asked for the Desktop, and both could read it — likely because access had been
+granted before, so that does not show a first read goes unasked. The usage
+strings are there for the Mac that does ask.
 
 ### On a second machine, and how it gets there
 

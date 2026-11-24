@@ -89,6 +89,10 @@ A file is only ever shown in Finder, never opened: a synced `.command` must not 
 
 Two cards with one stem (`backlog/a.md`, `ideas/a.md`) share one folder, and a removed card's folder stays — a new card of that name inherits it. Renaming a card's file in Finder leaves its files behind. Neither the listing nor a copy goes through a symbolic link; a link planted between the check and the copy is an accepted gap. A folder of files linked out of the board is refused with `cardOutside`, naming `_attachments/<stem>`.
 
+## iCloud
+
+What iCloud does to this folder was measured on two Macs in B001 rather than read from documentation. A new card took about 9 seconds to reach the other Mac. After a card was moved to another folder, its earlier versions are taken to be still offered by File → Revert To, though B001 did not check it. macOS guards Desktop and Documents: the built app says why it reads them (`NSDesktopFolderUsageDescription`, `NSDocumentsFolderUsageDescription` in `electron-builder.yml`), so a Mac that asks shows that reason ([releasing.md](../releasing.md)).
+
 ## Known limitations
 
 - A project is found by name: renamed, it shows the empty board of its new name until its folder is renamed too.

@@ -57,6 +57,12 @@ mac:
   # macOS 15 refuses an unsigned download outright rather than warning, so an
   # unsigned build needs the instructions in docs/releasing.md.
   minimumSystemVersion: '13.0'
+  # macOS asks before an app reads Desktop or Documents, and with no reason in
+  # Info.plist it may refuse without asking at all. The board folder is often on
+  # the Desktop, which iCloud syncs (docs/data/board.md).
+  extendInfo:
+    NSDesktopFolderUsageDescription: Octopus reads and writes the task board folder you chose on your Desktop.
+    NSDocumentsFolderUsageDescription: Octopus reads and writes the task board folder you chose in Documents.
 
 dmg:
   title: ${productName} ${version}
