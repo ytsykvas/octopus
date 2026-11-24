@@ -20,7 +20,10 @@ export interface BoardKeyContext {
   readonly reorderable: boolean
 }
 
-export type BoardKey = Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>
+export type BoardKey = Pick<
+  KeyboardEvent,
+  'key' | 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'
+>
 
 const DIRECTIONS = new Map<string, BoardDirection>([
   ['ArrowDown', 'down'],
@@ -31,12 +34,21 @@ const DIRECTIONS = new Map<string, BoardDirection>([
   ['ArrowLeft', 'left']
 ])
 
+const LETTER_CODES = new Map([
+  ['KeyC', 'c'],
+  ['KeyJ', 'j'],
+  ['KeyK', 'k']
+])
+
 export function boardKeyAction(
   event: BoardKey,
   { focused, open, reorderable }: BoardKeyContext
 ): BoardKeyAction | null {
   // Caps Lock gives `C` without Shift; Shift itself is ruled out by the modifier checks.
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+  // A Latin letter as typed (Dvorak moves them); on a Cyrillic layout, `с`, the key's place.
+  const key = /^[a-z]$/i.test(event.key)
+    ? event.key.toLowerCase()
+    : (LETTER_CODES.get(event.code) ?? event.key)
   const target = focused ?? open
   const { metaKey, ctrlKey, altKey, shiftKey } = event
   if (!metaKey && !ctrlKey && !altKey && !shiftKey) return plainAction(key, focused, open)
@@ -102,7 +114,7 @@ export function stepIndex(
   return card?.meta.order === undefined || next?.meta.order === undefined ? null : index + 1
 }
 
-/** The ref of the card button a key landed on; null on the body; undefined on any other control, whose key it is. */
+/** The card a key landed on: its ref, null on the body, undefined on a control that owns it. */
 export function focusedCard(target: EventTarget | null): string | null | undefined {
   if (target === document.body) return null
   return target instanceof HTMLElement ? target.dataset.cardRef : undefined

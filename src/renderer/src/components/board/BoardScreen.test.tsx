@@ -38,6 +38,14 @@ const ELSEWHERE: CardRunEntry = {
   branch: 'octopus/feature/anna'
 }
 
+const card = (ref: string, status: BoardStatus, order: number): BoardCard =>
+  boardCard({
+    ref,
+    status,
+    title: ref.slice(ref.indexOf('/') + 1, -'.md'.length),
+    meta: { links: [], runs: [], order }
+  })
+
 describe('BoardScreen', () => {
   it('draws nothing before the config arrives', () => {
     const { container } = renderScreen({ boardFolder: null })
@@ -891,14 +899,6 @@ describe('BoardScreen', () => {
 
     const column = (name: string): HTMLElement => screen.getByRole('region', { name })
 
-    const card = (ref: string, status: BoardStatus, order: number): BoardCard =>
-      boardCard({
-        ref,
-        status,
-        title: ref.slice(ref.indexOf('/') + 1, -'.md'.length),
-        meta: { links: [], runs: [], order }
-      })
-
     beforeEach(async () => {
       givenBoard([
         card('backlog/a.md', 'backlog', 1),
@@ -998,14 +998,6 @@ describe('BoardScreen', () => {
 
   describe('the keyboard', () => {
     beforeAll(stubDialogElement)
-
-    const card = (ref: string, status: BoardStatus, order: number): BoardCard =>
-      boardCard({
-        ref,
-        status,
-        title: ref.slice(ref.indexOf('/') + 1, -'.md'.length),
-        meta: { links: [], runs: [], order }
-      })
 
     const L0 = boardListing([
       card('backlog/a.md', 'backlog', 1),
@@ -1176,6 +1168,50 @@ describe('BoardScreen', () => {
       expect(button('a')).toHaveFocus()
     })
 
+    it('leaves the focus in a field opened while a loose task was moved', async () => {
+      const loose = boardCard({
+        ref: 'notes.md',
+        title: 'notes',
+        loose: true,
+        meta: { links: [], runs: [] }
+      })
+      const answer = held<Result<string>>()
+      vi.mocked(octopus().board.move).mockReturnValueOnce(answer.promise)
+      const user = await show([...L0.cards, loose])
+      givenBoard([
+        ...L0.cards,
+        { ...loose, ref: 'backlog/notes.md', loose: false, meta: { ...loose.meta, order: 1.5 } }
+      ])
+      focus('notes')
+      await user.keyboard('{Alt>}{ArrowUp}{/Alt}')
+      await user.keyboard('cx')
+
+      await act(async () => {
+        answer.resolve(ok('backlog/notes.md'))
+        await answer.promise
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'notes' })).toHaveAttribute(
+          'data-card-ref',
+          'backlog/notes.md'
+        )
+      })
+      expect(screen.getByRole('textbox', { name: 'Task title' })).toHaveFocus()
+      expect(octopus().board.create).not.toHaveBeenCalled()
+    })
+
+    it('leaves the focus on the task it is on when Escape closes another', async () => {
+      const user = await show()
+      await openPanel(user, 'a')
+      focus('b')
+
+      await user.keyboard('{Escape}')
+
+      expect(screen.queryByRole('complementary')).toBeNull()
+      expect(button('b')).toHaveFocus()
+    })
+
     it('keeps the focus on a task whose move was refused', async () => {
       vi.mocked(octopus().board.move).mockResolvedValue({
         ok: false,
@@ -1259,8 +1295,8 @@ describe('BoardScreen', () => {
         expect(screen.queryByRole('complementary')).toBeNull()
       })
 
-      await user.keyboard('{Meta>}{Backspace}{/Meta}')
-
+      // Not cancelled: a key the board acted on, even one that threw on the way, would be.
+      expect(fireEvent.keyDown(document.body, { key: 'Backspace', metaKey: true })).toBe(true)
       expect(screen.queryByRole('dialog')).toBeNull()
     })
 
@@ -1328,15 +1364,44 @@ describe('BoardScreen', () => {
       expect(button('a')).toHaveFocus()
     })
 
+    it('walks the board on a Cyrillic layout', async () => {
+      await show()
+
+      fireEvent.keyDown(document.body, { key: 'о', code: 'KeyJ' })
+
+      expect(button('a')).toHaveFocus()
+    })
+
+    it('ignores keys while a popover is open', async () => {
+      const user = await show()
+      await openPanel(user, 'a')
+      const popover = document.createElement('div')
+      popover.setAttribute('role', 'dialog')
+      document.body.append(popover)
+      act(() => {
+        button('a').blur()
+      })
+
+      await user.keyboard('{Escape}')
+
+      popover.remove()
+      expect(screen.getByRole('complementary', { name: 'a' })).toBeInTheDocument()
+    })
+
     it('ignores keys while a dialog is open', async () => {
       const user = await show()
       focus('a')
       await user.keyboard('{Meta>}{Backspace}{/Meta}')
       const dialog = await screen.findByRole('dialog')
+      // A click on the dialog's text leaves the focus on the body, where the board's keys act.
+      act(() => {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+      })
 
       await user.keyboard('j')
 
-      expect(dialog.contains(document.activeElement)).toBe(true)
+      expect(document.body).toHaveFocus()
+      expect(dialog).toBeInTheDocument()
     })
 
     it('ignores the keys while no board is shown', async () => {

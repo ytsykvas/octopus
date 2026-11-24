@@ -184,12 +184,14 @@ export function BoardScreen({
     openCardAt(ref)
   }
 
-  // A state rather than a ref read later: the request commits with, or after, the listing the
-  // move read back, so the effect finds the tile where React has put it. React moving a focused
-  // <li> (⌥↓ moves the one pressed; a loose card gets a new ref) drops the focus.
+  // Put back only from the body: React keeps the focus on a tile it moves, but a loose card
+  // comes back from a move as a new node under a new ref, and a key pressed meanwhile may have
+  // put it in a field. A state, so the effect runs once the listing the move read back is drawn.
   const [refocus, setRefocus] = useState<{ readonly ref: string } | null>(null)
   useLayoutEffect(() => {
-    if (refocus !== null) cardButton(refocus.ref)?.focus()
+    if (refocus !== null && document.activeElement === document.body) {
+      cardButton(refocus.ref)?.focus()
+    }
   }, [refocus])
 
   const runKey = (action: BoardKeyAction): void => {
@@ -220,7 +222,7 @@ export function BoardScreen({
         const index = stepIndex(columns[status], action.ref, action.step)
         if (index === null) return
         void moveCard(action.ref, { status, index }).then((next) => {
-          setRefocus({ ref: next ?? action.ref })
+          if (next !== null) setRefocus({ ref: next })
         })
         return
       }
@@ -240,9 +242,9 @@ export function BoardScreen({
     (event) => {
       // The same guard as App's: an open dialog owns every key.
       if (document.querySelector('dialog[open]') !== null) return
-      // An open menu closes itself on Escape, but its listener was added after this one,
-      // so `defaultPrevented` is still false here.
-      if (document.querySelector('[role="menu"]') !== null) return
+      // An open menu or popover closes itself on Escape, but its listener was added after this
+      // one, so `defaultPrevented` is still false here.
+      if (document.querySelector('[role="menu"], [role="dialog"]') !== null) return
       const focused = focusedCard(event.target)
       if (focused === undefined) return
       const action = boardKeyAction(event, {

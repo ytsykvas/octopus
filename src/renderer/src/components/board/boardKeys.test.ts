@@ -16,7 +16,15 @@ import {
 } from './boardKeys.js'
 
 function key(k: string, mods: Partial<Omit<BoardKey, 'key'>> = {}): BoardKey {
-  return { key: k, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods }
+  return {
+    key: k,
+    code: '',
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...mods
+  }
 }
 
 const CONTEXT: BoardKeyContext = { focused: 'a', open: null, reorderable: true }
@@ -62,6 +70,11 @@ describe('boardKeyAction', () => {
     [key('Backspace', { metaKey: true }), { focused: null }, null],
     [key('Backspace', { metaKey: true, shiftKey: true }), {}, null],
     [key('Backspace'), {}, null],
+    [key('с', { code: 'KeyC' }), {}, { kind: 'create', from: 'a' }],
+    [key('о', { code: 'KeyJ' }), {}, { kind: 'focus', from: 'a', direction: 'down' }],
+    [key('л', { code: 'KeyK' }), {}, { kind: 'focus', from: 'a', direction: 'up' }],
+    [key('j', { code: 'KeyC' }), {}, { kind: 'focus', from: 'a', direction: 'down' }],
+    [key('ы', { code: 'KeyS' }), {}, null],
     [key('s'), {}, null],
     [key('x'), {}, null]
   ])('%o with %o gives %o', (event, context, expected) => {

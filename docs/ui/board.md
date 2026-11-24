@@ -46,8 +46,9 @@ screen there, so its agents' news arrives as a toast and a mark on the project's
 when Octopus shows that workspace again. An error banner stays with the screen it was raised on:
 every way off the board clears it, as a change of selection does.
 
-Only ⌘⇧N and a digit under ⌘ or ⌃ work on the board. ⌘1–⌘9 switch the board's project; ⌃1–⌃9,
-⌘⇧N, a toast's Show and a status-bar row open a workspace, and so leave for Octopus. The rest —
+Of the window's shortcuts only ⌘⇧N and a digit under ⌘ or ⌃ work on the board; its own keys are
+under [Keyboard](#keyboard). ⌘1–⌘9 switch the board's project; ⌃1–⌃9, ⌘⇧N, a toast's Show and a
+status-bar row open a workspace, and so leave for Octopus. The rest —
 ⌘T, ⌘⇧D, ⌥1 — act on a conversation or a pane the board does not show.
 
 The title bar shows the folder the board reads where the repository's path stands on Octopus, with
@@ -145,7 +146,9 @@ a card is a button carrying `data-card-ref`, with no roving tabindex and no focu
 own. Enter and Space open the focused card because it is a button. The board's keys act only
 when the key lands on a card button or on the body; on any other control the key is that
 control's, so Enter on the panel's Close closes it and letters typed in a field stay text. The
-key acts on the focused card, or on the open one when nothing has the focus.
+key acts on the focused card, or on the open one when nothing has the focus. C, J and K are read
+as typed on a Latin layout and by the key's place on any other, so a Cyrillic layout's `с`, `о`
+and `л` work too.
 
 | Key               | Action                                                        |
 | ----------------- | ------------------------------------------------------------- |
@@ -156,11 +159,18 @@ key acts on the focused card, or on the open one when nothing has the focus.
 | `Esc`             | close the panel; with it closed, let go of the focused task   |
 | `⌘⌫`              | delete the task, after asking                                 |
 
-An open menu keeps every key: its Escape listener is added after the board's, so the board
-checks for `[role="menu"]` rather than `defaultPrevented`. `⌥↓` does nothing past the last
+An open menu or popover — a status-bar list — keeps every key: its Escape listener is added after
+the board's, so the board checks for `[role="menu"]` and `[role="dialog"]` rather than
+`defaultPrevented`. `⌥↓` does nothing past the last
 ordered card: core cuts a drop index to the ordered part, so the step would write the same
-place. Moving a focused tile makes React re-insert its node, which drops the focus, so the
-focus is put back in a layout effect once the moved listing is drawn.
+place.
+
+With a panel open, the arrows and J/K open the card the focus lands on, so the panel follows the
+focus and the description editor of the card left hands its draft up. React keeps the focus on a
+tile it moves, but a loose card comes back from ⌥↑/⌥↓ under a new ref, as a new node; a layout
+effect puts the focus on it once the moved listing is drawn, and the same effect gives the focus to
+the card whose panel Esc closed. It does so only from the body: a key pressed while a move was out
+— C, J — may have put the focus where it is wanted.
 
 ## Filter and search
 
@@ -212,8 +222,8 @@ second line adds turns, active time and tokens in and out — written by `format
 - Every read lists and reads every file of the project's folder; a folder of thousands of large
   files reads slowly.
 - A card cannot be dragged from the keyboard: the browser's drag and drop has no keyboard path.
-  The status menu in the card panel moves a card to another column, and ⌥↑/⌥↓ reorder one within
-  a column.
+  ⌥↑/⌥↓ reorder one within a column; moving it to another takes the status menu, and so the mouse
+  (below).
 - The card panel's status, priority and tag menus cannot be worked from the keyboard: Tab
   reaches a trigger and Enter opens it, but `DropdownMenu` has no arrow-key navigation, so the
   item is picked with the mouse.
