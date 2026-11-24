@@ -79,8 +79,8 @@ trigger instead: the priority's icon, the tag's colour. Choosing the value a car
 writes nothing.
 
 **A move follows its card.** A status change moves the file into another folder, which gives it a
-new ref. Every move goes through `moveCard` in `BoardScreen` — the status menu's and dragging's
-now, ⌥↑/⌥↓'s once they are built — and the panel follows the new ref, but only while it still shows
+new ref. Every move goes through `moveCard` in `BoardScreen` — the status menu's, dragging's and
+⌥↑/⌥↓'s — and the panel follows the new ref, but only while it still shows
 that card. The panel and its detail are keyed by the opening, not the ref, so a move keeps what
 the panel holds and shows, and an opening's number is never reused, so a card opened after a close
 never shows the last one's description. The status menu puts the card first in its new column.
@@ -140,7 +140,27 @@ open card stays open under its new path. `useDragReorder` is not reused: it keep
 
 ## Keyboard
 
-Not built yet: the board has no keys of its own.
+The board is driven from the keyboard with the browser's own focus, as the workspace list is:
+a card is a button carrying `data-card-ref`, with no roving tabindex and no focus state of its
+own. Enter and Space open the focused card because it is a button. The board's keys act only
+when the key lands on a card button or on the body; on any other control the key is that
+control's, so Enter on the panel's Close closes it and letters typed in a field stay text. The
+key acts on the focused card, or on the open one when nothing has the focus.
+
+| Key               | Action                                                        |
+| ----------------- | ------------------------------------------------------------- |
+| `C`               | new task in the target's column, or in Backlog with no target |
+| `↓` `J` / `↑` `K` | next / previous task in the column                            |
+| `→` / `←`         | the neighbouring column that has tasks, at the same position  |
+| `⌥↓` / `⌥↑`       | move the task one place down / up                             |
+| `Esc`             | close the panel; with it closed, let go of the focused task   |
+| `⌘⌫`              | delete the task, after asking                                 |
+
+An open menu keeps every key: its Escape listener is added after the board's, so the board
+checks for `[role="menu"]` rather than `defaultPrevented`. `⌥↓` does nothing past the last
+ordered card: core cuts a drop index to the ordered part, so the step would write the same
+place. Moving a focused tile makes React re-insert its node, which drops the focus, so the
+focus is put back in a layout effect once the moved listing is drawn.
 
 ## Filter and search
 
@@ -192,5 +212,8 @@ second line adds turns, active time and tokens in and out — written by `format
 - Every read lists and reads every file of the project's folder; a folder of thousands of large
   files reads slowly.
 - A card cannot be dragged from the keyboard: the browser's drag and drop has no keyboard path.
-  The status menu in the card panel moves a card to another column; no key reorders one within
-  a column yet.
+  The status menu in the card panel moves a card to another column, and ⌥↑/⌥↓ reorder one within
+  a column.
+- The card panel's status, priority and tag menus cannot be worked from the keyboard: Tab
+  reaches a trigger and Enter opens it, but `DropdownMenu` has no arrow-key navigation, so the
+  item is picked with the mouse.

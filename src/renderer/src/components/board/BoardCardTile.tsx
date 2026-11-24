@@ -70,6 +70,8 @@ export function BoardCardTile({
       <button
         type="button"
         onClick={onOpen}
+        data-card-ref={card.ref}
+        aria-keyshortcuts="Enter Alt+ArrowUp Alt+ArrowDown Meta+Backspace"
         aria-current={open ? 'true' : undefined}
         className={`focus-ring hover:border-line-strong w-full rounded-[var(--radius-control)] border px-2.5 py-2 text-left ${open ? 'border-accent/50 bg-canvas' : 'border-line bg-surface'}`}
       >

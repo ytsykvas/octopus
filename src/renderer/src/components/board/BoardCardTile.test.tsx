@@ -182,6 +182,17 @@ describe('BoardCardTile', () => {
     expect(screen.getByRole('listitem')).toHaveAttribute('draggable', 'true')
   })
 
+  it('announces its shortcuts and its ref', () => {
+    renderTile()
+
+    const button = screen.getByRole('button', { name: 'Fix login' })
+    expect(button).toHaveAttribute(
+      'aria-keyshortcuts',
+      'Enter Alt+ArrowUp Alt+ArrowDown Meta+Backspace'
+    )
+    expect(button).toHaveAttribute('data-card-ref', 'backlog/Fix login.md')
+  })
+
   describe('in Ukrainian', () => {
     // Unmounted first: switching back under a mounted tile re-renders it outside act.
     afterEach(async () => {
