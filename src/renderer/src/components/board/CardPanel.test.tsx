@@ -300,7 +300,7 @@ describe('CardPanel', () => {
     const { board } = renderPanel()
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
-    await user.type(screen.getByRole('textbox', { name: 'Description' }), '!')
+    await user.keyboard('!')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(board.saveDescription).toHaveBeenCalledWith('backlog/Fix login.md', {

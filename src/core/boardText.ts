@@ -90,3 +90,27 @@ export function threadOf(tail: string): CardComment[] {
   }
   return comments.map((comment) => ({ at: comment.at, text: comment.lines.join('\n').trim() }))
 }
+
+export interface TitleHead {
+  readonly text: string
+  /** What goes between the head and a body the description did not have when it was read. */
+  readonly gap: string
+}
+
+export function titleHead(description: string): TitleHead {
+  const lines = linesOf(description)
+  const first = lines.find((line) => line.text.trim() !== '')
+  if (first === undefined || !isTitleLine(first)) return { text: '', gap: '' }
+  const kept = lines.find((line) => line.start > first.start && line.text.trim() !== '')
+  if (kept !== undefined) return { text: description.slice(0, kept.start), gap: '' }
+  return { text: description, gap: gapAfter(description) }
+}
+
+function gapAfter(head: string): string {
+  if (/\n[ \t]*\r?\n$/.test(head)) return ''
+  return head.endsWith('\n') ? '\n' : '\n\n'
+}
+
+export function withBody(head: TitleHead, body: string): string {
+  return body === '' ? head.text : head.text + head.gap + body
+}

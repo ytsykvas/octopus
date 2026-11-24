@@ -1950,6 +1950,21 @@ export const de: Translation = {
         'Dateien werden fürs Zurückspulen gesichert, wenn der Agent sie mit Edit oder Write bearbeitet. Ein Befehl – ein Formatter, ein Codegenerator, git checkout, rm – ändert Dateien an diesen Sicherungen vorbei, daher lässt das Zurückspulen unberührt, was er getan hat. Vor einem Befehl, den du vielleicht rückgängig machen willst, committe oder stashe deine Arbeit; der Tab „Änderungen“ zeigt, was in den Dateien hinzugekommen und weggefallen ist.'
     }
   },
+  markdownEditor: {
+    toolbar: 'Formatierung',
+    heading: 'Überschrift',
+    bold: 'Fett (⌘B)',
+    italic: 'Kursiv (⌘I)',
+    strike: 'Durchgestrichen',
+    quote: 'Zitat',
+    code: 'Code (⌘E)',
+    codeBlock: 'Codeblock',
+    link: 'Link (⌘K)',
+    bulletList: 'Aufzählung',
+    orderedList: 'Nummerierte Liste',
+    taskList: 'Aufgabenliste',
+    done: 'Erledigt'
+  },
   board: {
     statuses: {
       backlog: 'Backlog',

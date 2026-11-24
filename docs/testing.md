@@ -313,8 +313,9 @@ resort, below any `-c` a test passes, so it overrides nothing.
 `src/renderer/src/test/setup.ts` runs before each: it installs a stub on
 `window.octopus`, initialises real translations and cleans up afterwards. It
 also stands in for what jsdom does not implement and a component calls
-unconditionally — `matchMedia`, `scrollIntoView` — so the component needs no
-`?.()` branch a real window never takes.
+unconditionally — `matchMedia`, `scrollIntoView`, `ResizeObserver`, and a
+`Range`'s `getClientRects` and `getBoundingClientRect`, which CodeMirror measures
+text through — so the component needs no `?.()` branch a real window never takes.
 
 The stub in [`test/octopus.ts`](../src/renderer/src/test/octopus.ts) is **typed
 as the real `OctopusApi`**, so a channel added to preload without a counterpart
@@ -353,10 +354,9 @@ component behaves as though the window had no size:
 - `getBoundingClientRect` on an **element** answers zeroes, so anything placed
   against a trigger needs it stubbed (`useAnchoredPanel.test.tsx` and the split
   threshold in `DiffPanel.test.tsx` both do);
-- `getBoundingClientRect` on a **`Range`** does not exist at all. A handler that
-  calls it throws, and the state it was going to set never arrives — which
-  looks exactly like a listener that never fired. `DiffPanel.test.tsx` assigns
-  one on `Range.prototype`;
+- `getBoundingClientRect` on a **`Range`** answers zeroes too, from `setup.ts`:
+  jsdom has none at all. A test that places something against a selection
+  assigns its own on `Range.prototype`, as `DiffPanel.test.tsx` does;
 - there is no `selectionchange` event of jsdom's own, so a test that selects
   text dispatches it after building the range.
 
