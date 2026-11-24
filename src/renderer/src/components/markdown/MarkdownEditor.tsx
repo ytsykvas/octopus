@@ -92,9 +92,9 @@ const theme = EditorView.theme({
   '.cm-line': { padding: '0' }
 })
 
+/** Every prop but the handlers is read once, on mount; the editor owns the text from then on. */
 export interface MarkdownEditorProps {
   readonly label: string
-  /** Read once, when the editor mounts; the editor owns the text from then on. */
   readonly initial: string
   readonly maxLength: number
   readonly autoFocus: boolean

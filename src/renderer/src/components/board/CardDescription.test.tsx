@@ -82,6 +82,32 @@ describe('CardDescription', () => {
     expect(onSave).toHaveBeenCalledWith({ text: '# Fix login\n\nBody', base: '# Fix login\n' })
   })
 
+  it('counts the blank line a first description needs against the limit', async () => {
+    const user = userEvent.setup()
+    const full = `# ${'a'.repeat(CARD_TEXT_MAX - 4)}\n`
+    renderDescription(full)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.keyboard('b')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith({ text: full, base: full })
+  })
+
+  it('keeps a title followed straight by its text as it was', async () => {
+    const user = userEvent.setup()
+    renderDescription('# Fix login\nOld text.\n')
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.keyboard('!')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith({
+      text: '# Fix login\nOld text.\n!',
+      base: '# Fix login\nOld text.\n'
+    })
+  })
+
   it('stops the text at the card limit, title line included', async () => {
     const user = userEvent.setup()
     const full = `# T\n\n${'a'.repeat(CARD_TEXT_MAX - 6)}`
@@ -227,6 +253,49 @@ describe('CardDescription', () => {
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 
+  it('overwrites under the title the card has now', async () => {
+    onSave.mockResolvedValueOnce(refusal('cardChanged', { name: 'Fix login.md' }))
+    const user = userEvent.setup()
+    const { rerender } = renderDescription()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(field())
+    await user.type(field(), 'New')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    rerender(
+      <CardDescription
+        description={'# Renamed\n\nOld text.\n'}
+        draft={null}
+        onDraft={onDraft}
+        onSave={onSave}
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Overwrite' }))
+
+    expect(onSave).toHaveBeenLastCalledWith({ text: '# Renamed\n\nNew', base: null })
+  })
+
+  it('overwrites a description edited whole as it is in the editor', async () => {
+    onSave.mockResolvedValueOnce(refusal('cardChanged', { name: 'Fix login.md' }))
+    const user = userEvent.setup()
+    const { rerender } = renderDescription('Intro\n')
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.keyboard('!')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    rerender(
+      <CardDescription
+        description={'# Titled\n\nIntro\n'}
+        draft={null}
+        onDraft={onDraft}
+        onSave={onSave}
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Overwrite' }))
+
+    expect(onSave).toHaveBeenLastCalledWith({ text: 'Intro\n!', base: null })
+  })
+
   it('reloads by dropping the edit', async () => {
     onSave.mockResolvedValueOnce(refusal('cardChanged', { name: 'Fix login.md' }))
     const user = userEvent.setup()
@@ -333,15 +402,21 @@ describe('CardDescription', () => {
     expect(editorText(field())).toBe('Kept')
   })
 
+  it('shows a title typed into a description that had none', () => {
+    renderDescription('Intro\n', { text: '# New\nIntro\n', base: 'Intro\n' })
+
+    expect(editorText(field())).toBe('# New\nIntro\n')
+  })
+
   it('leaves the focus alone when it opens on a draft', () => {
-    renderDescription(OPENED, { text: 'Kept', base: OPENED })
+    renderDescription(OPENED, { text: '# Fix login\n\nKept', base: OPENED })
 
     expect(field()).not.toHaveFocus()
   })
 
   it('takes the focus when a restored draft goes back to editing', async () => {
     const user = userEvent.setup()
-    renderDescription(OPENED, { text: 'Kept', base: OPENED })
+    renderDescription(OPENED, { text: '# Fix login\n\nKept', base: OPENED })
 
     await user.click(screen.getByRole('button', { name: 'Preview' }))
     await user.click(screen.getByRole('button', { name: 'Edit' }))

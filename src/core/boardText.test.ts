@@ -91,34 +91,42 @@ describe('withoutTitle', () => {
 
 describe('titleHead', () => {
   it.each([
-    ['# Title\n\n\nBody\n', '# Title\n\n\n'],
-    ['\n# Title\nBody', '\n# Title\n'],
-    ['# Only', '# Only'],
-    ['Body\n# Title\n', ''],
-    ['```\n# Not a title\n```\n', ''],
-    ['', '']
-  ])('reads the head of %j', (description, expected) => {
-    expect(titleHead(description)).toBe(expected)
+    ['# Title\n\n\nBody\n', '# Title\n\n\n', ''],
+    ['\n# Title\nBody', '\n# Title\n', ''],
+    ['# T\nBody', '# T\n', ''],
+    ['# T\n\n', '# T\n\n', ''],
+    ['# T\r\n\r\n', '# T\r\n\r\n', ''],
+    ['# T\n', '# T\n', '\n'],
+    ['# Only', '# Only', '\n\n'],
+    ['Body\n# Title\n', '', ''],
+    ['```\n# Not a title\n```\n', '', ''],
+    ['', '', '']
+  ])('reads the head of %j', (description, text, gap) => {
+    expect(titleHead(description)).toEqual({ text, gap })
   })
 })
 
 describe('withBody', () => {
   it.each([
-    ['', 'Body', 'Body'],
-    ['# T', '', '# T'],
-    ['# T\n\n', 'Body', '# T\n\nBody'],
-    ['# T\r\n\r\n', 'Body', '# T\r\n\r\nBody'],
-    ['# T\n', 'Body', '# T\n\nBody'],
-    ['# T', 'Body', '# T\n\nBody']
-  ])('puts %j and %j together', (head, body, expected) => {
-    expect(withBody(head, body)).toBe(expected)
-  })
-
-  it('gives back what titleHead split', () => {
-    const description = '# Fix login\n\nOld text.\n'
+    '# Fix login\n\nOld text.\n',
+    '# T\nBody',
+    '\n# T\nBody',
+    '# T\r\nBody',
+    '# Only',
+    'Intro\n# T\n'
+  ])('gives back %j as titleHead split it', (description) => {
     const head = titleHead(description)
 
-    expect(withBody(head, description.slice(head.length))).toBe(description)
+    expect(withBody(head, description.slice(head.text.length))).toBe(description)
+  })
+
+  it.each([
+    ['# T\n', 'Body', '# T\n\nBody'],
+    ['# Only', 'Body', '# Only\n\nBody'],
+    ['# T\nOld', '', '# T\n'],
+    ['# Only', '', '# Only']
+  ])('puts a blank line between %j and a body it did not have', (description, body, expected) => {
+    expect(withBody(titleHead(description), body)).toBe(expected)
   })
 })
 

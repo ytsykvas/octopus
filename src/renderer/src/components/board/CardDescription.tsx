@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CARD_TEXT_MAX, type DescriptionSave } from '@core/boardSchema.js'
-import { titleHead, withBody, withoutTitle } from '@core/boardText.js'
+import { type TitleHead, titleHead, withBody, withoutTitle } from '@core/boardText.js'
 
 import type { Failure } from '../../../../preload/index.js'
 import { useLatest } from '../../hooks/useLatest.js'
@@ -13,17 +13,22 @@ import { Callout } from '../pr/Callout.js'
 import { Segmented } from '../Segmented.js'
 import type { DescriptionDraft } from './boardDrafts.js'
 
-interface Editing extends DescriptionDraft {
+interface Editing {
+  readonly base: string
   readonly mode: 'edit' | 'preview'
-  readonly head: string
+  readonly head: TitleHead
+  readonly body: string
 }
 
-const opened = (text: string, base: string): Editing => ({
-  text,
-  base,
-  mode: 'edit',
-  head: titleHead(text)
-})
+const NO_HEAD: TitleHead = { text: '', gap: '' }
+
+function opened(text: string, base: string): Editing {
+  // From the text only when the card had a title: one typed into a titleless draft stays in view.
+  const head = titleHead(base).text === '' ? NO_HEAD : titleHead(text)
+  return { base, mode: 'edit', head, body: text.slice(head.text.length) }
+}
+
+const textOf = (editing: Editing): string => withBody(editing.head, editing.body)
 
 export function CardDescription({
   description,
@@ -53,7 +58,7 @@ export function CardDescription({
   useEffect(
     () => () => {
       const edit = latest.current
-      leave.current(edit === null ? null : { text: edit.text, base: edit.base })
+      leave.current(edit === null ? null : { text: textOf(edit), base: edit.base })
     },
     [leave]
   )
@@ -69,7 +74,7 @@ export function CardDescription({
   }
   const save = async (current: Editing, base: string | null): Promise<void> => {
     setSaving(true)
-    const failure = await onSave({ text: current.text, base })
+    const failure = await onSave({ text: textOf(current), base })
     setSaving(false)
     if (failure === null) close()
     else if (failure.code === 'cardChanged') setConflict(true)
@@ -121,21 +126,20 @@ export function CardDescription({
           {editing.mode === 'edit' ? (
             <MarkdownEditor
               label={t('board.panel.description')}
-              initial={editing.text.slice(editing.head.length)}
-              maxLength={CARD_TEXT_MAX - withBody(editing.head, '-').length + 1}
+              initial={editing.body}
+              maxLength={CARD_TEXT_MAX - editing.head.text.length - editing.head.gap.length}
               autoFocus={!restored}
               onChange={(body) => {
-                edit({ ...editing, text: withBody(editing.head, body) })
+                edit({ ...editing, body })
               }}
               onSave={(body) => {
-                if (!saving)
-                  void save({ ...editing, text: withBody(editing.head, body) }, editing.base)
+                if (!saving) void save({ ...editing, body }, editing.base)
               }}
               onCancel={close}
             />
           ) : (
             <div className="border-line min-h-[240px] rounded-[var(--radius-control)] border px-2.5 py-2">
-              {body(editing.text)}
+              {body(textOf(editing))}
             </div>
           )}
           {conflict && (
@@ -149,7 +153,10 @@ export function CardDescription({
                   size="sm"
                   variant="danger"
                   disabled={saving}
-                  onClick={() => void save(editing, null)}
+                  onClick={() => {
+                    const head = editing.head.text === '' ? NO_HEAD : titleHead(description)
+                    void save({ ...editing, head }, null)
+                  }}
                 >
                   {t('board.panel.overwrite')}
                 </Button>

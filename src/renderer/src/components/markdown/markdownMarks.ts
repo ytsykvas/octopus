@@ -47,7 +47,8 @@ export function markdownMarks(
   selection: { readonly from: number; readonly to: number }
 ): MarkdownMark[] {
   const marks: MarkdownMark[] = []
-  const lineStart = (at: number): number => text.slice(0, at).lastIndexOf('\n') + 1
+  // At 0 this reads index 0 as well; a newline there is an empty line with nothing to reveal.
+  const lineStart = (at: number): number => text.lastIndexOf('\n', at - 1) + 1
   const lineEnd = (at: number): number => {
     const end = text.indexOf('\n', at)
     return end === -1 ? text.length : end
