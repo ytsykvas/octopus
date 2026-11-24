@@ -158,6 +158,12 @@ clamp and all four ways of closing, and both composer panels use it. Give it the
 size at the moment of opening — a panel's height often depends on what it is
 about to draw.
 
+**A tooltip is a `title` attribute and nothing else.** `TitleTooltips`, mounted
+once in `main.tsx`, draws every one itself: the native tooltip waits a second
+and a half on macOS, and over the Changes tab's out-of-date cloud it never
+appeared at all. While the pointer is on an element its title is blanked, so
+the two never show together, and it comes back when the pointer leaves.
+
 ## Colour that carries meaning
 
 A project's colour comes from `--project-<name>`, declared once per theme, and
