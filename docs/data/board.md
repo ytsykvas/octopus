@@ -95,7 +95,7 @@ What iCloud does to this folder was measured on two Macs in B001 rather than rea
 
 ### Names in two Unicode forms
 
-B001 saw names change form on the way: `Größe ändern.md` and `Їжак.md`, written composed (NFC) on one Mac, were listed decomposed (NFD, with U+0308) on the other, and a name created decomposed there arrived decomposed back. So one file can carry different bytes in its name on two Macs. The board keeps a card's name exactly as `readdir` gives it — a ref is never normalised, and nothing synced holds one: a workspace finds its card by the `id` in its header — and compares names with `sameName`, which composes both sides first. So such a card opens and moves under its own name, and a new card with the composed spelling of that title gets `-2`.
+B001 saw names change form on the way: `Größe ändern.md` and `Їжак.md`, written composed (NFC) on one Mac, were listed decomposed (NFD, with U+0308) on the other, and a name created decomposed there arrived decomposed back. So one file can carry different bytes in its name on two Macs. The board keeps a card's name exactly as `readdir` gives it — a ref is never normalised, and nothing synced holds one: a workspace finds its card by the `id` in its header — and compares names with `sameName`, which composes both sides first. So such a card opens and moves under its own name, its `_attachments` folder is found by the volume, which ignores the form too, and a new card with the composed spelling of that name gets `-2`.
 
 ## Known limitations
 

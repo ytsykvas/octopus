@@ -1171,6 +1171,16 @@ describe('names that arrive decomposed', () => {
     })
   })
 
+  it('lists a loose card whose name arrived decomposed', async () => {
+    await card(DECOMPOSED, '# Size\n')
+
+    const cards = await listBoard(await layoutOf())
+
+    expect(cards.map((entry) => entry.ref).sort()).toEqual(
+      [DECOMPOSED, `backlog/${DECOMPOSED}`].sort()
+    )
+  })
+
   it('keeps a decomposed name when it moves the card', async () => {
     const ref = await moveCard(await layoutOf(), `backlog/${DECOMPOSED}`, {
       status: 'done',
