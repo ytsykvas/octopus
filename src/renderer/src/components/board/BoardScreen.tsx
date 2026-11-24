@@ -248,11 +248,6 @@ export function BoardScreen({
   useWindowEvent(
     'keydown',
     (event) => {
-      // The same guard as App's: an open dialog owns every key.
-      if (document.querySelector('dialog[open]') !== null) return
-      // An open menu or popover closes itself on Escape, but its listener was added after this
-      // one, so `defaultPrevented` is still false here.
-      if (document.querySelector('[role="menu"], [role="dialog"]') !== null) return
       const focused = focusedCard(event.target)
       if (focused === undefined) return
       const action = boardKeyAction(event, {

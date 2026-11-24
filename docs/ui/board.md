@@ -184,8 +184,9 @@ the current language, and its priority and tag are among those chosen, "none" in
 filter a column shows a fraction of its cards, so dragging and `⌥↑` / `⌥↓` are off — the
 neighbours a new position is computed from would be wrong — while the status still changes from
 the panel. A column's count reads "1 of 2", and a column the filter emptied says so instead of the
-ordinary empty state. `/` puts the focus in the search under the same rule as the board's keys;
-Escape clears it and leaves the focus on the body.
+ordinary empty state; a card it hides keeps its panel open, a card just created under it included.
+`/` puts the focus in the search under the same rule as the board's keys, and is read by its place
+too, unshifted, as C, J and K are; Escape clears the query alone and leaves the focus on the body.
 
 ## Run
 

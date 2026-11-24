@@ -57,14 +57,14 @@ describe('BoardFilterBar', () => {
     expect(onChange).toHaveBeenLastCalledWith({ query: 'a', priorities: [], tags: [] })
   })
 
-  it('clears the query and gives the focus to the board on Escape', async () => {
+  it('clears only the query and gives the focus to the board on Escape', async () => {
     const user = userEvent.setup()
-    const { onChange } = renderBar({ ...EMPTY_BOARD_FILTER, query: 'login' })
+    const { onChange } = renderBar({ query: 'login', priorities: ['high'], tags: ['fix'] })
 
     await user.click(field())
     await user.keyboard('{Escape}')
 
-    expect(onChange).toHaveBeenLastCalledWith(EMPTY_BOARD_FILTER)
+    expect(onChange).toHaveBeenLastCalledWith({ query: '', priorities: ['high'], tags: ['fix'] })
     expect(document.body).toHaveFocus()
   })
 
@@ -98,6 +98,30 @@ describe('BoardFilterBar', () => {
     renderBar()
 
     await user.keyboard('j')
+
+    expect(field()).not.toHaveFocus()
+  })
+
+  it('puts the focus in the search from the slash key of another layout', () => {
+    renderBar()
+
+    act(() => {
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: '.', code: 'Slash', bubbles: true })
+      )
+    })
+
+    expect(field()).toHaveFocus()
+  })
+
+  it('leaves the question mark to the board', () => {
+    renderBar()
+
+    act(() => {
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: '?', code: 'Slash', shiftKey: true, bubbles: true })
+      )
+    })
 
     expect(field()).not.toHaveFocus()
   })
@@ -167,12 +191,16 @@ describe('BoardFilterBar', () => {
 
   it('adds a priority from the menu', async () => {
     const user = userEvent.setup()
-    const { onChange } = renderBar()
+    const { onChange } = renderBar({ ...EMPTY_BOARD_FILTER, query: 'login', tags: ['fix'] })
 
     await user.click(button('Priority'))
     await user.click(screen.getByRole('menuitemradio', { name: 'High' }))
 
-    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY_BOARD_FILTER, priorities: ['high'] })
+    expect(onChange).toHaveBeenLastCalledWith({
+      query: 'login',
+      priorities: ['high'],
+      tags: ['fix']
+    })
   })
 
   it('takes a chosen priority back off', async () => {

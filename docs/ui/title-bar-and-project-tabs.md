@@ -21,9 +21,9 @@ both in one tree outgrows the window and makes a click mean two things — selec
 and fold. Splitting them means neither list grows with the other. The strip's
 foot holds the switch between the Octopus and Board screens above Plugins; on
 the board the title bar shows the project's board folder, and its right end
-holds the board's search field and its two filter menus instead of the server
-controls; they appear once a project and a board folder are chosen
-(docs/ui/board.md).
+holds the board's search field and its two filter menus instead of the
+controls the Octopus screen has there; they appear once a project and a board
+folder are chosen (docs/ui/board.md).
 
 **A project's tile says when its agents need you.** Several agents run at once,
 and without this the only way to learn that one had finished or stopped to ask

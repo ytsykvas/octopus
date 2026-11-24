@@ -34,9 +34,9 @@ export function BoardFilterBar({ filter, onChange }: BoardFilterBarProps): React
   const field = useRef<HTMLInputElement>(null)
 
   useWindowEvent('keydown', (event) => {
-    if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return
-    if (document.querySelector('dialog[open]') !== null) return
-    if (document.querySelector('[role="menu"], [role="dialog"]') !== null) return
+    // Also by its place, as C/J/K are: another layout types something else there; shifted it is `?`.
+    const slash = event.key === '/' || (event.code === 'Slash' && !event.shiftKey)
+    if (!slash || event.metaKey || event.ctrlKey || event.altKey) return
     // On a field or a button the slash is that control's, the search's own included.
     if (focusedCard(event.target) === undefined) return
     event.preventDefault()

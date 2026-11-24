@@ -230,7 +230,6 @@ export function App(): React.JSX.Element {
     setShownSelection(selection)
     setError(null)
   }
-  // Not persisted, and another project starts unfiltered (docs/ui/board.md).
   const [boardFilter, setBoardFilter] = useState<BoardFilter>(EMPTY_BOARD_FILTER)
   const [filteredProjectId, setFilteredProjectId] = useState(selectedProjectId)
   if (selectedProjectId !== filteredProjectId) {
