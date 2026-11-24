@@ -35,6 +35,10 @@ The filename is the chat id, a uuid, and the directory is flat. A chat outlives
 the name its workspace had when it started, so filing it under that name would
 either strand the file on a rename or require moving it.
 
+A workspace started from a board card has its transcripts read once more at
+removal, to fold the turns and tokens into the card (`boardRun.ts`); then they
+are deleted as before.
+
 ## The CLI's own sessions
 
 The agent CLI keeps its own copy of every conversation under `~/.claude/projects`

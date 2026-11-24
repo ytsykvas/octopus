@@ -197,6 +197,7 @@ import {
   type PullRequestView,
   readBranchRequests,
   type BranchRequestList,
+  type PullRequest,
   pushBranch,
   pushBranchTo,
   pushUrl,
@@ -204,7 +205,7 @@ import {
   readPullRequestDetail,
   updateFromBase
 } from './pullRequests.js'
-import type { PullRequestDetail, RerunScope } from './pullRequestShapes.js'
+import type { BranchRequest, PullRequestDetail, RerunScope } from './pullRequestShapes.js'
 import { gitIn, isIgnored, keptIndexCopies } from './git.js'
 import { FETCH_OPTIONS, PUSH_OPTIONS, pushTargets, resolveBase } from './remotes.js'
 import { createRemoteRefWatch, type RemoteRefWatch, type RemoteRefWatchDeps } from './remoteRefs.js'
@@ -234,7 +235,7 @@ import {
   stateFile
 } from './paths.js'
 import { DOWNLOAD_TIMEOUT_MS } from './download.js'
-import { oneAtATime, oneAtATimeEach, within } from './parallel.js'
+import { allOf, oneAtATime, oneAtATimeEach, within } from './parallel.js'
 import {
   ensureLibrary,
   importLibraryItem,
@@ -285,7 +286,8 @@ import {
   type CardPatch,
   type DescriptionSave
 } from './boardSchema.js'
-import { parseCard, setMeta, upsertRun } from './boardCard.js'
+import { parseCard, readMeta, type RunFields, setMeta, upsertRun } from './boardCard.js'
+import { foldRunUsage } from './boardRun.js'
 import { cardWorkspaceName, machineLabel } from './boardNames.js'
 import { present } from './present.js'
 import {
@@ -5198,7 +5200,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     // creation removes the workspace: one with a pool name beats a refusal.
     await within(
       RECORD_RUN_MS,
-      recordRun(projectId, layout, card.id, requireWorkspace(created.id)).catch(onDiagnostic)
+      recordRun(layout, card.id, requireWorkspace(created.id)).catch(onDiagnostic)
     )
 
     return {
@@ -5214,19 +5216,25 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return null
   }
 
-  async function recordRun(
-    projectId: string,
+  async function recordRun(layout: BoardLayout, id: string, workspace: Workspace): Promise<void> {
+    const { email } = await checkClaudeAccount(commandExec)
+    await writeRun(layout, id, workspace, () => ({ accounts: email === null ? [] : [email] }))
+  }
+
+  async function writeRun(
     layout: BoardLayout,
     id: string,
-    workspace: Workspace
+    workspace: Workspace,
+    fields: (raw: string) => RunFields
   ): Promise<void> {
-    const { email } = await checkClaudeAccount(commandExec)
-    await boardWork(projectId, async () => {
+    await boardWork(workspace.projectId, async () => {
       // By id, not by the ref it was run from: making the workspace takes
       // seconds, and the card may have been moved or deleted meanwhile.
       const ref = await findCard(layout, id)
       if (ref === null) return
       await editCard(layout, ref, (raw, name) =>
+        // `device`, `machine` and `branch` every time: a run whose record failed
+        // would otherwise be an entry the schema drops.
         upsertRun(
           raw,
           workspace.createdAt,
@@ -5234,12 +5242,86 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             device: config.deviceId,
             machine: machineLabel(hostname()),
             branch: workspace.branch,
-            accounts: email === null ? [] : [email]
+            ...fields(raw)
           },
           name
         )
       )
     })
+  }
+
+  async function settleCardRun(
+    workspace: Workspace,
+    chats: readonly Chat[],
+    request: PullRequest | null
+  ): Promise<void> {
+    const id = workspace.card
+    if (id === null || config.boardFolder === '') return
+    // Bounded and only logged: a board that cannot be reached must not keep a workspace.
+    await within(RECORD_RUN_MS, settleRun(workspace, id, chats, request).catch(onDiagnostic))
+  }
+
+  async function settleRun(
+    workspace: Workspace,
+    id: string,
+    chats: readonly Chat[],
+    request: PullRequest | null
+  ): Promise<void> {
+    // In the line: closing the chats did not wait for their appends, and the last
+    // `result` may be one of them.
+    const usage = foldRunUsage(
+      await transcriptWrites(() => allOf(chats.map((chat) => readTranscript(chat.id, dataRoot))))
+    )
+    const { email } = await checkClaudeAccount(commandExec)
+    await writeRun(await layoutOf(workspace.projectId), id, workspace, (raw) => ({
+      ended: now(),
+      ...usage,
+      accounts: email === null ? [] : [email],
+      ...requestFields(raw, workspace, request)
+    }))
+  }
+
+  // Read inside the change, so a merge time is written once and kept across restarts.
+  function requestFields(
+    raw: string,
+    workspace: Workspace,
+    request: Pick<PullRequest, 'url' | 'state'> | null
+  ): Pick<RunFields, 'pr' | 'merged'> {
+    if (request === null) return {}
+    const run = readMeta(raw).meta.runs.find((entry) => entry.started === workspace.createdAt)
+    return request.state === 'merged' && run?.merged === undefined
+      ? { pr: request.url, merged: now() }
+      : { pr: request.url }
+  }
+
+  // The last request reading tried on a card, per workspace.
+  const notedRequests = new Map<string, string>()
+
+  async function notePullRequests(
+    projectId: string,
+    requests: readonly BranchRequest[]
+  ): Promise<void> {
+    if (config.boardFolder === '') return
+    const byBranch = new Map(requests.map((request) => [request.branch, request]))
+    for (const workspace of workspacesOfProject(state, projectId)) {
+      await noteRequest(workspace, byBranch.get(workspace.branch)).catch(onDiagnostic)
+    }
+  }
+
+  async function noteRequest(
+    workspace: Workspace,
+    request: BranchRequest | undefined
+  ): Promise<void> {
+    const id = workspace.card
+    if (id === null || request === undefined) return
+    const reading = `${request.url}|${request.state}`
+    if (notedRequests.get(workspace.id) === reading) return
+    // Before the attempt: a card that is gone or cannot be written is tried again
+    // when the request changes, not on every poll.
+    notedRequests.set(workspace.id, reading)
+    await writeRun(await layoutOf(workspace.projectId), id, workspace, (raw) =>
+      requestFields(raw, workspace, request)
+    )
   }
 
   /** Where one kind of library item lives in a store; a path, made on demand. */
@@ -6847,7 +6929,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             // Read before the closing below, which leaves the records in place
             // but is the last moment the chats are reachable from the state that
             // is about to be rewritten.
-            closing.push(...allChatsOfWorkspace(state, workspace.id))
+            const own = allChatsOfWorkspace(state, workspace.id)
+            closing.push(...own)
 
             await teardown(workspace.id)
 
@@ -6872,11 +6955,15 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
             // Best-effort, one by one: a worktree already deleted from outside
             // must not stop the rest — or the project — from being removed. The
             // user has confirmed, so uncommitted work goes too.
-            await removeWorkspace(
+            const worktreeGone = await removeWorkspace(
               workspace,
               { repository, workspace: makeExec(workspace.path) },
               { force: true, deleteBranch: true }
-            ).catch(() => undefined)
+            ).then(
+              () => true,
+              () => false
+            )
+            if (worktreeGone) await settleCardRun(workspace, own, null)
           })
         }
       }
@@ -6978,6 +7065,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
           force: options?.force ?? false,
           deleteBranch: options?.deleteBranch ?? false
         }
+        // For the card: a merge seen only here is then recorded too.
+        let requestSeen: PullRequest | null = null
         // git calls a squash- or rebase-merged branch unmerged, even one this app's merge button
         // landed. GitHub is asked only after git says no; a gh missing or signed out leaves
         // git's answer standing.
@@ -6990,6 +7079,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
               makeExec(workspace.path),
               makeExec(workspace.path, FETCH_OPTIONS)
             )
+            requestSeen = view.request
             return view.request?.state === 'merged'
           } catch {
             return false
@@ -7056,6 +7146,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
          */
 
         await discardWorkspace(workspace, execs, removal)
+        // Before the commit, after which the transcripts are deleted.
+        await settleCardRun(workspace, closing, requestSeen)
 
         await commit((current) => removeWorkspaceRecord(current, workspaceId))
         await discardHistories(closing)
@@ -7236,16 +7328,19 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return setReviewThreadResolved(threadId, resolved, makeGh(workspace.path))
     },
 
-    readBranchRequests(projectId) {
+    async readBranchRequests(projectId) {
       const project = requireProject(projectId)
 
       // From the checkout rather than from a worktree: this is a question about
       // the repository, and a project can be open with no workspace in it.
-      return readBranchRequests(
+      const list = await readBranchRequests(
         workspacesOfProject(state, projectId),
         makeGh(project.repoPath),
         makeExec(project.repoPath)
       )
+      // On the window's own poll, bounded so a slow board never holds the marks.
+      await within(RECORD_RUN_MS, notePullRequests(projectId, list.requests))
+      return list
     },
 
     async readFileTree(workspaceId) {

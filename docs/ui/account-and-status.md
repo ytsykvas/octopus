@@ -255,7 +255,9 @@ through `useVisibleInterval`, which stops while the window is hidden or
 minimised and asks at once when it is shown again — a switch between apps
 asks nothing, since the clock never stopped; the other projects' requests ride
 on `useBranchRequests`, and only while the bar shows. Folding it away is the
-switch for somebody who would rather the app did not run `ps` at all.
+switch for somebody who would rather the app did not run `ps` at all. The same
+read also notes a request in the card of a workspace started from the board; the
+window sees no difference.
 
 **A reading redraws the bar and nothing else.** The bar takes the machine's
 reading itself, rather than `App` holding it — every reading differs from the

@@ -36,7 +36,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CommandExec } from './accounts.js'
 import { descriptionOf, readMeta } from './boardCard.js'
 import { machineLabel } from './boardNames.js'
-import { CARD_TEXT_MAX } from './boardSchema.js'
+import { CARD_TEXT_MAX, type CardRunEntry } from './boardSchema.js'
 import {
   ABANDONED,
   COMPACTION_WATCH_SETTINGS,
@@ -414,12 +414,17 @@ const LATER = '2999-01-01T00:00:00Z'
  * the branch cannot be shown to have moved past.
  */
 const oneRequest =
-  (createdAt: string, branch: () => string, head: () => string = () => '0'.repeat(40)) =>
+  (
+    createdAt: string,
+    branch: () => string,
+    head: () => string = () => '0'.repeat(40),
+    state: 'OPEN' | 'MERGED' | 'CLOSED' = 'MERGED'
+  ) =>
   () =>
   (args: readonly string[]): Promise<string> => {
     const request = {
       number: 7,
-      state: 'MERGED',
+      state,
       url: 'https://x/pull/7',
       createdAt,
       headRefOid: head(),
@@ -447,15 +452,29 @@ function respondTo(command: string, payload: string): CommandExec {
     name === command ? Promise.resolve(payload) : Promise.reject(new Error('not installed'))
 }
 
-const CLAUDE_SIGNED_IN = JSON.stringify({
-  loggedIn: true,
-  authMethod: 'claude.ai',
-  apiProvider: 'firstParty',
-  email: 'user@example.com',
-  orgId: 'org-1',
-  orgName: "user@example.com's Organization",
-  subscriptionType: 'max'
-})
+const signedInAs = (email: string): string =>
+  JSON.stringify({
+    loggedIn: true,
+    authMethod: 'claude.ai',
+    apiProvider: 'firstParty',
+    email,
+    orgId: 'org-1',
+    orgName: `${email}'s Organization`,
+    subscriptionType: 'max'
+  })
+
+const CLAUDE_SIGNED_IN = signedInAs('user@example.com')
+
+/** The nth `claude` call gets the nth answer, and every later one the last. */
+function claudeAnswers(...answers: readonly (() => Promise<string>)[]): CommandExec {
+  let calls = 0
+  return (name) => {
+    if (name !== 'claude') return Promise.reject(new Error('not installed'))
+    const answer = present(answers[Math.min(calls, answers.length - 1)], 'an answer')
+    calls += 1
+    return answer()
+  }
+}
 
 /** One card in `board/planner/backlog/A.md`, the project `planner`, and a service that can run it. */
 async function withBoard(
@@ -489,6 +508,30 @@ const only = async (on: OctopusService, projectId: string): Promise<Workspace> =
   present((await on.listWorkspaces(projectId))[0], 'a workspace')
 
 const raw = (file: string): Promise<string> => readFile(file, 'utf8')
+
+const runsIn = async (file: string): Promise<CardRunEntry[]> => readMeta(await raw(file)).meta.runs
+
+const T1 = '2026-11-22T12:00:00.000Z'
+const T2 = '2026-11-23T12:00:00.000Z'
+
+const resultOf = (
+  at: string,
+  durationMs: number | null,
+  inputTokens: number | null,
+  outputTokens: number | null
+): ChatEntry => ({
+  role: 'agent',
+  at,
+  event: {
+    type: 'result',
+    ok: true,
+    costUsd: 1,
+    durationMs,
+    inputTokens,
+    outputTokens,
+    terminalReason: null
+  }
+})
 
 describe('workspaces', () => {
   /** A service with one project already added, as the UI would have. */
@@ -18661,7 +18704,6 @@ describe('the board', () => {
 
 describe('running a board card', () => {
   const UUID = '2f1c0b6e-5f0e-4d6e-9c55-0d6c1c2a7a11'
-  const runsIn = async (file: string): Promise<unknown[]> => readMeta(await raw(file)).meta.runs
 
   it('starts a workspace from a card and returns its description as a draft', async () => {
     const { service, projectId, file } = await withBoard('# Fix login\n\nBody\n')
@@ -19063,6 +19105,394 @@ describe('running a board card', () => {
     const { meta } = readMeta(await raw(file))
     expect(meta.id).toBeDefined()
     expect(meta.runs).toEqual([])
+  })
+})
+
+describe('settling a card run', () => {
+  const AT = '2026-11-21T10:00:00.000Z'
+
+  async function ranOnce(
+    card: string,
+    extra: ServiceOptions = {}
+  ): Promise<Awaited<ReturnType<typeof withBoard>> & { id: string }> {
+    const made = await withBoard(card, extra)
+    const launch = await made.service.runCard(made.projectId, 'backlog/A.md')
+    const chat = await made.service.openChat(launch.workspaceId)
+    await appendEntry(chat.id, resultOf(AT, 60_000, 100, 7), join(dir, 'data'))
+    return { ...made, id: launch.workspaceId }
+  }
+
+  it('writes what the run came to into its card when the workspace is removed', async () => {
+    const { service, id, file } = await ranOnce('# Fix login\n', { now: () => T1 })
+
+    await service.removeWorkspaceById(id, { force: true })
+
+    const [run] = await runsIn(file)
+    expect(run).toMatchObject({
+      ended: T1,
+      device: service.getConfig().deviceId,
+      machine: 'Mac-One',
+      turns: 1,
+      activeMs: 60_000,
+      tokensIn: 100,
+      tokensOut: 7,
+      accounts: ['user@example.com']
+    })
+    expect(run).not.toHaveProperty('cost')
+    await expect(access(file)).resolves.toBeUndefined()
+  })
+
+  it('counts a turn a fork copied only once', async () => {
+    const { service, id, file } = await ranOnce('# Fix login\n')
+    const fork = await service.createChat(id)
+    await appendEntry(fork.id, resultOf(AT, 60_000, 100, 7), join(dir, 'data'))
+    await appendEntry(fork.id, resultOf('2026-11-21T10:05:00.000Z', 1000, 1, 2), join(dir, 'data'))
+
+    await service.removeWorkspaceById(id, { force: true })
+
+    expect((await runsIn(file))[0]).toMatchObject({ turns: 2, activeMs: 61_000 })
+  })
+
+  it('adds the account in use at removal to the one at the start', async () => {
+    const { service, id, file } = await ranOnce('# Fix login\n', {
+      commandExec: claudeAnswers(
+        () => Promise.resolve(signedInAs('a@x')),
+        () => Promise.resolve(signedInAs('b@x'))
+      )
+    })
+
+    await service.removeWorkspaceById(id, { force: true })
+
+    expect((await runsIn(file))[0]?.accounts).toEqual(['a@x', 'b@x'])
+  })
+
+  it('writes no account when Claude is signed out at removal', async () => {
+    const { service, id, file } = await ranOnce('# Fix login\n', {
+      commandExec: claudeAnswers(
+        () => Promise.resolve(CLAUDE_SIGNED_IN),
+        () => Promise.reject(new Error('not installed'))
+      )
+    })
+
+    await service.removeWorkspaceById(id, { force: true })
+
+    expect((await runsIn(file))[0]?.accounts).toEqual(['user@example.com'])
+  })
+
+  it('records a merge seen only at removal', async () => {
+    const { service, projectId, repo, id, file } = await ranOnce('# Fix login\n', {
+      makeGh: oneRequest(LATER, () => ''),
+      now: () => T1
+    })
+    const workspace = await only(service, projectId)
+    await writeFile(join(workspace.path, 'work.txt'), 'work\n', 'utf8')
+    await run('git', ['add', '.'], { cwd: workspace.path })
+    await run('git', ['commit', '-q', '-m', 'work'], { cwd: workspace.path })
+    await run('git', ['merge', '--squash', workspace.branch], { cwd: repo })
+    await run('git', ['commit', '-q', '-m', 'squashed'], { cwd: repo })
+
+    await service.removeWorkspaceById(id, { deleteBranch: true })
+
+    expect((await runsIn(file))[0]).toMatchObject({
+      pr: 'https://x/pull/7',
+      merged: T1,
+      ended: T1
+    })
+  })
+
+  it('looks at no board for a workspace not started from a card', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, board } = await withBoard('# Fix login\n', { onDiagnostic })
+    const workspace = await service.createWorkspaceIn(projectId)
+    await rm(board, { recursive: true })
+
+    await service.removeWorkspaceById(workspace.id, { force: true })
+
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing while no board folder is set', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, id, file } = await ranOnce('# Fix login\n', { onDiagnostic })
+    await service.updateConfig({ boardFolder: '' })
+    const before = await raw(file)
+
+    await service.removeWorkspaceById(id, { force: true })
+
+    await expect(raw(file)).resolves.toBe(before)
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it('still removes the workspace when the board folder is gone', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, board, id } = await ranOnce('# Fix login\n', { onDiagnostic })
+    await rm(board, { recursive: true })
+
+    await service.removeWorkspaceById(id, { force: true })
+
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+    expect(onDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'boardFolderUnreadable' })
+    )
+    expect(await readdir(dir)).not.toContain('board')
+  })
+
+  it('makes no folder when the project folder is gone', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, board, id } = await ranOnce('# Fix login\n', { onDiagnostic })
+    await rm(join(board, 'planner'), { recursive: true })
+
+    await service.removeWorkspaceById(id, { force: true })
+
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+    await expect(readdir(board)).resolves.toEqual([])
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it('still removes the workspace when the card is gone', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, id, file } = await ranOnce('# Fix login\n', { onDiagnostic })
+    await rm(file)
+
+    await service.removeWorkspaceById(id, { force: true })
+
+    await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it('settles every card when the whole project is removed', async () => {
+    const { service, projectId, board, file } = await withBoard('# Fix login\n')
+    const second = join(board, 'planner', 'backlog', 'B.md')
+    await writeFile(second, '# Two\n')
+    await service.runCard(projectId, 'backlog/A.md')
+    await service.runCard(projectId, 'backlog/B.md')
+
+    await service.removeProjectById(projectId)
+
+    expect((await runsIn(file))[0]?.ended).toBeDefined()
+    expect((await runsIn(second))[0]?.ended).toBeDefined()
+  })
+
+  it('settles no card whose worktree the project removal could not remove', async () => {
+    const { service, projectId, file } = await ranOnce('# Fix login\n')
+    const { path } = await only(service, projectId)
+    await run('git', ['worktree', 'lock', path], { cwd: path })
+
+    await service.removeProjectById(projectId)
+
+    expect((await runsIn(file))[0]?.ended).toBeUndefined()
+  })
+
+  it('settles no card when git refuses to remove the workspace', async () => {
+    const { service, projectId, id, file } = await ranOnce('# Fix login\n')
+    const { path } = await only(service, projectId)
+    await run('git', ['worktree', 'lock', path], { cwd: path })
+
+    await expect(service.removeWorkspaceById(id, { deleteBranch: false })).rejects.toThrow()
+
+    expect((await runsIn(file))[0]?.ended).toBeUndefined()
+  })
+
+  it('does not wait for a board that hangs', async () => {
+    let reached = (): void => undefined
+    const asked = new Promise<void>((resolve) => {
+      reached = resolve
+    })
+    const { service, projectId, id, file } = await ranOnce('# Fix login\n', {
+      commandExec: claudeAnswers(
+        () => Promise.resolve(CLAUDE_SIGNED_IN),
+        () => {
+          reached()
+          return new Promise<string>(() => undefined)
+        }
+      )
+    })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true })
+    try {
+      const removal = service.removeWorkspaceById(id, { force: true })
+      await asked
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await expect(removal).resolves.toBeDefined()
+      await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+      expect((await runsIn(file))[0]?.ended).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.skipIf(process.getuid?.() === 0)('reports a board it cannot write to', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, board, id } = await ranOnce('# Fix login\n', { onDiagnostic })
+    const backlog = join(board, 'planner', 'backlog')
+    await chmod(backlog, 0o555)
+    try {
+      await service.removeWorkspaceById(id, { force: true })
+
+      await expect(service.listWorkspaces(projectId)).resolves.toEqual([])
+      expect(onDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'EACCES' }))
+    } finally {
+      await chmod(backlog, 0o755)
+    }
+  })
+})
+
+describe('noting pull requests in cards', () => {
+  async function runWithRequest(
+    state: 'OPEN' | 'MERGED',
+    extra: ServiceOptions = {}
+  ): Promise<Awaited<ReturnType<typeof withBoard>> & { workspace: Workspace }> {
+    let branch = ''
+    const made = await withBoard('# Fix login\n', {
+      makeGh: oneRequest(LATER, () => branch, undefined, state),
+      ...extra
+    })
+    await made.service.runCard(made.projectId, 'backlog/A.md')
+    const workspace = await only(made.service, made.projectId)
+    branch = workspace.branch
+    return { ...made, workspace }
+  }
+
+  it("writes the pull request of a card's workspace into its run", async () => {
+    const { service, projectId, file } = await runWithRequest('OPEN')
+
+    await service.readBranchRequests(projectId)
+
+    const [run] = await runsIn(file)
+    expect(run).toMatchObject({
+      pr: 'https://x/pull/7',
+      device: service.getConfig().deviceId,
+      machine: 'Mac-One'
+    })
+    expect(run?.merged).toBeUndefined()
+    await expect(access(file)).resolves.toBeUndefined()
+  })
+
+  it('marks the run merged when its request is', async () => {
+    const { service, projectId, file } = await runWithRequest('MERGED', { now: () => T1 })
+
+    await service.readBranchRequests(projectId)
+
+    expect((await runsIn(file))[0]?.merged).toBe(T1)
+  })
+
+  it('keeps the first merge time across a restart', async () => {
+    const { service, projectId, workspace, file } = await runWithRequest('MERGED', {
+      now: () => T1
+    })
+    await service.readBranchRequests(projectId)
+
+    const restarted = await createService({
+      ...paths(dir),
+      hostname: () => 'Mac-One.local',
+      commandExec: respondTo('claude', CLAUDE_SIGNED_IN),
+      makeGh: oneRequest(LATER, () => workspace.branch),
+      now: () => T2
+    })
+    await restarted.readBranchRequests(projectId)
+
+    expect((await runsIn(file))[0]?.merged).toBe(T1)
+  })
+
+  it('writes a whole run into a card whose run was not recorded', async () => {
+    const { service, projectId, workspace, file } = await runWithRequest('MERGED', {
+      now: () => T1
+    })
+    const id = present(readMeta(await raw(file)).meta.id, 'the card id')
+    await writeFile(file, `---\nid: ${id}\n---\n# Fix login\n`)
+
+    await service.readBranchRequests(projectId)
+
+    await expect(runsIn(file)).resolves.toEqual([
+      {
+        started: workspace.createdAt,
+        device: service.getConfig().deviceId,
+        machine: 'Mac-One',
+        branch: workspace.branch,
+        pr: 'https://x/pull/7',
+        merged: T1
+      }
+    ])
+  })
+
+  it('returns the list unchanged', async () => {
+    const { service, projectId } = await runWithRequest('OPEN')
+
+    await expect(service.readBranchRequests(projectId)).resolves.toMatchObject({
+      requests: [{ number: 7 }]
+    })
+  })
+
+  it('looks at no board for a workspace not started from a card', async () => {
+    let branch = ''
+    const onDiagnostic = vi.fn()
+    const { service, projectId, board } = await withBoard('# Fix login\n', {
+      makeGh: oneRequest(LATER, () => branch, undefined, 'OPEN'),
+      onDiagnostic
+    })
+    branch = (await service.createWorkspaceIn(projectId)).branch
+    await rm(board, { recursive: true })
+
+    await service.readBranchRequests(projectId)
+
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing for a workspace whose branch has no request', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, file } = await withBoard('# Fix login\n', {
+      makeGh: oneRequest(LATER, () => '', undefined, 'OPEN'),
+      onDiagnostic
+    })
+    await service.runCard(projectId, 'backlog/A.md')
+    const before = await raw(file)
+
+    await service.readBranchRequests(projectId)
+
+    await expect(raw(file)).resolves.toBe(before)
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing while no board folder is set', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, file } = await runWithRequest('OPEN', { onDiagnostic })
+    await service.updateConfig({ boardFolder: '' })
+    const before = await raw(file)
+
+    await service.readBranchRequests(projectId)
+
+    await expect(raw(file)).resolves.toBe(before)
+    expect(onDiagnostic).not.toHaveBeenCalled()
+  })
+
+  it.skipIf(process.getuid?.() === 0)(
+    'tries a card it cannot write once per request reading',
+    async () => {
+      const onDiagnostic = vi.fn()
+      const { service, projectId, board } = await runWithRequest('OPEN', { onDiagnostic })
+      const backlog = join(board, 'planner', 'backlog')
+      await chmod(backlog, 0o555)
+      try {
+        await service.readBranchRequests(projectId)
+        await service.readBranchRequests(projectId)
+
+        expect(onDiagnostic).toHaveBeenCalledTimes(1)
+        expect(onDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'EACCES' }))
+      } finally {
+        await chmod(backlog, 0o755)
+      }
+    }
+  )
+
+  it('notes nothing in a card that is gone', async () => {
+    const onDiagnostic = vi.fn()
+    const { service, projectId, board, file } = await runWithRequest('OPEN', { onDiagnostic })
+    await rm(file)
+
+    await service.readBranchRequests(projectId)
+
+    expect(onDiagnostic).not.toHaveBeenCalled()
+    await expect(readdir(join(board, 'planner', 'backlog'))).resolves.toEqual([])
   })
 })
 

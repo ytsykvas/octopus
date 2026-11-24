@@ -244,7 +244,11 @@ workspace's own processes go first: the hooks registered with
 awaited before the chats close and the cleanup script runs, so a dev server no
 longer holds the database the script drops or writes into the tree git is about
 to remove. A hook that rejects does not stop the removal; removing a project does
-the same for each workspace. `force` throws away
+the same for each workspace. A workspace started from a board card has its
+summary written into the card after `discardWorkspace` and before the commit, the
+last moment its transcripts are on disk; the write is bounded at 5 seconds and
+its failure is only logged. Removing a project does the same for each workspace
+whose worktree actually went. `force` throws away
 uncommitted work, never committed work: the merged check runs whether it is set
 or not. Two removals delete an unmerged branch, both by passing no `baseBranch`,
 so the check is skipped: removing a project, whose dialog has already said every
