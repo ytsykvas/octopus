@@ -2041,10 +2041,10 @@ export const de: Translation = {
       merged: 'gemergt',
       removed: 'Workspace entfernt',
       open: 'in Arbeit',
-      turns_one: '{{count}} Durchgang',
-      turns_few: '{{count}} Durchgänge',
-      turns_many: '{{count}} Durchgänge',
-      turns_other: '{{count}} Durchgänge',
+      turns_one: '{{count}} Runde',
+      turns_few: '{{count}} Runden',
+      turns_many: '{{count}} Runden',
+      turns_other: '{{count}} Runden',
       tokens: '{{input}} Eingabe- / {{output}} Ausgabe-Tokens'
     }
   },

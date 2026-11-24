@@ -34,13 +34,16 @@ describe('CardRuns', () => {
     expect(screen.getByRole('region', { name: 'Runs' })).toBeInTheDocument()
   })
 
-  it('lists the newest run first', () => {
+  it('lists the newest run first, whatever order the file keeps', () => {
     renderRuns([
-      { ...RUN, started: '2026-11-20T12:00:00.000Z', ended: ENDED },
-      { ...RUN, ended: ENDED }
+      { ...RUN, ended: ENDED },
+      { ...RUN, started: '2026-11-22T12:00:00.000Z', ended: ENDED },
+      { ...RUN, started: '2026-11-20T12:00:00.000Z', ended: ENDED }
     ])
 
-    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Nov 21, 2026')
+    const [newest, , oldest] = screen.getAllByRole('listitem')
+    expect(newest).toHaveTextContent('Nov 22, 2026')
+    expect(oldest).toHaveTextContent('Nov 20, 2026')
   })
 
   it('says a run was merged and links its pull request', () => {
@@ -115,7 +118,7 @@ describe('CardRuns', () => {
     expect(screen.getByText('1 turn · 0s · 0 in / 0 out tokens')).toBeInTheDocument()
   })
 
-  it('shows no figures for a run still in work', () => {
+  it("shows no figures before the run's summary is written", () => {
     renderRuns([{ ...RUN, device: 'device-two' }])
 
     expect(screen.queryByText(/turns?/)).toBeNull()

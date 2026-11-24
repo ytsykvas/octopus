@@ -6,7 +6,7 @@ import type { CardRunEntry } from '@core/boardSchema.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { formatDuration, formatTokens } from '../chat/format.js'
-import { type RunState, runState } from './boardRuns.js'
+import { newestFirst, type RunState, runState } from './boardRuns.js'
 
 const STATE_LABELS: Readonly<
   Record<RunState, 'board.runs.merged' | 'board.runs.removed' | 'board.runs.open'>
@@ -53,7 +53,7 @@ export function CardRuns({
         {t('board.runs.title')}
       </h3>
       <ol className="flex flex-col gap-1.5">
-        {[...runs].reverse().map((run) => (
+        {newestFirst(runs).map((run) => (
           <li key={run.started} className="text-ink-soft text-[11px]">
             <p>
               {[

@@ -131,6 +131,16 @@ describe('cardMark', () => {
     expect(cardMark(card, none, none, 'device-one')).toEqual({ kind: 'merged' })
   })
 
+  it('judges by the latest run, not the last one written', () => {
+    const later = { ...RUN, started: '2026-11-22T08:00:00.000Z', ended: ENDED, merged: ENDED }
+
+    expect(cardMark(withRuns([later, { ...RUN, ended: ENDED }]), none, none, 'device-one')).toEqual(
+      {
+        kind: 'merged'
+      }
+    )
+  })
+
   it('marks a removed workspace', () => {
     const card = withRuns([{ ...RUN, ended: ENDED }])
 

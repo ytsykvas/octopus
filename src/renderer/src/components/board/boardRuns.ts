@@ -37,6 +37,11 @@ export function openRunElsewhere(
   return runs.findLast((run) => run.ended === undefined && run.device !== deviceId)
 }
 
+// By `started`, not file order: a run whose first write failed is appended after later ones.
+export function newestFirst(runs: readonly CardRunEntry[]): CardRunEntry[] {
+  return [...runs].sort((a, b) => Date.parse(b.started) - Date.parse(a.started))
+}
+
 export function cardMark(
   card: BoardCard,
   linkedBy: ReadonlyMap<string, WorkspaceView>,
@@ -50,7 +55,7 @@ export function cardMark(
   // Any open run of another installation, not only the last: two Macs may each have started it.
   const elsewhere = openRunElsewhere(card.meta.runs, deviceId)
   if (elsewhere !== undefined) return { kind: 'elsewhere', machine: elsewhere.machine }
-  const last = card.meta.runs.at(-1)
+  const [last] = newestFirst(card.meta.runs)
   if (last === undefined) return null
   if (last.merged !== undefined) return { kind: 'merged' }
   // Also a run this Mac left open with no workspace here: its summary was lost at the removal.
