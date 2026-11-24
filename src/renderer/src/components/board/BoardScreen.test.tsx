@@ -197,6 +197,24 @@ describe('BoardScreen', () => {
     expect(await within(testing).findByText('New')).toBeInTheDocument()
   })
 
+  it('renames a task from its tile', async () => {
+    givenBoard([boardCard()])
+    const user = userEvent.setup()
+    renderScreen()
+    const backlog = await screen.findByRole('region', { name: 'Backlog' })
+
+    await user.dblClick(await within(backlog).findByRole('button', { name: 'Fix login' }))
+    const field = within(backlog).getByRole('textbox', { name: 'Task title' })
+    await user.clear(field)
+    await user.type(field, 'Fix sign-in{Enter}')
+
+    expect(octopus().board.rename).toHaveBeenCalledWith(
+      'planner',
+      'backlog/Fix login.md',
+      'Fix sign-in'
+    )
+  })
+
   it('moves the field to the column whose + was pressed', async () => {
     givenBoard([])
     const user = userEvent.setup()

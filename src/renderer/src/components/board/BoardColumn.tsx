@@ -22,6 +22,7 @@ export interface BoardColumnProps {
   readonly onCreate: (title: string) => void
   readonly openRef: string | null
   readonly onOpen: (ref: string) => void
+  readonly onRename: (ref: string, title: string) => void
   readonly marksOf: (card: BoardCard) => React.JSX.Element | null
   readonly drag: BoardDrag
 }
@@ -36,6 +37,7 @@ export function BoardColumn({
   onCreate,
   openRef,
   onOpen,
+  onRename,
   marksOf,
   drag
 }: BoardColumnProps): React.JSX.Element {
@@ -50,6 +52,9 @@ export function BoardColumn({
       open={card.ref === openRef}
       onOpen={() => {
         onOpen(card.ref)
+      }}
+      onRename={(title) => {
+        onRename(card.ref, title)
       }}
       marks={marksOf(card)}
       drag={drag.cardProps(card.ref, status)}

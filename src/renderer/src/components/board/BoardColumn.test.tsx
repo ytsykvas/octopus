@@ -18,6 +18,7 @@ function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
     onCreate: vi.fn(),
     openRef: null,
     onOpen: vi.fn(),
+    onRename: vi.fn(),
     marksOf: () => null,
     drag: noDrag(),
     ...props
@@ -141,6 +142,18 @@ describe('BoardColumn', () => {
     await userEvent.click(screen.getByRole('button', { name: 'B' }))
 
     expect(onOpen).toHaveBeenCalledWith('backlog/B.md')
+  })
+
+  it('renames the card whose title was edited', async () => {
+    const user = userEvent.setup()
+    const { onRename } = renderColumn({ cards: [card('A'), card('B')] })
+
+    await user.dblClick(screen.getByRole('button', { name: 'B' }))
+    const field = screen.getByRole('textbox', { name: 'Task title' })
+    await user.clear(field)
+    await user.type(field, 'C{Enter}')
+
+    expect(onRename).toHaveBeenCalledWith('backlog/B.md', 'C')
   })
 
   it('asks each card for its marks', () => {

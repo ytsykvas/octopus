@@ -11,6 +11,7 @@ function renderTile(props: Partial<BoardCardTileProps> = {}): BoardCardTileProps
     card: boardCard(),
     open: false,
     onOpen: vi.fn(),
+    onRename: vi.fn(),
     marks: null,
     drag: noDrag().cardProps('backlog/Fix login.md', 'backlog'),
     dropEdge: null,
@@ -191,6 +192,70 @@ describe('BoardCardTile', () => {
       'Enter Alt+ArrowUp Alt+ArrowDown Meta+Backspace'
     )
     expect(button).toHaveAttribute('data-card-ref', 'backlog/Fix login.md')
+  })
+
+  it('renames on a double-click', async () => {
+    const user = userEvent.setup()
+    const { onRename } = renderTile()
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    const field = screen.getByRole('textbox', { name: 'Task title' })
+    expect(field).toHaveValue('Fix login')
+    expect(field).toHaveFocus()
+    await user.clear(field)
+    await user.type(field, 'Fix sign-in{Enter}')
+
+    expect(onRename).toHaveBeenCalledWith('Fix sign-in')
+    expect(screen.getByRole('button', { name: 'Fix login' })).toBeInTheDocument()
+  })
+
+  it('keeps the title on Escape', async () => {
+    const user = userEvent.setup()
+    const { onRename } = renderTile()
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    expect(screen.getByRole('textbox', { name: 'Task title' })).toHaveFocus()
+    await user.keyboard('X{Escape}')
+
+    expect(onRename).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Fix login' })).toBeInTheDocument()
+  })
+
+  it('keeps the rest of the card around the field', async () => {
+    const user = userEvent.setup()
+    renderTile({
+      card: boardCard({ meta: { links: [], runs: [], priority: 'urgent', tag: 'fix' } })
+    })
+
+    await user.dblClick(screen.getByRole('button'))
+
+    const tile = screen.getByRole('listitem')
+    expect(within(tile).getByRole('textbox', { name: 'Task title' })).toBeInTheDocument()
+    expect(within(tile).getByRole('img', { name: 'Urgent' })).toBeInTheDocument()
+    expect(within(tile).getByText('Fix')).toBeInTheDocument()
+  })
+
+  it('sends nothing for an unchanged title', async () => {
+    const user = userEvent.setup()
+    const { onRename } = renderTile()
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+    expect(screen.getByRole('textbox', { name: 'Task title' })).toHaveValue('Fix login')
+    await user.keyboard('{Enter}')
+
+    expect(onRename).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Fix login' })).toBeInTheDocument()
+  })
+
+  it('cannot be dragged while its title is edited', async () => {
+    const user = userEvent.setup()
+    renderTile({
+      drag: { ...noDrag().cardProps('backlog/Fix login.md', 'backlog'), draggable: true }
+    })
+
+    await user.dblClick(screen.getByRole('button', { name: 'Fix login' }))
+
+    expect(screen.getByRole('listitem')).not.toHaveAttribute('draggable')
   })
 
   describe('in Ukrainian', () => {

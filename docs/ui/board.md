@@ -95,9 +95,12 @@ Another project or another board folder closes the panel and the new-task field.
 it was that card's. Copy description puts the whole description on the clipboard, its `# title`
 line included, with the whitespace around it trimmed. A file that is not UTF-8 shows a warning in
 place of its description and has nothing to copy or edit; its comments still show.
-A double-click on the title renames the card: only its `# ` line changes, and the file keeps its
-name, which is what other Macs and links know it by. The panel's width is dragged from its left edge,
-320 to 720px, and not saved.
+A double-click on the title renames the card, in the panel or on its tile: only its `# ` line
+changes, and the file keeps its name, which is what other Macs and links know it by. The tile puts
+the new-task field where its title was, keeps its priority and second line around it, and cannot be
+dragged while the field is open; the double-click's first click has opened the panel, as a
+workspace row's selects the row. The panel's width is dragged from its left edge, 320 to 720px, and
+not saved.
 
 `useCardDetail` reads the open card at its ref, again on every listing `revision`, and keeps the
 previous detail while the same opening is read again. A card removed outside is quiet

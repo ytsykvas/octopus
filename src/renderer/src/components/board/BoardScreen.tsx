@@ -312,6 +312,7 @@ export function BoardScreen({
             onCreate={(title) => void createIn(status, title)}
             openRef={openRef}
             onOpen={openCardAt}
+            onRename={(ref, title) => void board.rename(ref, title)}
             marksOf={marksOf}
             drag={drag}
           />
