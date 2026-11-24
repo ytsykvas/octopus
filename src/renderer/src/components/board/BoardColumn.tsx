@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 
 import { type BoardCard, type BoardStatus, CARD_TITLE_MAX } from '@core/boardSchema.js'
 
+import type { BoardDrag } from '../../hooks/useBoardDrag.js'
+import { DropLine } from '../DropLine.js'
 import { NameEditor } from '../NameEditor.js'
 import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
@@ -19,6 +21,7 @@ export interface BoardColumnProps {
   readonly openRef: string | null
   readonly onOpen: (ref: string) => void
   readonly marksOf: (card: BoardCard) => React.JSX.Element | null
+  readonly drag: BoardDrag
 }
 
 export function BoardColumn({
@@ -29,7 +32,8 @@ export function BoardColumn({
   onCreate,
   openRef,
   onOpen,
-  marksOf
+  marksOf,
+  drag
 }: BoardColumnProps): React.JSX.Element {
   const { t } = useTranslation()
   const label = t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
@@ -44,6 +48,9 @@ export function BoardColumn({
         onOpen(card.ref)
       }}
       marks={marksOf(card)}
+      drag={drag.cardProps(card.ref, status)}
+      dropEdge={drag.dropEdge(card.ref)}
+      dragging={drag.draggingRef === card.ref}
     />
   )
 
@@ -51,6 +58,7 @@ export function BoardColumn({
     <section
       aria-label={label}
       className="border-line flex min-h-0 w-[272px] shrink-0 flex-col border-r"
+      {...drag.columnProps(status)}
     >
       <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">
         <h2 className="section-label">{label}</h2>
@@ -68,6 +76,7 @@ export function BoardColumn({
       </header>
       {cards.length === 0 && !creating ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
+          {drag.overColumn === status && <DropLine edge="above" />}
           <Placeholder compact art={false} title={t('board.empty.columnTitle')}>
             {t('board.empty.columnText')}
           </Placeholder>

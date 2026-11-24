@@ -9,6 +9,7 @@ import type { Failure, Result } from '../../../preload/index.js'
 import { type DescriptionDraft, movedDraft, withDraft } from '../components/board/boardDrafts.js'
 import { BoardScreen, type BoardScreenProps } from '../components/board/BoardScreen.js'
 import type { BoardController } from '../hooks/useBoard.js'
+import type { BoardDrag } from '../hooks/useBoardDrag.js'
 import { octopus } from './octopus.js'
 import { project as boardProject } from './projects.js'
 
@@ -123,6 +124,23 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
     saveDescription: vi.fn(() => Promise.resolve(null)),
     comment: vi.fn(() => Promise.resolve(true)),
     ...overrides
+  }
+}
+
+/** For the tests of a column or a tile that are not about the drag. */
+export function noDrag(): BoardDrag {
+  return {
+    draggingRef: null,
+    cardProps: () => ({
+      draggable: false,
+      onDragStart: vi.fn(),
+      onDragOver: vi.fn(),
+      onDrop: vi.fn(),
+      onDragEnd: vi.fn()
+    }),
+    columnProps: () => ({ onDragOver: vi.fn(), onDragLeave: vi.fn(), onDrop: vi.fn() }),
+    dropEdge: () => null,
+    overColumn: null
   }
 }
 

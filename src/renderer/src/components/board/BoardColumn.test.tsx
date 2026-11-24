@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { BoardCard } from '@core/boardSchema.js'
 
-import { boardCard } from '../../test/board.js'
+import { boardCard, noDrag } from '../../test/board.js'
 import { BoardColumn, type BoardColumnProps } from './BoardColumn.js'
 
 function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
@@ -17,6 +17,7 @@ function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
     openRef: null,
     onOpen: vi.fn(),
     marksOf: () => null,
+    drag: noDrag(),
     ...props
   }
   render(<BoardColumn {...all} />)
@@ -155,5 +156,19 @@ describe('BoardColumn', () => {
 
     const [first] = screen.getAllByRole('listitem')
     expect(first).toContainElement(screen.getByRole('textbox', { name: 'Task title' }))
+  })
+
+  it('draws the drop line in an empty column a card is over', () => {
+    renderColumn({ status: 'testing', cards: [], drag: { ...noDrag(), overColumn: 'testing' } })
+
+    expect(
+      within(screen.getByRole('region', { name: 'Testing' })).getByTestId('drop-line')
+    ).toHaveAttribute('data-edge', 'above')
+  })
+
+  it('draws no drop line for a card over another column', () => {
+    renderColumn({ status: 'testing', cards: [], drag: { ...noDrag(), overColumn: 'done' } })
+
+    expect(screen.queryByTestId('drop-line')).toBeNull()
   })
 })

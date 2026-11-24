@@ -14,6 +14,7 @@ import type { Project } from '@core/store.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useBoard } from '../../hooks/useBoard.js'
+import { useBoardDrag } from '../../hooks/useBoardDrag.js'
 import { type OpenCard, useCardDetail } from '../../hooks/useCardDetail.js'
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
@@ -99,7 +100,7 @@ export function BoardScreen({
     [linkedBy, requests, deviceId]
   )
 
-  /** Every move of a card goes through here (status menu now, drag B204, ⌥↑/⌥↓ B205). */
+  /** Every move of a card goes through here (status menu and drag now, ⌥↑/⌥↓ B205). */
   const moveCard = useCallback(
     async (ref: string, to: CardMove): Promise<string | null> => {
       const moved = await move(ref, to)
@@ -112,6 +113,14 @@ export function BoardScreen({
       return moved
     },
     [move, onDraftMoved]
+  )
+  // Always on until B206 switches it off under a filter.
+  const drag = useBoardDrag(
+    columns,
+    (ref, to) => {
+      void moveCard(ref, to)
+    },
+    true
   )
 
   const removeCard = useCallback(
@@ -208,6 +217,7 @@ export function BoardScreen({
             openRef={openRef}
             onOpen={openCardAt}
             marksOf={marksOf}
+            drag={drag}
           />
         ))}
       </div>
