@@ -268,6 +268,9 @@ folder run one after another — two projects whose names give one folder share 
 | `board:move`            | `projectId`, `ref`, `move`  | into a column at an index, answering the new ref; never replaces a file                                                 |
 | `board:remove`          | `projectId`, `ref`          | to the Trash                                                                                                            |
 | `board:run`             | `projectId`, `ref`          | starts a workspace from the card, or answers the one already started from it here (`CardLaunch`)                        |
+| `board:attach`          | `projectId`, `ref`          | copies what was picked in main's file dialog beside the card; how many were copied, `0` when cancelled                  |
+| `board:revealFile`      | `projectId`, `ref`, `name`  | shows one of the card's files selected in Finder, never opens it                                                        |
+| `board:revealCard`      | `projectId`, `ref`          | shows the card's own file selected in Finder                                                                            |
 
 `board:run` answers the workspace, the card's description as a draft (null once
 a conversation of a workspace already here has started), the first kind detour,

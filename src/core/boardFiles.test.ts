@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addComment,
   type BoardLayout,
+  cardOnDisk,
   createCard,
   editCard,
   findCard,
@@ -1086,6 +1087,34 @@ describe('removeCard', () => {
     })
     expect(trash).not.toHaveBeenCalled()
     await expect(readFile(join(root, 'outside.md'), 'utf8')).resolves.toBe('# Outside\n')
+  })
+})
+
+describe('cardOnDisk', () => {
+  it('answers the path of a card that is there', async () => {
+    await card('backlog/A.md', '# A\n')
+
+    await expect(cardOnDisk(await layoutOf(), 'backlog/A.md')).resolves.toBe(
+      join(P(), 'backlog', 'A.md')
+    )
+  })
+
+  it('refuses a card that is not there', async () => {
+    await mkdir(join(P(), 'backlog'), { recursive: true })
+
+    await expect(cardOnDisk(await layoutOf(), 'backlog/Gone.md')).rejects.toMatchObject({
+      code: 'cardMissing',
+      params: { name: 'Gone.md' }
+    })
+  })
+
+  it('passes on a failure that is not absence', async () => {
+    await card('backlog/A.md', '# A\n')
+    const layout = await layoutOf()
+
+    await lockedWhile(join(P(), 'backlog'), 0o755, async () => {
+      await expect(cardOnDisk(layout, 'backlog/A.md')).rejects.toMatchObject({ code: 'EACCES' })
+    })
   })
 })
 

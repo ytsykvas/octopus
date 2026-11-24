@@ -271,10 +271,12 @@ import {
   renameCard as renameCardIn,
   saveDescription as saveDescriptionIn,
   updateCard as updateCardIn,
+  cardOnDisk,
   editCard,
   findCard,
   type BoardLayout
 } from './boardFiles.js'
+import { addAttachments, attachmentPath, listAttachments } from './cardFiles.js'
 import {
   BoardError,
   CARD_TEXT_MAX,
@@ -1413,6 +1415,12 @@ export interface OctopusService {
   removeCard(projectId: string, ref: string): Promise<void>
   /** Starts a workspace from a board card, or answers the one already started from it here. */
   runCard(projectId: string, ref: string): Promise<CardLaunch>
+  /** Copies files the person picked into the card's folder of files; how many were copied. */
+  addCardAttachments(projectId: string, ref: string, sources: readonly string[]): Promise<number>
+  /** Where one of a card's files is, for Finder to show. */
+  cardAttachmentPath(projectId: string, ref: string, name: string): Promise<string>
+  /** Where a card's own file is, for Finder to show. */
+  cardPath(projectId: string, ref: string): Promise<string>
 
   /** The skills one of the two stores holds, for a settings section. */
   listSkills(store: Store): Promise<SkillEntry[]>
@@ -6797,7 +6805,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return { folder: layout.dir, cards: await listBoardIn(layout) }
     },
     async readCard(projectId, ref) {
-      return { ...(await readCardIn(await layoutOf(projectId), ref)), attachments: [] }
+      const layout = await layoutOf(projectId)
+      return { ...(await readCardIn(layout, ref)), attachments: await listAttachments(layout, ref) }
     },
     createCard(projectId, draft) {
       return boardWork(projectId, async () => createCardIn(await layoutOf(projectId), draft))
@@ -6861,6 +6870,17 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       } finally {
         cardRuns.delete(card.id)
       }
+    },
+    addCardAttachments(projectId, ref, sources) {
+      return boardWork(projectId, async () =>
+        addAttachments(await layoutOf(projectId), ref, sources)
+      )
+    },
+    async cardAttachmentPath(projectId, ref, name) {
+      return attachmentPath(await layoutOf(projectId), ref, name)
+    },
+    async cardPath(projectId, ref) {
+      return cardOnDisk(await layoutOf(projectId), ref)
     },
 
     async skillsForChat(chatId) {

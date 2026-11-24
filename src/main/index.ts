@@ -279,7 +279,10 @@ async function start(): Promise<void> {
     broadcastConfig: (config) => {
       pushConfig(BrowserWindow.getAllWindows(), config)
     },
-    openPath: (path) => shell.openPath(path)
+    openPath: (path) => shell.openPath(path),
+    showItemInFolder: (path) => {
+      shell.showItemInFolder(path)
+    }
   })
   watchSystemTheme(service)
   guardPermissions(session.defaultSession, appUrl)
