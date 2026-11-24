@@ -18744,6 +18744,21 @@ describe('the board', () => {
     ).resolves.toBe(shot)
   })
 
+  it("names the card's folder of files when it cannot be read", async () => {
+    await service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
+    const files = join(folder, '_attachments', 'Fix login')
+    await mkdir(files, { recursive: true })
+    await chmod(files, 0o000)
+    try {
+      await expect(service.readCard(projectId, 'backlog/Fix login.md')).rejects.toMatchObject({
+        code: 'boardFolderUnreadable',
+        params: { path: files }
+      })
+    } finally {
+      await chmod(files, 0o755)
+    }
+  })
+
   it('answers where a card is', async () => {
     await service.createCard(projectId, { status: 'backlog', title: 'Fix login' })
 

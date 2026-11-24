@@ -67,6 +67,7 @@ import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { NotesBodySchema } from '../core/notes.js'
 import { PromptDraftSchema, PromptIdSchema } from '../core/promptSchema.js'
 import {
+  ATTACHMENT_NAME_MAX,
   CardDraftSchema,
   CardMoveSchema,
   CardPatchSchema,
@@ -865,6 +866,7 @@ export function registerIpc(
     attempt(async () => {
       const project = ProjectIdSchema.parse(projectId)
       const card = CardRefSchema.parse(ref)
+      await service.cardPath(project, card)
       const window = host.windowFor(event)
       const picked = await host.showOpenDialog(
         { properties: ['openFile', 'multiSelections'] },
@@ -881,7 +883,7 @@ export function registerIpc(
         await service.cardAttachmentPath(
           ProjectIdSchema.parse(projectId),
           CardRefSchema.parse(ref),
-          z.string().min(1).max(255).parse(name)
+          z.string().min(1).max(ATTACHMENT_NAME_MAX).parse(name)
         )
       )
     })

@@ -9,13 +9,17 @@ import {
   symlink,
   writeFile
 } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
+import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { addAttachments, attachmentPath, isAttachmentName, listAttachments } from './cardFiles.js'
 import { type BoardLayout, findLayout } from './boardFiles.js'
+
+const run = promisify(execFile)
 
 let root: string
 let layout: BoardLayout
@@ -113,12 +117,13 @@ describe('listAttachments', () => {
     await expect(listAttachments(layout, 'backlog/A.md')).resolves.toEqual([])
   })
 
-  it('passes on a failure that is not absence', async () => {
+  it('names the folder of files when it cannot be read', async () => {
     await mkdir(files(), { recursive: true })
 
     await lockedWhile(files(), 0o755, async () => {
       await expect(listAttachments(layout, 'backlog/A.md')).rejects.toMatchObject({
-        code: 'EACCES'
+        code: 'boardFolderUnreadable',
+        params: { path: files() }
       })
     })
   })
@@ -167,6 +172,39 @@ describe('addAttachments', () => {
     await given(files('Mockup.PNG'))
 
     expect(await addOne('mockup.png')).toContain('mockup-2.png')
+  })
+
+  it('cuts a long name to make room for its number', async () => {
+    const long = `${'x'.repeat(251)}.png`
+    await given(files(long))
+
+    expect(await addOne(long)).toContain(`${'x'.repeat(249)}-2.png`)
+  })
+
+  it('keeps the quarantine of a downloaded file', async () => {
+    const shot = await picked('shot.command')
+    await run('/usr/bin/xattr', ['-w', 'com.apple.quarantine', '0083;6745a1b2;Safari;', shot])
+
+    await addAttachments(layout, 'backlog/A.md', [shot])
+
+    const { stdout } = await run('/usr/bin/xattr', [
+      '-p',
+      'com.apple.quarantine',
+      files('shot.command')
+    ])
+    expect(stdout).toBe('0083;6745a1b2;Safari;\n')
+  })
+
+  it('removes a copy whose quarantine could not be kept', async () => {
+    const exec = (_command: string, args: readonly string[]): Promise<string> =>
+      args[0] === '-p'
+        ? Promise.resolve('0083;6745a1b2;Safari;\n')
+        : Promise.reject(new Error('xattr: denied'))
+
+    await expect(
+      addAttachments(layout, 'backlog/A.md', [await picked('shot.command')], exec)
+    ).rejects.toThrow('xattr: denied')
+    await expect(readdir(files())).resolves.toEqual([])
   })
 
   it('numbers a name with no extension', async () => {
@@ -252,7 +290,7 @@ describe('addAttachments', () => {
 
     await expect(
       addAttachments(layout, 'backlog/A.md', [await picked('one.txt')])
-    ).rejects.toMatchObject({ code: 'cardOutside', params: { name: 'A.md' } })
+    ).rejects.toMatchObject({ code: 'cardOutside', params: { name: join('_attachments', 'A') } })
     await expect(readdir(join(root, 'elsewhere'))).resolves.toEqual([])
   })
 

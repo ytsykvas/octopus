@@ -55,7 +55,7 @@ export interface BoardLayout {
 
 const MARKDOWN = /\.md$/i
 
-function unreadable(path: string, reason: string): BoardError {
+export function unreadable(path: string, reason: string): BoardError {
   return new BoardError(
     'boardFolderUnreadable',
     { path, reason },

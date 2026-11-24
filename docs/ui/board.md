@@ -245,6 +245,8 @@ would bring back what the first removed. A file that is not UTF-8 has no section
 "Add files" asks main for the system's file dialog; the files appear in the list once the board is
 read again. A file's row shows it in Finder on a click, and the panel's More menu does the same for
 the card's own file, above Delete — a file that is not UTF-8 included. Nothing here opens a file.
+A picked file the board would not list — a hidden name, a folder, a link — is skipped without a
+word, and "Add files" asks first whether the card is still there, so a gone card opens no dialog.
 
 ## Known limitations
 

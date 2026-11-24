@@ -114,7 +114,8 @@ service of its own — so most of the usual surface does not exist. What does:
   and the board's file code deletes no card: a removal is handed to the
   caller, which in the app is the Trash. "Add files" copies into
   `_attachments/<stem>/` only what was picked in the system's dialog in main,
-  never over a file; no channel takes a path from the window. A card's files,
+  never over a file and keeping its quarantine flag; no board channel takes a
+  path from the window. A card's files,
   and the card itself, are only ever shown in Finder — never opened — because
   the folder syncs and a `.command` from another machine must not run on a
   click. A way to make the app copy from a path the window chose, write

@@ -4175,6 +4175,14 @@ describe('board resources', () => {
     expect(bench.dialogOptions).toEqual([])
   })
 
+  it('refuses an attach for a card that is gone before any dialog', async () => {
+    await expect(invoke('board:attach', projectId, 'backlog/Gone.md')).resolves.toMatchObject({
+      ok: false,
+      code: 'cardMissing'
+    })
+    expect(bench.dialogOptions).toEqual([])
+  })
+
   it("shows a card's file in Finder and never opens it", async () => {
     await mkdir(join(folder, '_attachments', 'Fix login'), { recursive: true })
     await writeFile(join(folder, '_attachments', 'Fix login', 'a.txt'), 'a')
