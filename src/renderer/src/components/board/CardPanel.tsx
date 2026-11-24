@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Ellipsis, Play, Trash2, X } from 'lucide-react'
+import { ChevronDown, Copy, Ellipsis, FolderOpen, Play, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -239,6 +239,12 @@ export function CardPanel({
           align="right"
           actions={[
             {
+              id: 'reveal',
+              label: t('board.panel.reveal'),
+              icon: <FolderOpen aria-hidden size={13} />,
+              onSelect: () => void board.revealCard(card.ref)
+            },
+            {
               id: 'remove',
               label: t('board.panel.remove'),
               icon: <Trash2 aria-hidden size={13} />,
@@ -317,6 +323,9 @@ export function CardPanel({
                 <CardResources
                   links={detail.meta.links}
                   onLinks={(links) => board.update(card.ref, { links })}
+                  attachments={detail.attachments}
+                  onAttach={() => void board.attach(card.ref)}
+                  onReveal={(name) => void board.revealFile(card.ref, name)}
                 />
               </>
             )}

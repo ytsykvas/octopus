@@ -31,6 +31,9 @@ export interface BoardController {
   /** Null unless refused, so the editor can tell `cardChanged` apart; a board gone first answers null. */
   readonly saveDescription: (ref: string, save: DescriptionSave) => Promise<Failure | null>
   readonly comment: (ref: string, text: string) => Promise<boolean>
+  readonly attach: (ref: string) => Promise<boolean>
+  readonly revealFile: (ref: string, name: string) => Promise<boolean>
+  readonly revealCard: (ref: string) => Promise<boolean>
 }
 
 interface BoardSource {
@@ -228,6 +231,32 @@ export function useBoard(
     [source, settle]
   )
 
+  const attach = useCallback(
+    async (ref: string): Promise<boolean> => {
+      if (source === null) return false
+      return (await settle(window.octopus.board.attach(source.projectId, ref)))?.ok === true
+    },
+    [source, settle]
+  )
+
+  const revealFile = useCallback(
+    async (ref: string, name: string): Promise<boolean> => {
+      if (source === null) return false
+      return (
+        (await settle(window.octopus.board.revealFile(source.projectId, ref, name)))?.ok === true
+      )
+    },
+    [source, settle]
+  )
+
+  const revealCard = useCallback(
+    async (ref: string): Promise<boolean> => {
+      if (source === null) return false
+      return (await settle(window.octopus.board.revealCard(source.projectId, ref)))?.ok === true
+    },
+    [source, settle]
+  )
+
   // A sync service writes while the window is elsewhere; coming back is when that matters.
   useWindowEvent('focus', () => void refresh(), { active: source !== null })
 
@@ -255,6 +284,9 @@ export function useBoard(
     remove,
     rename,
     saveDescription,
-    comment
+    comment,
+    attach,
+    revealFile,
+    revealCard
   }
 }

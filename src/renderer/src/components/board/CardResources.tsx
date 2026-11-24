@@ -1,4 +1,4 @@
-import { Link, Plus, X } from 'lucide-react'
+import { Link, Paperclip, Plus, X } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -11,9 +11,18 @@ import { IconButton } from '../paneControls.js'
 export interface CardResourcesProps {
   readonly links: readonly string[]
   readonly onLinks: (links: string[]) => Promise<boolean>
+  readonly attachments: readonly string[]
+  readonly onAttach: () => void
+  readonly onReveal: (name: string) => void
 }
 
-export function CardResources({ links, onLinks }: CardResourcesProps): React.JSX.Element {
+export function CardResources({
+  links,
+  onLinks,
+  attachments,
+  onAttach,
+  onReveal
+}: CardResourcesProps): React.JSX.Element {
   const { t } = useTranslation()
   const headingId = useId()
   const { ask, dialog } = useAskText()
@@ -46,6 +55,12 @@ export function CardResources({ links, onLinks }: CardResourcesProps): React.JSX
       // CardPatchSchema refuses a longer list.
       disabled: writing || links.length >= CARD_LINKS_MAX,
       onSelect: () => void addLink()
+    },
+    {
+      id: 'addFiles',
+      label: t('board.resources.addFiles'),
+      icon: <Paperclip aria-hidden size={13} />,
+      onSelect: onAttach
     }
   ]
 
@@ -74,9 +89,10 @@ export function CardResources({ links, onLinks }: CardResourcesProps): React.JSX
           />
         </span>
       </div>
-      {links.length === 0 ? (
+      {links.length === 0 && attachments.length === 0 && (
         <p className="text-ink-soft text-[12px]">{t('board.resources.empty')}</p>
-      ) : (
+      )}
+      {links.length > 0 && (
         <ul className="flex flex-col gap-1">
           {links.map((url) => (
             <li key={url} className="flex items-center gap-1.5 text-[12px]">
@@ -96,6 +112,25 @@ export function CardResources({ links, onLinks }: CardResourcesProps): React.JSX
               >
                 <X aria-hidden size={12} />
               </IconButton>
+            </li>
+          ))}
+        </ul>
+      )}
+      {attachments.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {attachments.map((name) => (
+            <li key={name} className="flex items-center text-[12px]">
+              <button
+                type="button"
+                title={t('board.panel.reveal')}
+                onClick={() => {
+                  onReveal(name)
+                }}
+                className="focus-ring text-ink hover:text-accent flex min-w-0 items-center gap-1.5 rounded-[var(--radius-control)]"
+              >
+                <Paperclip aria-hidden size={12} className="text-ink-faint shrink-0" />
+                <span className="truncate">{name}</span>
+              </button>
             </li>
           ))}
         </ul>

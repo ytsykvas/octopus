@@ -2009,6 +2009,7 @@ export const de: Translation = {
       more: 'Mehr',
       copy: 'Beschreibung kopieren',
       copied: 'Kopiert',
+      reveal: 'Im Finder zeigen',
       remove: 'Löschen',
       description: 'Beschreibung',
       noDescription: 'Noch keine Beschreibung.',
@@ -2041,7 +2042,8 @@ export const de: Translation = {
       linkInvalid:
         'Nur http- und https-Links können hinzugefügt werden, ohne Benutzername oder Passwort und mit höchstens 2.000 Zeichen.',
       removeLink: '{{url}} entfernen',
-      empty: 'Keine Links.'
+      empty: 'Keine Links oder Dateien.',
+      addFiles: 'Dateien hinzufügen'
     },
     run: {
       elsewhereTitle: 'Schon in Arbeit auf {{machine}}',

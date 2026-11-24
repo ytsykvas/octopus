@@ -125,6 +125,9 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
     rename: vi.fn(() => Promise.resolve(true)),
     saveDescription: vi.fn(() => Promise.resolve(null)),
     comment: vi.fn(() => Promise.resolve(true)),
+    attach: vi.fn(() => Promise.resolve(true)),
+    revealFile: vi.fn(() => Promise.resolve(true)),
+    revealCard: vi.fn(() => Promise.resolve(true)),
     ...overrides
   }
 }
