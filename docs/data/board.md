@@ -91,7 +91,7 @@ Two cards with one stem (`backlog/a.md`, `ideas/a.md`) share one folder, and a r
 
 ## iCloud
 
-What iCloud does to this folder was measured on two Macs in B001 rather than read from documentation. A new card took about 9 seconds to reach the other Mac. After a card was moved to another folder, its earlier versions are taken to be still offered by File → Revert To, though B001 did not check it. macOS guards Desktop and Documents: the built app says why it reads them (`NSDesktopFolderUsageDescription`, `NSDocumentsFolderUsageDescription` in `electron-builder.yml`), so a Mac that asks shows that reason ([releasing.md](../releasing.md)).
+What iCloud does to this folder was measured on two Macs in B001 rather than read from documentation. A new card took about 9 seconds to reach the other Mac. After a card is moved to another folder, the maintainer assumes File → Revert To still offers its earlier versions; B001 did not check it. macOS guards Desktop and Documents: the built app says why it reads them (`NSDesktopFolderUsageDescription`, `NSDocumentsFolderUsageDescription` in `electron-builder.yml`), so a Mac that asks shows that reason ([releasing.md](../releasing.md)).
 
 ## Known limitations
 
