@@ -1383,6 +1383,7 @@ export const de: Translation = {
   settings: {
     title: 'Einstellungen',
     sectionGeneral: 'Allgemein',
+    sectionBoard: 'Board',
     sectionGit: 'Git',
     sectionAgent: 'Agent',
     sectionSkills: 'Skills',

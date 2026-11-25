@@ -1358,6 +1358,7 @@ export const uk: Translation = {
   settings: {
     title: 'Налаштування',
     sectionGeneral: 'Загальні',
+    sectionBoard: 'Дошка',
     sectionGit: 'Git',
     sectionAgent: 'Агент',
     sectionSkills: 'Скіли',

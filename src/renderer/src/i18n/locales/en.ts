@@ -1749,6 +1749,7 @@ export const en = {
   settings: {
     title: 'Settings',
     sectionGeneral: 'General',
+    sectionBoard: 'Board',
     sectionGit: 'Git',
     sectionAgent: 'Agent',
     sectionSkills: 'Skills',

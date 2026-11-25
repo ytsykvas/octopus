@@ -832,7 +832,7 @@ describe('Settings', () => {
     const user = userEvent.setup()
     await renderSettings()
 
-    await openSection(user, 'General')
+    await openSection(user, 'Board')
 
     expect(screen.getByText('Not set')).toBeInTheDocument()
     expect(screen.getByText('Board folder')).toBeInTheDocument()
@@ -846,7 +846,7 @@ describe('Settings', () => {
     const user = userEvent.setup()
     const props = await renderSettings()
 
-    await openSection(user, 'General')
+    await openSection(user, 'Board')
     await user.click(screen.getByRole('button', { name: 'Change…' }))
 
     await waitFor(() => {
@@ -864,7 +864,7 @@ describe('Settings', () => {
       config: config({ boardFolder: '/Users/someone/Desktop/tasks' })
     })
 
-    await openSection(user, 'General')
+    await openSection(user, 'Board')
     await user.click(screen.getByRole('button', { name: 'Change…' }))
 
     await waitFor(() => {
@@ -882,7 +882,7 @@ describe('Settings', () => {
     const user = userEvent.setup()
     const props = await renderSettings()
 
-    await openSection(user, 'General')
+    await openSection(user, 'Board')
     await user.click(screen.getByRole('button', { name: 'Change…' }))
 
     expect(await screen.findByText('Something went wrong: No window')).toBeInTheDocument()
@@ -896,7 +896,7 @@ describe('Settings', () => {
     })
     const user = userEvent.setup()
     await renderSettings()
-    await openSection(user, 'General')
+    await openSection(user, 'Board')
     await user.click(screen.getByRole('button', { name: 'Change…' }))
     await screen.findByText('Something went wrong: No window')
     vi.mocked(window.octopus.dialog.pickDirectory).mockResolvedValue({ ok: true, value: null })
@@ -906,6 +906,23 @@ describe('Settings', () => {
     await waitFor(() => {
       expect(screen.queryByText('Something went wrong: No window')).toBeNull()
     })
+  })
+
+  it('keeps the board folder out of General', async () => {
+    const user = userEvent.setup()
+    await renderSettings({ initialSection: 'board' })
+
+    await openSection(user, 'General')
+
+    expect(screen.getByText('Theme')).toBeInTheDocument()
+    expect(screen.queryByText('Board folder')).not.toBeInTheDocument()
+  })
+
+  it('opens on the board section when asked to', async () => {
+    await renderSettings({ initialSection: 'board' })
+
+    expect(screen.getByText('Board folder')).toBeInTheDocument()
+    expect(screen.queryByText('Theme')).not.toBeInTheDocument()
   })
 
   it('shows the Claude account under its own section', async () => {

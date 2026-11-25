@@ -10,6 +10,7 @@ import {
   Monitor,
   Play,
   Sparkles,
+  SquareKanban,
   SquareSlash
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
@@ -84,6 +85,7 @@ interface SettingsProps {
 
 export type SectionId =
   | 'general'
+  | 'board'
   | 'git'
   | 'agent'
   | 'skills'
@@ -97,6 +99,7 @@ const SECTIONS: readonly {
   readonly id: SectionId
   readonly labelKey:
     | 'settings.sectionGeneral'
+    | 'settings.sectionBoard'
     | 'settings.sectionGit'
     | 'settings.sectionAgent'
     | 'settings.sectionSkills'
@@ -108,6 +111,7 @@ const SECTIONS: readonly {
   readonly Icon: LucideIcon
 }[] = [
   { id: 'general', labelKey: 'settings.sectionGeneral', Icon: Monitor },
+  { id: 'board', labelKey: 'settings.sectionBoard', Icon: SquareKanban },
   { id: 'git', labelKey: 'settings.sectionGit', Icon: GitBranch },
   { id: 'agent', labelKey: 'settings.sectionAgent', Icon: Sparkles },
   { id: 'skills', labelKey: 'settings.sectionSkills', Icon: Blocks },
@@ -152,6 +156,7 @@ export function Settings({
 
         <div className="min-w-0 flex-1 space-y-6 overflow-auto p-6">
           {section === 'general' && <GeneralSection config={config} onChange={onChange} />}
+          {section === 'board' && <BoardSection config={config} onChange={onChange} />}
           {section === 'git' && (
             <GitSection config={config} onChange={onChange} accounts={accounts} />
           )}
@@ -258,7 +263,15 @@ function GeneralSection({ config, onChange }: SectionProps): React.JSX.Element {
       >
         {(id) => <SoundChoice id={id} config={config} onChange={onChange} />}
       </Field>
+    </div>
+  )
+}
 
+function BoardSection({ config, onChange }: SectionProps): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="space-y-6">
       <Field label={t('settings.boardFolder')} hint={t('settings.boardFolderHint')}>
         <DirectoryField
           value={config.boardFolder}
