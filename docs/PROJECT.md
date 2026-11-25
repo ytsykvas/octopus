@@ -239,10 +239,10 @@ The cost is a builder in beta (released 2026-04-12). Verified in practice: `npm 
 
 #### Install trap
 
-The `electron` package's `postinstall` can quietly fail to download the binary (~100 MB). Symptom: `npm run dev` fails with `Error: Electron uninstall` while the build succeeds. Check and cure:
+Since Electron 42 the `electron` package has no install script: it fetches its binary (~100 MB) the first time something requires it. When that fetch never happened or failed, the build succeeds and `npm run dev` fails with `Error: Electron uninstall`, or with `spawn …/Electron.app/… ENOENT`. Check for the app itself, not the directory, and cure (docs/development.md):
 
 ```bash
-ls node_modules/electron/dist   # must exist
+ls node_modules/electron/dist/Electron.app   # must exist
 node node_modules/electron/install.js
 ```
 
@@ -737,8 +737,9 @@ Everything but the board under one directory:
 ~/.octopus/
   config.json                global settings
   state.json                 workspaces, session ids, statuses
+  state.json.bak             the state before the last save, offered back if it cannot be read
   prompts.json               saved prompts for every project
-  projects/<slug>/
+  projects/<projectId>/
     carry                    which of the checkout's files travel into a workspace
     prompts.json             this project's saved prompts; goes with the project
     envs/                    named sets of variables, one appended to every workspace's .env
@@ -746,7 +747,7 @@ Everything but the board under one directory:
     scripts/setup.sh
     scripts/run.sh
     scripts/archive.sh
-  workspaces/<slug>/<name>/  ← git worktree
+  workspaces/<projectId>/<workspaceId>/  ← git worktree
 ```
 
 The board is the one thing stored outside it: a folder chosen in Settings, one folder per project, one per column, one markdown file per card ([data/board.md](data/board.md)).

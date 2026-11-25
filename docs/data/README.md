@@ -29,7 +29,7 @@ else joins a home directory by hand.
     instructions/*.md                this project's own, which win
     prompts.json                     saved prompts only this project offers
     skills/                          the same shape again, for what only this project gets
-  workspaces/<projectId>/<name>/     the git worktrees
+  workspaces/<projectId>/<workspaceId>/ the git worktrees
 ```
 
 ```
