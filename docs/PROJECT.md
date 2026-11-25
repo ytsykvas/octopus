@@ -731,7 +731,7 @@ per row would be a network call per row on every refresh.
 
 ### 12.5 On-disk layout
 
-Everything but the board under one directory:
+Everything but the board and the log under one directory:
 
 ```
 ~/.octopus/
@@ -747,10 +747,10 @@ Everything but the board under one directory:
     scripts/setup.sh
     scripts/run.sh
     scripts/archive.sh
-  workspaces/<projectId>/<workspaceId>/  ← git worktree
+  workspaces/<projectId>/<name>/  ← git worktree, named as the workspace was created
 ```
 
-The board is the one thing stored outside it: a folder chosen in Settings, one folder per project, one per column, one markdown file per card ([data/board.md](data/board.md)).
+Two things are stored outside it: the board, a folder chosen in Settings, one folder per project, one per column, one markdown file per card ([data/board.md](data/board.md)); and `main.log`, the errors caught to keep a session alive, in `~/Library/Logs/octopus/` (docs/development.md).
 
 ### 12.6 The board
 

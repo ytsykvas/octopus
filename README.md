@@ -25,7 +25,7 @@ Markdown cards, and one click turns a card into a workspace.
 ## Quick start
 
 You build it yourself — there are no downloads, and [that is deliberate](#why-there-are-no-downloads).
-You need macOS 13+ on Apple Silicon, Node.js 22.12+, git and a Claude Code
+You need macOS 13+ on Apple Silicon, Node.js 22.22+, git and a Claude Code
 login; [the details](#installing) are below.
 
 ```bash
@@ -76,11 +76,12 @@ local-only, and is built to one person's taste.
 - **Settings that survive the machine.** Scripts, carried files and instructions
   can live in `~/.octopus`, which goes when the disk does, or in the repository
   itself under `.octopus/`, so a fresh clone has its scripts and instructions
-  with nothing configured. The repository's carry list adds to the project's
-  own, and what it says about where work is cut from or where credentials go
-  waits until you trust the repository. What it may never carry is a
-  credential: a pull can change what runs and never what it runs against, and
-  a script arriving that way is shown before it runs.
+  with nothing configured. What it says about which files to carry, where work
+  is cut from and where credentials go waits until you trust the repository,
+  and then its carry list adds to the project's own. What it may never carry is
+  a credential: a pull can change what runs and never what it runs against, and
+  a script arriving that way is shown before it runs, unless you trust the
+  repository.
 - **Hard to lose work by accident.** Removing a workspace offers to delete its
   branch, but commits that exist nowhere else go only after a second, explicit
   question. `state.json` keeps a backup beside it, and when it cannot be read
@@ -99,8 +100,8 @@ local-only, and is built to one person's taste.
   at once; each keeps its own transcript, model, effort and mode — Plan,
   Manual, Accept edits, or Auto, where the SDK's classifier decides — and
   survives a restart. A closed one waits in the workspace's history to be
-  reopened, and any conversation can be rewound to before a message, its files
-  with it. A plan is read in a dialog and can be handed to a fresh chat to carry
+  reopened, and any conversation can be rewound to before a message, with the
+  files its edits touched. A plan is read in a dialog and can be handed to a fresh chat to carry
   out, and the `opusplan` preset plans on Opus and builds on Sonnet. Background
   subagents get a map of their own, where each one can be stopped alone, and
   `/btw` questions are answered in a drawer beside the chat. A panel shows what
@@ -109,7 +110,7 @@ local-only, and is built to one person's taste.
 - **It stays on its branch and never publishes.** Every session carries guards
   that refuse switching or renaming the workspace's branch, and refuse pushing
   or opening, merging or closing a pull request: those belong to the pull
-  request pane, so nothing reaches the remote that you have not looked at.
+  request pane, so nothing reaches the remote by accident.
 - **Saved prompts, a click away.** Prompts are kept for every project or for
   one and ordered in Settings. They fan out from a button above the composer's
   field, beside the checkout's own `.claude/commands`, and the ones marked for
@@ -133,8 +134,9 @@ local-only, and is built to one person's taste.
   the model of the chat that last worked. It then follows the PR: checks, which
   are re-run or handed to the agent when they fail; the review verdict and its
   threads, answered and resolved from here; and merge, squash or rebase when it
-  is ready. A branch behind its base holds the merge and offers to bring the
-  base in first, and a merged PR offers to remove its workspace.
+  is ready. When GitHub will merge a branch only once it is up to date, the
+  pane offers to bring the base in first, and a merged PR offers to remove its
+  workspace.
 - **The worktree, readable.** A Files tab shows the tree with tabs of open
   files, and marks every file and line the branch has changed since it began,
   not only since the last commit. A Terminal tab keeps a shell per workspace
@@ -154,9 +156,10 @@ local-only, and is built to one person's taste.
   the keyboard.
 - **From a card to a workspace.** Run makes a workspace from a card and puts
   the card's text in its first conversation, waiting and unsent. The card then
-  shows that workspace's state and pull request, and the request, the merge and
-  the run's turns, time and tokens are written back into its file, so another
-  Mac sees them too.
+  shows that workspace's state and pull request. The request, the merge, the
+  run's turns, time and tokens, and the account and the machine it ran on are
+  written back into its file, so another Mac sees them too — and so does
+  anything else that reads the folder.
 
 ### The window
 
@@ -216,15 +219,17 @@ them run, this one included.
 **What you need first:**
 
 - **macOS 13 or later, Apple Silicon**
-- **Node.js 22.12+** and **git**
+- **Node.js 22.22+** (or 24.15+) and **git**
 - a **[Claude Code](https://claude.com/claude-code) login** — the agent runs on
   your authentication, and the app never handles credentials itself.
 - **[`gh`](https://cli.github.com)**, signed in, for cloning from GitHub and for
   pull requests. Everything else works without it.
 
 The agent itself is not one of these: the Claude Code binary comes down with
-`npm install` and lives inside the app. Only the Settings account panel uses a
-`claude` CLI of your own, on your `PATH`, to sign in and out.
+`npm install` and lives inside the app. A `claude` CLI of your own, on your
+`PATH`, is what the Settings account panel signs in and out through, and what
+names the account a board card's run is written with; without it the app works
+and says the account is not connected.
 
 Then follow the [quick start](#quick-start). To run it in development instead,
 use `npm run dev`. Only one copy runs at a time: it takes Electron's
