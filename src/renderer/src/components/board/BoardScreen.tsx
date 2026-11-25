@@ -22,6 +22,7 @@ import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useWindowEvent } from '../../hooks/useWindowEvent.js'
 import { Button } from '../Button.js'
 import { Placeholder } from '../Placeholder.js'
+import { projectColorStyle } from '../projectTint.js'
 import { BoardColumn } from './BoardColumn.js'
 import type { DescriptionDraft } from './boardDrafts.js'
 import { statusOf } from './boardDrop.js'
@@ -304,10 +305,7 @@ export function BoardScreen({
   // The first read is still out: neither columns nor a message, so nothing flashes.
   if (board.listing === null) return <div className="flex min-h-0 flex-1" />
   return (
-    <div
-      className="flex min-h-0 flex-1"
-      style={{ '--project-color': `var(--project-${project.color})` } as React.CSSProperties}
-    >
+    <div className="flex min-h-0 flex-1" style={projectColorStyle(project.color)}>
       <div
         className="scrollbar-shown flex min-w-0 flex-1 overflow-x-auto"
         onWheel={(event) => {

@@ -1,3 +1,7 @@
+import type { CSSProperties } from 'react'
+
+import type { ProjectColor } from '@core/colors.js'
+
 /**
  * How a tile wears a project's colour, for every tile that does — a project's
  * tab and a plugin's avatar — so the two read as one family and cannot drift.
@@ -20,3 +24,7 @@ export const LETTERS = 'color-mix(in srgb, var(--project-color) 75%, var(--ink))
 
 /** The tile's ground at rest: the colour, faint enough for the letters to carry. */
 export const TILE_WASH = 'color-mix(in srgb, var(--project-color) 14%, transparent)'
+
+export function projectColorStyle(color: ProjectColor): CSSProperties {
+  return { '--project-color': `var(--project-${color})` } as CSSProperties
+}
