@@ -232,6 +232,18 @@ function rightPane({ hidden = false }: { readonly hidden?: boolean } = {}): HTML
   return section
 }
 
+/** The window's title bar: the first banner, since the chat and the board's columns draw their own. */
+function titleBar(): HTMLElement {
+  const [bar] = screen.getAllByRole('banner')
+  if (!bar) throw new Error('the window has no title bar')
+  return bar
+}
+
+/** The given elements in the order the container holds them. */
+function inOrder(container: HTMLElement, elements: readonly HTMLElement[]): HTMLElement[] {
+  return [...container.querySelectorAll<HTMLElement>('*')].filter((node) => elements.includes(node))
+}
+
 /** The draggable edges, in the order they sit in the window. */
 function edges(): { readonly list: HTMLElement; readonly panel: HTMLElement } {
   const [list, panel] = screen.getAllByRole('separator', { name: 'Resize panel' })
@@ -1054,6 +1066,32 @@ describe('App', () => {
 
     expect(await within(bar).findByText(PLANNER.repoPath)).toBeInTheDocument()
     expect(within(bar).queryByText('planner')).not.toBeInTheDocument()
+  })
+
+  it('offers the screen switch in the title bar only', async () => {
+    await openApp()
+    const bar = titleBar()
+
+    expect(within(bar).getByRole('group', { name: 'Screen' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Board' })).toEqual([
+      within(bar).getByRole('button', { name: 'Board' })
+    ])
+  })
+
+  it('sets the switch between the branch and the actions', async () => {
+    givenTwoProjects()
+    const user = await openApp()
+    await user.click(await findTab('PL'))
+    await user.click(await screen.findByText('anna'))
+    const bar = titleBar()
+
+    const order = [
+      within(bar).getByText(PLANNER.repoPath),
+      await within(bar).findByText('ytsykvas/anna'),
+      within(bar).getByRole('group', { name: 'Screen' }),
+      within(bar).getByRole('button', { name: 'Collapse panel' })
+    ]
+    expect(inOrder(bar, order)).toEqual(order)
   })
 
   describe('Run and Stop in the title bar', () => {
@@ -4175,6 +4213,18 @@ describe('the board screen', () => {
 
     expect(await screen.findByText('/tmp/board/Planner')).toBeInTheDocument()
     expect(screen.queryByText('/tmp/board/planner')).toBeNull()
+  })
+
+  it('sets the switch between the folder and the filters', async () => {
+    await onTheBoard()
+    const bar = titleBar()
+
+    const order = [
+      await within(bar).findByText('/tmp/board/planner'),
+      within(bar).getByRole('group', { name: 'Screen' }),
+      within(bar).getByRole('searchbox', { name: 'Search tasks' })
+    ]
+    expect(inOrder(bar, order)).toEqual(order)
   })
 
   it('asks for a folder and shows the app name while there is none', async () => {

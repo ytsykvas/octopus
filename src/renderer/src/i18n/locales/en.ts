@@ -6,15 +6,16 @@
  */
 export const en = {
   app: {
-    name: 'octopus'
+    name: 'octopus',
+    screen: 'Screen',
+    screenOctopus: 'Octopus',
+    screenBoard: 'Board'
   },
 
   sidebar: {
     empty: 'Nothing here yet. Add a repository with the "+" button.',
     pick: 'Pick a project on the far left.',
     addProject: 'Add repository',
-    screenOctopus: 'Octopus',
-    screenBoard: 'Board',
     // The dot on a project's tab when one of its agents finished out of sight.
     projectDone: 'An agent finished here while you were away',
     addFromDisk: 'From disk…',

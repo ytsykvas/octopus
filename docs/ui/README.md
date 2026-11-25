@@ -2,15 +2,13 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ ●●●   sport   /Users/…/sport                                  ▶ │ ⊞  │  title bar
+│ ●●●   /Users/…/sport  ⑂ develop    [▣ Octopus│▢ Board]        ▶ │ ⊞  │  title bar
 ├────┬──────────────┬──────────────────────────┬──────────────────────┤
 │ TG │  sport       │                          │ Changes Terminal …   │
 │ SP │  ⑂ develop   │        agent chat        │                      │
 │ OC ├──────────────┤                          │                      │
 │    │  ● anna      │                          │                      │
 │ +  │  ○ maria     │                          │                      │
-│ ▣  │              │                          │                      │  ▣ Octopus
-│ ▢  │              │                          │                      │  ▢ Board
 │ ✣  │              │                          │                      │  ✣ plugins
 ├────┴──────────────┤                          │                      │
 │ Claude   5h 31%   │                          │                      │
@@ -23,7 +21,7 @@
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | [title-bar-and-project-tabs.md](title-bar-and-project-tabs.md)   | the title bar, its Run button, the project tab strip, a tile's attention dot, toasts and sounds             |
 | [workspace-list.md](workspace-list.md)                           | the left column's list: Help, the branch header, change counts, a branch's pull request state               |
-| [board.md](board.md)                                             | the Board: the switch at the foot of the tab strip, columns, cards, how the board is read, its empty states |
+| [board.md](board.md)                                             | the Board: the screen switch in the title bar, the columns, cards, how its folder is read, its empty states |
 | [account-and-status.md](account-and-status.md)                   | the foot of the left column, the usage reading and the status bar                                           |
 | [chat-tabs-and-viewer.md](chat-tabs-and-viewer.md)               | the centre's tab strip, file tabs and the file viewer                                                       |
 | [chat-log.md](chat-log.md)                                       | how the conversation log is drawn                                                                           |

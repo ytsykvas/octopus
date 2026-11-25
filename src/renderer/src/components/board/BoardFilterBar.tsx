@@ -44,7 +44,7 @@ export function BoardFilterBar({ filter, onChange }: BoardFilterBarProps): React
   })
 
   return (
-    <div className="ml-auto flex items-center gap-1">
+    <div className="flex items-center gap-1">
       <label className="relative flex items-center">
         <Search
           aria-hidden

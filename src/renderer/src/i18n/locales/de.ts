@@ -8,15 +8,16 @@ import type { Translation } from './en.js'
  */
 export const de: Translation = {
   app: {
-    name: 'octopus'
+    name: 'octopus',
+    screen: 'Ansicht',
+    screenOctopus: 'Octopus',
+    screenBoard: 'Board'
   },
 
   sidebar: {
     empty: 'Noch nichts hier. Füge mit „+“ ein Repository hinzu.',
     pick: 'Wähle ganz links ein Projekt.',
     addProject: 'Repository hinzufügen',
-    screenOctopus: 'Octopus',
-    screenBoard: 'Board',
     projectDone: 'Ein Agent ist hier fertig geworden, während du weg warst',
     addFromDisk: 'Von der Festplatte…',
     addFromDiskHint: 'Ein Repository, das schon auf diesem Rechner liegt',
