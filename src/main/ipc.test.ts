@@ -24,6 +24,7 @@ import type { RemoteRepository } from '../core/github.js'
 import type { DraftEvent } from '../core/pullRequestDraft.js'
 import { chatTranscript } from '../core/paths.js'
 import type { RemoteRefWatchDeps } from '../core/remoteRefs.js'
+import { type Column, DEFAULT_COLUMNS } from '../core/boardColumns.js'
 import type { BoardChangedEvent } from '../core/boardSchema.js'
 import type { BoardWatchDeps } from '../core/boardWatch.js'
 import {
@@ -470,6 +471,9 @@ describe('channel table', () => {
     'board:revealFile',
     'board:removeFile',
     'board:revealCard',
+    'board:columns',
+    'board:editColumns',
+    'board:resetColumns',
     'dialog:pickSkill',
     'dialog:pickMarkdown',
     'dialog:pickFiles',
@@ -4009,6 +4013,7 @@ describe('the saved prompts channels', () => {
 })
 
 describe('board channels', () => {
+  const IDEAS: Column = { kind: 'custom', id: 'Ideas', name: 'Ideas' }
   let id: string
 
   beforeEach(async () => {
@@ -4058,6 +4063,58 @@ describe('board channels', () => {
     await expect(invoke('board:list', id)).resolves.toMatchObject({ value: { cards: [] } })
   })
 
+  it('edits the default columns and tells every window the config it wrote', async () => {
+    await expect(
+      invoke('board:editColumns', null, { kind: 'add', name: 'Ideas' })
+    ).resolves.toEqual({
+      ok: true,
+      value: { columns: [...DEFAULT_COLUMNS, IDEAS], own: false }
+    })
+
+    expect(bench.configBroadcasts.at(-1)).toMatchObject({
+      boardColumns: [...DEFAULT_COLUMNS, IDEAS]
+    })
+    await expect(invoke('board:columns', null)).resolves.toEqual({
+      ok: true,
+      value: { columns: [...DEFAULT_COLUMNS, IDEAS], own: false }
+    })
+  })
+
+  it("edits and resets a project's columns without touching the config", async () => {
+    const broadcasts = bench.configBroadcasts.length
+
+    await expect(invoke('board:editColumns', id, { kind: 'add', name: 'Ideas' })).resolves.toEqual({
+      ok: true,
+      value: { columns: [...DEFAULT_COLUMNS, IDEAS], own: true }
+    })
+    await expect(invoke('board:columns', id)).resolves.toMatchObject({ value: { own: true } })
+    await expect(invoke('board:resetColumns', id)).resolves.toEqual({
+      ok: true,
+      value: { columns: DEFAULT_COLUMNS, own: false }
+    })
+    expect(bench.configBroadcasts).toHaveLength(broadcasts)
+  })
+
+  it('refuses a malformed column edit', async () => {
+    const answers = await Promise.all([
+      invoke('board:columns', ''),
+      invoke('board:editColumns', '', { kind: 'add', name: 'Ideas' }),
+      invoke('board:editColumns', id, { kind: 'add', name: '' }),
+      invoke('board:editColumns', id, { kind: 'paint', id: 'done' }),
+      invoke('board:resetColumns', null)
+    ])
+
+    for (const answer of answers) {
+      expect(answer).toMatchObject({ ok: false, code: 'valueRefused' })
+    }
+  })
+
+  it('answers a column the board does not have with its code', async () => {
+    await expect(
+      invoke('board:create', id, { status: 'later', title: 'A' })
+    ).resolves.toMatchObject({ ok: false, code: 'columnMissing', params: { id: 'later' } })
+  })
+
   it('answers a coded failure while no folder is set', async () => {
     await invoke('config:update', { boardFolder: '' })
 
@@ -4089,7 +4146,7 @@ describe('board channels', () => {
     const answers = await Promise.all([
       invoke('board:list', ''),
       invoke('board:create', id, { status: 'backlog', title: '  ' }),
-      invoke('board:create', id, { status: 'later', title: 'A' }),
+      invoke('board:create', id, { status: '', title: 'A' }),
       invoke('board:update', id, ref, { order: 3 }),
       invoke('board:update', id, ref, { links: ['javascript:alert(1)'] }),
       invoke('board:rename', id, ref, 'a\nb'),

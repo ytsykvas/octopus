@@ -3,8 +3,6 @@
  *
  * Pure: the window sorts and matches with the same rules the core does.
  */
-import { BOARD_STATUSES, type BoardStatus } from './boardSchema.js'
-
 /** Root collation with digits read as numbers: the same order whatever the system language. */
 const NAME_COLLATOR = new Intl.Collator('und', { numeric: true })
 
@@ -13,17 +11,6 @@ const FORBIDDEN = new Set(['/', '\\', ':', '*', '?', '"', '<', '>', '|'])
 
 /** A control character: below a space, or DEL. Compared as strings so no regex holds a control escape. */
 const isControl = (ch: string): boolean => ch < ' ' || ch === '\u007f'
-
-/** NFC, lower case, every run of `-` or `_` a space, whitespace collapsed, trimmed. */
-export function normaliseFolder(name: string): string {
-  return name.normalize('NFC').toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-/** The status a folder name stands for, or null. */
-export function statusOfFolder(name: string): BoardStatus | null {
-  const normalised = normaliseFolder(name)
-  return BOARD_STATUSES.find((status) => status === normalised) ?? null
-}
 
 /** A name the board never reads: a leading `_` or `.`, or a `.tmp` ending (any case). */
 export function isSkipped(name: string): boolean {

@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { DEFAULT_COLUMNS } from '@core/boardColumns.js'
 import type { CardRunEntry } from '@core/boardSchema.js'
 
 import { boardCard, boardController, cardDetail, refusal } from '../../test/board.js'
@@ -35,6 +36,7 @@ function withClipboard(): ReturnType<typeof userEvent.setup> {
 function renderPanel(props: Partial<CardPanelProps> = {}): CardPanelProps {
   const all: CardPanelProps = {
     card: boardCard(),
+    columns: DEFAULT_COLUMNS,
     detail: cardDetail(),
     failure: null,
     board: boardController(),
@@ -62,6 +64,14 @@ describe('CardPanel', () => {
     expect(screen.getByRole('region', { name: 'Description' })).toBeInTheDocument()
   })
 
+  it('washes its top in the colour of the project', () => {
+    renderPanel()
+
+    expect(screen.getByRole('complementary', { name: 'Fix login' })).toHaveClass(
+      'project-tinted-top'
+    )
+  })
+
   it('moves the card to the status chosen', async () => {
     const { onMove } = renderPanel()
 
@@ -69,6 +79,35 @@ describe('CardPanel', () => {
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Done' }))
 
     expect(onMove).toHaveBeenCalledWith({ status: 'done', index: 0 })
+  })
+
+  it('offers the columns of the listing, an added one included', async () => {
+    const { onMove } = renderPanel({
+      columns: [...DEFAULT_COLUMNS, { kind: 'custom', id: 'Ideas', name: 'Ideas to try' }]
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Backlog' }))
+    expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
+      'Backlog',
+      'In progress',
+      'Testing',
+      'Staging',
+      'Done',
+      'Blocked',
+      'Ideas to try'
+    ])
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Ideas to try' }))
+
+    expect(onMove).toHaveBeenCalledWith({ status: 'Ideas', index: 0 })
+  })
+
+  it('names the column of a card in a column somebody added', () => {
+    renderPanel({
+      card: boardCard({ ref: 'Ideas/Fix login.md', status: 'Ideas' }),
+      columns: [...DEFAULT_COLUMNS, { kind: 'custom', id: 'Ideas', name: 'Ideas to try' }]
+    })
+
+    expect(screen.getByRole('button', { name: 'Ideas to try' })).toBeInTheDocument()
   })
 
   it('marks the current status and sends nothing for it', async () => {

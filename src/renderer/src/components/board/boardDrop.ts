@@ -1,20 +1,21 @@
-import { dropSlot } from '@core/boardOrder.js'
-import { BOARD_STATUSES, type BoardCard, type BoardStatus } from '@core/boardSchema.js'
+import { cardsIn, dropSlot } from '@core/boardOrder.js'
+import type { BoardCard, ColumnId } from '@core/boardSchema.js'
 
 import type { DropEdge } from '../../hooks/useDragReorder.js'
 
-export type BoardColumns = Readonly<Record<BoardStatus, readonly BoardCard[]>>
+export type BoardColumns = ReadonlyMap<ColumnId, readonly BoardCard[]>
 
 /** A file from the Finder or dragged text carries no such type, and is refused. */
 export const CARD_MIME = 'application/x-octopus-card'
 
 export type DropMark =
   | { readonly kind: 'card'; readonly ref: string; readonly edge: DropEdge }
-  | { readonly kind: 'column'; readonly status: BoardStatus }
+  | { readonly kind: 'column'; readonly status: ColumnId }
 
 /** Unused by the drag itself: B205 reads it for `C` and `⌥↑/⌥↓`. */
-export function statusOf(columns: BoardColumns, ref: string): BoardStatus | null {
-  return BOARD_STATUSES.find((status) => columns[status].some((card) => card.ref === ref)) ?? null
+export function statusOf(columns: BoardColumns, ref: string): ColumnId | null {
+  for (const [status, cards] of columns) if (cards.some((card) => card.ref === ref)) return status
+  return null
 }
 
 export function edgeAt(
@@ -28,10 +29,10 @@ export function edgeAt(
 export function landingSlot(
   columns: BoardColumns,
   draggingRef: string,
-  status: BoardStatus,
+  status: ColumnId,
   over: { readonly ref: string; readonly edge: DropEdge } | null
 ): number {
-  const without = columns[status].filter((card) => card.ref !== draggingRef)
+  const without = cardsIn(columns, status).filter((card) => card.ref !== draggingRef)
   if (over === null) return dropSlot(without, without.length)
   const at = without.findIndex((card) => card.ref === over.ref)
   if (at === -1) return dropSlot(without, without.length)
@@ -41,10 +42,10 @@ export function landingSlot(
 export function isOwnPlace(
   columns: BoardColumns,
   draggingRef: string,
-  status: BoardStatus,
+  status: ColumnId,
   slot: number
 ): boolean {
-  const column = columns[status]
+  const column = cardsIn(columns, status)
   const card = column.find((entry) => entry.ref === draggingRef)
   if (card === undefined) return false
   if (column.length === 1) return true
@@ -55,11 +56,11 @@ export function isOwnPlace(
 export function dropMark(
   columns: BoardColumns,
   draggingRef: string,
-  status: BoardStatus,
+  status: ColumnId,
   slot: number
 ): DropMark | null {
   if (isOwnPlace(columns, draggingRef, status, slot)) return null
-  const without = columns[status].filter((card) => card.ref !== draggingRef)
+  const without = cardsIn(columns, status).filter((card) => card.ref !== draggingRef)
   // Under the card before the slot, not over the one after: that keeps it above "By name".
   // Clamped, since a listing re-read mid-drag can leave the slot past the end.
   const above = slot > 0 ? without[Math.min(slot, without.length) - 1] : undefined

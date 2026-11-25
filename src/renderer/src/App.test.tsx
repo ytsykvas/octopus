@@ -13,6 +13,7 @@ import { StrictMode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { GitHubAccount } from '@core/accounts.js'
+import { DEFAULT_COLUMNS } from '@core/boardColumns.js'
 import type { BoardCard, CardLaunch } from '@core/boardSchema.js'
 import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
@@ -59,6 +60,7 @@ function config(overrides: Partial<Config> = {}): Config {
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     boardFolder: '',
+    boardColumns: [...DEFAULT_COLUMNS],
     settingSources: 'none',
     agentProgressSummaries: true,
     workingMode: 'default',
@@ -4204,7 +4206,7 @@ describe('the board screen', () => {
     })
     vi.mocked(window.octopus.board.list).mockResolvedValue({
       ok: true,
-      value: { folder: '/tmp/board/Planner', cards: [] }
+      value: { folder: '/tmp/board/Planner', columns: DEFAULT_COLUMNS, cards: [] }
     })
     const user = await openApp()
     await user.click(await findTab('PL'))

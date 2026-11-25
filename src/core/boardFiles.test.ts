@@ -35,7 +35,8 @@ import {
   saveDescription,
   updateCard
 } from './boardFiles.js'
-import { sameName, statusOfFolder } from './boardNames.js'
+import { type Column, columnKey, DEFAULT_COLUMNS } from './boardColumns.js'
+import { sameName } from './boardNames.js'
 import { type BoardCard, BoardError } from './boardSchema.js'
 
 let root: string
@@ -115,6 +116,11 @@ const refsOf = (cards: readonly BoardCard[]): string[] => cards.map((card) => ca
 const cardAt = (cards: readonly BoardCard[], ref: string): BoardCard | undefined =>
   cards.find((card) => card.ref === ref)
 
+const WITH_IDEAS: readonly Column[] = [
+  ...DEFAULT_COLUMNS,
+  { kind: 'custom', id: 'Ideas', name: 'Ideas' }
+]
+
 describe('firstNamed', () => {
   it('takes the first matching name in name order', () => {
     expect(firstNamed(['Planner', 'other', 'planner'], (name) => sameName(name, 'planner'))).toBe(
@@ -124,7 +130,7 @@ describe('firstNamed', () => {
 
   it('takes the first of two folders of one status', () => {
     expect(
-      firstNamed(['in-progress', 'In Progress'], (name) => statusOfFolder(name) === 'in progress')
+      firstNamed(['in-progress', 'In Progress'], (name) => columnKey(name) === 'in progress')
     ).toBe('In Progress')
   })
 
@@ -185,14 +191,15 @@ describe('findLayout', () => {
     expect(await findLayout(root, 'planner')).toEqual({
       dir: join(root, 'planner'),
       exists: false,
-      folders: {
-        backlog: 'backlog',
-        'in progress': 'in progress',
-        testing: 'testing',
-        staging: 'staging',
-        done: 'done',
-        blocked: 'blocked'
-      }
+      columns: DEFAULT_COLUMNS,
+      folders: new Map([
+        ['backlog', 'backlog'],
+        ['in progress', 'in progress'],
+        ['testing', 'testing'],
+        ['staging', 'staging'],
+        ['done', 'done'],
+        ['blocked', 'blocked']
+      ])
     })
     expect(await readdir(root)).toEqual([])
   })
@@ -207,15 +214,15 @@ describe('findLayout', () => {
   it('reuses a status folder spelled another way', async () => {
     await plannerTree()
     const layout = await findLayout(root, 'planner')
-    expect(layout.folders['in progress']).toBe('In-Progress')
-    expect(layout.folders.backlog).toBe('backlog')
+    expect(layout.folders.get('in progress')).toBe('In-Progress')
+    expect(layout.folders.get('backlog')).toBe('backlog')
   })
 
   it('names a missing status folder by its status and makes nothing', async () => {
     await plannerTree()
     const before = await snapshot()
     const layout = await findLayout(root, 'planner')
-    expect(layout.folders.testing).toBe('testing')
+    expect(layout.folders.get('testing')).toBe('testing')
     expect(await snapshot()).toEqual(before)
   })
 
@@ -259,9 +266,9 @@ describe('findLayout', () => {
     await symlink(join(root, 'elsewhere'), join(root, 'planner', 'backlog'))
     await given(join(root, 'planner', 'blocked'), 'x')
     const layout = await findLayout(root, 'planner')
-    expect(layout.folders.done).toBe('done')
-    expect(layout.folders.backlog).toBe('backlog')
-    expect(layout.folders.blocked).toBe('blocked')
+    expect(layout.folders.get('done')).toBe('done')
+    expect(layout.folders.get('backlog')).toBe('backlog')
+    expect(layout.folders.get('blocked')).toBe('blocked')
     expect(await listBoard(layout)).toEqual([])
     await expect(readCard(layout, 'backlog/a.md')).rejects.toMatchObject({
       code: 'cardOutside'
@@ -276,6 +283,34 @@ describe('findLayout', () => {
     expect(layout.exists).toBe(true)
     expect(layout.dir).toBe(join(root, 'Release.tmp'))
     expect(refsOf(await listBoard(layout))).toEqual(['backlog/a.md'])
+  })
+})
+
+describe('findLayout with columns', () => {
+  it('lays out the six built in when no columns are given', async () => {
+    const layout = await findLayout(root, 'planner')
+    expect(layout.columns).toEqual(DEFAULT_COLUMNS)
+    expect([...layout.folders.keys()]).toEqual(DEFAULT_COLUMNS.map((column) => column.id))
+  })
+
+  it('keeps the columns in the order given', async () => {
+    const [first, ...rest] = WITH_IDEAS
+    const columns = [...rest, ...(first === undefined ? [] : [first])]
+    const layout = await findLayout(root, 'planner', columns)
+    expect(layout.columns).toBe(columns)
+    expect([...layout.folders.keys()]).toEqual(columns.map((column) => column.id))
+  })
+
+  it("finds an added column's folder spelled another way", async () => {
+    await mkdir(join(root, 'planner', 'IDEAS'), { recursive: true })
+    const layout = await findLayout(root, 'planner', WITH_IDEAS)
+    expect(layout.folders.get('Ideas')).toBe('IDEAS')
+  })
+
+  it("names an added column's missing folder by its id", async () => {
+    await mkdir(join(root, 'planner'))
+    const layout = await findLayout(root, 'planner', WITH_IDEAS)
+    expect(layout.folders.get('Ideas')).toBe('Ideas')
   })
 })
 
@@ -366,7 +401,7 @@ describe('listBoard', () => {
     await given(join(layout.dir, 'In Progress', 'second.md'), '# Second\n')
     const both = await findLayout(root, 'planner')
     const cards = await listBoard(both)
-    expect(both.folders['in progress']).toBe('In Progress')
+    expect(both.folders.get('in progress')).toBe('In Progress')
     expect(cardAt(cards, 'In-Progress/bar.md')).toMatchObject({
       status: 'in progress',
       loose: false
@@ -390,6 +425,26 @@ describe('listBoard', () => {
       status: 'backlog',
       loose: true,
       title: 'Idea X'
+    })
+  })
+
+  it('files a card under the added column whose folder holds it', async () => {
+    const ideas = await findLayout(root, 'planner', WITH_IDEAS)
+    expect(cardAt(await listBoard(ideas), 'ideas/x.md')).toMatchObject({
+      status: 'Ideas',
+      loose: false
+    })
+  })
+
+  it('shows the cards of a column left out of the list as loose backlog cards', async () => {
+    const without = await findLayout(
+      root,
+      'planner',
+      DEFAULT_COLUMNS.filter((column) => column.id !== 'in progress')
+    )
+    expect(cardAt(await listBoard(without), 'In-Progress/bar.md')).toMatchObject({
+      status: 'backlog',
+      loose: true
     })
   })
 
@@ -633,6 +688,22 @@ describe('createCard', () => {
     expect(ref).toBe('backlog/Fix login.md')
     await expect(read(ref)).resolves.toBe('---\norder: 0\n---\n# Fix login\n')
     await expect(readdir(P())).resolves.toEqual(['backlog'])
+  })
+
+  it("writes into an added column's folder", async () => {
+    const layout = await findLayout(root, 'planner', WITH_IDEAS)
+
+    await expect(createCard(layout, { status: 'Ideas', title: 'X' })).resolves.toBe('Ideas/X.md')
+  })
+
+  it('refuses a column the board does not have and writes nothing', async () => {
+    await card('backlog/a.md', '# A\n')
+    const before = await snapshot()
+
+    await expect(
+      createCard(await layoutOf(), { status: 'Ideas', title: 'X' })
+    ).rejects.toMatchObject({ code: 'columnMissing', params: { id: 'Ideas' } })
+    expect(await snapshot()).toEqual(before)
   })
 
   it('makes only the status folder it writes into', async () => {
@@ -905,6 +976,25 @@ describe('moveCard', () => {
     expect(ref).toBe('done/Fix login.md')
     await gone('backlog/Fix login.md')
     await expect(read(ref)).resolves.toBe('---\norder: 0\n---\n# Fix login\n')
+  })
+
+  it("moves a card into an added column's folder", async () => {
+    await card('backlog/a.md', '# A\n')
+    const layout = await findLayout(root, 'planner', WITH_IDEAS)
+
+    await expect(moveCard(layout, 'backlog/a.md', { status: 'Ideas', index: 0 })).resolves.toBe(
+      'Ideas/a.md'
+    )
+  })
+
+  it('refuses a column the board does not have and moves nothing', async () => {
+    await card('backlog/a.md', '# A\n')
+    const before = await snapshot()
+
+    await expect(
+      moveCard(await layoutOf(), 'backlog/a.md', { status: 'Ideas', index: 0 })
+    ).rejects.toMatchObject({ code: 'columnMissing', params: { id: 'Ideas' } })
+    expect(await snapshot()).toEqual(before)
   })
 
   it('reorders inside one folder without moving the file', async () => {

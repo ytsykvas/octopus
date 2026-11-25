@@ -572,6 +572,17 @@ describe('channel names', () => {
       () => method('board', 'revealCard')('p' as never, 'backlog/a.md' as never),
       'board:revealCard'
     ],
+    ['board.columns', () => method('board', 'columns')('p' as never), 'board:columns'],
+    [
+      'board.editColumns',
+      () => method('board', 'editColumns')(null as never, { kind: 'add', name: 'Ideas' } as never),
+      'board:editColumns'
+    ],
+    [
+      'board.resetColumns',
+      () => method('board', 'resetColumns')('p' as never),
+      'board:resetColumns'
+    ],
     [
       'library.list',
       () => method('library', 'list')({ kind: 'global' } as never, 'command' as never),
@@ -848,7 +859,9 @@ describe('arguments reach main unchanged', () => {
     ['saveDescription', ['p', 'backlog/a.md', { text: 'x', base: null }], 'board:saveDescription'],
     ['comment', ['p', 'backlog/a.md', 'hi'], 'board:comment'],
     ['create', ['p', { status: 'backlog', title: 'A' }], 'board:create'],
-    ['revealFile', ['p', 'backlog/a.md', 'a.txt'], 'board:revealFile']
+    ['revealFile', ['p', 'backlog/a.md', 'a.txt'], 'board:revealFile'],
+    ['columns', [null], 'board:columns'],
+    ['editColumns', ['p', { kind: 'remove', id: 'Ideas' }], 'board:editColumns']
   ])('board.%s passes every argument through', (name, args, channel) => {
     method('board', name)(...(args as never[]))
     expect(invoke).toHaveBeenCalledWith(channel, ...args)

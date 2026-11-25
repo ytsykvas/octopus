@@ -35,6 +35,7 @@ import { DropdownMenu } from './DropdownMenu.js'
 import { EnvProfileSwitch } from './EnvProfileSwitch.js'
 import type { DiffView } from './diff/DiffHunk.js'
 import { ResizeHandle } from './ResizeHandle.js'
+import { projectColorStyle } from './projectTint.js'
 import { PullRequestPanel } from './pr/PullRequestPanel.js'
 import { WorkspaceEnv } from './WorkspaceEnv.js'
 import { WorkspaceScripts } from './WorkspaceScripts.js'
@@ -538,7 +539,7 @@ export function RightPanel({
         // Set on the pane rather than on the tab it currently paints, so the
         // stylesheet owns how the colour is used and anything else in here can
         // reach for it later.
-        ...(color ? ({ '--project-color': `var(--project-${color})` } as React.CSSProperties) : {})
+        ...(color ? projectColorStyle(color) : {})
       }}
       // Hidden, never unmounted — see `open`. `aria-hidden` beside the class,
       // as the tabs below do it: the class means nothing without a stylesheet.

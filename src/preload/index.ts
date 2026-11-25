@@ -34,6 +34,7 @@ import type {
   WorkspaceStatusEvent
 } from '@core/service.js'
 import type { ScriptsInWorkspace } from '@core/repoSource.js'
+import type { BoardColumnSet, ColumnEdit } from '@core/boardColumns.js'
 import type {
   BoardChangedEvent,
   BoardListing,
@@ -1029,7 +1030,13 @@ const api = {
     removeFile: (projectId: string, ref: string, name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('board:removeFile', projectId, ref, name) as Promise<Result<void>>,
     revealCard: (projectId: string, ref: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('board:revealCard', projectId, ref) as Promise<Result<void>>
+      ipcRenderer.invoke('board:revealCard', projectId, ref) as Promise<Result<void>>,
+    columns: (projectId: string | null): Promise<Result<BoardColumnSet>> =>
+      ipcRenderer.invoke('board:columns', projectId) as Promise<Result<BoardColumnSet>>,
+    editColumns: (projectId: string | null, edit: ColumnEdit): Promise<Result<BoardColumnSet>> =>
+      ipcRenderer.invoke('board:editColumns', projectId, edit) as Promise<Result<BoardColumnSet>>,
+    resetColumns: (projectId: string): Promise<Result<BoardColumnSet>> =>
+      ipcRenderer.invoke('board:resetColumns', projectId) as Promise<Result<BoardColumnSet>>
   },
 
   skills: {

@@ -1,10 +1,12 @@
+import type { TFunction } from 'i18next'
 import type { LucideIcon } from 'lucide-react'
 import { Minus, OctagonAlert, SignalHigh, SignalLow, SignalMedium } from 'lucide-react'
 
+import type { Column } from '@core/boardColumns.js'
 import type { BoardStatus, CardPriority } from '@core/boardSchema.js'
 
 /** The locale key of each status: a key cannot hold the space in `in progress`. */
-export const STATUS_LABEL_KEYS: Readonly<
+const STATUS_LABEL_KEYS: Readonly<
   Record<BoardStatus, 'backlog' | 'inProgress' | 'testing' | 'staging' | 'done' | 'blocked'>
 > = {
   backlog: 'backlog',
@@ -13,6 +15,12 @@ export const STATUS_LABEL_KEYS: Readonly<
   staging: 'staging',
   done: 'done',
   blocked: 'blocked'
+}
+
+export function columnLabel(column: Column, t: TFunction): string {
+  return column.kind === 'system'
+    ? t(`board.statuses.${STATUS_LABEL_KEYS[column.id]}`)
+    : column.name
 }
 
 export interface PriorityLook {

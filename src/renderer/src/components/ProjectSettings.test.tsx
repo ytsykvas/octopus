@@ -1029,6 +1029,16 @@ describe('ProjectSettings', () => {
    * General to find it. Read once, on mount, which is correct only because the
    * dialog is rendered conditionally.
    */
+  it("edits this project's board columns under Board", async () => {
+    const user = userEvent.setup()
+    await renderDialog()
+
+    await openSection(user, 'Board')
+
+    expect(await screen.findByRole('listitem', { name: 'Backlog' })).toBeInTheDocument()
+    expect(window.octopus.board.columns).toHaveBeenCalledWith('planner')
+  })
+
   it('opens on the section it was asked for', async () => {
     vi.mocked(window.octopus.projects.readInstruction).mockResolvedValue({
       ok: true,

@@ -369,7 +369,7 @@ The log says the same at the row that started the agent: the row keeps spinning 
 
 **Status bar — how everything is doing.** A 22px strip across the foot of the window, about every project rather than the open one, since the workspace list already speaks for that. On the left what wants attention: workspaces whose agent is working and those waiting on an answer, then the open pull requests of our workspaces — all of them, those that need action (a failed check, changes requested, a conflict) and those GitHub would merge now. On the right what is happening here: how long the turn in front has been running, and what octopus costs the machine — the whole tree under the main process, agents, dev servers and terminals included, since Electron itself is the cheap part. Every figure opens on a click to the workspaces behind it, and a row leads to its workspace: the waiting conversation in front, or the pull request tab for a request. The machine is asked every ten seconds and not at all while the window is hidden; the requests ride on the workspace list's own clock. A chevron at its right end folds it away, which stops those reads, and leaves one in the corner to bring it back; the choice is kept.
 
-**Board — the second screen.** A switch in the middle of the title bar moves between this layout and the Board: the selected project's tasks as six columns read from its folder inside the board folder, with the right pane folded offstage and the title bar showing that folder. Of the window's shortcuts only ⌘⇧N and the digits work there; the board has keys of its own (docs/ui/board.md).
+**Board — the second screen.** A switch in the middle of the title bar moves between this layout and the Board: the selected project's tasks as columns — six built in, plus any added — read from its folder inside the board folder, with the right pane folded offstage and the title bar showing that folder. Of the window's shortcuts only ⌘⇧N and the digits work there; the board has keys of its own (docs/ui/board.md).
 
 #### Shortcuts
 
@@ -753,7 +753,7 @@ The board is the one thing stored outside it: a folder chosen in Settings, one f
 
 ### 12.6 The board
 
-Each project's tasks are Markdown files in a folder named after it inside the board folder chosen in Settings, one subfolder per column (docs/data/board.md). The window reads them and never creates a folder by reading (docs/ui/board.md).
+Each project's tasks are Markdown files in a folder named after it inside the board folder chosen in Settings, one subfolder per column (docs/data/board.md). The window reads them and never creates a folder by reading (docs/ui/board.md). The columns themselves are kept on this Mac, not in the folder: a column added here is not on another Mac, whose board shows its tasks loose in Backlog.
 
 ---
 

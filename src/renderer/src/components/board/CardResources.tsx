@@ -94,17 +94,9 @@ export function CardResources({
           <DropdownMenu
             actions={actions}
             trigger={({ onClick, open }) => (
-              <button
-                type="button"
-                onClick={onClick}
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-label={t('board.resources.add')}
-                title={t('board.resources.add')}
-                className="focus-ring text-ink-faint hover:text-ink hover:bg-muted rounded-[var(--radius-control)] p-1"
-              >
+              <IconButton label={t('board.resources.add')} onClick={onClick} menuOpen={open}>
                 <Plus aria-hidden size={13} />
-              </button>
+              </IconButton>
             )}
           />
         </span>

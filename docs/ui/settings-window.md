@@ -12,12 +12,21 @@ dot in the project dot's place says an installed plugin would not load, which
 is why `usePlugins` reads the installed list when the app starts rather than
 when the window opens.
 
-**General ends with the board folder.** The same directory field the clone
-destination uses in Git: the path, or a muted "Not set", and Change… opening
-the system folder dialog. Picked through the dialog rather than typed, because
-a folder chosen in an Open dialog is the one macOS lets the app read without
-a separate prompt. A dialog that fails says why under the field, in
-either section.
+**Board holds the board folder, then the default columns.** The folder is the
+same directory field the clone destination uses in Git: the path, or a muted
+"Not set", and Change… opening the system folder dialog. Picked through the
+dialog rather than typed, because a folder chosen in an Open dialog is the one
+macOS lets the app read without a separate prompt. A dialog that fails says why
+under the field, in either section.
+
+**The columns are one list in both dialogs** (`ColumnsSection`): Settings → Board
+edits the default columns, Project settings → Board one project's. A row is
+dragged anywhere on it, or moved with Alt and an arrow on its handle. The six
+built-in rows are marked and offer no rename or removal; an added one offers
+both, and a removal is refused while a board that shows the column still has a
+task in it. A refused edit says why above the list. In a project the section
+says whether the board follows the defaults or has columns of its own, and
+offers the way back to the defaults only in the second case.
 
 **`PluginsWindow`** is a `Modal` of the large size with two tabs, styled as the
 import dialogs' pills:

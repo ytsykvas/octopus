@@ -11,7 +11,7 @@ import { DONE_TONE } from './agentStatus.js'
 import { AddTile } from './AddTile.js'
 import { DropdownMenu } from './DropdownMenu.js'
 import { DropLine } from './DropLine.js'
-import { LETTERS, TILE_WASH } from './projectTint.js'
+import { LETTERS, projectColorStyle, TILE_WASH } from './projectTint.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
 
 interface ProjectTabsProps {
@@ -228,7 +228,7 @@ function ProjectTab({
     <div
       {...drag}
       className={`relative ${dragging ? 'opacity-40' : ''}`}
-      style={{ '--project-color': `var(--project-${project.color})` } as React.CSSProperties}
+      style={projectColorStyle(project.color)}
     >
       <DropdownMenu
         align="left"

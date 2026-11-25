@@ -227,6 +227,7 @@ export const en = {
   project: {
     title: 'Project settings',
     sectionGeneral: 'General',
+    sectionBoard: 'Board',
     sectionGit: 'Git',
     sectionScripts: 'Scripts',
     sectionFiles: 'Files',
@@ -1750,6 +1751,7 @@ export const en = {
   settings: {
     title: 'Settings',
     sectionGeneral: 'General',
+    sectionBoard: 'Board',
     sectionGit: 'Git',
     sectionAgent: 'Agent',
     sectionSkills: 'Skills',
@@ -2440,6 +2442,37 @@ export const en = {
       newTaskPlaceholder: 'Task title',
       count: '{{shown}} of {{total}}'
     },
+    columns: {
+      title: 'Columns',
+      defaultHint: 'Every project\u2019s board shows these until it has columns of its own.',
+      projectHint: 'The columns of this project\u2019s board.',
+      following:
+        'The same as the default columns in Settings \u2192 Board. A change here gives this project its own.',
+      own: 'This project has columns of its own.',
+      useDefault: 'Use the default columns',
+      builtIn: 'Built in',
+      builtInHint: 'A built-in column can be moved, but not renamed or removed.',
+      reorderHandle: 'Reorder \u201c{{name}}\u201d (Alt+\u2191 / Alt+\u2193)',
+      add: 'Add column',
+      addTitle: 'New column',
+      name: 'Name',
+      nameInvalid: 'A name is one line of up to 60 characters.',
+      create: 'Add',
+      rename: 'Rename \u201c{{name}}\u201d',
+      renameTitle: 'Rename column',
+      save: 'Rename',
+      remove: 'Remove \u201c{{name}}\u201d',
+      removeTitle: 'Remove \u201c{{name}}\u201d?',
+      removeBody: 'The column leaves the board. Its folder stays on disk.',
+      removeConfirm: 'Remove',
+      cancel: 'Cancel',
+      menu: 'Actions for \u201c{{name}}\u201d',
+      moveLeft: 'Move left',
+      moveRight: 'Move right',
+      renameItem: 'Rename\u2026',
+      removeItem: 'Remove\u2026',
+      removeBlocked: 'Move its tasks out first.'
+    },
     filter: {
       search: 'Search tasks',
       priority: 'Priority',
@@ -2712,6 +2745,12 @@ export const en = {
       '“{{name}}” is not UTF-8 text, so octopus leaves it as it is. Change it in an editor that can save it as UTF-8.',
     cardTooLong:
       '“{{name}}” is longer than 100,000 characters — more than one message to the agent can hold. Shorten it, then run it again.',
+    columnMissing: 'That column is no longer on the board.',
+    columnBuiltIn: 'That column is built in: it can be moved, but not renamed or removed.',
+    columnNameTaken: 'A column is already called “{{name}}”.',
+    columnsFull: 'A board holds at most {{max}} columns.',
+    columnNotEmpty:
+      'Tasks still in that column on the “{{project}}” board: {{count}}. Move them out first.',
     unknown: 'Something went wrong: {{message}}'
   }
 }

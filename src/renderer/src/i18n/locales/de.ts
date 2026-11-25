@@ -184,6 +184,7 @@ export const de: Translation = {
   project: {
     title: 'Projekteinstellungen',
     sectionGeneral: 'Allgemein',
+    sectionBoard: 'Board',
     sectionGit: 'Git',
     sectionScripts: 'Skripte',
     sectionFiles: 'Dateien',
@@ -1384,6 +1385,7 @@ export const de: Translation = {
   settings: {
     title: 'Einstellungen',
     sectionGeneral: 'Allgemein',
+    sectionBoard: 'Board',
     sectionGit: 'Git',
     sectionAgent: 'Agent',
     sectionSkills: 'Skills',
@@ -2001,6 +2003,38 @@ export const de: Translation = {
       newTaskPlaceholder: 'Titel der Aufgabe',
       count: '{{shown}} von {{total}}'
     },
+    columns: {
+      title: 'Spalten',
+      defaultHint: 'Das Board jedes Projekts zeigt diese, bis das Projekt eigene Spalten hat.',
+      projectHint: 'Die Spalten des Boards dieses Projekts.',
+      following:
+        'Dieselben wie die Standardspalten unter Einstellungen → Board. Eine Änderung hier gibt dem Projekt eigene.',
+      own: 'Dieses Projekt hat eigene Spalten.',
+      useDefault: 'Standardspalten verwenden',
+      builtIn: 'Fest',
+      builtInHint:
+        'Eine feste Spalte lässt sich verschieben, aber nicht umbenennen oder entfernen.',
+      reorderHandle: '„{{name}}“ verschieben (Alt+↑ / Alt+↓)',
+      add: 'Spalte hinzufügen',
+      addTitle: 'Neue Spalte',
+      name: 'Name',
+      nameInvalid: 'Ein Name ist eine Zeile mit bis zu 60 Zeichen.',
+      create: 'Hinzufügen',
+      rename: '„{{name}}“ umbenennen',
+      renameTitle: 'Spalte umbenennen',
+      save: 'Umbenennen',
+      remove: '„{{name}}“ entfernen',
+      removeTitle: '„{{name}}“ entfernen?',
+      removeBody: 'Die Spalte verschwindet vom Board. Ihr Ordner bleibt auf der Festplatte.',
+      removeConfirm: 'Entfernen',
+      cancel: 'Abbrechen',
+      menu: 'Aktionen für „{{name}}“',
+      moveLeft: 'Nach links',
+      moveRight: 'Nach rechts',
+      renameItem: 'Umbenennen…',
+      removeItem: 'Entfernen…',
+      removeBlocked: 'Verschiebe zuerst ihre Aufgaben.'
+    },
     filter: {
       search: 'Aufgaben suchen',
       priority: 'Priorität',
@@ -2256,6 +2290,13 @@ export const de: Translation = {
       '„{{name}}“ ist kein UTF-8-Text, daher lässt octopus die Datei unverändert. Ändere sie in einem Editor, der sie als UTF-8 speichern kann.',
     cardTooLong:
       '„{{name}}“ ist länger als 100.000 Zeichen – mehr, als eine Nachricht an den Agenten fassen kann. Kürze die Aufgabe und führe sie dann erneut aus.',
+    columnMissing: 'Diese Spalte gibt es auf dem Board nicht mehr.',
+    columnBuiltIn:
+      'Diese Spalte ist fest: Sie lässt sich verschieben, aber nicht umbenennen oder entfernen.',
+    columnNameTaken: 'Es gibt schon eine Spalte „{{name}}“.',
+    columnsFull: 'Ein Board hat höchstens {{max}} Spalten.',
+    columnNotEmpty:
+      'Aufgaben in dieser Spalte auf dem Board „{{project}}“: {{count}}. Verschiebe sie zuerst.',
     unknown: 'Etwas ist schiefgelaufen: {{message}}'
   }
 }

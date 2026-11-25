@@ -3,7 +3,7 @@
  *
  * Pure: the window computes the order a drop writes before it asks for the move.
  */
-import type { BoardCard, BoardStatus } from './boardSchema.js'
+import type { BoardCard, ColumnId } from './boardSchema.js'
 import { compareNames } from './boardNames.js'
 
 /** Anything with an optional `meta.order`: a card, or a test's two-field stand-in. Not exported. */
@@ -28,17 +28,23 @@ export function sortCards<T extends Ordered & { readonly ref: string }>(cards: r
   )
 }
 
-export function cardsByStatus<T extends BoardCard>(cards: readonly T[]): Record<BoardStatus, T[]> {
-  const column = (status: BoardStatus): T[] =>
-    sortCards(cards.filter((card) => card.status === status))
-  return {
-    backlog: column('backlog'),
-    'in progress': column('in progress'),
-    testing: column('testing'),
-    staging: column('staging'),
-    done: column('done'),
-    blocked: column('blocked')
-  }
+export function columnCards<T extends BoardCard>(cards: readonly T[], status: ColumnId): T[] {
+  return sortCards(cards.filter((card) => card.status === status))
+}
+
+// A Map, not a record: a record lists an integer-like id such as "2" first, out of the columns' order.
+export function cardsByStatus<T extends BoardCard>(
+  cards: readonly T[],
+  columns: readonly { readonly id: ColumnId }[]
+): Map<ColumnId, T[]> {
+  return new Map(columns.map((column) => [column.id, columnCards(cards, column.id)]))
+}
+
+export function cardsIn<T>(
+  columns: ReadonlyMap<ColumnId, readonly T[]>,
+  id: ColumnId
+): readonly T[] {
+  return columns.get(id) ?? []
 }
 
 const orderedOf = (column: readonly Ordered[]): Ordered[] =>

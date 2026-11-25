@@ -949,6 +949,48 @@ describe('useBoard', () => {
       expect(await act(() => writes)).toEqual([false, false, false])
     })
 
+    it('edits the columns of the board and reads it again', async () => {
+      givenBoard([boardCard()])
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const edited = await act(() => result.current.editColumns({ kind: 'add', name: 'Ideas' }))
+
+      expect(edited).toBe(true)
+      expect(octopus().board.editColumns).toHaveBeenCalledWith('planner', {
+        kind: 'add',
+        name: 'Ideas'
+      })
+      expect(octopus().board.list).toHaveBeenCalledTimes(2)
+    })
+
+    it('reports a column edit that was refused', async () => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.editColumns).mockResolvedValueOnce(
+        refusal('columnNameTaken', { name: 'Done' })
+      )
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      const edited = await act(() => result.current.editColumns({ kind: 'add', name: 'Done' }))
+
+      expect(edited).toBe(false)
+      expect(onError).toHaveBeenLastCalledWith('A column is already called “Done”.')
+    })
+
+    it('edits no columns without a folder', async () => {
+      const { result } = renderBoard({ folder: '' })
+
+      expect(await act(() => result.current.editColumns({ kind: 'add', name: 'Ideas' }))).toBe(
+        false
+      )
+      expect(octopus().board.editColumns).not.toHaveBeenCalled()
+    })
+
     it('attaches and reveals nothing without a folder', async () => {
       const { result } = renderBoard({ folder: '' })
 

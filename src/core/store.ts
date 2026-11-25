@@ -10,6 +10,7 @@ import { isAbsolute } from 'node:path'
 
 import { z } from 'zod'
 
+import { type Column, ColumnsSchema } from './boardColumns.js'
 import { BranchPrefixSchema } from './branches.js'
 import { CodedError } from './codedError.js'
 import { NotesBodySchema } from './notes.js'
@@ -159,6 +160,8 @@ export const ProjectSchema = z.object({
    * later starts on the default without a migration.
    */
   preferLocal: z.array(SourceItemIdSchema).default([]),
+  /** Absent or `null`: the board shows the config's columns. */
+  boardColumns: ColumnsSchema.nullable().optional(),
   /**
    * Skills that are off in every new conversation of this project.
    *
@@ -580,6 +583,22 @@ export function editProject(state: State, projectId: string, edit: ProjectEdit):
     ...state,
     projects: state.projects.map((entry) =>
       entry.id === projectId ? { ...entry, ...change } : entry
+    )
+  }
+}
+
+/** The project's own columns, or `null` to follow the config's; a project gone meanwhile stays gone. */
+export function withBoardColumns(
+  state: State,
+  projectId: string,
+  change: (own: readonly Column[] | null) => Column[] | null
+): State {
+  return {
+    ...state,
+    projects: state.projects.map((project) =>
+      project.id === projectId
+        ? { ...project, boardColumns: change(project.boardColumns ?? null) }
+        : project
     )
   }
 }

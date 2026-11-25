@@ -1,7 +1,7 @@
 import { colorFor } from '@core/colors.js'
 import { initials } from '@core/initials.js'
 
-import { LETTERS, TILE_WASH } from '../projectTint.js'
+import { LETTERS, projectColorStyle, TILE_WASH } from '../projectTint.js'
 
 /**
  * A plugin's tile: two letters on a colour that follows from its id.
@@ -26,13 +26,7 @@ export function PluginAvatar({
       className={`flex shrink-0 items-center justify-center font-semibold ${
         size === 'lg' ? 'size-12 rounded-[12px] text-[16px]' : 'size-9 rounded-[9px] text-[13px]'
       }`}
-      style={
-        {
-          '--project-color': `var(--project-${colorFor(id)})`,
-          backgroundColor: TILE_WASH,
-          color: LETTERS
-        } as React.CSSProperties
-      }
+      style={{ ...projectColorStyle(colorFor(id)), backgroundColor: TILE_WASH, color: LETTERS }}
     >
       {initials(name)}
     </span>

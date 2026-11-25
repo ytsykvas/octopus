@@ -1,32 +1,30 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, type Mock, vi } from 'vitest'
 
-import type { BoardCard, BoardStatus } from '@core/boardSchema.js'
+import type { BoardCard, ColumnId } from '@core/boardSchema.js'
 
 import { type BoardColumns, CARD_MIME } from '../components/board/boardDrop.js'
 import { boardCard } from '../test/board.js'
 import { useBoardDrag } from './useBoardDrag.js'
 
-const card = (ref: string, status: BoardStatus, order?: number): BoardCard =>
+const card = (ref: string, status: ColumnId, order?: number): BoardCard =>
   boardCard({
     ref,
     status,
     title: ref,
     meta: { links: [], runs: [], ...(order === undefined ? {} : { order }) }
   })
-const COLUMNS: BoardColumns = {
-  backlog: [
-    card('a', 'backlog', 1),
-    card('b', 'backlog', 2),
-    card('u', 'backlog'),
-    card('v', 'backlog')
+const COLUMNS: BoardColumns = new Map([
+  [
+    'backlog',
+    [card('a', 'backlog', 1), card('b', 'backlog', 2), card('u', 'backlog'), card('v', 'backlog')]
   ],
-  'in progress': [card('p', 'in progress', 1)],
-  testing: [],
-  staging: [card('s', 'staging')],
-  done: [],
-  blocked: []
-}
+  ['in progress', [card('p', 'in progress', 1)]],
+  ['testing', []],
+  ['staging', [card('s', 'staging')]],
+  ['done', []],
+  ['blocked', []]
+])
 
 interface Transfer {
   readonly types: string[]
@@ -86,7 +84,7 @@ function setUp(enabled = true): {
 function start(
   result: { readonly current: ReturnType<typeof useBoardDrag> },
   ref: string,
-  status: BoardStatus
+  status: ColumnId
 ): void {
   act(() => {
     result.current.cardProps(ref, status).onDragStart(dragEvent().event)

@@ -1,4 +1,4 @@
-import { GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -10,6 +10,7 @@ import { useDragReorder } from '../../hooks/useDragReorder.js'
 import { usePromptStore } from '../../hooks/usePromptStore.js'
 import { Button } from '../Button.js'
 import { DropLine } from '../DropLine.js'
+import { ReorderHandle } from '../ReorderHandle.js'
 import { PromptEditor } from './PromptEditor.js'
 
 interface PromptsSectionProps {
@@ -94,21 +95,12 @@ export function PromptsSection({ store }: PromptsSectionProps): React.JSX.Elemen
                   prompt.id === reorder.draggingId ? 'opacity-40' : ''
                 }`}
               >
-                <button
-                  type="button"
-                  aria-label={t('prompts.reorderHandle', { title: prompt.title })}
-                  onKeyDown={(event) => {
-                    if (!event.altKey) return
-                    if (event.key === 'ArrowUp') reorder.moveBy(prompt.id, -1)
-                    else if (event.key === 'ArrowDown') reorder.moveBy(prompt.id, 1)
-                    else return
-
-                    event.preventDefault()
+                <ReorderHandle
+                  label={t('prompts.reorderHandle', { title: prompt.title })}
+                  onStep={(step) => {
+                    reorder.moveBy(prompt.id, step)
                   }}
-                  className="focus-ring text-ink-faint hover:text-ink -ml-1 cursor-grab rounded-[var(--radius-control)] p-0.5"
-                >
-                  <GripVertical aria-hidden size={14} />
-                </button>
+                />
 
                 <span className="min-w-0 flex-1">
                   <span className="text-ink block truncate font-medium">{prompt.title}</span>
