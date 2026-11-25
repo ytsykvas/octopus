@@ -24,7 +24,7 @@ import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
 import { NameEditor } from '../NameEditor.js'
 import { IconButton } from '../paneControls.js'
 import { Callout } from '../pr/Callout.js'
-import { LETTERS } from '../projectTint.js'
+import { LETTERS, projectColorStyle } from '../projectTint.js'
 import { ResizeHandle } from '../ResizeHandle.js'
 import type { DescriptionDraft } from './boardDrafts.js'
 import { NO_PRIORITY_LOOK, PRIORITY_LOOKS, STATUS_LABEL_KEYS } from './boardLabels.js'
@@ -174,7 +174,7 @@ export function CardPanel({
     <aside
       aria-label={card.title}
       style={{ width }}
-      className="border-line bg-surface relative flex min-h-0 shrink-0 flex-col border-l"
+      className="border-line bg-surface project-tinted-top relative flex min-h-0 shrink-0 flex-col border-l"
     >
       <ResizeHandle
         grows="left"
@@ -221,12 +221,7 @@ export function CardPanel({
               ) : (
                 <span
                   className="truncate font-medium"
-                  style={
-                    {
-                      '--project-color': `var(--project-${KIND_COLORS[tag]})`,
-                      color: LETTERS
-                    } as React.CSSProperties
-                  }
+                  style={{ ...projectColorStyle(KIND_COLORS[tag]), color: LETTERS }}
                 >
                   {t(`workspaces.kinds.${tag}.short`)}
                 </span>

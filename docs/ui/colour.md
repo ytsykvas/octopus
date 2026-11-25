@@ -33,8 +33,9 @@ Fifteen, `--project-<name>`, one pair per theme. The colour is **stored on the
 project**, not derived from its name — a hash would repaint a project the moment
 it was renamed, and constancy is what makes it recognisable.
 
-Applied by setting `--project-color` inline on a container. That inline style is
-a sanctioned exception: the value is dynamic, but still resolves to a token.
+Applied by setting `--project-color` inline on a container, through
+`projectColorStyle` in `components/projectTint.ts`. That inline style is a
+sanctioned exception: the value is dynamic, but still resolves to a token.
 
 The same palette colours the twelve kinds of work (`KIND_COLORS` in
 `workspaceKinds.ts`), and the kind strip on a workspace card sets

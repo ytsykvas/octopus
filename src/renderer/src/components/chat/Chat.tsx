@@ -9,6 +9,7 @@ import type { ChatTabsController } from '../../hooks/useChatTabs.js'
 import type { FileTabsController } from '../../hooks/useFileTabs.js'
 import { Button } from '../Button.js'
 import { RepoTrustReview } from '../RepoTrustReview.js'
+import { projectColorStyle } from '../projectTint.js'
 import type { AttachedFileController } from '../../hooks/useAttachedFiles.js'
 import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
@@ -181,7 +182,7 @@ export function Chat({
       // The sanctioned inline style (§10.4): the value is dynamic but still
       // resolves to a token, and setting it on the container is what lets the
       // stylesheet own how the colour is used rather than each component.
-      style={{ '--project-color': `var(--project-${color})` } as React.CSSProperties}
+      style={projectColorStyle(color)}
     >
       <header className="border-line flex h-9 min-w-0 shrink-0 items-center border-b px-6">
         {/* Held to the pane's left edge rather than to the capped column below

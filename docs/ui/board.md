@@ -35,6 +35,13 @@ column or a column whose cards fit turns sideways (`sidewaysDelta`); Shift and a
 already do. Opening a card brings it into view once the panel is drawn, and so does a move that
 takes the open card to another column.
 
+**The project's colour** sits where Octopus puts it, in the same two shapes. The first column —
+Backlog, where work starts — carries `.project-tinted` down its whole height, as the workspace
+list does, its header on the strongest part of the wash the way the project's name is; the other
+five stay plain. The card panel carries `.project-tinted-top`, the right pane's wash across the top
+only: it holds a description read at length. `BoardScreen` sets `--project-color` on its root, so
+the panel reaches it without a prop.
+
 **Every hook in `BoardScreen` sits above its first return.** Later parts hang theirs on the
 columns, and a hook below a return breaks the rules of hooks the moment the state changes.
 
