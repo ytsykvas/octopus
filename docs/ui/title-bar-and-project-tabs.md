@@ -16,14 +16,23 @@ repository's scripts wait to be allowed, and marks a failed build with a red
 dot — with the pane folded, that is the only place the failure can show.
 `Restart` stays on the tab alone.
 
-**Projects are a tab strip**; workspaces are a list of the active one. Putting
-both in one tree outgrows the window and makes a click mean two things — select
-and fold. Splitting them means neither list grows with the other. The strip's
-foot holds the switch between the Octopus and Board screens above Plugins; on
+**Its middle switches between the Octopus and Board screens** (`ScreenSwitch`):
+centred in the gap between the path and branch on the left and the controls on
+the right, with the screen in front filled with the accent. The switch is about
+the window rather than a project, so it is not on the project strip, where two
+neutral tiles above Plugins never said which screen was in front. Centred in
+the gap rather than in the window, it moves when the two ends change width — on
+the board, whose filters are wider than the Octopus controls, it sits further
+left. The fill is solid, not the `bg-accent/12` tint other segmented choices
+use: the screen in front has to read at a glance from anywhere in the window. On
 the board the title bar shows the project's board folder, and its right end
 holds the board's search field and its two filter menus instead of the
 controls the Octopus screen has there; they appear once a project and a board
 folder are chosen (docs/ui/board.md).
+
+**Projects are a tab strip**; workspaces are a list of the active one. Putting
+both in one tree outgrows the window and makes a click mean two things — select
+and fold. Splitting them means neither list grows with the other.
 
 **A project's tile says when its agents need you.** Several agents run at once,
 and without this the only way to learn that one had finished or stopped to ask

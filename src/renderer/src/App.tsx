@@ -23,7 +23,7 @@ import { Chat } from './components/chat/Chat.js'
 import { RepositoryPicker } from './components/RepositoryPicker.js'
 import { Placeholder } from './components/Placeholder.js'
 import { ProjectSettings, type SectionId as ProjectSection } from './components/ProjectSettings.js'
-import { ProjectTabs, type Screen } from './components/ProjectTabs.js'
+import { ProjectTabs } from './components/ProjectTabs.js'
 import {
   type DescriptionDraft,
   draftSlot,
@@ -35,6 +35,7 @@ import { BoardFilterBar } from './components/board/BoardFilterBar.js'
 import { BoardScreen } from './components/board/BoardScreen.js'
 import { PluginsWindow } from './components/plugins/PluginsWindow.js'
 import { RightPanel } from './components/RightPanel.js'
+import { type Screen, ScreenSwitch } from './components/ScreenSwitch.js'
 import type { DiffReveal } from './components/diff/DiffPanel.js'
 import { ServerControls } from './components/ServerControls.js'
 import { type SectionId, Settings } from './components/Settings.js'
@@ -1055,116 +1056,119 @@ export function App(): React.JSX.Element {
             the window rather than about the conversation: where the work lands.
             Here it reads as one line with the project and its directory, and
             the row it left is the tab strip's. */}
+        {!onBoard && selectedWorkspace && (
+          <span className="text-ink-soft flex min-w-0 items-center gap-1.5">
+            <GitBranch aria-hidden size={12} className="shrink-0" />
+            <span className="truncate font-mono text-[11px]">{selectedWorkspace.branch}</span>
+          </span>
+        )}
+
+        {/* The header's gap-3 stands on both sides, so centred here is centred in the gap. */}
+        <div className="flex flex-1 justify-center">
+          <ScreenSwitch screen={screen} onScreen={setScreen} />
+        </div>
+
         {!onBoard && (
-          <>
-            {selectedWorkspace && (
-              <span className="text-ink-soft flex min-w-0 shrink-0 items-center gap-1.5">
-                <GitBranch aria-hidden size={12} className="shrink-0" />
-                <span className="truncate font-mono text-[11px]">{selectedWorkspace.branch}</span>
-              </span>
+          <span className="flex shrink-0 items-center gap-2">
+            {/*
+             * Finished work, one press from a request.
+             *
+             * Beside the branch, because that is what a request would be made of.
+             * It appears when the workspace has something to carry and no request
+             * open yet, and stays away while the project's list cannot say so (see
+             * `requestKnown`) — and it deliberately does not ask GitHub itself: that is a
+             * network call per workspace, and the tab it opens is the one authority
+             * on what the branch has.
+             */}
+            {readyForRequest && requestKnown && (
+              <Button size="sm" onClick={showPullRequests}>
+                <GitPullRequest aria-hidden size={12} />
+                {t('pullRequest.createShortcut')}
+              </Button>
             )}
 
-            <span className="ml-auto flex shrink-0 items-center gap-2">
-              {/*
-               * Finished work, one press from a request.
-               *
-               * Beside the branch, because that is what a request would be made of.
-               * It appears when the workspace has something to carry and no request
-               * open yet, and stays away while the project's list cannot say so (see
-               * `requestKnown`) — and it deliberately does not ask GitHub itself: that is a
-               * network call per workspace, and the tab it opens is the one authority
-               * on what the branch has.
-               */}
-              {readyForRequest && requestKnown && (
-                <Button size="sm" onClick={showPullRequests}>
-                  <GitPullRequest aria-hidden size={12} />
-                  {t('pullRequest.createShortcut')}
+            {/*
+             * A request that exists is finished here rather than opened.
+             *
+             * The header cannot see conflicts or draft status — the pane reads
+             * those for the workspace showing. It can see the checks, so a failed
+             * run stops the merge here as it would there; everything else GitHub
+             * refuses on its own, and a refusal now says why.
+             */}
+            {openRequest?.state === 'open' && selectedWorkspace !== null && (
+              <>
+                <MergeMenu
+                  // Green, like every press that finishes the work.
+                  variant="success"
+                  onMerge={(method) => {
+                    finishRequest(selectedWorkspace, () =>
+                      window.octopus.workspaces.mergePullRequest(
+                        selectedWorkspace.id,
+                        openRequest.number,
+                        method
+                      )
+                    )
+                  }}
+                  /* The same rule the pane keeps, said in the summary this list
+                     carries: a red check and a check still going both hold the
+                     button, and a repository that runs none reports `none` and
+                     is merged as it always was. */
+                  disabled={
+                    finishing.isPending(selectedWorkspace.id, 'finish') ||
+                    openRequest.checks === 'failed' ||
+                    openRequest.checks === 'running'
+                  }
+                />
+
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={finishing.isPending(selectedWorkspace.id, 'finish')}
+                  onClick={() => {
+                    finishRequest(selectedWorkspace, () =>
+                      window.octopus.workspaces.closePullRequest(
+                        selectedWorkspace.id,
+                        openRequest.number
+                      )
+                    )
+                  }}
+                >
+                  {t('pullRequest.close')}
                 </Button>
+              </>
+            )}
+
+            <ServerControls
+              runnable={server.runnable}
+              activeRun={server.activeRun}
+              building={server.building}
+              servingAt={server.servingAt}
+              runAll={server.runAll}
+              stopRun={server.stopRun}
+            />
+
+            {server.runnable && <span aria-hidden className="bg-line h-4 w-px" />}
+
+            {/* One control in one place, rather than a collapse inside the pane and
+              an expand out here: the button that folds something away should be
+              the button that brings it back, or the second one has to be hunted
+              for in a pane that is no longer on screen. */}
+            <button
+              type="button"
+              onClick={() => {
+                showRightPanel(!rightPanelOpen)
+              }}
+              className="text-ink-faint hover:text-ink focus-ring rounded p-1 transition-colors"
+              title={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
+              aria-label={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
+            >
+              {rightPanelOpen ? (
+                <PanelRightClose aria-hidden size={14} />
+              ) : (
+                <PanelRightOpen aria-hidden size={14} />
               )}
-
-              {/*
-               * A request that exists is finished here rather than opened.
-               *
-               * The header cannot see conflicts or draft status — the pane reads
-               * those for the workspace showing. It can see the checks, so a failed
-               * run stops the merge here as it would there; everything else GitHub
-               * refuses on its own, and a refusal now says why.
-               */}
-              {openRequest?.state === 'open' && selectedWorkspace !== null && (
-                <>
-                  <MergeMenu
-                    // Green, like every press that finishes the work.
-                    variant="success"
-                    onMerge={(method) => {
-                      finishRequest(selectedWorkspace, () =>
-                        window.octopus.workspaces.mergePullRequest(
-                          selectedWorkspace.id,
-                          openRequest.number,
-                          method
-                        )
-                      )
-                    }}
-                    /* The same rule the pane keeps, said in the summary this list
-                       carries: a red check and a check still going both hold the
-                       button, and a repository that runs none reports `none` and
-                       is merged as it always was. */
-                    disabled={
-                      finishing.isPending(selectedWorkspace.id, 'finish') ||
-                      openRequest.checks === 'failed' ||
-                      openRequest.checks === 'running'
-                    }
-                  />
-
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    disabled={finishing.isPending(selectedWorkspace.id, 'finish')}
-                    onClick={() => {
-                      finishRequest(selectedWorkspace, () =>
-                        window.octopus.workspaces.closePullRequest(
-                          selectedWorkspace.id,
-                          openRequest.number
-                        )
-                      )
-                    }}
-                  >
-                    {t('pullRequest.close')}
-                  </Button>
-                </>
-              )}
-
-              <ServerControls
-                runnable={server.runnable}
-                activeRun={server.activeRun}
-                building={server.building}
-                servingAt={server.servingAt}
-                runAll={server.runAll}
-                stopRun={server.stopRun}
-              />
-
-              {server.runnable && <span aria-hidden className="bg-line h-4 w-px" />}
-
-              {/* One control in one place, rather than a collapse inside the pane and
-                an expand out here: the button that folds something away should be
-                the button that brings it back, or the second one has to be hunted
-                for in a pane that is no longer on screen. */}
-              <button
-                type="button"
-                onClick={() => {
-                  showRightPanel(!rightPanelOpen)
-                }}
-                className="text-ink-faint hover:text-ink focus-ring rounded p-1 transition-colors"
-                title={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
-                aria-label={rightPanelOpen ? t('panel.collapse') : t('panel.expand')}
-              >
-                {rightPanelOpen ? (
-                  <PanelRightClose aria-hidden size={14} />
-                ) : (
-                  <PanelRightOpen aria-hidden size={14} />
-                )}
-              </button>
-            </span>
-          </>
+            </button>
+          </span>
         )}
         {showsBoardFolder && <BoardFilterBar filter={boardFilter} onChange={setBoardFilter} />}
       </header>
@@ -1204,8 +1208,6 @@ export function App(): React.JSX.Element {
                 // Installed from a terminal since the app started, or removed.
                 void plugins.readInstalled()
               }}
-              screen={screen}
-              onScreen={setScreen}
             />
 
             {listShown && (

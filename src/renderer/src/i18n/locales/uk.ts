@@ -8,15 +8,16 @@ import type { Translation } from './en.js'
  */
 export const uk: Translation = {
   app: {
-    name: 'octopus'
+    name: 'octopus',
+    screen: 'Екран',
+    screenOctopus: 'Octopus',
+    screenBoard: 'Дошка'
   },
 
   sidebar: {
     empty: 'Поки порожньо. Додайте репозиторій кнопкою «+».',
     pick: 'Оберіть проєкт на смузі ліворуч.',
     addProject: 'Додати репозиторій',
-    screenOctopus: 'Octopus',
-    screenBoard: 'Дошка',
     projectDone: 'Агент тут закінчив, поки вас не було',
     addFromDisk: 'З диска…',
     addFromDiskHint: 'Репозиторій, який уже є на цьому комп’ютері',

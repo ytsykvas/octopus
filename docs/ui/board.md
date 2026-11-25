@@ -47,10 +47,11 @@ columns, and a hook below a return breaks the rules of hooks the moment the stat
 
 ## Getting there
 
-Two tiles at the foot of the project strip, above Plugins, switch the window between Octopus and
-the Board. The switch is about the window rather than a project, so it sits with Plugins, apart
-from the scrolling list. Which screen is in front is not stored: like the list's fold, it lasts
-for the session. With no projects at all both screens show the same pane offering to add one.
+The switch in the middle of the title bar (`ScreenSwitch`) moves the window between Octopus and the
+Board, and fills the screen in front with the accent. It is about the window rather than a project,
+so it sits in the bar, not on the project strip. Which screen is in front is not stored: like the
+list's fold, it lasts for the session. With no projects at all both screens show the same pane
+offering to add one.
 
 On the board the workspace list is not drawn and the right pane is folded **offstage**, not
 unmounted: its terminals and servers belong to their workspaces and keep running. The fold's button
