@@ -2,16 +2,17 @@ import { ChevronDown, Copy, Ellipsis, FolderOpen, Play, Trash2, X } from 'lucide
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { Column } from '@core/boardColumns.js'
 import {
-  BOARD_STATUSES,
   type BoardCard,
-  type BoardStatus,
   type CardDetail,
   type CardMove,
   CARD_PRIORITIES,
   type CardPriority,
-  CARD_TITLE_MAX
+  CARD_TITLE_MAX,
+  type ColumnId
 } from '@core/boardSchema.js'
+import { present } from '@core/present.js'
 import { KIND_COLORS, WORKSPACE_KINDS, type WorkspaceKind } from '@core/workspaceKinds.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 
@@ -27,7 +28,7 @@ import { Callout } from '../pr/Callout.js'
 import { LETTERS } from '../projectTint.js'
 import { ResizeHandle } from '../ResizeHandle.js'
 import type { DescriptionDraft } from './boardDrafts.js'
-import { NO_PRIORITY_LOOK, PRIORITY_LOOKS, STATUS_LABEL_KEYS } from './boardLabels.js'
+import { columnLabel, NO_PRIORITY_LOOK, PRIORITY_LOOKS } from './boardLabels.js'
 import { CardComments } from './CardComments.js'
 import { CardDescription } from './CardDescription.js'
 import { CardResources } from './CardResources.js'
@@ -43,6 +44,8 @@ const TAG_CHOICES: readonly (WorkspaceKind | null)[] = [...WORKSPACE_KINDS, null
 export interface CardPanelProps {
   /** From the listing: the header draws at once, before the detail arrives. */
   readonly card: BoardCard
+  /** The listing's, so the card's own column is always one of them. */
+  readonly columns: readonly Column[]
   readonly detail: CardDetail | null
   readonly failure: Failure | null
   readonly board: BoardController
@@ -132,6 +135,7 @@ function CopyDescription({
 
 export function CardPanel({
   card,
+  columns,
   detail,
   failure,
   board,
@@ -150,8 +154,14 @@ export function CardPanel({
   const [renaming, setRenaming] = useState(false)
   const [running, setRunning] = useState(false)
   const describeFailure = useErrorMessage()
-  const statusLabel = (status: BoardStatus): string =>
-    t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
+  const statusLabel = (status: ColumnId): string =>
+    columnLabel(
+      present(
+        columns.find((column) => column.id === status),
+        'a listed column'
+      ),
+      t
+    )
   const priorityLabel = (value: CardPriority | null): string =>
     value === null ? t('board.priorities.none') : t(`board.priorities.${value}`)
   const tagLabel = (value: WorkspaceKind | null): string =>
@@ -187,9 +197,14 @@ export function CardPanel({
       <header className="border-line flex h-10 shrink-0 items-center gap-1 border-b px-2">
         <DropdownMenu
           align="left"
-          actions={choices(BOARD_STATUSES, card.status, statusLabel, (status) => {
-            onMove({ status, index: 0 })
-          })}
+          actions={choices(
+            columns.map((column) => column.id),
+            card.status,
+            statusLabel,
+            (status) => {
+              onMove({ status, index: 0 })
+            }
+          )}
           trigger={({ onClick, open }) => (
             <MenuTrigger title={t('board.panel.status')} open={open} onClick={onClick}>
               <span className="truncate">{statusLabel(card.status)}</span>

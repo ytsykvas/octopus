@@ -293,6 +293,8 @@ export function useErrorMessage(): (failure: Failure) => string {
         case 'cardNotText':
         case 'cardTooLong':
           return t(`errors.${failure.code}`, { name: failure.params?.name ?? '' })
+        case 'columnMissing':
+          return t('errors.columnMissing', { id: failure.params?.id ?? '' })
         default:
           return t('errors.unknown', { message: failure.error })
       }

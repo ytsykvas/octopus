@@ -48,16 +48,10 @@ export function filterColumns(
   tagLabel: (tag: WorkspaceKind) => string
 ): BoardColumns {
   if (!isFilterActive(filter)) return columns
-  const keep = (cards: readonly BoardCard[]): BoardCard[] =>
-    cards.filter((card) => matchesFilter(card, filter, tagLabel))
-  // Spelled out rather than built with Object.fromEntries, which would need a cast:
-  // a seventh status then fails to compile here instead of going missing.
-  return {
-    backlog: keep(columns.backlog),
-    'in progress': keep(columns['in progress']),
-    testing: keep(columns.testing),
-    staging: keep(columns.staging),
-    done: keep(columns.done),
-    blocked: keep(columns.blocked)
-  }
+  return new Map(
+    [...columns].map(([status, cards]) => [
+      status,
+      cards.filter((card) => matchesFilter(card, filter, tagLabel))
+    ])
+  )
 }

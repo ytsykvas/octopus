@@ -6,6 +6,7 @@
  */
 import { z } from 'zod'
 
+import type { Column } from './boardColumns.js'
 import { CodedError } from './codedError.js'
 import { isExternalUrl } from './externalUrls.js'
 import { WorkspaceKindSchema } from './workspaceKinds.js'
@@ -21,6 +22,10 @@ export const BOARD_STATUSES = [
 ] as const
 export const BoardStatusSchema = z.enum(BOARD_STATUSES)
 export type BoardStatus = z.infer<typeof BoardStatusSchema>
+
+export const COLUMN_ID_MAX = 100
+export const ColumnIdSchema = z.string().min(1).max(COLUMN_ID_MAX)
+export type ColumnId = z.infer<typeof ColumnIdSchema>
 
 export const CARD_PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const
 export const CardPrioritySchema = z.enum(CARD_PRIORITIES)
@@ -109,7 +114,7 @@ export const CardTitleSchema = z
   .min(1)
   .max(CARD_TITLE_MAX)
   .refine((title) => !/[\r\n]/.test(title))
-export const CardDraftSchema = z.strictObject({ status: BoardStatusSchema, title: CardTitleSchema })
+export const CardDraftSchema = z.strictObject({ status: ColumnIdSchema, title: CardTitleSchema })
 export const CardPatchSchema = z
   .strictObject({
     priority: CardPrioritySchema.nullable(),
@@ -119,7 +124,7 @@ export const CardPatchSchema = z
   // Not `.partial()`: an explicit `undefined` would read as "remove", which is what `null` says.
   .exactPartial()
 export const CardMoveSchema = z.strictObject({
-  status: BoardStatusSchema,
+  status: ColumnIdSchema,
   index: z.number().int().min(0).max(10_000)
 })
 export const DescriptionSaveSchema = z.strictObject({
@@ -135,7 +140,7 @@ export type DescriptionSave = z.infer<typeof DescriptionSaveSchema>
 
 export interface BoardCard {
   readonly ref: string
-  readonly status: BoardStatus
+  readonly status: ColumnId
   readonly loose: boolean
   readonly title: string
   readonly meta: CardMeta
@@ -155,6 +160,7 @@ export interface CardDetail extends BoardCard {
 }
 export interface BoardListing {
   readonly folder: string
+  readonly columns: readonly Column[]
   readonly cards: readonly BoardCard[]
 }
 export interface CardLaunch {
@@ -178,6 +184,7 @@ export type BoardErrorCode =
   | 'cardOutside'
   | 'cardNotText'
   | 'cardTooLong'
+  | 'columnMissing'
 
 export class BoardError extends CodedError<BoardErrorCode> {
   override readonly name = 'BoardError'

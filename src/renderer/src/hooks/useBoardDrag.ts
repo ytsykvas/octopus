@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import type { BoardStatus, CardMove } from '@core/boardSchema.js'
+import type { CardMove, ColumnId } from '@core/boardSchema.js'
 
 import {
   type BoardColumns,
@@ -29,11 +29,11 @@ export interface ColumnDropProps {
 
 export interface BoardDrag {
   readonly draggingRef: string | null
-  readonly cardProps: (ref: string, status: BoardStatus) => CardDragProps
-  readonly columnProps: (status: BoardStatus) => ColumnDropProps
+  readonly cardProps: (ref: string, status: ColumnId) => CardDragProps
+  readonly columnProps: (status: ColumnId) => ColumnDropProps
   readonly dropEdge: (ref: string) => DropEdge | null
   /** The empty column the card would fall into. */
-  readonly overColumn: BoardStatus | null
+  readonly overColumn: ColumnId | null
 }
 
 export function useBoardDrag(
@@ -44,7 +44,7 @@ export function useBoardDrag(
   const [draggingRef, setDraggingRef] = useState<string | null>(null)
   const [hover, setHover] = useState<{
     readonly ref: string
-    readonly status: BoardStatus
+    readonly status: ColumnId
     readonly slot: number
   } | null>(null)
   const mark = hover === null ? null : dropMark(columns, hover.ref, hover.status, hover.slot)
@@ -56,14 +56,14 @@ export function useBoardDrag(
     setHover(null)
   }
   // dragover fires every ~50 ms; keeping the same object for the same place spares a redraw.
-  const point = (ref: string, status: BoardStatus, slot: number): void => {
+  const point = (ref: string, status: ColumnId, slot: number): void => {
     setHover((current) =>
       current !== null && current.ref === ref && current.status === status && current.slot === slot
         ? current
         : { ref, status, slot }
     )
   }
-  const finish = (ref: string, status: BoardStatus, slot: number): void => {
+  const finish = (ref: string, status: ColumnId, slot: number): void => {
     if (!isOwnPlace(columns, ref, status, slot)) onMove(ref, { status, index: slot })
     end()
   }

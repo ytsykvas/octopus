@@ -35,6 +35,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CommandExec } from './accounts.js'
 import { descriptionOf, readMeta } from './boardCard.js'
+import { DEFAULT_COLUMNS } from './boardColumns.js'
 import { machineLabel } from './boardNames.js'
 import { CARD_TEXT_MAX, type CardRunEntry } from './boardSchema.js'
 import {
@@ -18594,7 +18595,11 @@ describe('the board', () => {
   })
 
   it('lists an empty board without making a folder', async () => {
-    await expect(service.listBoard(projectId)).resolves.toEqual({ folder, cards: [] })
+    await expect(service.listBoard(projectId)).resolves.toEqual({
+      folder,
+      columns: DEFAULT_COLUMNS,
+      cards: []
+    })
     await expect(readdir(board)).resolves.toEqual([])
   })
 

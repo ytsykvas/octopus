@@ -258,7 +258,7 @@ folder run one after another — two projects whose names give one folder share 
 
 | Channel                 | Arguments                   | Notes                                                                                                                   |
 | ----------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `board:list`            | `projectId`                 | the folder and every card in it; a project with no folder yet is an empty board, and nothing is made                    |
+| `board:list`            | `projectId`                 | the folder, its columns and every card in it; a project with no folder yet is an empty board, and nothing is made       |
 | `board:read`            | `projectId`, `ref`          | one card whole: description and comments                                                                                |
 | `board:create`          | `projectId`, `draft`        | a new card at the top of its column, answering its ref; a file that reached the name first is refused (`cardNameTaken`) |
 | `board:update`          | `projectId`, `ref`, `patch` | priority, tag and links; a key the patch leaves out is left alone                                                       |

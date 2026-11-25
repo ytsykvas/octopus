@@ -2,6 +2,7 @@ import { act, createEvent, fireEvent, screen, waitFor, within } from '@testing-l
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { DEFAULT_COLUMNS } from '@core/boardColumns.js'
 import type {
   BoardCard,
   BoardListing,
@@ -119,6 +120,44 @@ describe('BoardScreen', () => {
     ])
   })
 
+  it('lays out the columns the listing gives, in its order', async () => {
+    givenBoard(
+      [boardCard({ ref: 'Ideas/A.md', status: 'Ideas', title: 'A' })],
+      [{ kind: 'custom', id: 'Ideas', name: 'Ideas to try' }, ...DEFAULT_COLUMNS]
+    )
+
+    renderScreen()
+
+    const columns = await screen.findAllByRole('region')
+    expect(columns.map((column) => column.getAttribute('aria-label'))).toEqual([
+      'Ideas to try',
+      'Backlog',
+      'In progress',
+      'Testing',
+      'Staging',
+      'Done',
+      'Blocked'
+    ])
+    expect(
+      within(screen.getByRole('region', { name: 'Ideas to try' })).getByText('A')
+    ).toBeInTheDocument()
+  })
+
+  it('creates a task in a column somebody added', async () => {
+    givenBoard([], [...DEFAULT_COLUMNS, { kind: 'custom', id: 'Ideas', name: 'Ideas to try' }])
+    const user = userEvent.setup()
+    renderScreen()
+    const ideas = await screen.findByRole('region', { name: 'Ideas to try' })
+
+    await user.click(within(ideas).getByRole('button', { name: 'New task' }))
+    await user.type(within(ideas).getByRole('textbox', { name: 'Task title' }), 'New{Enter}')
+
+    expect(octopus().board.create).toHaveBeenCalledWith('planner', {
+      status: 'Ideas',
+      title: 'New'
+    })
+  })
+
   it('shows an empty board for a project with no folder yet', async () => {
     givenBoard([])
 
@@ -155,7 +194,7 @@ describe('BoardScreen', () => {
 
   it("writes the folder it reads into the title bar's slot", async () => {
     vi.mocked(octopus().board.list).mockResolvedValue(
-      ok({ folder: '/tmp/board/Planner', cards: [] })
+      ok({ folder: '/tmp/board/Planner', columns: DEFAULT_COLUMNS, cards: [] })
     )
     const slot = document.createElement('span')
 

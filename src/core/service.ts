@@ -6804,7 +6804,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async listBoard(projectId) {
       syncBoardWatch()
       const layout = await layoutOf(projectId)
-      return { folder: layout.dir, cards: await listBoardIn(layout) }
+      return { folder: layout.dir, columns: layout.columns, cards: await listBoardIn(layout) }
     },
     async readCard(projectId, ref) {
       const layout = await layoutOf(projectId)

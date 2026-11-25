@@ -1,20 +1,21 @@
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { BoardCard, BoardStatus } from '@core/boardSchema.js'
+import type { Column } from '@core/boardColumns.js'
+import type { BoardCard } from '@core/boardSchema.js'
 
 import type { BoardDrag } from '../../hooks/useBoardDrag.js'
 import { DropLine } from '../DropLine.js'
 import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardCardTile, CARD_FIELD_BOX, CardTitleField, TitleLead } from './BoardCardTile.js'
-import { STATUS_LABEL_KEYS } from './boardLabels.js'
+import { columnLabel } from './boardLabels.js'
 
 export interface BoardColumnProps {
-  readonly status: BoardStatus
+  readonly column: Column
   /** Already sorted: `cardsByStatus` sorts every column. */
   readonly cards: readonly BoardCard[]
-  /** The cards of this status before the filter: `cards` may be a part of them. */
+  /** The cards of this column before the filter: `cards` may be a part of them. */
   readonly total: number
   readonly filtering: boolean
   readonly creating: boolean
@@ -28,7 +29,7 @@ export interface BoardColumnProps {
 }
 
 export function BoardColumn({
-  status,
+  column,
   cards,
   total,
   filtering,
@@ -42,7 +43,7 @@ export function BoardColumn({
   drag
 }: BoardColumnProps): React.JSX.Element {
   const { t } = useTranslation()
-  const label = t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
+  const label = columnLabel(column, t)
   const ordered = cards.filter((card) => card.meta.order !== undefined)
   const loose = cards.filter((card) => card.meta.order === undefined)
   const tile = (card: BoardCard): React.JSX.Element => (
@@ -57,7 +58,7 @@ export function BoardColumn({
         onRename(card.ref, title)
       }}
       marks={marksOf(card)}
-      drag={drag.cardProps(card.ref, status)}
+      drag={drag.cardProps(card.ref, column.id)}
       dropEdge={drag.dropEdge(card.ref)}
       dragging={drag.draggingRef === card.ref}
     />
@@ -67,7 +68,7 @@ export function BoardColumn({
     <section
       aria-label={label}
       className="border-line flex min-h-0 w-[272px] shrink-0 flex-col border-r"
-      {...drag.columnProps(status)}
+      {...drag.columnProps(column.id)}
     >
       <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">
         <h2 className="section-label">{label}</h2>
@@ -87,7 +88,7 @@ export function BoardColumn({
       </header>
       {cards.length === 0 && !creating ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
-          {drag.overColumn === status && <DropLine edge="above" />}
+          {drag.overColumn === column.id && <DropLine edge="above" />}
           <Placeholder compact art={false} title={t('board.empty.columnTitle')}>
             {total === 0 ? t('board.empty.columnText') : t('board.empty.filteredText')}
           </Placeholder>

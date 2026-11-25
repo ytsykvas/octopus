@@ -4058,6 +4058,12 @@ describe('board channels', () => {
     await expect(invoke('board:list', id)).resolves.toMatchObject({ value: { cards: [] } })
   })
 
+  it('answers a column the board does not have with its code', async () => {
+    await expect(
+      invoke('board:create', id, { status: 'later', title: 'A' })
+    ).resolves.toMatchObject({ ok: false, code: 'columnMissing', params: { id: 'later' } })
+  })
+
   it('answers a coded failure while no folder is set', async () => {
     await invoke('config:update', { boardFolder: '' })
 
@@ -4089,7 +4095,7 @@ describe('board channels', () => {
     const answers = await Promise.all([
       invoke('board:list', ''),
       invoke('board:create', id, { status: 'backlog', title: '  ' }),
-      invoke('board:create', id, { status: 'later', title: 'A' }),
+      invoke('board:create', id, { status: '', title: 'A' }),
       invoke('board:update', id, ref, { order: 3 }),
       invoke('board:update', id, ref, { links: ['javascript:alert(1)'] }),
       invoke('board:rename', id, ref, 'a\nb'),

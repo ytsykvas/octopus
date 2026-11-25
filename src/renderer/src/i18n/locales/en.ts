@@ -2712,6 +2712,7 @@ export const en = {
       '“{{name}}” is not UTF-8 text, so octopus leaves it as it is. Change it in an editor that can save it as UTF-8.',
     cardTooLong:
       '“{{name}}” is longer than 100,000 characters — more than one message to the agent can hold. Shorten it, then run it again.',
+    columnMissing: 'That column is no longer on the board.',
     unknown: 'Something went wrong: {{message}}'
   }
 }

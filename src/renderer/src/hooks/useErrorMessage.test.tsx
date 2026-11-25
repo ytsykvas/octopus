@@ -75,6 +75,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   cardOutside: { name: 'A.md' },
   cardNotText: { name: 'A.md' },
   cardTooLong: { name: 'A.md' },
+  columnMissing: null,
   attachmentTooLarge: { limit: '12' },
   libraryNameInvalid: { name: 'Ship It' },
   libraryExists: { name: 'ship' },

@@ -2,6 +2,7 @@ import { render } from '@testing-library/react'
 import { createElement } from 'react'
 import { vi } from 'vitest'
 
+import { type Column, DEFAULT_COLUMNS } from '@core/boardColumns.js'
 import type { BoardCard, BoardListing, CardDetail } from '@core/boardSchema.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 
@@ -56,8 +57,11 @@ export function cardDetail(overrides: Partial<CardDetail> = {}): CardDetail {
   }
 }
 
-export function boardListing(cards: readonly BoardCard[]): BoardListing {
-  return { folder: '/tmp/board/planner', cards }
+export function boardListing(
+  cards: readonly BoardCard[],
+  columns: readonly Column[] = DEFAULT_COLUMNS
+): BoardListing {
+  return { folder: '/tmp/board/planner', columns, cards }
 }
 
 /** An answer of IPC that worked — what every mocked `window.octopus.board.*` resolves to. */
@@ -71,8 +75,11 @@ export function refusal(code: string, params: Readonly<Record<string, string>> =
 }
 
 /** Every later read of the board answers with these cards. */
-export function givenBoard(cards: readonly BoardCard[]): void {
-  vi.mocked(octopus().board.list).mockResolvedValue(ok(boardListing(cards)))
+export function givenBoard(
+  cards: readonly BoardCard[],
+  columns: readonly Column[] = DEFAULT_COLUMNS
+): void {
+  vi.mocked(octopus().board.list).mockResolvedValue(ok(boardListing(cards, columns)))
 }
 
 /**

@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 
 import type { AccountsStatus } from '@core/accounts.js'
+import { DEFAULT_COLUMNS } from '@core/boardColumns.js'
 import type { Chat } from '@core/chats.js'
 import type { Config } from '@core/config.js'
 import type { WorkspaceDiff } from '@core/diff.js'
@@ -299,7 +300,7 @@ export function installOctopusStub(): Api {
 
     board: {
       onChanged: vi.fn(subscription),
-      list: vi.fn(() => ok({ folder: '/board/planner', cards: [] })),
+      list: vi.fn(() => ok({ folder: '/board/planner', columns: DEFAULT_COLUMNS, cards: [] })),
       read: vi.fn(() =>
         ok({
           ref: 'backlog/Fix login.md',

@@ -2256,6 +2256,7 @@ export const de: Translation = {
       '„{{name}}“ ist kein UTF-8-Text, daher lässt octopus die Datei unverändert. Ändere sie in einem Editor, der sie als UTF-8 speichern kann.',
     cardTooLong:
       '„{{name}}“ ist länger als 100.000 Zeichen – mehr, als eine Nachricht an den Agenten fassen kann. Kürze die Aufgabe und führe sie dann erneut aus.',
+    columnMissing: 'Diese Spalte gibt es auf dem Board nicht mehr.',
     unknown: 'Etwas ist schiefgelaufen: {{message}}'
   }
 }

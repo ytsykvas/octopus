@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { BoardCard, BoardStatus } from '@core/boardSchema.js'
+import type { BoardCard, ColumnId } from '@core/boardSchema.js'
 
 import { boardCard } from '../../test/board.js'
 import {
@@ -12,26 +12,24 @@ import {
   statusOf
 } from './boardDrop.js'
 
-const card = (ref: string, status: BoardStatus, order?: number): BoardCard =>
+const card = (ref: string, status: ColumnId, order?: number): BoardCard =>
   boardCard({
     ref,
     status,
     title: ref,
     meta: { links: [], runs: [], ...(order === undefined ? {} : { order }) }
   })
-const COLUMNS: BoardColumns = {
-  backlog: [
-    card('a', 'backlog', 1),
-    card('b', 'backlog', 2),
-    card('u', 'backlog'),
-    card('v', 'backlog')
+const COLUMNS: BoardColumns = new Map([
+  [
+    'backlog',
+    [card('a', 'backlog', 1), card('b', 'backlog', 2), card('u', 'backlog'), card('v', 'backlog')]
   ],
-  'in progress': [card('p', 'in progress', 1)],
-  testing: [],
-  staging: [card('s', 'staging')],
-  done: [],
-  blocked: []
-}
+  ['in progress', [card('p', 'in progress', 1)]],
+  ['testing', []],
+  ['staging', [card('s', 'staging')]],
+  ['done', []],
+  ['blocked', []]
+])
 
 describe('edgeAt', () => {
   it.each([

@@ -1,8 +1,8 @@
 # The Board
 
-`components/board/` draws one project's tasks as six columns — Backlog, In progress, Testing,
-Staging, Done, Blocked — read from the project's folder inside the board folder
-(`docs/data/board.md`).
+`components/board/` draws one project's tasks in the columns its listing names, in that order —
+the six built in are Backlog, In progress, Testing, Staging, Done, Blocked — read from the
+project's folder inside the board folder (`docs/data/board.md`).
 
 **Reading never writes.** A project without a folder yet is six empty columns, not an error:
 folders are made by the first card written into them (B105), so looking at a board in a synced
@@ -63,8 +63,8 @@ no branch and, instead of the controls at its right, the [filter](#filter-and-se
 folder chosen it shows the app's name and no filter. That folder is the one on disk, which core
 finds by name regardless of case, so `BoardScreen` writes it into a slot App leaves in the bar
 (`titleSlot`) rather than App building it from the project's name; the slot is empty while the first
-read is out or has failed. A loose card whose file sits in a folder that is not a status shows that
-folder's name first on its second line, so a renamed status folder is visible rather than silently
+read is out or has failed. A loose card whose file sits in a folder that is no column's shows that
+folder's name first on its second line, so a renamed column folder is visible rather than silently
 emptied.
 
 ## Creating a task

@@ -9,7 +9,7 @@ import { BoardColumn, type BoardColumnProps } from './BoardColumn.js'
 
 function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
   const all: BoardColumnProps = {
-    status: 'backlog',
+    column: { kind: 'system', id: 'backlog' },
     cards: [],
     total: props.cards?.length ?? 0,
     filtering: false,
@@ -37,11 +37,17 @@ function card(title: string, order?: number): ReturnType<typeof boardCard> {
 
 describe('BoardColumn', () => {
   it('is a region named by its status', () => {
-    renderColumn({ status: 'in progress', cards: [] })
+    renderColumn({ column: { kind: 'system', id: 'in progress' }, cards: [] })
 
     expect(
       within(screen.getByRole('region', { name: 'In progress' })).getByText('0')
     ).toBeInTheDocument()
+  })
+
+  it('is named as somebody named the column they added', () => {
+    renderColumn({ column: { kind: 'custom', id: 'Ideas', name: 'Ideas to try' }, cards: [] })
+
+    expect(screen.getByRole('region', { name: 'Ideas to try' })).toBeInTheDocument()
   })
 
   it('says when it is empty', () => {
@@ -174,7 +180,11 @@ describe('BoardColumn', () => {
   })
 
   it('draws the drop line in an empty column a card is over', () => {
-    renderColumn({ status: 'testing', cards: [], drag: { ...noDrag(), overColumn: 'testing' } })
+    renderColumn({
+      column: { kind: 'system', id: 'testing' },
+      cards: [],
+      drag: { ...noDrag(), overColumn: 'testing' }
+    })
 
     expect(
       within(screen.getByRole('region', { name: 'Testing' })).getByTestId('drop-line')
@@ -182,7 +192,11 @@ describe('BoardColumn', () => {
   })
 
   it('draws no drop line for a card over another column', () => {
-    renderColumn({ status: 'testing', cards: [], drag: { ...noDrag(), overColumn: 'done' } })
+    renderColumn({
+      column: { kind: 'system', id: 'testing' },
+      cards: [],
+      drag: { ...noDrag(), overColumn: 'done' }
+    })
 
     expect(screen.queryByTestId('drop-line')).toBeNull()
   })

@@ -2,13 +2,8 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
-import { cardsByStatus } from '@core/boardOrder.js'
-import {
-  type BoardCard,
-  BOARD_STATUSES,
-  type BoardStatus,
-  type CardMove
-} from '@core/boardSchema.js'
+import { cardsByStatus, cardsIn } from '@core/boardOrder.js'
+import type { BoardCard, CardMove, ColumnId } from '@core/boardSchema.js'
 import { present } from '@core/present.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { Project } from '@core/store.js'
@@ -87,13 +82,16 @@ export function BoardScreen({
   const { move, remove } = board
   // Every hook stays above the first return: B202a–B206 hang theirs on `columns`, and a hook
   // below a return breaks the rules of hooks the moment the screen changes state.
-  const columns = useMemo(() => cardsByStatus(board.listing?.cards ?? []), [board.listing])
+  const columns = useMemo(
+    () => cardsByStatus(board.listing?.cards ?? [], board.listing?.columns ?? []),
+    [board.listing]
+  )
   const filtering = isFilterActive(filter)
   const visible = useMemo(
     () => filterColumns(columns, filter, (tag) => t(`workspaces.kinds.${tag}.label`)),
     [columns, filter, t]
   )
-  const [creatingIn, setCreatingIn] = useState<BoardStatus | null>(null)
+  const [creatingIn, setCreatingIn] = useState<ColumnId | null>(null)
   const [open, setOpen] = useState<OpenCard | null>(null)
   // Never reused, not even after a close: the detail and the panel are keyed by it.
   const openings = useRef(0)
@@ -186,7 +184,7 @@ export function BoardScreen({
     setOpen({ ref, session: openings.current })
   }
 
-  const createIn = async (status: BoardStatus, title: string): Promise<void> => {
+  const createIn = async (status: ColumnId, title: string): Promise<void> => {
     const ref = await board.create({ status, title })
     if (ref === null) return
     onDraft(ref, null)
@@ -235,7 +233,7 @@ export function BoardScreen({
       }
       case 'step': {
         const status = present(statusOf(columns, action.ref), 'the column of a listed task')
-        const index = stepIndex(columns[status], action.ref, action.step)
+        const index = stepIndex(cardsIn(columns, status), action.ref, action.step)
         if (index === null) return
         void moveCard(action.ref, { status, index }).then((next) => {
           if (next !== null) setRefocus({ ref: next })
@@ -312,18 +310,18 @@ export function BoardScreen({
           if (delta !== null) event.currentTarget.scrollLeft += delta
         }}
       >
-        {BOARD_STATUSES.map((status) => (
+        {board.listing.columns.map((column) => (
           <BoardColumn
-            key={status}
-            status={status}
-            cards={visible[status]}
-            total={columns[status].length}
+            key={column.id}
+            column={column}
+            cards={cardsIn(visible, column.id)}
+            total={cardsIn(columns, column.id).length}
             filtering={filtering}
-            creating={creatingIn === status}
+            creating={creatingIn === column.id}
             onCreating={(on) => {
-              setCreatingIn(on ? status : null)
+              setCreatingIn(on ? column.id : null)
             }}
-            onCreate={(title) => void createIn(status, title)}
+            onCreate={(title) => void createIn(column.id, title)}
             openRef={openRef}
             onOpen={openCardAt}
             onRename={(ref, title) => void board.rename(ref, title)}
@@ -336,6 +334,7 @@ export function BoardScreen({
         <CardPanel
           key={panelKey}
           card={openCard}
+          columns={board.listing.columns}
           detail={detail}
           failure={failure}
           board={board}
