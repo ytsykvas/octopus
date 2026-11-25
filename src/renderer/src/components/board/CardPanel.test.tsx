@@ -62,6 +62,14 @@ describe('CardPanel', () => {
     expect(screen.getByRole('region', { name: 'Description' })).toBeInTheDocument()
   })
 
+  it('washes its top in the colour of the project', () => {
+    renderPanel()
+
+    expect(screen.getByRole('complementary', { name: 'Fix login' })).toHaveClass(
+      'project-tinted-top'
+    )
+  })
+
   it('moves the card to the status chosen', async () => {
     const { onMove } = renderPanel()
 

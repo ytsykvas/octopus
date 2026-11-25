@@ -304,7 +304,10 @@ export function BoardScreen({
   // The first read is still out: neither columns nor a message, so nothing flashes.
   if (board.listing === null) return <div className="flex min-h-0 flex-1" />
   return (
-    <div className="flex min-h-0 flex-1">
+    <div
+      className="flex min-h-0 flex-1"
+      style={{ '--project-color': `var(--project-${project.color})` } as React.CSSProperties}
+    >
       <div
         className="scrollbar-shown flex min-w-0 flex-1 overflow-x-auto"
         onWheel={(event) => {

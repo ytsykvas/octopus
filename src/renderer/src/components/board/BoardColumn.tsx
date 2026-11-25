@@ -66,7 +66,7 @@ export function BoardColumn({
   return (
     <section
       aria-label={label}
-      className="border-line flex min-h-0 w-[272px] shrink-0 flex-col border-r"
+      className={`border-line flex min-h-0 w-[272px] shrink-0 flex-col border-r ${status === 'backlog' ? 'project-tinted' : ''}`}
       {...drag.columnProps(status)}
     >
       <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">

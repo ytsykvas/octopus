@@ -119,6 +119,15 @@ describe('BoardScreen', () => {
     ])
   })
 
+  it('hands the colour of the project to the columns and the card panel', async () => {
+    givenBoard([])
+
+    const { container } = renderScreen({ project: boardProject({ color: 'teal' }) })
+
+    await screen.findAllByRole('region')
+    expect(container.firstElementChild).toHaveStyle({ '--project-color': 'var(--project-teal)' })
+  })
+
   it('shows an empty board for a project with no folder yet', async () => {
     givenBoard([])
 

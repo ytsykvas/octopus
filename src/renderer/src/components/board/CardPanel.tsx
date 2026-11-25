@@ -174,7 +174,7 @@ export function CardPanel({
     <aside
       aria-label={card.title}
       style={{ width }}
-      className="border-line bg-surface relative flex min-h-0 shrink-0 flex-col border-l"
+      className="border-line bg-surface project-tinted-top relative flex min-h-0 shrink-0 flex-col border-l"
     >
       <ResizeHandle
         grows="left"
