@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -12,10 +13,12 @@ import type { WorkspaceView } from '@core/workspaces.js'
 import { useBoard } from '../../hooks/useBoard.js'
 import { useBoardDrag } from '../../hooks/useBoardDrag.js'
 import { type OpenCard, useCardDetail } from '../../hooks/useCardDetail.js'
+import { useColumnEditing } from '../../hooks/useColumnEditing.js'
 import { useConfirm } from '../../hooks/useConfirm.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { useWindowEvent } from '../../hooks/useWindowEvent.js'
 import { Button } from '../Button.js'
+import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardColumn } from './BoardColumn.js'
 import type { DescriptionDraft } from './boardDrafts.js'
@@ -33,6 +36,7 @@ import { cardMark, linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.
 import { sidewaysDelta } from './boardScroll.js'
 import { CardMarks } from './CardMarks.js'
 import { CardPanel, PANEL_WIDTH } from './CardPanel.js'
+import { columnMenu } from './columnMenu.js'
 
 export interface BoardScreenProps {
   /** null while no project is selected; App shows its own pane when there are none at all (B201b). */
@@ -79,13 +83,14 @@ export function BoardScreen({
   const describeFailure = useErrorMessage()
   const board = useBoard(project?.id ?? null, boardFolder ?? '', onError)
   // The members, not `board`: the controller is a new object every render, its members are stable.
-  const { move, remove } = board
+  const { move, remove, editColumns } = board
   // Every hook stays above the first return: B202a–B206 hang theirs on `columns`, and a hook
   // below a return breaks the rules of hooks the moment the screen changes state.
   const columns = useMemo(
     () => cardsByStatus(board.listing?.cards ?? [], board.listing?.columns ?? []),
     [board.listing]
   )
+  const editing = useColumnEditing(board.listing?.columns ?? [], editColumns)
   const filtering = isFilterActive(filter)
   const visible = useMemo(
     () => filterColumns(columns, filter, (tag) => t(`workspaces.kinds.${tag}.label`)),
@@ -310,7 +315,7 @@ export function BoardScreen({
           if (delta !== null) event.currentTarget.scrollLeft += delta
         }}
       >
-        {board.listing.columns.map((column) => (
+        {board.listing.columns.map((column, index, all) => (
           <BoardColumn
             key={column.id}
             column={column}
@@ -327,8 +332,24 @@ export function BoardScreen({
             onRename={(ref, title) => void board.rename(ref, title)}
             marksOf={marksOf}
             drag={drag}
+            menu={columnMenu(
+              column,
+              { index, count: all.length, cardCount: cardsIn(columns, column.id).length },
+              editing,
+              t
+            )}
+            reorder={{
+              props: editing.reorder.itemProps(column.id),
+              edge: editing.reorder.dropEdge(column.id),
+              dragging: editing.reorder.draggingId === column.id
+            }}
           />
         ))}
+        <div className="flex shrink-0 items-start px-2 pt-1.5">
+          <IconButton label={t('board.columns.add')} onClick={() => void editing.add()}>
+            <Plus aria-hidden size={14} />
+          </IconButton>
+        </div>
       </div>
       {openCard !== null && (
         <CardPanel
@@ -355,6 +376,7 @@ export function BoardScreen({
         />
       )}
       {dialog}
+      {editing.dialogs}
       {titleSlot !== null && createPortal(board.listing.folder, titleSlot)}
     </div>
   )

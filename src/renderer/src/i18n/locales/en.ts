@@ -2464,7 +2464,13 @@ export const en = {
       removeTitle: 'Remove \u201c{{name}}\u201d?',
       removeBody: 'The column leaves the board. Its folder stays on disk.',
       removeConfirm: 'Remove',
-      cancel: 'Cancel'
+      cancel: 'Cancel',
+      menu: 'Actions for \u201c{{name}}\u201d',
+      moveLeft: 'Move left',
+      moveRight: 'Move right',
+      renameItem: 'Rename\u2026',
+      removeItem: 'Remove\u2026',
+      removeBlocked: 'Move its tasks out first.'
     },
     filter: {
       search: 'Search tasks',

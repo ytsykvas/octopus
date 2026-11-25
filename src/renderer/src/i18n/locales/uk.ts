@@ -1992,7 +1992,13 @@ export const uk: Translation = {
       removeTitle: 'Видалити «{{name}}»?',
       removeBody: 'Колонка зникне з дошки. Її тека лишиться на диску.',
       removeConfirm: 'Видалити',
-      cancel: 'Скасувати'
+      cancel: 'Скасувати',
+      menu: 'Дії з «{{name}}»',
+      moveLeft: 'Посунути ліворуч',
+      moveRight: 'Посунути праворуч',
+      renameItem: 'Перейменувати…',
+      removeItem: 'Видалити…',
+      removeBlocked: 'Спершу перенесіть з неї задачі.'
     },
     filter: {
       search: 'Пошук задач',

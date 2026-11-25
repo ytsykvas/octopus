@@ -2026,7 +2026,13 @@ export const de: Translation = {
       removeTitle: '„{{name}}“ entfernen?',
       removeBody: 'Die Spalte verschwindet vom Board. Ihr Ordner bleibt auf der Festplatte.',
       removeConfirm: 'Entfernen',
-      cancel: 'Abbrechen'
+      cancel: 'Abbrechen',
+      menu: 'Aktionen für „{{name}}“',
+      moveLeft: 'Nach links',
+      moveRight: 'Nach rechts',
+      renameItem: 'Umbenennen…',
+      removeItem: 'Entfernen…',
+      removeBlocked: 'Verschiebe zuerst ihre Aufgaben.'
     },
     filter: {
       search: 'Aufgaben suchen',

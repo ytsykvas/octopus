@@ -1,15 +1,23 @@
-import { Plus } from 'lucide-react'
+import { Ellipsis, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { Column } from '@core/boardColumns.js'
 import type { BoardCard } from '@core/boardSchema.js'
 
 import type { BoardDrag } from '../../hooks/useBoardDrag.js'
+import type { DragItemProps, DropEdge } from '../../hooks/useDragReorder.js'
+import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
 import { DropLine } from '../DropLine.js'
 import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardCardTile, CARD_FIELD_BOX, CardTitleField, TitleLead } from './BoardCardTile.js'
 import { columnLabel } from './boardLabels.js'
+
+export interface ColumnReorder {
+  readonly props: DragItemProps
+  readonly edge: DropEdge | null
+  readonly dragging: boolean
+}
 
 export interface BoardColumnProps {
   readonly column: Column
@@ -26,6 +34,8 @@ export interface BoardColumnProps {
   readonly onRename: (ref: string, title: string) => void
   readonly marksOf: (card: BoardCard) => React.JSX.Element | null
   readonly drag: BoardDrag
+  readonly menu: readonly MenuAction[]
+  readonly reorder: ColumnReorder
 }
 
 export function BoardColumn({
@@ -40,7 +50,9 @@ export function BoardColumn({
   onOpen,
   onRename,
   marksOf,
-  drag
+  drag,
+  menu,
+  reorder
 }: BoardColumnProps): React.JSX.Element {
   const { t } = useTranslation()
   const label = columnLabel(column, t)
@@ -67,15 +79,34 @@ export function BoardColumn({
   return (
     <section
       aria-label={label}
-      className="border-line flex min-h-0 w-[272px] shrink-0 flex-col border-r"
+      className={`border-line relative flex min-h-0 w-[272px] shrink-0 flex-col border-r ${
+        reorder.dragging ? 'opacity-40' : ''
+      }`}
       {...drag.columnProps(column.id)}
     >
-      <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">
-        <h2 className="section-label">{label}</h2>
+      {reorder.edge !== null && <DropLine edge={reorder.edge} across />}
+      <header
+        className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 px-3"
+        {...reorder.props}
+      >
+        <h2 className="section-label truncate">{label}</h2>
         <span className="text-ink-faint text-[11px] tabular-nums">
           {filtering ? t('board.column.count', { shown: cards.length, total }) : cards.length}
         </span>
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center">
+          <DropdownMenu
+            align="right"
+            actions={menu}
+            trigger={({ onClick, open }) => (
+              <IconButton
+                label={t('board.columns.menu', { name: label })}
+                onClick={onClick}
+                menuOpen={open}
+              >
+                <Ellipsis aria-hidden size={14} />
+              </IconButton>
+            )}
+          />
           <IconButton
             label={t('board.column.newTask')}
             onClick={() => {

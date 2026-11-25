@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
+import type { ColumnEdit } from '@core/boardColumns.js'
 import type {
   BoardListing,
   CardDraft,
@@ -35,6 +36,8 @@ export interface BoardController {
   readonly revealFile: (ref: string, name: string) => Promise<boolean>
   readonly removeFile: (ref: string, name: string) => Promise<boolean>
   readonly revealCard: (ref: string) => Promise<boolean>
+  /** Gives the project columns of its own the first time it is asked. */
+  readonly editColumns: (edit: ColumnEdit) => Promise<boolean>
 }
 
 interface BoardSource {
@@ -268,6 +271,14 @@ export function useBoard(
     [source, settle]
   )
 
+  const editColumns = useCallback(
+    async (edit: ColumnEdit): Promise<boolean> => {
+      if (source === null) return false
+      return (await settle(window.octopus.board.editColumns(source.projectId, edit)))?.ok === true
+    },
+    [source, settle]
+  )
+
   // A sync service writes while the window is elsewhere; coming back is when that matters.
   useWindowEvent('focus', () => void refresh(), { active: source !== null })
 
@@ -299,6 +310,7 @@ export function useBoard(
     attach,
     revealFile,
     removeFile,
-    revealCard
+    revealCard,
+    editColumns
   }
 }

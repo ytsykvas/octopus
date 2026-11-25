@@ -1,10 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { BoardCard } from '@core/boardSchema.js'
 
-import { boardCard, noDrag } from '../../test/board.js'
+import { boardCard, noDrag, stillColumn } from '../../test/board.js'
 import { BoardColumn, type BoardColumnProps } from './BoardColumn.js'
 
 function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
@@ -21,6 +21,8 @@ function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
     onRename: vi.fn(),
     marksOf: () => null,
     drag: noDrag(),
+    menu: [],
+    reorder: stillColumn(),
     ...props
   }
   render(<BoardColumn {...all} />)
@@ -49,6 +51,42 @@ describe('BoardColumn', () => {
 
     expect(screen.getByRole('region', { name: 'Ideas to try' })).toBeInTheDocument()
   })
+
+  it('offers its menu from the header', async () => {
+    const onSelect = vi.fn()
+    renderColumn({ menu: [{ id: 'right', label: 'Move right', onSelect }] })
+
+    const trigger = screen.getByRole('button', { name: 'Actions for “Backlog”' })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move right' }))
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('is dragged by its header', () => {
+    const reorder = stillColumn()
+    renderColumn({ reorder })
+
+    const title = screen.getByRole('heading', { name: 'Backlog' })
+    expect(title.closest('header')).toHaveAttribute('draggable', 'true')
+    fireEvent.dragStart(title)
+
+    expect(reorder.props.onDragStart).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['above', 'below'] as const)(
+    'draws the line on the %s side a dragged column would land against, and dims while dragged',
+    (edge) => {
+      renderColumn({ reorder: { ...stillColumn(), edge, dragging: true } })
+
+      const column = screen.getByRole('region', { name: 'Backlog' })
+      expect(within(column).getByTestId('drop-line')).toHaveAttribute('data-edge', edge)
+      expect(column).toHaveClass('opacity-40')
+    }
+  )
 
   it('says when it is empty', () => {
     renderColumn({ cards: [] })

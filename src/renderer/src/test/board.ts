@@ -12,6 +12,7 @@ import { EMPTY_BOARD_FILTER } from '../components/board/boardFilter.js'
 import { BoardScreen, type BoardScreenProps } from '../components/board/BoardScreen.js'
 import type { BoardController } from '../hooks/useBoard.js'
 import type { BoardDrag } from '../hooks/useBoardDrag.js'
+import type { ColumnReorder } from '../components/board/BoardColumn.js'
 import { octopus } from './octopus.js'
 import { project as boardProject } from './projects.js'
 
@@ -136,6 +137,7 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
     revealFile: vi.fn(() => Promise.resolve(true)),
     removeFile: vi.fn(() => Promise.resolve(true)),
     revealCard: vi.fn(() => Promise.resolve(true)),
+    editColumns: vi.fn(() => Promise.resolve(true)),
     ...overrides
   }
 }
@@ -167,5 +169,19 @@ export function draftStore(): Pick<BoardScreenProps, 'draftOf' | 'onDraft' | 'on
     onDraftMoved: (from, to) => {
       drafts = movedDraft(drafts, from, to)
     }
+  }
+}
+
+export function stillColumn(): ColumnReorder {
+  return {
+    props: {
+      draggable: true,
+      onDragStart: vi.fn(),
+      onDragOver: vi.fn(),
+      onDrop: vi.fn(),
+      onDragEnd: vi.fn()
+    },
+    edge: null,
+    dragging: false
   }
 }

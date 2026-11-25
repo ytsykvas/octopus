@@ -158,6 +158,132 @@ describe('BoardScreen', () => {
     })
   })
 
+  describe('editing the columns', () => {
+    const IDEAS = { kind: 'custom', id: 'Ideas', name: 'Ideas' } as const
+
+    beforeAll(stubDialogElement)
+
+    it('adds a column from the end of the row and reads the board again', async () => {
+      givenBoard([])
+      const user = userEvent.setup()
+      renderScreen()
+      await screen.findByRole('region', { name: 'Blocked' })
+
+      await user.click(screen.getByRole('button', { name: 'Add column' }))
+      const asking = within(await screen.findByRole('dialog', { name: 'New column' }))
+      await user.type(asking.getByRole('textbox', { name: 'Name' }), 'Review')
+      await user.click(asking.getByRole('button', { name: 'Add' }))
+
+      expect(octopus().board.editColumns).toHaveBeenCalledWith('planner', {
+        kind: 'add',
+        name: 'Review'
+      })
+      await waitFor(() => {
+        expect(octopus().board.list).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    it('moves a column from its menu', async () => {
+      givenBoard([])
+      const user = userEvent.setup()
+      renderScreen()
+
+      await user.click(await screen.findByRole('button', { name: 'Actions for “Backlog”' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Move right' }))
+
+      expect(octopus().board.editColumns).toHaveBeenCalledWith('planner', {
+        kind: 'reorder',
+        ids: ['in progress', 'backlog', 'testing', 'staging', 'done', 'blocked']
+      })
+    })
+
+    it('puts a column where its header is dropped', async () => {
+      givenBoard([])
+      renderScreen()
+      const backlog = await screen.findByRole('heading', { name: 'Backlog' })
+      const done = screen.getByRole('heading', { name: 'Done' })
+
+      fireEvent.dragStart(backlog)
+      fireEvent.dragOver(done)
+      expect(
+        within(screen.getByRole('region', { name: 'Done' })).getByTestId('drop-line')
+      ).toHaveAttribute('data-edge', 'below')
+      fireEvent.drop(done)
+
+      expect(octopus().board.editColumns).toHaveBeenCalledWith('planner', {
+        kind: 'reorder',
+        ids: ['in progress', 'testing', 'staging', 'done', 'backlog', 'blocked']
+      })
+    })
+
+    it('renames an added column from its menu', async () => {
+      givenBoard([], [...DEFAULT_COLUMNS, IDEAS])
+      const user = userEvent.setup()
+      renderScreen()
+
+      await user.click(await screen.findByRole('button', { name: 'Actions for “Ideas”' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Rename…' }))
+      const asking = within(await screen.findByRole('dialog', { name: 'Rename column' }))
+      await user.clear(asking.getByRole('textbox', { name: 'Name' }))
+      await user.type(asking.getByRole('textbox', { name: 'Name' }), 'Thoughts')
+      await user.click(asking.getByRole('button', { name: 'Rename' }))
+
+      expect(octopus().board.editColumns).toHaveBeenCalledWith('planner', {
+        kind: 'rename',
+        id: 'Ideas',
+        name: 'Thoughts'
+      })
+    })
+
+    it('removes an empty added column once told to', async () => {
+      givenBoard([], [...DEFAULT_COLUMNS, IDEAS])
+      const user = userEvent.setup()
+      renderScreen()
+
+      await user.click(await screen.findByRole('button', { name: 'Actions for “Ideas”' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Remove…' }))
+      const asking = within(await screen.findByRole('dialog', { name: 'Remove “Ideas”?' }))
+      await user.click(asking.getByRole('button', { name: 'Remove' }))
+
+      expect(octopus().board.editColumns).toHaveBeenCalledWith('planner', {
+        kind: 'remove',
+        id: 'Ideas'
+      })
+    })
+
+    it('offers no removal of a column that holds tasks', async () => {
+      givenBoard(
+        [boardCard({ ref: 'Ideas/A.md', status: 'Ideas', title: 'A' })],
+        [...DEFAULT_COLUMNS, IDEAS]
+      )
+      const user = userEvent.setup()
+      renderScreen()
+
+      await user.click(await screen.findByRole('button', { name: 'Actions for “Ideas”' }))
+
+      expect(screen.getByRole('menuitem', { name: /Remove…/ })).toBeDisabled()
+      expect(screen.getByText('Move its tasks out first.')).toBeInTheDocument()
+    })
+
+    it('says why a column edit was refused', async () => {
+      givenBoard([])
+      vi.mocked(octopus().board.editColumns).mockResolvedValueOnce(
+        refusal('columnNameTaken', { name: 'Done' })
+      )
+      const user = userEvent.setup()
+      const { props } = renderScreen()
+
+      await user.click(await screen.findByRole('button', { name: 'Add column' }))
+      const asking = within(await screen.findByRole('dialog', { name: 'New column' }))
+      await user.type(asking.getByRole('textbox', { name: 'Name' }), 'Done')
+      await user.click(asking.getByRole('button', { name: 'Add' }))
+
+      await waitFor(() => {
+        expect(props.onError).toHaveBeenLastCalledWith('A column is already called “Done”.')
+      })
+    })
+  })
+
   it('shows an empty board for a project with no folder yet', async () => {
     givenBoard([])
 
@@ -1098,6 +1224,22 @@ describe('BoardScreen', () => {
       await waitFor(() => {
         expect(octopus().board.list).toHaveBeenCalledTimes(2)
       })
+    })
+
+    it("drops a card let go over a column's header into that column, and moves no column", () => {
+      const data = transfer()
+      vi.mocked(octopus().board.move).mockResolvedValue(ok('testing/a.md'))
+      const header = within(column('Testing')).getByRole('heading', { name: 'Testing' })
+
+      fireEvent.dragStart(li('a'), { dataTransfer: data })
+      fireEvent.dragOver(header, { dataTransfer: data })
+      fireEvent.drop(header, { dataTransfer: data })
+
+      expect(octopus().board.move).toHaveBeenCalledWith('planner', 'backlog/a.md', {
+        status: 'testing',
+        index: 0
+      })
+      expect(octopus().board.editColumns).not.toHaveBeenCalled()
     })
 
     it('keeps the panel on a card dragged to another column', async () => {

@@ -26,15 +26,17 @@ export function IconButton({
   onClick,
   disabled = false,
   pressed,
+  menuOpen,
   floating = false,
   children
 }: {
   readonly label: string
   /** May be absent while the button is disabled, when nothing can call it. */
-  readonly onClick?: (() => void) | undefined
+  readonly onClick?: ((event: React.MouseEvent<HTMLButtonElement>) => void) | undefined
   readonly disabled?: boolean
   /** Set only on a toggle; a plain action has no pressed state to announce. */
   readonly pressed?: boolean
+  readonly menuOpen?: boolean
   /** Bordered, over moving content, clickable through a pass-through row. */
   readonly floating?: boolean
   readonly children: React.ReactNode
@@ -50,6 +52,8 @@ export function IconButton({
       disabled={disabled && !floating}
       aria-disabled={softDisabled || undefined}
       aria-pressed={pressed}
+      aria-haspopup={menuOpen === undefined ? undefined : 'menu'}
+      aria-expanded={menuOpen}
       title={label}
       aria-label={label}
       className={`focus-ring text-ink-faint hover:text-ink rounded-[var(--radius-control)] disabled:pointer-events-none disabled:opacity-40 aria-disabled:opacity-40 ${

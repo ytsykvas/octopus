@@ -268,17 +268,9 @@ export function CardPanel({
             }
           ]}
           trigger={({ onClick, open }) => (
-            <button
-              type="button"
-              onClick={onClick}
-              aria-haspopup="menu"
-              aria-expanded={open}
-              aria-label={t('board.panel.more')}
-              title={t('board.panel.more')}
-              className="focus-ring text-ink-faint hover:text-ink hover:bg-muted shrink-0 rounded-[var(--radius-control)] p-1"
-            >
+            <IconButton label={t('board.panel.more')} onClick={onClick} menuOpen={open}>
               <Ellipsis aria-hidden size={14} />
-            </button>
+            </IconButton>
           )}
         />
         <IconButton label={t('board.panel.close')} onClick={onClose}>
