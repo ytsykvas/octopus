@@ -13,7 +13,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
 import type { LibraryKind } from './libraryNames.js'
-import type { ChatId, ProjectId, WorkspaceId } from './types.js'
+import type { ChatId, ProjectId } from './types.js'
 
 const ROOT_DIR_NAME = '.octopus'
 
@@ -274,13 +274,13 @@ export function workspacesDir(projectId: ProjectId, root: string = rootDir()): s
   return join(root, 'workspaces', projectId)
 }
 
-/** A single workspace directory — also the root of its git worktree. */
+/** A single workspace directory, named as the workspace was created — also its worktree's root. */
 export function workspacePath(
   projectId: ProjectId,
-  workspaceId: WorkspaceId,
+  name: string,
   root: string = rootDir()
 ): string {
-  return join(workspacesDir(projectId, root), workspaceId)
+  return join(workspacesDir(projectId, root), name)
 }
 
 /**
