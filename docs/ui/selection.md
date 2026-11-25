@@ -38,6 +38,8 @@ ground already holding 18% of their own colour and all but vanish, and the
 chosen tab, which takes that ground's colour, would look paler than they do —
 the strip works the same way, a neutral column of tiles beside a tinted list.
 With no project open the class is left off and the pane keeps its plain surface.
+The board repeats the pair: its Backlog column is tinted as the workspace list is,
+and the card panel as this pane is ([board.md](board.md)).
 
 The labels are mixed towards the ink, as the strip's letters are now. The strip
 used `--ink-faint` for them, which measured 3.3:1 in the light theme at the worst

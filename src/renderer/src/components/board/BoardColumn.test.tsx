@@ -88,6 +88,18 @@ describe('BoardColumn', () => {
     }
   )
 
+  it('washes the backlog in the colour of the project', () => {
+    renderColumn({ column: { kind: 'system', id: 'backlog' } })
+
+    expect(screen.getByRole('region', { name: 'Backlog' })).toHaveClass('project-tinted')
+  })
+
+  it('leaves every other column plain', () => {
+    renderColumn({ column: { kind: 'system', id: 'done' } })
+
+    expect(screen.getByRole('region', { name: 'Done' })).not.toHaveClass('project-tinted')
+  })
+
   it('says when it is empty', () => {
     renderColumn({ cards: [] })
 

@@ -35,6 +35,7 @@ import { Combobox } from './Combobox.js'
 import { Field } from './Field.js'
 import { Modal } from './Modal.js'
 import { ProjectGlyph } from './ProjectGlyph.js'
+import { projectColorStyle } from './projectTint.js'
 import { AgentPermissions } from './AgentPermissions.js'
 import { SectionRail } from './SectionRail.js'
 import { FileEditor } from './FileEditor.js'
@@ -578,9 +579,7 @@ export function ProjectSettings({
                   role="group"
                   aria-label={t('project.icon')}
                   className="flex max-w-sm flex-wrap gap-1.5"
-                  style={
-                    { '--project-color': `var(--project-${project.color})` } as React.CSSProperties
-                  }
+                  style={projectColorStyle(project.color)}
                 >
                   <IconChoice
                     label={t('project.iconNone')}

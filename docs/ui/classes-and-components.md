@@ -18,7 +18,7 @@ danger colour, for the tick inside a destructive confirmation.
 
 The last three are where a project's colour turns into a surface, and they are
 classes rather than inline styles on purpose: the component says _which_ project,
-the stylesheet says _how_ the colour is used, so the three places it appears
+the stylesheet says _how_ the colour is used, so the places it appears
 cannot drift apart.
 
 The second copy of a run of utility classes belongs here. Six copies of the

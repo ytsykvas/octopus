@@ -9,7 +9,7 @@ import type { CardDragProps } from '../../hooks/useBoardDrag.js'
 import type { DropEdge } from '../../hooks/useDragReorder.js'
 import { DropLine } from '../DropLine.js'
 import { NameEditor } from '../NameEditor.js'
-import { LETTERS } from '../projectTint.js'
+import { LETTERS, projectColorStyle } from '../projectTint.js'
 import { PRIORITY_LOOKS } from './boardLabels.js'
 
 export interface BoardCardTileProps {
@@ -125,12 +125,7 @@ export function BoardCardTile({
           {tag !== undefined && (
             <span
               className="font-medium"
-              style={
-                {
-                  '--project-color': `var(--project-${KIND_COLORS[tag]})`,
-                  color: LETTERS
-                } as React.CSSProperties
-              }
+              style={{ ...projectColorStyle(KIND_COLORS[tag]), color: LETTERS }}
             >
               {t(`workspaces.kinds.${tag}.short`)}
             </span>

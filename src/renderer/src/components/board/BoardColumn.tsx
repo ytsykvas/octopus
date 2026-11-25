@@ -80,8 +80,8 @@ export function BoardColumn({
     <section
       aria-label={label}
       className={`border-line relative flex min-h-0 w-[272px] shrink-0 flex-col border-r ${
-        reorder.dragging ? 'opacity-40' : ''
-      }`}
+        column.id === 'backlog' ? 'project-tinted' : ''
+      } ${reorder.dragging ? 'opacity-40' : ''}`}
       {...drag.columnProps(column.id)}
     >
       {reorder.edge !== null && <DropLine edge={reorder.edge} across />}

@@ -168,7 +168,8 @@ the two never show together, and it comes back when the pointer leaves.
 ## Colour that carries meaning
 
 A project's colour comes from `--project-<name>`, declared once per theme, and
-is applied by setting `--project-color` inline on a container. That inline style
+is applied by setting `--project-color` inline on a container with
+`projectColorStyle(color)` from `components/projectTint.ts`. That inline style
 is a sanctioned exception: the value is dynamic, but it still resolves to a
 token. The kind strip on a workspace card is the other one, for the same
 reason: `--kind-color` is `var(--project-<name>)` from `KIND_COLORS` in

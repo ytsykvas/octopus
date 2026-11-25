@@ -120,6 +120,15 @@ describe('BoardScreen', () => {
     ])
   })
 
+  it('hands the colour of the project to the columns and the card panel', async () => {
+    givenBoard([])
+
+    const { container } = renderScreen({ project: boardProject({ color: 'teal' }) })
+
+    await screen.findAllByRole('region')
+    expect(container.firstElementChild).toHaveStyle({ '--project-color': 'var(--project-teal)' })
+  })
+
   it('lays out the columns the listing gives, in its order', async () => {
     givenBoard(
       [boardCard({ ref: 'Ideas/A.md', status: 'Ideas', title: 'A' })],

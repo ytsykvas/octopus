@@ -15,6 +15,7 @@ import { DropdownMenu } from './DropdownMenu.js'
 import { DropLine } from './DropLine.js'
 import type { HelpKind } from './helpMessage.js'
 import { ResizeHandle } from './ResizeHandle.js'
+import { projectColorStyle } from './projectTint.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
 
 /** Matches the bounds on `sidebarWidth` in the config schema. */
@@ -103,9 +104,7 @@ export function Sidebar({
       className="border-line bg-surface relative flex shrink-0 flex-col border-r"
       style={{
         width: dragWidth ?? width,
-        ...(project
-          ? ({ '--project-color': `var(--project-${project.color})` } as React.CSSProperties)
-          : {})
+        ...(project ? projectColorStyle(project.color) : {})
       }}
     >
       <ResizeHandle
