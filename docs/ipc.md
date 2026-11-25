@@ -387,7 +387,8 @@ announces it too, which costs one read and is true.
 
 **`board:changed`** carries `{ projectId }` when something under that project's
 board folder changed on disk — octopus itself, Finder, an editor, or another
-Mac through whatever syncs the folder. It names the project and nothing else,
+Mac through whatever syncs the folder — and when that board's columns were
+edited, which for the default columns is every board that follows them. It names the project and nothing else,
 and the window reads the board again: a list of what changed would be a second
 copy of the folder to keep true.
 

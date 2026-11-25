@@ -18941,6 +18941,17 @@ describe('board columns', () => {
     expect(service.boardColumns(projectId)).toEqual({ columns: DEFAULT_COLUMNS, own: false })
   })
 
+  it('says a built-in column is built in, not that it holds tasks', async () => {
+    await service.createCard(projectId, { status: 'done', title: 'A' })
+
+    await expect(
+      service.editBoardColumns(null, { kind: 'remove', id: 'done' })
+    ).rejects.toMatchObject({ code: 'columnBuiltIn' })
+    await expect(
+      service.editBoardColumns(projectId, { kind: 'remove', id: 'done' })
+    ).rejects.toMatchObject({ code: 'columnBuiltIn' })
+  })
+
   it('sends a project back to the default columns', async () => {
     await service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
     const listener = vi.fn()

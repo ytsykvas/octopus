@@ -4,7 +4,7 @@
 the six built in are Backlog, In progress, Testing, Staging, Done, Blocked — read from the
 project's folder inside the board folder (`docs/data/board.md`).
 
-**Reading never writes.** A project without a folder yet is six empty columns, not an error:
+**Reading never writes.** A project without a folder yet is its columns, all empty, not an error:
 folders are made by the first card written into them (B105), so looking at a board in a synced
 folder never races another Mac to create the same directories.
 

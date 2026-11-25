@@ -1966,7 +1966,7 @@ export interface OctopusService {
    * rather than on its next tick.
    */
   onWorkspacePushed(handler: (event: WorkspacePushedEvent) => void): () => void
-  /** A project's board folder changed on disk, by anyone: the window reads that board again. */
+  /** A project's board folder changed on disk, by anyone, or its columns were edited: the window reads that board again. */
   onBoardChanged(handler: (event: BoardChangedEvent) => void): () => void
   /**
    * The account's windows, whenever they move.
@@ -6930,6 +6930,9 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return columnSet(projectId)
     },
     async editBoardColumns(projectId, edit) {
+      // Tried on the list as it stands before any board is read: a built-in column is
+      // refused as built in, not as one that still holds tasks.
+      editColumns(columnSet(projectId).columns, edit)
       const removed = edit.kind === 'remove' ? [edit.id] : []
       if (projectId === null) {
         const following = state.projects.filter((project) => project.boardColumns == null)
