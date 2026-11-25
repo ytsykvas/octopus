@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { type Column, DEFAULT_COLUMNS } from './boardColumns.js'
 import { NotesBodySchema } from './notes.js'
 
 import { InvalidFileError } from './persist.js'
@@ -46,6 +47,7 @@ import {
   removeChat,
   updateChat,
   updateWorkspace,
+  withBoardColumns,
   type Workspace,
   workspacesOfProject,
   type ProjectPatch,
@@ -198,6 +200,16 @@ describe('load and save', () => {
 
     const loaded = await loadState(file)
     expect(loaded.projects[0]?.icon).toBeUndefined()
+  })
+
+  it("keeps a project's own columns through a save, and loads one written before them", async () => {
+    await writeFile(file, JSON.stringify(withProject), 'utf8')
+    expect((await loadState(file)).projects[0]?.boardColumns).toBeUndefined()
+
+    const columns: Column[] = [...DEFAULT_COLUMNS, { kind: 'custom', id: 'Ideas', name: 'Ideas' }]
+    await saveState({ ...withProject, projects: [{ ...project, boardColumns: columns }] }, file)
+
+    expect((await loadState(file)).projects[0]?.boardColumns).toEqual(columns)
   })
 
   // Every workspace on disk predates kinds, and one that refused to load would
@@ -1472,6 +1484,37 @@ describe('recording an approval', () => {
     const next = recordApproval(state, 'planner', 'approvedScripts', 'second')
 
     expect(next.projects[0]?.approvedScripts).toEqual(['first', 'second'])
+  })
+})
+
+describe("a project's own board columns", () => {
+  const ledger: Project = { ...project, id: 'ledger', name: 'ledger', repoPath: '/repos/ledger' }
+  const ideas: Column[] = [...DEFAULT_COLUMNS, { kind: 'custom', id: 'Ideas', name: 'Ideas' }]
+
+  it('hands the change the columns the project has, or null, and keeps what it answers', () => {
+    const state = { ...EMPTY_STATE, projects: [project, { ...ledger, boardColumns: ideas }] }
+    const seen: (readonly Column[] | null)[] = []
+
+    const next = withBoardColumns(
+      withBoardColumns(state, 'planner', (own) => {
+        seen.push(own)
+        return ideas
+      }),
+      'ledger',
+      (own) => {
+        seen.push(own)
+        return null
+      }
+    )
+
+    expect(seen).toEqual([null, ideas])
+    expect(next.projects.map((entry) => entry.boardColumns)).toEqual([ideas, null])
+  })
+
+  it('leaves a project that has gone gone', () => {
+    const state = { ...EMPTY_STATE, projects: [project] }
+
+    expect(withBoardColumns(state, 'gone', () => ideas).projects).toEqual([project])
   })
 })
 

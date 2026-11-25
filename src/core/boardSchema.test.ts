@@ -5,6 +5,7 @@ import {
   CardDraftSchema,
   CardMetaSchema,
   CardMoveSchema,
+  COLUMN_ID_MAX,
   CardPatchSchema,
   CardRefSchema,
   CardTitleSchema,
@@ -157,6 +158,10 @@ describe('CardMetaSchema', () => {
 })
 
 describe('CardDraftSchema', () => {
+  it('takes any column id, which the board checks against its columns', () => {
+    expect(CardDraftSchema.parse({ status: 'Ideas', title: 'A' }).status).toBe('Ideas')
+  })
+
   it('trims the title', () => {
     expect(CardDraftSchema.parse({ status: 'backlog', title: '  Fix login  ' }).title).toBe(
       'Fix login'
@@ -168,7 +173,8 @@ describe('CardDraftSchema', () => {
     { status: 'backlog', title: 'x'.repeat(201) },
     { status: 'backlog', title: 'A\nB' },
     { status: 'backlog', title: 'A\rB' },
-    { status: 'todo', title: 'A' },
+    { status: '', title: 'A' },
+    { status: 'x'.repeat(COLUMN_ID_MAX + 1), title: 'A' },
     { status: 'backlog', title: 'A', order: 1 }
   ])('refuses %j', (draft) => {
     expect(CardDraftSchema.safeParse(draft).success).toBe(false)
@@ -208,7 +214,8 @@ describe('CardMoveSchema', () => {
   it.each([
     { status: 'done', index: -1 },
     { status: 'done', index: 1.5 },
-    { status: 'done', index: 10_001 }
+    { status: 'done', index: 10_001 },
+    { status: '', index: 0 }
   ])('refuses %j', (move) => {
     expect(CardMoveSchema.safeParse(move).success).toBe(false)
   })

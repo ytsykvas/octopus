@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { BOARD_STATUSES } from '@core/boardSchema.js'
 import type { WorkspaceKind } from '@core/workspaceKinds.js'
 
 import { boardCard } from '../../test/board.js'
+import type { BoardColumns } from './boardDrop.js'
 import {
   type BoardFilter,
   EMPTY_BOARD_FILTER,
@@ -85,14 +85,11 @@ describe('queryWords', () => {
 })
 
 describe('filterColumns', () => {
-  const columns = {
-    backlog: [A, B],
-    'in progress': [],
-    testing: [],
-    staging: [],
-    done: [C],
-    blocked: []
-  }
+  const columns: BoardColumns = new Map([
+    ['backlog', [A, B]],
+    ['in progress', []],
+    ['done', [C]]
+  ])
 
   it('hands back the same columns without a filter', () => {
     expect(filterColumns(columns, EMPTY_BOARD_FILTER, tagLabel)).toBe(columns)
@@ -101,8 +98,8 @@ describe('filterColumns', () => {
   it('keeps only what matches, in every column', () => {
     const shown = filterColumns(columns, { ...EMPTY_BOARD_FILTER, query: 'login' }, tagLabel)
 
-    expect(shown.backlog).toEqual([A])
-    expect(shown.done).toEqual([])
-    expect(Object.keys(shown)).toEqual([...BOARD_STATUSES])
+    expect(shown.get('backlog')).toEqual([A])
+    expect(shown.get('done')).toEqual([])
+    expect([...shown.keys()]).toEqual(['backlog', 'in progress', 'done'])
   })
 })

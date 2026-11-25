@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto'
 
 import { z } from 'zod'
 
+import { ColumnsSchema, DEFAULT_COLUMNS } from './boardColumns.js'
 import { BranchPrefixSchema, DEFAULT_BRANCH_PREFIX } from './branches.js'
 import { withMember } from './lists.js'
 import { SkillKeySchema } from './skillNames.js'
@@ -138,6 +139,8 @@ export const ConfigSchema = z.object({
    * chosen yet", which the board answers with a way to choose it.
    */
   boardFolder: z.string().default(''),
+  /** Left out of `ConfigPatchSchema`: `editBoardColumns` changes it, checking the boards first. */
+  boardColumns: ColumnsSchema.default(() => [...DEFAULT_COLUMNS]),
 
   settingSources: SettingSourcesModeSchema,
 
@@ -392,7 +395,8 @@ export const ConfigPatchSchema = z
         installedAt: true,
         alwaysAllowedTools: true,
         disabledSkillDefaults: true,
-        dismissedTips: true
+        dismissedTips: true,
+        boardColumns: true
       }).shape
     )
   )
@@ -471,6 +475,7 @@ export function createDefaultConfig(
     language: 'en',
     cloneDirectory: '',
     boardFolder: '',
+    boardColumns: [...DEFAULT_COLUMNS],
     rightPanelWidth: 360,
     rightPanelOpen: true,
     statusBarOpen: true,

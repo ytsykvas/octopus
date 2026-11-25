@@ -2,19 +2,22 @@ import { describe, expect, it } from 'vitest'
 
 import {
   cardsByStatus,
+  cardsIn,
+  columnCards,
   dropSlot,
   firstOrder,
   orderBetween,
   orderForDrop,
   sortCards
 } from './boardOrder.js'
-import type { BoardCard, BoardStatus } from './boardSchema.js'
+import { DEFAULT_COLUMNS } from './boardColumns.js'
+import type { BoardCard, ColumnId } from './boardSchema.js'
 
 const card = (ref: string, order?: number): { ref: string; meta: { order?: number } } => ({
   ref,
   meta: order === undefined ? {} : { order }
 })
-const full = (ref: string, status: BoardStatus, order: number): BoardCard => ({
+const full = (ref: string, status: ColumnId, order: number): BoardCard => ({
   ref,
   status,
   loose: false,
@@ -73,9 +76,26 @@ describe('sortCards', () => {
   })
 })
 
+describe('columnCards', () => {
+  it("takes one column's cards, sorted", () => {
+    expect(
+      refs(
+        columnCards(
+          [
+            full('done/b.md', 'done', 2),
+            full('backlog/c.md', 'backlog', 0),
+            full('done/a.md', 'done', 1)
+          ],
+          'done'
+        )
+      )
+    ).toEqual(['done/a.md', 'done/b.md'])
+  })
+})
+
 describe('cardsByStatus', () => {
-  it('answers every status, empty ones included', () => {
-    expect(Object.keys(cardsByStatus([]))).toEqual([
+  it('answers every column in its order, empty ones included', () => {
+    expect([...cardsByStatus([], DEFAULT_COLUMNS).keys()]).toEqual([
       'backlog',
       'in progress',
       'testing',
@@ -86,17 +106,28 @@ describe('cardsByStatus', () => {
   })
 
   it('groups and sorts each column', () => {
-    const columns = cardsByStatus([
-      full('done/b.md', 'done', 2),
-      full('done/a.md', 'done', 1),
-      full('backlog/c.md', 'backlog', 0)
-    ])
-    expect(refs(columns.done)).toEqual(['done/a.md', 'done/b.md'])
-    expect(refs(columns.backlog)).toEqual(['backlog/c.md'])
-    expect(columns['in progress']).toEqual([])
-    expect(columns.testing).toEqual([])
-    expect(columns.staging).toEqual([])
-    expect(columns.blocked).toEqual([])
+    const columns = cardsByStatus(
+      [
+        full('done/b.md', 'done', 2),
+        full('done/a.md', 'done', 1),
+        full('backlog/c.md', 'backlog', 0)
+      ],
+      DEFAULT_COLUMNS
+    )
+    expect(refs(cardsIn(columns, 'done'))).toEqual(['done/a.md', 'done/b.md'])
+    expect(refs(cardsIn(columns, 'backlog'))).toEqual(['backlog/c.md'])
+    expect(columns.get('in progress')).toEqual([])
+  })
+
+  it('leaves out a card whose column is not given', () => {
+    const columns = cardsByStatus([full('Ideas/a.md', 'Ideas', 0)], [{ id: 'backlog' }])
+    expect([...columns.values()].flat()).toEqual([])
+  })
+})
+
+describe('cardsIn', () => {
+  it('answers no cards for a column the map does not hold', () => {
+    expect(cardsIn(new Map(), 'Ideas')).toEqual([])
   })
 })
 

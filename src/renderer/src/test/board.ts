@@ -2,6 +2,7 @@ import { render } from '@testing-library/react'
 import { createElement } from 'react'
 import { vi } from 'vitest'
 
+import { type Column, DEFAULT_COLUMNS } from '@core/boardColumns.js'
 import type { BoardCard, BoardListing, CardDetail } from '@core/boardSchema.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 
@@ -11,6 +12,7 @@ import { EMPTY_BOARD_FILTER } from '../components/board/boardFilter.js'
 import { BoardScreen, type BoardScreenProps } from '../components/board/BoardScreen.js'
 import type { BoardController } from '../hooks/useBoard.js'
 import type { BoardDrag } from '../hooks/useBoardDrag.js'
+import type { ColumnReorder } from '../components/board/BoardColumn.js'
 import { octopus } from './octopus.js'
 import { project as boardProject } from './projects.js'
 
@@ -56,8 +58,11 @@ export function cardDetail(overrides: Partial<CardDetail> = {}): CardDetail {
   }
 }
 
-export function boardListing(cards: readonly BoardCard[]): BoardListing {
-  return { folder: '/tmp/board/planner', cards }
+export function boardListing(
+  cards: readonly BoardCard[],
+  columns: readonly Column[] = DEFAULT_COLUMNS
+): BoardListing {
+  return { folder: '/tmp/board/planner', columns, cards }
 }
 
 /** An answer of IPC that worked — what every mocked `window.octopus.board.*` resolves to. */
@@ -71,8 +76,11 @@ export function refusal(code: string, params: Readonly<Record<string, string>> =
 }
 
 /** Every later read of the board answers with these cards. */
-export function givenBoard(cards: readonly BoardCard[]): void {
-  vi.mocked(octopus().board.list).mockResolvedValue(ok(boardListing(cards)))
+export function givenBoard(
+  cards: readonly BoardCard[],
+  columns: readonly Column[] = DEFAULT_COLUMNS
+): void {
+  vi.mocked(octopus().board.list).mockResolvedValue(ok(boardListing(cards, columns)))
 }
 
 /**
@@ -129,6 +137,7 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
     revealFile: vi.fn(() => Promise.resolve(true)),
     removeFile: vi.fn(() => Promise.resolve(true)),
     revealCard: vi.fn(() => Promise.resolve(true)),
+    editColumns: vi.fn(() => Promise.resolve(true)),
     ...overrides
   }
 }
@@ -160,5 +169,19 @@ export function draftStore(): Pick<BoardScreenProps, 'draftOf' | 'onDraft' | 'on
     onDraftMoved: (from, to) => {
       drafts = movedDraft(drafts, from, to)
     }
+  }
+}
+
+export function stillColumn(): ColumnReorder {
+  return {
+    props: {
+      draggable: true,
+      onDragStart: vi.fn(),
+      onDragOver: vi.fn(),
+      onDrop: vi.fn(),
+      onDragEnd: vi.fn()
+    },
+    edge: null,
+    dragging: false
   }
 }

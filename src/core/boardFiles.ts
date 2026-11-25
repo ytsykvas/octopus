@@ -11,23 +11,23 @@ import {
   withDescription,
   withTitle
 } from './boardCard.js'
+import { type Column, columnKey, DEFAULT_COLUMNS, missingColumn } from './boardColumns.js'
 import {
   boardFolderName,
   cardFileName,
   compareNames,
   isSkipped,
   sameName,
-  statusOfFolder,
   stemOf
 } from './boardNames.js'
-import { cardsByStatus, firstOrder, orderForDrop } from './boardOrder.js'
+import { columnCards, firstOrder, orderForDrop } from './boardOrder.js'
 import {
   BoardError,
   CardMetaSchema,
   isCardRef,
   type BoardCard,
-  type BoardStatus,
   type CardDetail,
+  type ColumnId,
   type CardDraft,
   type CardMove,
   type CardPatch,
@@ -49,8 +49,9 @@ export interface BoardLayout {
   readonly dir: string
   /** False until the first write makes `dir`: reading never does. */
   readonly exists: boolean
-  /** Each status → the folder in `dir` that holds it: the one found, else the status's own name. */
-  readonly folders: Readonly<Record<BoardStatus, string>>
+  readonly columns: readonly Column[]
+  /** Each column's id → the folder in `dir` that holds it: the one found, else the id itself. */
+  readonly folders: ReadonlyMap<ColumnId, string>
 }
 
 const MARKDOWN = /\.md$/i
@@ -68,17 +69,6 @@ async function entriesOf(path: string): Promise<Dirent[]> {
     return await readdir(path, { withFileTypes: true })
   } catch (error) {
     throw unreadable(path, describeError(error))
-  }
-}
-
-function byStatus(pick: (status: BoardStatus) => string): Readonly<Record<BoardStatus, string>> {
-  return {
-    backlog: pick('backlog'),
-    'in progress': pick('in progress'),
-    testing: pick('testing'),
-    staging: pick('staging'),
-    done: pick('done'),
-    blocked: pick('blocked')
   }
 }
 
@@ -102,7 +92,11 @@ async function folderAt(path: string): Promise<void> {
   if (!stats.isDirectory()) throw unreadable(path, 'not a folder')
 }
 
-export async function findLayout(root: string, project: string): Promise<BoardLayout> {
+export async function findLayout(
+  root: string,
+  project: string,
+  columns: readonly Column[] = DEFAULT_COLUMNS
+): Promise<BoardLayout> {
   if (root === '') throw new BoardError('boardFolderUnset', {}, 'No board folder is set')
   if (!isAbsolute(root)) throw unreadable(root, 'not an absolute path')
   await folderAt(root)
@@ -112,24 +106,33 @@ export async function findLayout(root: string, project: string): Promise<BoardLa
   // which `boardFolderName` gives a project called so — and that is the project's folder.
   const names = (await entriesOf(root)).map((entry) => entry.name)
   const found = firstNamed(names, (name) => sameName(name, wanted))
+  const byColumn = (pick: (id: ColumnId) => string): ReadonlyMap<ColumnId, string> =>
+    new Map(columns.map((column) => [column.id, pick(column.id)]))
   if (found === null)
-    return { dir: join(root, wanted), exists: false, folders: byStatus((status) => status) }
+    return { dir: join(root, wanted), exists: false, columns, folders: byColumn((id) => id) }
 
   const dir = join(root, found)
   await folderAt(dir)
 
-  // A link `Dirent` is neither a file nor a folder, so a linked status folder is skipped here;
-  // so is `_done`, which `statusOfFolder` would read as "done" while the scan skips it.
+  // A link `Dirent` is neither a file nor a folder, so a linked column folder is skipped here;
+  // so is `_done`, which `columnKey` would read as "done" while the scan skips it.
   const folders = (await entriesOf(dir))
     .filter((entry) => entry.isDirectory() && !isSkipped(entry.name))
     .map((entry) => entry.name)
   return {
     dir,
     exists: true,
-    folders: byStatus(
-      (status) => firstNamed(folders, (name) => statusOfFolder(name) === status) ?? status
+    columns,
+    folders: byColumn(
+      (id) => firstNamed(folders, (name) => columnKey(name) === columnKey(id)) ?? id
     )
   }
+}
+
+function folderOf(layout: BoardLayout, status: ColumnId): string {
+  const folder = layout.folders.get(status)
+  if (folder === undefined) throw missingColumn(status)
+  return folder
 }
 
 export async function guardRef(layout: BoardLayout, ref: string): Promise<string> {
@@ -153,11 +156,16 @@ export function missing(error: unknown, ref: string): unknown {
   )
 }
 
-function locate(ref: string): { readonly status: BoardStatus; readonly loose: boolean } {
+function locate(
+  layout: BoardLayout,
+  ref: string
+): { readonly status: ColumnId; readonly loose: boolean } {
   const slash = ref.indexOf('/')
-  if (slash === -1) return { status: 'backlog', loose: true }
-  const status = statusOfFolder(ref.slice(0, slash))
-  return status === null ? { status: 'backlog', loose: true } : { status, loose: false }
+  const key = slash === -1 ? null : columnKey(ref.slice(0, slash))
+  const column = layout.columns.find(({ id }) => columnKey(id) === key)
+  return column === undefined
+    ? { status: 'backlog', loose: true }
+    : { status: column.id, loose: false }
 }
 
 // Read as bytes: text that is not UTF-8 decodes with U+FFFD in place of what it held, and
@@ -169,14 +177,14 @@ function decoded(bytes: Buffer): string | null {
 
 type CardText = Omit<CardDetail, 'attachments'>
 
-function cardOf(ref: string, bytes: Buffer): CardText {
+function cardOf(layout: BoardLayout, ref: string, bytes: Buffer): CardText {
   const fileName = basename(ref)
   const raw = decoded(bytes)
   if (raw === null) {
     const meta = CardMetaSchema.parse({})
     return {
       ref,
-      ...locate(ref),
+      ...locate(layout, ref),
       title: stemOf(fileName),
       meta,
       malformed: false,
@@ -189,7 +197,7 @@ function cardOf(ref: string, bytes: Buffer): CardText {
   const { title, meta, malformed, description, thread } = parseCard(raw, fileName)
   return {
     ref,
-    ...locate(ref),
+    ...locate(layout, ref),
     title,
     meta,
     malformed,
@@ -235,7 +243,7 @@ export async function listBoard(layout: BoardLayout): Promise<BoardCard[]> {
   const cards = await allOf(
     refs.map((ref) =>
       readFile(join(layout.dir, ref)).then(
-        (bytes) => listed(cardOf(ref, bytes)),
+        (bytes) => listed(cardOf(layout, ref, bytes)),
         () => null
       )
     )
@@ -251,7 +259,7 @@ export async function readCard(
   const bytes = await readFile(path).catch((error: unknown) => {
     throw missing(error, ref)
   })
-  return cardOf(ref, bytes)
+  return cardOf(layout, ref, bytes)
 }
 
 // What `editCard` compares before reading and before writing: a file that changed in between
@@ -286,18 +294,18 @@ export async function editCard(
 }
 
 export async function createCard(layout: BoardLayout, draft: CardDraft): Promise<string> {
+  const folder = folderOf(layout, draft.status)
   const cards = await listBoard(layout)
   const name = cardFileName(
     draft.title,
     cards.map((card) => basename(card.ref))
   )
-  const folder = layout.folders[draft.status]
   const ref = `${folder}/${name}`
   // Made first, then guarded: a status folder that is a link is refused before anything is written.
   await mkdir(join(layout.dir, folder), { recursive: true })
   const path = await guardRef(layout, ref)
   try {
-    await writeNewFile(path, newCard(draft.title, firstOrder(cardsByStatus(cards)[draft.status])))
+    await writeNewFile(path, newCard(draft.title, firstOrder(columnCards(cards, draft.status))))
   } catch (error) {
     if (isAlreadyThere(error))
       throw new BoardError('cardNameTaken', { name }, `${name} is already there`)
@@ -368,15 +376,15 @@ function keepsItsOrder(error: unknown): boolean {
 }
 
 export async function moveCard(layout: BoardLayout, ref: string, move: CardMove): Promise<string> {
+  const folder = folderOf(layout, move.status)
   const path = await guardRef(layout, ref)
   await stamp(path, ref)
-  const column = cardsByStatus(await listBoard(layout))[move.status].filter(
+  const column = columnCards(await listBoard(layout), move.status).filter(
     (card) => card.ref !== ref
   )
   const order = orderForDrop(column, move.index)
   const placed = (raw: string, fileName: string): string => setMeta(raw, { order }, fileName)
   const name = basename(ref)
-  const folder = layout.folders[move.status]
   const next = `${folder}/${name}`
   if (next === ref) {
     await editCard(layout, ref, placed)

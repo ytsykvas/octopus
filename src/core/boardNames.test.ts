@@ -10,26 +10,8 @@ import {
   nameKey,
   safeStem,
   sameName,
-  statusOfFolder,
   stemOf
 } from './boardNames.js'
-
-describe('statusOfFolder', () => {
-  it.each([
-    ['backlog', 'backlog'],
-    ['Backlog', 'backlog'],
-    ['In Progress', 'in progress'],
-    ['in-progress', 'in progress'],
-    ['IN_PROGRESS', 'in progress'],
-    ['in  progress ', 'in progress'],
-    ['in--progress', 'in progress'],
-    ['Done', 'done'],
-    ['back log', null],
-    ['todo', null]
-  ])('%j → %j', (name, expected) => {
-    expect(statusOfFolder(name)).toBe(expected)
-  })
-})
 
 describe('isSkipped', () => {
   it.each([

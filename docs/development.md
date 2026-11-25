@@ -37,7 +37,7 @@ sets this for you (`.octopus/scripts/run.sh`).
 The board writes into the folder it is given — a header into a task when a
 field changes, a move between column folders, a file to the Trash. Point a
 development copy at a scratch copy of that folder, never at the real one:
-copy it into `$TMPDIR/board-try` and choose that under Settings → General.
+copy it into `$TMPDIR/board-try` and choose that under Settings → Board.
 The real folder is synced to every Mac; a bug in a branch should not travel
 with it.
 

@@ -77,6 +77,7 @@ import {
   DescriptionSaveSchema,
   type BoardChangedEvent
 } from '../core/boardSchema.js'
+import { ColumnEditSchema } from '../core/boardColumns.js'
 import { StoreSchema } from '../core/stores.js'
 import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core/plugins.js'
 import type {
@@ -904,6 +905,21 @@ export function registerIpc(
         await service.cardPath(ProjectIdSchema.parse(projectId), CardRefSchema.parse(ref))
       )
     })
+  )
+  // `null` names the default columns, which live in the config: a window holding it hears.
+  host.handle('board:columns', (_event, projectId: unknown) =>
+    attempt(() => service.boardColumns(ProjectIdSchema.nullable().parse(projectId)))
+  )
+  host.handle('board:editColumns', (_event, projectId: unknown, edit: unknown) =>
+    attempt(async () => {
+      const project = ProjectIdSchema.nullable().parse(projectId)
+      const columns = await service.editBoardColumns(project, ColumnEditSchema.parse(edit))
+      if (project === null) host.broadcastConfig(service.getConfig())
+      return columns
+    })
+  )
+  host.handle('board:resetColumns', (_event, projectId: unknown) =>
+    attempt(() => service.resetBoardColumns(ProjectIdSchema.parse(projectId)))
   )
 
   host.handle('skills:inRepository', (_event, workspaceId: string) =>

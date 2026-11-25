@@ -1,20 +1,29 @@
-import { Plus } from 'lucide-react'
+import { Ellipsis, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { BoardCard, BoardStatus } from '@core/boardSchema.js'
+import type { Column } from '@core/boardColumns.js'
+import type { BoardCard } from '@core/boardSchema.js'
 
 import type { BoardDrag } from '../../hooks/useBoardDrag.js'
+import type { DragItemProps, DropEdge } from '../../hooks/useDragReorder.js'
+import { DropdownMenu, type MenuAction } from '../DropdownMenu.js'
 import { DropLine } from '../DropLine.js'
 import { IconButton } from '../paneControls.js'
 import { Placeholder } from '../Placeholder.js'
 import { BoardCardTile, CARD_FIELD_BOX, CardTitleField, TitleLead } from './BoardCardTile.js'
-import { STATUS_LABEL_KEYS } from './boardLabels.js'
+import { columnLabel } from './boardLabels.js'
+
+export interface ColumnReorder {
+  readonly props: DragItemProps
+  readonly edge: DropEdge | null
+  readonly dragging: boolean
+}
 
 export interface BoardColumnProps {
-  readonly status: BoardStatus
+  readonly column: Column
   /** Already sorted: `cardsByStatus` sorts every column. */
   readonly cards: readonly BoardCard[]
-  /** The cards of this status before the filter: `cards` may be a part of them. */
+  /** The cards of this column before the filter: `cards` may be a part of them. */
   readonly total: number
   readonly filtering: boolean
   readonly creating: boolean
@@ -25,10 +34,12 @@ export interface BoardColumnProps {
   readonly onRename: (ref: string, title: string) => void
   readonly marksOf: (card: BoardCard) => React.JSX.Element | null
   readonly drag: BoardDrag
+  readonly menu: readonly MenuAction[]
+  readonly reorder: ColumnReorder
 }
 
 export function BoardColumn({
-  status,
+  column,
   cards,
   total,
   filtering,
@@ -39,10 +50,12 @@ export function BoardColumn({
   onOpen,
   onRename,
   marksOf,
-  drag
+  drag,
+  menu,
+  reorder
 }: BoardColumnProps): React.JSX.Element {
   const { t } = useTranslation()
-  const label = t(`board.statuses.${STATUS_LABEL_KEYS[status]}`)
+  const label = columnLabel(column, t)
   const ordered = cards.filter((card) => card.meta.order !== undefined)
   const loose = cards.filter((card) => card.meta.order === undefined)
   const tile = (card: BoardCard): React.JSX.Element => (
@@ -57,7 +70,7 @@ export function BoardColumn({
         onRename(card.ref, title)
       }}
       marks={marksOf(card)}
-      drag={drag.cardProps(card.ref, status)}
+      drag={drag.cardProps(card.ref, column.id)}
       dropEdge={drag.dropEdge(card.ref)}
       dragging={drag.draggingRef === card.ref}
     />
@@ -66,15 +79,34 @@ export function BoardColumn({
   return (
     <section
       aria-label={label}
-      className={`border-line flex min-h-0 w-[272px] shrink-0 flex-col border-r ${status === 'backlog' ? 'project-tinted' : ''}`}
-      {...drag.columnProps(status)}
+      className={`border-line relative flex min-h-0 w-[272px] shrink-0 flex-col border-r ${
+        column.id === 'backlog' ? 'project-tinted' : ''
+      } ${reorder.dragging ? 'opacity-40' : ''}`}
+      {...drag.columnProps(column.id)}
     >
-      <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">
-        <h2 className="section-label">{label}</h2>
+      {reorder.edge !== null && <DropLine edge={reorder.edge} across />}
+      <header
+        className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 px-3"
+        {...reorder.props}
+      >
+        <h2 className="section-label truncate">{label}</h2>
         <span className="text-ink-faint text-[11px] tabular-nums">
           {filtering ? t('board.column.count', { shown: cards.length, total }) : cards.length}
         </span>
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center">
+          <DropdownMenu
+            align="right"
+            actions={menu}
+            trigger={({ onClick, open }) => (
+              <IconButton
+                label={t('board.columns.menu', { name: label })}
+                onClick={onClick}
+                menuOpen={open}
+              >
+                <Ellipsis aria-hidden size={14} />
+              </IconButton>
+            )}
+          />
           <IconButton
             label={t('board.column.newTask')}
             onClick={() => {
@@ -87,7 +119,7 @@ export function BoardColumn({
       </header>
       {cards.length === 0 && !creating ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
-          {drag.overColumn === status && <DropLine edge="above" />}
+          {drag.overColumn === column.id && <DropLine edge="above" />}
           <Placeholder compact art={false} title={t('board.empty.columnTitle')}>
             {total === 0 ? t('board.empty.columnText') : t('board.empty.filteredText')}
           </Placeholder>

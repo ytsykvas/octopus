@@ -277,6 +277,7 @@ import {
   type BoardLayout
 } from './boardFiles.js'
 import { addAttachments, attachmentPath, listAttachments, removeAttachment } from './cardFiles.js'
+import { type BoardColumnSet, type Column, type ColumnEdit, editColumns } from './boardColumns.js'
 import {
   BoardError,
   CARD_TEXT_MAX,
@@ -440,6 +441,7 @@ import {
   recordApproval,
   updateProject,
   updateWorkspace,
+  withBoardColumns,
   type Workspace,
   workspacesOfProject,
   workspaceStatusFrom
@@ -1423,6 +1425,10 @@ export interface OctopusService {
   removeCardAttachment(projectId: string, ref: string, name: string): Promise<void>
   /** Where a card's own file is, for Finder to show. */
   cardPath(projectId: string, ref: string): Promise<string>
+  /** A project's columns, or the default ones for `null`. */
+  boardColumns(projectId: string | null): BoardColumnSet
+  editBoardColumns(projectId: string | null, edit: ColumnEdit): Promise<BoardColumnSet>
+  resetBoardColumns(projectId: string): Promise<BoardColumnSet>
 
   /** The skills one of the two stores holds, for a settings section. */
   listSkills(store: Store): Promise<SkillEntry[]>
@@ -1960,7 +1966,7 @@ export interface OctopusService {
    * rather than on its next tick.
    */
   onWorkspacePushed(handler: (event: WorkspacePushedEvent) => void): () => void
-  /** A project's board folder changed on disk, by anyone: the window reads that board again. */
+  /** A project's board folder changed on disk, by anyone, or its columns were edited: the window reads that board again. */
   onBoardChanged(handler: (event: BoardChangedEvent) => void): () => void
   /**
    * The account's windows, whenever they move.
@@ -2095,11 +2101,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
   void refWatch.sync(state.projects)
 
   const boardListeners = new Set<(event: BoardChangedEvent) => void>()
-  const boardWatch = (options.boardWatch ?? createBoardWatch)({
-    onChange: (projectId) => {
-      for (const listener of boardListeners) listener({ projectId })
-    }
-  })
+  const announceBoard = (projectId: string): void => {
+    for (const listener of boardListeners) listener({ projectId })
+  }
+  const boardWatch = (options.boardWatch ?? createBoardWatch)({ onChange: announceBoard })
 
   /*
    * A project's variables used to be one file. Giving each project its `envs/`
@@ -5193,8 +5198,40 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return await boardLines(nameKey(boardFolderName(requireProject(projectId).name)), task)
   }
 
+  function columnsOf(project: Project): readonly Column[] {
+    return project.boardColumns ?? config.boardColumns
+  }
+
+  function layoutFor(project: Project): Promise<BoardLayout> {
+    return findLayout(config.boardFolder, project.name, columnsOf(project))
+  }
+
   function layoutOf(projectId: string): Promise<BoardLayout> {
-    return findLayout(config.boardFolder, requireProject(projectId).name)
+    return layoutFor(requireProject(projectId))
+  }
+
+  function columnSet(projectId: string | null): BoardColumnSet {
+    const own = projectId === null ? null : (requireProject(projectId).boardColumns ?? null)
+    return own === null ? { columns: config.boardColumns, own: false } : { columns: own, own: true }
+  }
+
+  // Checked before the write, not under it: a card that lands in between becomes loose, not lost.
+  async function assertColumnsEmpty(
+    projects: readonly Project[],
+    ids: readonly string[]
+  ): Promise<void> {
+    if (config.boardFolder === '' || ids.length === 0) return
+    for (const project of projects) {
+      const layout = await layoutFor(project)
+      const count = (await listBoardIn(layout)).filter((card) => ids.includes(card.status)).length
+      if (count > 0) {
+        throw new BoardError(
+          'columnNotEmpty',
+          { project: project.name, count: String(count) },
+          `${project.name} still has ${String(count)} tasks in that column`
+        )
+      }
+    }
   }
 
   // One change rather than a read then a write: the change sees the file as it is at
@@ -6804,7 +6841,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async listBoard(projectId) {
       syncBoardWatch()
       const layout = await layoutOf(projectId)
-      return { folder: layout.dir, cards: await listBoardIn(layout) }
+      return { folder: layout.dir, columns: layout.columns, cards: await listBoardIn(layout) }
     },
     async readCard(projectId, ref) {
       const layout = await layoutOf(projectId)
@@ -6888,6 +6925,41 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
     async cardPath(projectId, ref) {
       return cardOnDisk(await layoutOf(projectId), ref)
+    },
+    boardColumns(projectId) {
+      return columnSet(projectId)
+    },
+    async editBoardColumns(projectId, edit) {
+      // Tried on the list as it stands before any board is read: a built-in column is
+      // refused as built in, not as one that still holds tasks.
+      editColumns(columnSet(projectId).columns, edit)
+      const removed = edit.kind === 'remove' ? [edit.id] : []
+      if (projectId === null) {
+        const following = state.projects.filter((project) => project.boardColumns == null)
+        await assertColumnsEmpty(following, removed)
+        await applyConfig((current) => ({ boardColumns: editColumns(current.boardColumns, edit) }))
+        for (const project of following) announceBoard(project.id)
+        return columnSet(null)
+      }
+      const project = requireProject(projectId)
+      await assertColumnsEmpty([project], removed)
+      await commit((current) =>
+        withBoardColumns(current, projectId, (own) => editColumns(own ?? config.boardColumns, edit))
+      )
+      announceBoard(projectId)
+      return columnSet(projectId)
+    },
+    async resetBoardColumns(projectId) {
+      const project = requireProject(projectId)
+      const kept = new Set(config.boardColumns.map((column) => column.id))
+      const going = columnsOf(project).filter((column) => !kept.has(column.id))
+      await assertColumnsEmpty(
+        [project],
+        going.map((column) => column.id)
+      )
+      await commit((current) => withBoardColumns(current, projectId, () => null))
+      announceBoard(projectId)
+      return columnSet(projectId)
     },
 
     async skillsForChat(chatId) {

@@ -7,15 +7,16 @@ The board is the one thing octopus keeps outside `~/.octopus`. Its cards are mar
 ```
 <board folder>/
   <project>/                 boardFolderName(project name)
-    backlog/                 status folders: made by the first write into them
+    backlog/                 column folders: made by the first write into them
     in progress/
     testing/
     staging/
     done/
     blocked/
+    <added column>/          named after the column when it was added
     _attachments/<card>/     a card's attachments
     <any>.md                 a loose card, shown in Backlog
-    <any folder>/<any>.md    a loose card, shown in Backlog
+    <other folder>/<any>.md  a loose card, shown in Backlog
 ```
 
 A project and its folder are matched by name (`boardFolderName`, then `sameName`, which ignores case and Unicode normalisation). Nothing stored links the two. The project's folder is found whatever its name, one the scan would skip included — `Release.tmp` is a name `boardFolderName` gives — and two projects whose names give one folder share it, and their writes wait for each other.
@@ -35,15 +36,17 @@ An optional YAML header, only when the first line is exactly `---` and a closing
 
 A key with a bad value is dropped and the others kept; unknown keys are kept as written. A header that YAML cannot parse, but whose first line that is not a comment reads like a key, is **malformed**: the card is shown with a mark and its fields are never changed, because writing would put a second header above it. The header is rewritten through `yaml`, so its formatting may change when a field does; the body is copied byte for byte, BOM and CRLF included.
 
-## Status folders
+## Column folders
 
-A folder is a status when its name, lower-cased, with `-`, `_` and runs of spaces turned into one space, is one of the six (`statusOfFolder`): `In-Progress` is "in progress". Of two folders of one status the first by `compareNames` takes new and moved cards; the cards of both are shown. A link, a file, or a folder whose name starts with `_` or `.` is never a status folder. Nothing is made by reading: a project with no folder is an empty board and a missing status folder an empty column, each made by the first write into it — so two Macs opening the board at once cannot leave a `backlog 2` behind.
+A board's columns are a list ([`src/core/boardColumns.ts`](../../src/core/boardColumns.ts)): the six built in, each its status, in the order shown. A folder is a column's when its name and the column's id, each lower-cased with `-`, `_` and runs of spaces turned into one space, are equal (`columnKey`): `In-Progress` is "in progress". Of two folders of one column the first by `compareNames` takes new and moved cards; the cards of both are shown. A link, a file, or a folder whose name starts with `_` or `.` is never a column folder. A card written or moved into a column the list does not hold, or a rename or removal of one, is refused (`columnMissing`).
+
+The list is the config's `boardColumns` unless the project holds its own; the first edit of a project's columns gives it its own copy, and going back to the default ones (`resetBoardColumns`) is refused while a column they lack holds a card. A built-in column can be moved but not renamed or removed (`columnBuiltIn`), and a board holds at most 24 columns (`columnsFull`). A column added beside them (`editColumns`) is named as typed — one line of up to 60 characters, trimmed — and takes a folder named after it (`safeStem`), numbered when another column's folder or a name the scan skips is in the way; a new name changes only the name, so no folder is renamed under a synced board. No two columns share a name as `columnKey` compares them, a built-in one by its English id whatever language the window shows it in (`columnNameTaken`). A new order names the columns by id: an id the list lacks is ignored, and a column the order leaves out goes last, in the order it had. A column is removed only while no board it shows on holds a card in it (`columnNotEmpty`), checked before the write rather than under it: a card that lands in between is shown loose in Backlog, never lost. The lists are kept on this Mac, so another Mac without an added column shows its cards loose in Backlog too. Nothing is made by reading: a project with no folder is an empty board and a missing column folder an empty column, each made by the first write into it — so two Macs opening the board at once cannot leave a `backlog 2` behind.
 
 ## What is a card
 
-Every `.md` file, in any case, in the project's folder or one level below it. One directly in the project's folder, or in a folder that is not a status, is a **loose** card, shown in Backlog. Skipped: names starting with `_` or `.`, names ending in `.tmp`, links, anything deeper, and files that cannot be read. A file that is not UTF-8 is listed by its file name with no text and marked, and nothing ever writes it: decoding would replace what it holds with U+FFFD, and writing that back would lose it.
+Every `.md` file, in any case, in the project's folder or one level below it. One directly in the project's folder, or in a folder that is no column's, is a **loose** card, shown in Backlog. Skipped: names starting with `_` or `.`, names ending in `.tmp`, links, anything deeper, and files that cannot be read. A file that is not UTF-8 is listed by its file name with no text and marked, and nothing ever writes it: decoding would replace what it holds with U+FFFD, and writing that back would lose it.
 
-A loose card is filed into its status folder the first time it is moved, Backlog included; so is a card in the second folder of a status.
+A loose card is filed into its column's folder the first time it is moved, Backlog included; so is a card in the second folder of a column.
 
 ## A ref
 

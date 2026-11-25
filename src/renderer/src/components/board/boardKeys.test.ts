@@ -132,16 +132,13 @@ describe('stepIndex', () => {
 
 describe('cardRefs', () => {
   it('lists the refs column by column', () => {
-    const columns: BoardColumns = {
-      backlog: [boardCard({ ref: 'a' }), boardCard({ ref: 'b' })],
-      'in progress': [boardCard({ ref: 'p', status: 'in progress' })],
-      testing: [],
-      staging: [],
-      done: [],
-      blocked: []
-    }
+    const columns: BoardColumns = new Map([
+      ['backlog', [boardCard({ ref: 'a' }), boardCard({ ref: 'b' })]],
+      ['in progress', [boardCard({ ref: 'p', status: 'in progress' })]],
+      ['Ideas', []]
+    ])
 
-    expect(cardRefs(columns)).toEqual([['a', 'b'], ['p'], [], [], [], []])
+    expect(cardRefs(columns)).toEqual([['a', 'b'], ['p'], []])
   })
 })
 

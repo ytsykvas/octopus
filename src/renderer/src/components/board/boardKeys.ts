@@ -1,4 +1,4 @@
-import { BOARD_STATUSES, type BoardCard } from '@core/boardSchema.js'
+import type { BoardCard } from '@core/boardSchema.js'
 import { present } from '@core/present.js'
 
 import type { BoardColumns } from './boardDrop.js'
@@ -78,7 +78,7 @@ function plainAction(
 }
 
 export function cardRefs(columns: BoardColumns): string[][] {
-  return BOARD_STATUSES.map((status) => columns[status].map((card) => card.ref))
+  return [...columns.values()].map((cards) => cards.map((card) => card.ref))
 }
 
 export function nextFocus(

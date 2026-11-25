@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { DEFAULT_COLUMNS } from './boardColumns.js'
 import {
   type Config,
   type ConfigPatch,
@@ -78,6 +79,10 @@ describe('createDefaultConfig', () => {
 
   it('leaves the board folder unset until one is chosen', () => {
     expect(createDefaultConfig('ytsykvas', NOW, () => UUID).boardFolder).toBe('')
+  })
+
+  it('starts every board on the six built-in columns', () => {
+    expect(createDefaultConfig('ytsykvas', NOW, () => UUID).boardColumns).toEqual(DEFAULT_COLUMNS)
   })
 
   it('records deviceId and install time — hooks for future licensing', () => {
@@ -167,6 +172,7 @@ describe('loadConfig', () => {
 
     const config = await loadConfig(file)
     expect(config.language).toBe('en')
+    expect(config.boardColumns).toEqual(DEFAULT_COLUMNS)
     expect(config.rightPanelWidth).toBe(360)
     expect(config.rightPanelOpen).toBe(true)
     expect(config.statusBarOpen).toBe(true)
@@ -621,6 +627,7 @@ describe('a patch from the window', () => {
     ['a standing permission', { alwaysAllowedTools: ['Bash'] }],
     ['the skills off by default', { disabledSkillDefaults: [] }],
     ['the dismissed tips', { dismissedTips: [] }],
+    ['the board columns', { boardColumns: [...DEFAULT_COLUMNS] }],
     ['the device id', { deviceId: UUID }],
     ['the install time', { installedAt: '2026-01-01T00:00:00Z' }],
     ['the version', { version: 2 }],

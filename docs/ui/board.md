@@ -1,10 +1,10 @@
 # The Board
 
-`components/board/` draws one project's tasks as six columns — Backlog, In progress, Testing,
-Staging, Done, Blocked — read from the project's folder inside the board folder
-(`docs/data/board.md`).
+`components/board/` draws one project's tasks in the columns its listing names, in that order —
+the six built in are Backlog, In progress, Testing, Staging, Done, Blocked — read from the
+project's folder inside the board folder (`docs/data/board.md`).
 
-**Reading never writes.** A project without a folder yet is six empty columns, not an error:
+**Reading never writes.** A project without a folder yet is its columns, all empty, not an error:
 folders are made by the first card written into them (B105), so looking at a board in a synced
 folder never races another Mac to create the same directories.
 
@@ -35,10 +35,10 @@ column or a column whose cards fit turns sideways (`sidewaysDelta`); Shift and a
 already do. Opening a card brings it into view once the panel is drawn, and so does a move that
 takes the open card to another column.
 
-**The project's colour** sits where Octopus puts it, in the same two shapes. The first column —
-Backlog, where work starts — carries `.project-tinted` down its whole height, as the workspace
-list does, its header on the strongest part of the wash the way the project's name is; the other
-five stay plain. The card panel carries `.project-tinted-top`, the right pane's wash across the top
+**The project's colour** sits where Octopus puts it, in the same two shapes. Backlog, where work
+starts and the first column until somebody moves it, carries `.project-tinted` down its whole
+height, as the workspace list does, its header on the strongest part of the wash the way the
+project's name is; every other column stays plain, wherever it stands. The card panel carries `.project-tinted-top`, the right pane's wash across the top
 only: it holds a description read at length. `BoardScreen` sets `--project-color` on its root, so
 the panel reaches it without a prop.
 
@@ -70,8 +70,8 @@ no branch and, instead of the controls at its right, the [filter](#filter-and-se
 folder chosen it shows the app's name and no filter. That folder is the one on disk, which core
 finds by name regardless of case, so `BoardScreen` writes it into a slot App leaves in the bar
 (`titleSlot`) rather than App building it from the project's name; the slot is empty while the first
-read is out or has failed. A loose card whose file sits in a folder that is not a status shows that
-folder's name first on its second line, so a renamed status folder is visible rather than silently
+read is out or has failed. A loose card whose file sits in a folder that is no column's shows that
+folder's name first on its second line, so a renamed column folder is visible rather than silently
 emptied.
 
 ## Creating a task
@@ -164,8 +164,9 @@ stays in the field. Editing or deleting a comment is not offered.
 
 A card is dragged with the browser's own drag and drop, one state for every column (`useBoardDrag`).
 The drag carries its own type, `application/x-octopus-card`; a file from the Finder or dragged text
-has none, so the board's `dragover` never calls `preventDefault` for it and the browser shows that
-it cannot be dropped. The landing index is counted in the target column without the dragged card and
+has none, so a card's or a column's `dragover` never calls `preventDefault` for it and the browser
+shows that it cannot be dropped. Over a column's header it is swallowed instead, as over any item
+`useDragReorder` moves, and comes to nothing. The landing index is counted in the target column without the dragged card and
 cut to the ordered part (`dropSlot`; core does the same in `orderForDrop`), and the line is drawn
 under the card before that slot, which keeps it above the "By name" divider where the card really
 lands. Leaving a column for something outside it — the panel, the title bar — takes its line away. A
@@ -173,6 +174,20 @@ drop that would change nothing — an ordered card on its own slot, a card alone
 card let go over its own tile — writes nothing. The move goes through the screen's `moveCard`, so an
 open card stays open under its new path. `useDragReorder` is not reused: it keeps one list, its
 `dragstart` gets no event to put the type on, and an empty list cannot take a drop.
+
+## Editing the columns
+
+A column's header holds its menu: Move left and Move right for every column, and Rename… and
+Remove… for one somebody added — the built-in six are moved, never renamed or removed. Remove… is
+disabled, with the reason under it, while the column holds a task; core refuses it again
+(`columnNotEmpty`) for a task the listing has not shown yet. The `+` after the last column adds one.
+A header is also dragged onto another to reorder the columns: that is one list, so it is
+`useDragReorder`'s, and its line stands on the side the column would land (`DropLine` `across`). A
+card dragged over a header still falls into that column, because the header lets the drop through
+to the column's own handler. Every edit from the board changes this project's columns — the first
+gives it its own copy of the default ones — and goes through `useBoard`, so the board is read again
+and a refusal reaches the banner. The questions they ask are `useColumnEditing`'s, which the
+settings list (`ColumnsSection`) asks with the same words.
 
 ## Keyboard
 

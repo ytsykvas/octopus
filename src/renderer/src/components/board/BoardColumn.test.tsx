@@ -1,15 +1,15 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { BoardCard } from '@core/boardSchema.js'
 
-import { boardCard, noDrag } from '../../test/board.js'
+import { boardCard, noDrag, stillColumn } from '../../test/board.js'
 import { BoardColumn, type BoardColumnProps } from './BoardColumn.js'
 
 function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
   const all: BoardColumnProps = {
-    status: 'backlog',
+    column: { kind: 'system', id: 'backlog' },
     cards: [],
     total: props.cards?.length ?? 0,
     filtering: false,
@@ -21,6 +21,8 @@ function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
     onRename: vi.fn(),
     marksOf: () => null,
     drag: noDrag(),
+    menu: [],
+    reorder: stillColumn(),
     ...props
   }
   render(<BoardColumn {...all} />)
@@ -37,21 +39,63 @@ function card(title: string, order?: number): ReturnType<typeof boardCard> {
 
 describe('BoardColumn', () => {
   it('is a region named by its status', () => {
-    renderColumn({ status: 'in progress', cards: [] })
+    renderColumn({ column: { kind: 'system', id: 'in progress' }, cards: [] })
 
     expect(
       within(screen.getByRole('region', { name: 'In progress' })).getByText('0')
     ).toBeInTheDocument()
   })
 
+  it('is named as somebody named the column they added', () => {
+    renderColumn({ column: { kind: 'custom', id: 'Ideas', name: 'Ideas to try' }, cards: [] })
+
+    expect(screen.getByRole('region', { name: 'Ideas to try' })).toBeInTheDocument()
+  })
+
+  it('offers its menu from the header', async () => {
+    const onSelect = vi.fn()
+    renderColumn({ menu: [{ id: 'right', label: 'Move right', onSelect }] })
+
+    const trigger = screen.getByRole('button', { name: 'Actions for “Backlog”' })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move right' }))
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('is dragged by its header', () => {
+    const reorder = stillColumn()
+    renderColumn({ reorder })
+
+    const title = screen.getByRole('heading', { name: 'Backlog' })
+    expect(title.closest('header')).toHaveAttribute('draggable', 'true')
+    fireEvent.dragStart(title)
+
+    expect(reorder.props.onDragStart).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['above', 'below'] as const)(
+    'draws the line on the %s side a dragged column would land against, and dims while dragged',
+    (edge) => {
+      renderColumn({ reorder: { ...stillColumn(), edge, dragging: true } })
+
+      const column = screen.getByRole('region', { name: 'Backlog' })
+      expect(within(column).getByTestId('drop-line')).toHaveAttribute('data-edge', edge)
+      expect(column).toHaveClass('opacity-40')
+    }
+  )
+
   it('washes the backlog in the colour of the project', () => {
-    renderColumn({ status: 'backlog' })
+    renderColumn({ column: { kind: 'system', id: 'backlog' } })
 
     expect(screen.getByRole('region', { name: 'Backlog' })).toHaveClass('project-tinted')
   })
 
   it('leaves every other column plain', () => {
-    renderColumn({ status: 'done' })
+    renderColumn({ column: { kind: 'system', id: 'done' } })
 
     expect(screen.getByRole('region', { name: 'Done' })).not.toHaveClass('project-tinted')
   })
@@ -186,7 +230,11 @@ describe('BoardColumn', () => {
   })
 
   it('draws the drop line in an empty column a card is over', () => {
-    renderColumn({ status: 'testing', cards: [], drag: { ...noDrag(), overColumn: 'testing' } })
+    renderColumn({
+      column: { kind: 'system', id: 'testing' },
+      cards: [],
+      drag: { ...noDrag(), overColumn: 'testing' }
+    })
 
     expect(
       within(screen.getByRole('region', { name: 'Testing' })).getByTestId('drop-line')
@@ -194,7 +242,11 @@ describe('BoardColumn', () => {
   })
 
   it('draws no drop line for a card over another column', () => {
-    renderColumn({ status: 'testing', cards: [], drag: { ...noDrag(), overColumn: 'done' } })
+    renderColumn({
+      column: { kind: 'system', id: 'testing' },
+      cards: [],
+      drag: { ...noDrag(), overColumn: 'done' }
+    })
 
     expect(screen.queryByTestId('drop-line')).toBeNull()
   })
