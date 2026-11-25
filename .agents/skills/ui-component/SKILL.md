@@ -9,7 +9,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npm run typecheck:*), Bash(np
 
 # UI component
 
-The invariants are in `.Codex/rules/renderer.md`; this is how to meet them.
+The invariants are in `.claude/rules/renderer.md`; this is how to meet them.
 Tokens live in `src/renderer/src/styles.css`; the design intent, a calm desktop
 interface in the spirit of Linear, Raycast and VS Code, is §10 of
 `docs/PROJECT.md`.
@@ -75,13 +75,15 @@ over its own content.
 - `.project-tinted` / `.bubble-sent` / `.tab-selected` — where a project's
   colour turns into a surface;
 - `.input` — text field, and anything shaped like one;
+- `.error-box` — the box a failure is said in (danger ground, ink and edge);
 - `.choice` — **every** checkbox and radio, with `.choice-danger` for the tick
   inside a destructive confirmation. Not optional and not replaceable by
   `accent-color`: that colours the checked fill and leaves the empty box a
   white square on the dark canvas;
 - `.section-label` — section heading (11px, weight 600, muted);
 - `.focus-ring` — visible keyboard focus;
-- `.titlebar-drag` — window drag region.
+- `.titlebar-drag` — window drag region;
+- `.scrollbar-shown` — a scroll box whose scrollbar macOS must not hide (its children keep the themed colour).
 
 The second copy of a run of utility classes is the moment to add a class here.
 Six copies of the field styling had already drifted by a few pixels of height —
@@ -117,7 +119,8 @@ adding new button components.
 
 Existing pieces, worth checking before writing another: `Modal`,
 `DropdownMenu`, `Combobox` (a select with search), `Field`, `NameEditor`,
-`ResizeHandle`, `Terminal`, and the pair in `Disclosure.tsx` for anything that
+`ResizeHandle`, `Terminal`, `useDragReorder` with `DropLine` for a list put in
+order by dragging (and Alt and an arrow), and the pair in `Disclosure.tsx` for anything that
 folds — `DisclosureButton` for the toggle, `DisclosureChevron` alone where the control
 is not a plain button (a `Button`, a tree row, a `<summary>`).
 
@@ -156,12 +159,22 @@ clamp and all four ways of closing, and both composer panels use it. Give it the
 size at the moment of opening — a panel's height often depends on what it is
 about to draw.
 
+**A tooltip is a `title` attribute and nothing else.** `TitleTooltips`, mounted
+once in `main.tsx`, draws every one itself: the native tooltip waits a second
+and a half on macOS, and over the Changes tab's out-of-date cloud it never
+appeared at all. While the pointer is on an element its title is blanked, so
+the two never show together, and it comes back when the pointer leaves.
+
 ## Colour that carries meaning
 
 A project's colour comes from `--project-<name>`, declared once per theme, and
-is applied by setting `--project-color` inline on a container. That inline style
-is the one sanctioned exception: the value is dynamic, but it still resolves to
-a token.
+is applied by setting `--project-color` inline on a container with
+`projectColorStyle(color)` from `components/projectTint.ts`. That inline style
+is a sanctioned exception: the value is dynamic, but it still resolves to a
+token. The kind strip on a workspace card is the other one, for the same
+reason: `--kind-color` is `var(--project-<name>)` from `KIND_COLORS` in
+`workspaceKinds.ts`. Any third needs that same property — a variable set
+inline, whose value is a token.
 
 Two rules that are easy to get wrong:
 

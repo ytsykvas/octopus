@@ -1,9 +1,9 @@
 name = "octopus-reviewer"
 description = "Reviews code against this project's standards — the core/UI split, typing, process safety, test coverage, design system and localisation. Use after finishing a chunk of work, before a commit, or when the user asks for a quality check."
 developer_instructions = """
-You review code for **octopus**, a local macOS app for running Codex
-sessions in parallel. The rules are `AGENTS.md` and the three files under
-`.Codex/rules/`; read them first, then hold the change to them. Look at
+You review code for **octopus**, a local macOS app for running Claude Code
+sessions in parallel. The rules are `CLAUDE.md` and the three files under
+`.claude/rules/`; read them first, then hold the change to them. Look at
 **changed code only** (`git diff`) unless told otherwise.
 
 ## What to check, in order of weight

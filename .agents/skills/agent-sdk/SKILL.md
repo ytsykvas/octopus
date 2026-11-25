@@ -1,19 +1,19 @@
 ---
 name: agent-sdk
-description: Integrating with @anthropic-ai/Codex-agent-sdk — starting agent sessions, streaming events, tool permissions, resume, and mapping SDK messages onto the internal AgentEvent type. Use when working on src/core/agent.ts, adding agent chat capabilities, handling session events or session ids.
+description: Integrating with @anthropic-ai/claude-agent-sdk — starting agent sessions, streaming events, tool permissions, resume, and mapping SDK messages onto the internal AgentEvent type. Use when working on src/core/agent.ts, adding agent chat capabilities, handling session events or session ids.
 when_to_use: When an agent needs to be started in a workspace, its replies handled, tool permissions implemented, a session resumed after a restart, or session cost surfaced.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npx vitest:*), Bash(npm run typecheck:*)
 ---
 
-# Working with the Codex Agent SDK
+# Working with the Claude Agent SDK
 
-Package: `@anthropic-ai/Codex-agent-sdk` (installed). Types live in
-`node_modules/@anthropic-ai/Codex-agent-sdk/sdk.d.ts` — **check them**, because
+Package: `@anthropic-ai/claude-agent-sdk` (installed). Types live in
+`node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` — **check them**, because
 the public documentation presents a simplified picture.
 
 ## The project's core principle
 
-octopus is a **harness** around Codex, not a filter on it: it adds nothing
+octopus is a **harness** around Claude Code, not a filter on it: it adds nothing
 of its own to the context and withholds nothing the user has put there (§4,
 §12.3 docs/PROJECT.md).
 
@@ -21,8 +21,8 @@ of its own to the context and withholds nothing the user has put there (§4,
 settingSources: ['user', 'project', 'local'] // the default; the CLI's own set
 ```
 
-The SDK is explicit that `'project'` is what loads `AGENTS.md`, and it turns out
-to gate `.Codex/commands/` as well. The value is a user setting —
+The SDK is explicit that `'project'` is what loads `CLAUDE.md`, and it turns out
+to gate `.claude/commands/` as well. The value is a user setting —
 nothing / `['project']` / all three — but the default is the full set, and an
 agent that knows less here than in a terminal is a defect. Loading nothing is
 not what §4 asks for: the objection is to material **we** add that nobody
@@ -36,7 +36,7 @@ answers a call the agent made, so it is not context we added.
 ## Basic run
 
 ```ts
-import { query } from '@anthropic-ai/Codex-agent-sdk'
+import { query } from '@anthropic-ai/claude-agent-sdk'
 
 const session = query({
   prompt: inputStream, // AsyncIterable<SDKUserMessage> — enables follow-ups
@@ -44,7 +44,7 @@ const session = query({
     cwd: workspace.path,
     resume: workspace.sessionId ?? undefined,
     settingSources: ['user', 'project', 'local'],
-    systemPrompt: { type: 'preset', preset: 'Codex' },
+    systemPrompt: { type: 'preset', preset: 'claude_code' },
     canUseTool: async (toolName, input, { decisionReason }) => {
       /* our own permission dialog */
     }
@@ -149,13 +149,40 @@ Alternatively call `session.streamInput(...)` on an existing session object.
 ## Session control
 
 - `session.interrupt()` — stop the current work;
-- `session.setModel(model)` — switch models mid-flight;
+- `session.setModel(model)` — switch models mid-flight, and mid-turn: see below;
 - `session.setPermissionMode(mode)` — a `PermissionMode` from `sdk.d.ts`:
   `'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto'`;
 - `session.close()` — **mandatory** when a workspace is removed or archived.
 
 An unclosed `query()` leaves a live child process behind. Every workspace must
 close its own session in its own teardown.
+
+**`setModel` and `setPermissionMode` do not land alike.** The mode rewrites the
+session's live permission context, so the next permission check — mid-turn
+included — sees it. The model is checked (catalogue, organisation limits, a
+`PreModelSwitch` hook, and a call to the API for anything but an alias), then
+becomes the live model that the request loop reads before **every request**. So a
+switch lands inside a running turn, on a cache of its own (a prompt cache belongs
+to one model, and the first request on another writes the whole context again),
+and across model families the CLI appends a line naming the switch to the
+conversation. Nothing about the model should be sent at a moment the user did
+not mean it; `docs/core/models-and-effort.md` holds the plan model back for that
+reason.
+
+That is read from the binary, not measured on a session — and the protocol's own
+text for `set_model` says "subsequent conversation turns", which is the gentler
+reading and not what the code does. Treat the stricter one as true until a
+session shows otherwise.
+
+**The CLI's behaviour is readable, and nothing else says it.** The platform
+package (`node_modules/@anthropic-ai/claude-agent-sdk-<platform>/claude`, or
+`app.asar.unpacked` in a packaged build) is one executable with its JavaScript
+inside as plain text; the version is in it (`VERSION:"2.1.…"`). Search it with
+Python over `mmap` — BSD `grep` refuses a repetition above 255 — and anchor on a
+string rather than a name: minified names repeat from one module to the next, so
+`Bgs` is one function in one place and another elsewhere. Read the binary the
+app _runs_, which is the one `agentBinary.ts` resolves, and not one on the
+machine's `PATH`: the two differ in version.
 
 **There is no `setEffort`, and nothing else settings-shaped has a method here.**
 Effort is a start-up option; moving it on a running session goes through
@@ -181,7 +208,7 @@ along with `suggestions`, `blockedPath` and `title`. Declaring only two
 parameters is legal TypeScript and silently throws all of it away, and the card
 then says "the agent wants to use Edit" over a path and nothing else. The
 reason matters: under `acceptEdits` the CLI still asks about an edit to the
-agent's own instructions (`.Codex/skills/…/SKILL.md`), and only
+agent's own instructions (`.claude/skills/…/SKILL.md`), and only
 `decisionReason` says so — without it the mode looks broken.
 
 **Fakes take the whole argument.** A test double that narrows `askPermission`

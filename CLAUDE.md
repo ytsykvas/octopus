@@ -93,8 +93,9 @@ applies always), and never what the code, tests or `docs/` already say.
 | Invariants for a layer, loaded on touch   | `.claude/rules/`                                                               |
 | A technique: core modules, UI, the SDK    | `.claude/skills/core-module`, `ui-component`, `agent-sdk`                      |
 | Build, run and clean up a project         | `.claude/skills/workspace-scripts`                                             |
-| The gate, a commit, a docs or test audit  | `/check`, `/ship`, `/docs-check`, `/test-check`                                |
+| The gate, a docs or test audit            | `/check`, `/docs-check`, `/test-check`                                         |
 | A review against this project's standards | the `octopus-reviewer` subagent                                                |
+| Codex copies of the skills and reviewer   | `.agents/skills/`, `.codex/agents/` — changed in the same commit as `.claude/` |
 | Running a dev copy and its traps          | [docs/development.md](docs/development.md)                                     |
 | The pull request format                   | [.octopus/instructions/pull-request.md](.octopus/instructions/pull-request.md) |
 | Contributing as a person                  | [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md)                 |

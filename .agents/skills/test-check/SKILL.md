@@ -91,7 +91,7 @@ on a `<dialog>` to fire a `cancel` event. Anything else is styling.
 
 ## Writing what is missing
 
-Follow `.Codex/rules/core.md`, `.Codex/rules/renderer.md`, the
+Follow `.claude/rules/core.md`, `.claude/rules/renderer.md`, the
 `core-module` and `ui-component` skills, and `docs/testing.md` for how the suite
 is arranged. In short:
 

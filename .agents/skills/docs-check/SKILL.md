@@ -9,7 +9,7 @@ allowed-tools: Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(ls:*)
 # Documentation check
 
 Documentation rots quietly. Nothing fails when a document starts describing an
-application that no longer exists — and `AGENTS.md` sends whoever comes next to
+application that no longer exists — and `CLAUDE.md` sends whoever comes next to
 read `docs/` first, so a stale claim is worse than no claim: it sends them the
 wrong way with confidence.
 

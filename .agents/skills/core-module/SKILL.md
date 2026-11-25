@@ -9,7 +9,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(npx vitest:*), Bash(npm test:
 
 # Core module
 
-The invariants are in `.Codex/rules/core.md`; this is how to meet them.
+The invariants are in `.claude/rules/core.md`; this is how to meet them.
 `src/core/` is headless — no Electron, no DOM — which is what makes it
 testable without launching the app and extractable into a CLI or daemon later
 (§11.1 docs/PROJECT.md).
@@ -101,15 +101,15 @@ Getting this wrong keeps producing bugs here, and they run both ways: a name
 meaningful inside one project checked against the whole app, and a name the
 agent treats as global checked inside one directory.
 
-| Value              | Unique within                                                                      |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| workspace `name`   | its project                                                                        |
-| workspace `slug`   | its project — it names a database, and is **not** injective                        |
-| workspace `branch` | its project — branches live in a repository                                        |
-| workspace `id`     | the whole app — it is the IPC key                                                  |
-| skill `name`       | everything the agent can see — both stores, and the checkout's own `.Codex/skills` |
-| skill folder       | its store — it is a directory, and the app addresses a skill by it                 |
-| directory path     | the filesystem                                                                     |
+| Value              | Unique within                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| workspace `name`   | its project                                                                         |
+| workspace `slug`   | its project — it names a database, and is **not** injective                         |
+| workspace `branch` | its project — branches live in a repository                                         |
+| workspace `id`     | the whole app — it is the IPC key                                                   |
+| skill `name`       | everything the agent can see — both stores, and the checkout's own `.claude/skills` |
+| skill folder       | its store — it is a directory, and the app addresses a skill by it                  |
+| directory path     | the filesystem                                                                      |
 
 The skill rows are the pair worth reading together. `skillKey` is the bare name
 because the CLI dedupes on it — two skills sharing one are one skill to the
@@ -118,7 +118,7 @@ its store and is what a read or a write is addressed by. Checking the name
 inside one store let a global `review` and a project `review` both exist, after
 which the switch on either row moved both.
 
-Two projects are two repositories: `octopus/anna` in each is two different
+Two projects are two repositories: `octopus/feature/anna` in each is two different
 branches, and treating that as a clash locks every project after the first out
 of the start of the name pool.
 
@@ -188,7 +188,9 @@ Then assert against that. The probes worth keeping from the last audit:
 | Ask                                       | Because                                                                                                             |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | what does a hostile name become           | `toSlug` output goes straight into `git branch`, which rejects `.lock`, `..`, leading `-`, `@{`, control characters |
+| what does a slash in a name become        | git checks every part between slashes: `fix/`, `a//b`, `x/.hidden` and `x.lock/y` are all refused                   |
 | what happens on collision                 | the pool is twenty blocks, and the port a probe finds free can be taken by the time a server binds                  |
+| what do two reads arriving together do    | a check made before an `await` is stale after it: another read may have started the work                            |
 | what does a half-written file look like   | a crash between temp-write and rename leaves the temp behind                                                        |
 | what does the tool print on a stale entry | `prunable`, `locked` and `bare` lines the parser had never seen                                                     |
 
