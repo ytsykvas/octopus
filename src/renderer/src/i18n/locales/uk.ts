@@ -183,6 +183,7 @@ export const uk: Translation = {
   project: {
     title: 'Налаштування проєкту',
     sectionGeneral: 'Загальні',
+    sectionBoard: 'Дошка',
     sectionGit: 'Git',
     sectionScripts: 'Скрипти',
     sectionFiles: 'Файли',
@@ -1968,6 +1969,31 @@ export const uk: Translation = {
       newTaskPlaceholder: 'Назва задачі',
       count: '{{shown}} з {{total}}'
     },
+    columns: {
+      title: 'Колонки',
+      defaultHint: 'Їх показує дошка кожного проєкту, доки в нього немає власних колонок.',
+      projectHint: 'Колонки дошки цього проєкту.',
+      following:
+        'Такі самі, як колонки за замовчуванням у Налаштування → Дошка. Зміна тут дає проєкту власні.',
+      own: 'У цього проєкту власні колонки.',
+      useDefault: 'Повернути колонки за замовчуванням',
+      builtIn: 'Стандартна',
+      builtInHint: 'Стандартну колонку можна переставити, але не перейменувати чи видалити.',
+      reorderHandle: 'Перемістити «{{name}}» (Alt+↑ / Alt+↓)',
+      add: 'Додати колонку',
+      addTitle: 'Нова колонка',
+      name: 'Назва',
+      nameInvalid: 'Назва — один рядок до 60 символів.',
+      create: 'Додати',
+      rename: 'Перейменувати «{{name}}»',
+      renameTitle: 'Перейменувати колонку',
+      save: 'Перейменувати',
+      remove: 'Видалити «{{name}}»',
+      removeTitle: 'Видалити «{{name}}»?',
+      removeBody: 'Колонка зникне з дошки. Її тека лишиться на диску.',
+      removeConfirm: 'Видалити',
+      cancel: 'Скасувати'
+    },
     filter: {
       search: 'Пошук задач',
       priority: 'Пріоритет',
@@ -2220,6 +2246,10 @@ export const uk: Translation = {
     cardTooLong:
       '«{{name}}» довший за 100 000 символів — більше, ніж вміщує одне повідомлення агентові. Скоротіть його й запустіть ще раз.',
     columnMissing: 'Цієї колонки на дошці більше немає.',
+    columnBuiltIn: 'Ця колонка стандартна: її можна переставити, але не перейменувати чи видалити.',
+    columnNameTaken: 'Колонка «{{name}}» уже є.',
+    columnsFull: 'Колонок на дошці може бути не більше {{max}}.',
+    columnNotEmpty: 'Задач у цій колонці на дошці «{{project}}»: {{count}}. Спершу перенесіть їх.',
     unknown: 'Щось пішло не так: {{message}}'
   }
 }

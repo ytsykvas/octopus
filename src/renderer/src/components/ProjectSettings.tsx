@@ -6,6 +6,7 @@ import {
   Info,
   KeyRound,
   MessageSquareText,
+  SquareKanban,
   SquareSlash,
   Terminal,
   TriangleAlert,
@@ -45,6 +46,7 @@ import { useProjectSources } from '../hooks/useProjectSources.js'
 import { RepoConfig } from './RepoConfig.js'
 import { RepoTrust } from './RepoTrust.js'
 import { LibrarySection } from './settings/LibrarySection.js'
+import { ColumnsSection } from './settings/ColumnsSection.js'
 import { PromptsSection } from './settings/PromptsSection.js'
 import { SkillsSection } from './settings/SkillsSection.js'
 
@@ -175,6 +177,7 @@ const SOURCE_LABELS = {
 
 export type SectionId =
   | 'general'
+  | 'board'
   | 'git'
   | 'scripts'
   | 'files'
@@ -190,6 +193,7 @@ const SECTIONS: readonly {
   readonly id: SectionId
   readonly labelKey:
     | 'project.sectionGeneral'
+    | 'project.sectionBoard'
     | 'project.sectionGit'
     | 'project.sectionScripts'
     | 'project.sectionFiles'
@@ -204,6 +208,7 @@ const SECTIONS: readonly {
   readonly destructive?: boolean
 }[] = [
   { id: 'general', labelKey: 'project.sectionGeneral', Icon: Info },
+  { id: 'board', labelKey: 'project.sectionBoard', Icon: SquareKanban },
   { id: 'git', labelKey: 'project.sectionGit', Icon: GitBranch },
   { id: 'scripts', labelKey: 'project.sectionScripts', Icon: Terminal },
   // Next to the scripts: these are what they need present, and before this
@@ -637,6 +642,8 @@ export function ProjectSettings({
               </Field>
             </>
           )}
+
+          {section === 'board' && <ColumnsSection projectId={project.id} />}
 
           {/* The list is only what the repository offers. A project added before
               this dialog existed may still sit on a local `main`, and showing

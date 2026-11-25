@@ -60,6 +60,7 @@ import { Switch } from './Switch.js'
 import { AccountCard } from './settings/AccountCard.js'
 import { AuthTerminal } from './settings/AuthTerminal.js'
 import { ClaudeSection } from './settings/ClaudeSection.js'
+import { ColumnsSection } from './settings/ColumnsSection.js'
 import { LibrarySection } from './settings/LibrarySection.js'
 import { PromptsSection } from './settings/PromptsSection.js'
 import { SkillsSection } from './settings/SkillsSection.js'
@@ -280,6 +281,10 @@ function BoardSection({ config, onChange }: SectionProps): React.JSX.Element {
           onPick={(boardFolder) => void onChange({ boardFolder })}
         />
       </Field>
+
+      <div className="border-line border-t pt-6">
+        <ColumnsSection projectId={null} />
+      </div>
     </div>
   )
 }

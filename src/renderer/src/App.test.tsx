@@ -60,6 +60,7 @@ function config(overrides: Partial<Config> = {}): Config {
     branchPrefix: 'ytsykvas',
     cloneDirectory: '',
     boardFolder: '',
+    boardColumns: [...DEFAULT_COLUMNS],
     settingSources: 'none',
     agentProgressSummaries: true,
     workingMode: 'default',

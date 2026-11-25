@@ -18796,6 +18796,197 @@ describe('the board', () => {
   })
 })
 
+describe('board columns', () => {
+  let projectId: string
+  let otherId: string
+  let board: string
+  const ideas = { kind: 'custom', id: 'Ideas', name: 'Ideas' } as const
+
+  beforeEach(async () => {
+    const repo = join(dir, 'planner')
+    await initRepo(repo)
+    projectId = (await service.addProjectFromPath(repo)).id
+    const other = join(dir, 'ledger')
+    await initRepo(other)
+    otherId = (await service.addProjectFromPath(other)).id
+    board = join(dir, 'board')
+    await mkdir(board)
+    await service.updateConfig({ boardFolder: board })
+  })
+
+  it('answers the default columns for every board at first', () => {
+    expect(service.boardColumns(null)).toEqual({ columns: DEFAULT_COLUMNS, own: false })
+    expect(service.boardColumns(projectId)).toEqual({ columns: DEFAULT_COLUMNS, own: false })
+  })
+
+  it('adds a default column to every board that follows them, and says so', async () => {
+    const listener = vi.fn()
+    service.onBoardChanged(listener)
+
+    await expect(service.editBoardColumns(null, { kind: 'add', name: 'Ideas' })).resolves.toEqual({
+      columns: [...DEFAULT_COLUMNS, ideas],
+      own: false
+    })
+
+    expect(service.getConfig().boardColumns).toEqual([...DEFAULT_COLUMNS, ideas])
+    expect((await service.listBoard(projectId)).columns).toEqual([...DEFAULT_COLUMNS, ideas])
+    expect(listener.mock.calls).toEqual([[{ projectId }], [{ projectId: otherId }]])
+  })
+
+  it("gives a project columns of its own and leaves the others' alone", async () => {
+    const listener = vi.fn()
+    service.onBoardChanged(listener)
+
+    await expect(
+      service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
+    ).resolves.toEqual({ columns: [...DEFAULT_COLUMNS, ideas], own: true })
+
+    expect((await service.listBoard(projectId)).columns).toEqual([...DEFAULT_COLUMNS, ideas])
+    expect((await service.listBoard(otherId)).columns).toEqual(DEFAULT_COLUMNS)
+    expect(service.getConfig().boardColumns).toEqual(DEFAULT_COLUMNS)
+    expect(listener.mock.calls).toEqual([[{ projectId }]])
+  })
+
+  it('builds on the columns a project already has', async () => {
+    await service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
+
+    await service.editBoardColumns(projectId, { kind: 'add', name: 'Review' })
+
+    expect(service.boardColumns(projectId).columns).toEqual([
+      ...DEFAULT_COLUMNS,
+      ideas,
+      { kind: 'custom', id: 'Review', name: 'Review' }
+    ])
+  })
+
+  it('leaves a project with columns of its own out of a default change', async () => {
+    await service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
+    const listener = vi.fn()
+    service.onBoardChanged(listener)
+
+    await service.editBoardColumns(null, { kind: 'add', name: 'Review' })
+
+    expect(service.boardColumns(projectId).columns).toEqual([...DEFAULT_COLUMNS, ideas])
+    expect(listener.mock.calls).toEqual([[{ projectId: otherId }]])
+  })
+
+  it('refuses to remove a default column a following board still has a task in', async () => {
+    await service.editBoardColumns(null, { kind: 'add', name: 'Ideas' })
+    await service.createCard(otherId, { status: 'Ideas', title: 'A' })
+
+    await expect(
+      service.editBoardColumns(null, { kind: 'remove', id: 'Ideas' })
+    ).rejects.toMatchObject({ code: 'columnNotEmpty', params: { project: 'ledger', count: '1' } })
+    expect(service.getConfig().boardColumns).toEqual([...DEFAULT_COLUMNS, ideas])
+  })
+
+  it('removes a default column whose tasks are only on a board with its own columns', async () => {
+    await service.editBoardColumns(null, { kind: 'add', name: 'Ideas' })
+    await service.editBoardColumns(projectId, { kind: 'reorder', ids: [] })
+    await service.createCard(projectId, { status: 'Ideas', title: 'A' })
+
+    await service.editBoardColumns(null, { kind: 'remove', id: 'Ideas' })
+
+    expect(service.getConfig().boardColumns).toEqual(DEFAULT_COLUMNS)
+    expect(service.boardColumns(projectId).columns).toEqual([...DEFAULT_COLUMNS, ideas])
+  })
+
+  it("refuses to remove a project's column that still has a task", async () => {
+    await service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
+    await service.createCard(projectId, { status: 'Ideas', title: 'A' })
+
+    await expect(
+      service.editBoardColumns(projectId, { kind: 'remove', id: 'Ideas' })
+    ).rejects.toMatchObject({ code: 'columnNotEmpty', params: { project: 'planner', count: '1' } })
+  })
+
+  it('counts only the tasks in the column that would go', async () => {
+    await service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
+    await service.createCard(projectId, { status: 'backlog', title: 'A' })
+
+    await expect(
+      service.editBoardColumns(projectId, { kind: 'remove', id: 'Ideas' })
+    ).resolves.toEqual({ columns: DEFAULT_COLUMNS, own: true })
+  })
+
+  it("removes a project's empty column", async () => {
+    await service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
+
+    await expect(
+      service.editBoardColumns(projectId, { kind: 'remove', id: 'Ideas' })
+    ).resolves.toEqual({ columns: DEFAULT_COLUMNS, own: true })
+  })
+
+  it('removes a column with no board folder to look in', async () => {
+    await service.editBoardColumns(null, { kind: 'add', name: 'Ideas' })
+    await service.updateConfig({ boardFolder: '' })
+
+    await service.editBoardColumns(null, { kind: 'remove', id: 'Ideas' })
+
+    expect(service.getConfig().boardColumns).toEqual(DEFAULT_COLUMNS)
+  })
+
+  it('reads no board for an edit that removes nothing', async () => {
+    await service.updateConfig({ boardFolder: join(dir, 'nowhere') })
+
+    await expect(
+      service.editBoardColumns(null, { kind: 'add', name: 'Ideas' })
+    ).resolves.toMatchObject({ own: false })
+  })
+
+  it('refuses an edit the columns cannot take, and keeps them', async () => {
+    await expect(
+      service.editBoardColumns(projectId, { kind: 'remove', id: 'done' })
+    ).rejects.toMatchObject({ code: 'columnBuiltIn' })
+    expect(service.boardColumns(projectId)).toEqual({ columns: DEFAULT_COLUMNS, own: false })
+  })
+
+  it('sends a project back to the default columns', async () => {
+    await service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
+    const listener = vi.fn()
+    service.onBoardChanged(listener)
+
+    await expect(service.resetBoardColumns(projectId)).resolves.toEqual({
+      columns: DEFAULT_COLUMNS,
+      own: false
+    })
+    expect(listener.mock.calls).toEqual([[{ projectId }]])
+  })
+
+  it('refuses to send a project back while a column that would go has a task', async () => {
+    await service.editBoardColumns(projectId, { kind: 'add', name: 'Ideas' })
+    await service.createCard(projectId, { status: 'Ideas', title: 'A' })
+
+    await expect(service.resetBoardColumns(projectId)).rejects.toMatchObject({
+      code: 'columnNotEmpty'
+    })
+    expect(service.boardColumns(projectId).own).toBe(true)
+  })
+
+  it('sends a project back when its tasks are in columns the defaults keep', async () => {
+    await service.editBoardColumns(null, { kind: 'add', name: 'Ideas' })
+    await service.editBoardColumns(projectId, { kind: 'reorder', ids: ['Ideas'] })
+    await service.createCard(projectId, { status: 'Ideas', title: 'A' })
+
+    await expect(service.resetBoardColumns(projectId)).resolves.toEqual({
+      columns: [...DEFAULT_COLUMNS, ideas],
+      own: false
+    })
+  })
+
+  it('refuses a project it does not know', async () => {
+    expect(() => service.boardColumns('nope')).toThrow(
+      expect.objectContaining({ code: 'worktreeMissing' })
+    )
+    await expect(
+      service.editBoardColumns('nope', { kind: 'add', name: 'Ideas' })
+    ).rejects.toMatchObject({ code: 'worktreeMissing' })
+    await expect(service.resetBoardColumns('nope')).rejects.toMatchObject({
+      code: 'worktreeMissing'
+    })
+  })
+})
+
 describe('watching the board folder', () => {
   function boardWatchSpy(): {
     readonly factory: NonNullable<ServiceOptions['boardWatch']>

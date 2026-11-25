@@ -6,7 +6,9 @@ A **project** is a repository that has been added: `id`, `name`, `repoPath`,
 `baseBranch`, `branchPrefix`, `color`, `icon`, and — beside the approvals below
 — its own `disabledSkillDefaults`, which is the config field one layer down: it
 answers for this project's conversations where the config answers for every
-project's.
+project's. `boardColumns` is the same for the board: absent or `null`, the board
+shows the config's columns. The first edit of a project's columns stores the whole
+list there, and going back to the default ones stores `null`.
 
 `baseBranch` is the branch the **user chose**, stored the way they chose it —
 `main` or `origin/develop`, both are accepted. It is deliberately not the ref a

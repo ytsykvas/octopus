@@ -13,6 +13,7 @@ The board is the one thing octopus keeps outside `~/.octopus`. Its cards are mar
     staging/
     done/
     blocked/
+    <added column>/          named after the column when it was added
     _attachments/<card>/     a card's attachments
     <any>.md                 a loose card, shown in Backlog
     <other folder>/<any>.md  a loose card, shown in Backlog
@@ -37,7 +38,9 @@ A key with a bad value is dropped and the others kept; unknown keys are kept as 
 
 ## Column folders
 
-A board's columns are a list ([`src/core/boardColumns.ts`](../../src/core/boardColumns.ts)): the six built in, each its status, in the order shown. A folder is a column's when its name and the column's id, each lower-cased with `-`, `_` and runs of spaces turned into one space, are equal (`columnKey`): `In-Progress` is "in progress". Of two folders of one column the first by `compareNames` takes new and moved cards; the cards of both are shown. A link, a file, or a folder whose name starts with `_` or `.` is never a column folder. A card written or moved into a column the list does not hold is refused (`columnMissing`). Nothing is made by reading: a project with no folder is an empty board and a missing status folder an empty column, each made by the first write into it — so two Macs opening the board at once cannot leave a `backlog 2` behind.
+A board's columns are a list ([`src/core/boardColumns.ts`](../../src/core/boardColumns.ts)): the six built in, each its status, in the order shown. A folder is a column's when its name and the column's id, each lower-cased with `-`, `_` and runs of spaces turned into one space, are equal (`columnKey`): `In-Progress` is "in progress". Of two folders of one column the first by `compareNames` takes new and moved cards; the cards of both are shown. A link, a file, or a folder whose name starts with `_` or `.` is never a column folder. A card written or moved into a column the list does not hold, or a rename or removal of one, is refused (`columnMissing`).
+
+The list is the config's `boardColumns` unless the project holds its own; the first edit of a project's columns gives it its own copy, and going back to the default ones (`resetBoardColumns`) is refused while a column they lack holds a card. A built-in column can be moved but not renamed or removed (`columnBuiltIn`), and a board holds at most 24 columns (`columnsFull`). A column added beside them (`editColumns`) is named as typed — one line of up to 60 characters, trimmed — and takes a folder named after it (`safeStem`), numbered when another column's folder or a name the scan skips is in the way; a new name changes only the name, so no folder is renamed under a synced board. No two columns share a name as `columnKey` compares them, a built-in one by its English id whatever language the window shows it in (`columnNameTaken`). A new order names the columns by id: an id the list lacks is ignored, and a column the order leaves out goes last, in the order it had. A column is removed only while no board it shows on holds a card in it (`columnNotEmpty`), checked before the write rather than under it: a card that lands in between is shown loose in Backlog, never lost. The lists are kept on this Mac, so another Mac without an added column shows its cards loose in Backlog too. Nothing is made by reading: a project with no folder is an empty board and a missing column folder an empty column, each made by the first write into it — so two Macs opening the board at once cannot leave a `backlog 2` behind.
 
 ## What is a card
 

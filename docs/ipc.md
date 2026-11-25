@@ -35,7 +35,7 @@ The only channels outside this shape are `theme:get`, which cannot fail, and
 | --------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `theme:get`     | —         | resolves `system` against the OS                                                                                                                                                                                                                                           |
 | `config:get`    | —         |                                                                                                                                                                                                                                                                            |
-| `config:update` | `patch`   | parsed strictly with `ConfigPatchSchema`: the lists (`config:edit`), `version`, `deviceId`, `installedAt`, unknown keys and a key sent as `undefined` are refused, and a setting left out stays as it was. Broadcasts `theme:changed` and `config:changed` to every window |
+| `config:update` | `patch`   | parsed strictly with `ConfigPatchSchema`: lists (`config:edit`, `board:editColumns`), `version`, `deviceId`, `installedAt`, unknown keys and an `undefined` value are refused; a setting left out is kept. Broadcasts `theme:changed` and `config:changed` to every window |
 | `config:edit`   | `edit`    | one list changed by an operation (`ConfigEditSchema`): a skill off or on by default, a tip dismissed, a standing permission forgotten. Broadcasts like `config:update`                                                                                                     |
 
 ### Projects
@@ -272,6 +272,9 @@ folder run one after another — two projects whose names give one folder share 
 | `board:revealFile`      | `projectId`, `ref`, `name`  | shows one of the card's files selected in Finder, never opens it                                                        |
 | `board:removeFile`      | `projectId`, `ref`, `name`  | one of the card's files to the Trash, as `board:remove` sends the card                                                  |
 | `board:revealCard`      | `projectId`, `ref`          | shows the card's own file selected in Finder                                                                            |
+| `board:columns`         | `projectId` or `null`       | the project's columns and whether they are its own; `null` answers the default ones                                     |
+| `board:editColumns`     | `projectId`/`null`, `edit`  | adds, renames or removes one column, or takes a new order; `null` edits the default ones and pushes `config:changed`    |
+| `board:resetColumns`    | `projectId`                 | the project back to the default columns; refused while a column that would go holds a card                              |
 
 `board:run` answers the workspace, the card's description as a draft (null once
 a conversation of a workspace already here has started), the first kind detour,

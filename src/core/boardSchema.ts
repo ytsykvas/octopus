@@ -185,6 +185,10 @@ export type BoardErrorCode =
   | 'cardNotText'
   | 'cardTooLong'
   | 'columnMissing'
+  | 'columnBuiltIn'
+  | 'columnNameTaken'
+  | 'columnsFull'
+  | 'columnNotEmpty'
 
 export class BoardError extends CodedError<BoardErrorCode> {
   override readonly name = 'BoardError'
