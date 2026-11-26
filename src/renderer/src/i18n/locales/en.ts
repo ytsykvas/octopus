@@ -664,7 +664,10 @@ export const en = {
       'Sent as the first message of a new conversation when you choose Help → “Set this project up to run”. Octopus adds the checkout, the workspace’s name, slug and port, the scripts in effect, the files it carries and the names of the variables below it — never their values.',
     diagnoseRun: 'Diagnosing a run that failed',
     diagnoseRunHint:
-      'Sent as the first message of a new conversation when you choose Help → “Why does Run not work?”. Octopus adds the same facts, whether anything is listening on the port, and the last lines of the latest build and server, with their exit codes.'
+      'Sent as the first message of a new conversation when you choose Help → “Why does Run not work?”. Octopus adds the same facts, whether anything is listening on the port, and the last lines of the latest build and server, with their exit codes.',
+    taskCards: 'Task cards',
+    taskCardsHint:
+      'Sent in the first message when you plan tasks with the agent on the board, or edit one with it. It says how this project wants a task written; octopus adds what the agent is to do, the board’s priorities and tags, and your idea or the task.'
   },
 
   help: {

@@ -141,7 +141,8 @@ describe('the instruction every project falls back to', () => {
       'Answering a review',
       'Reviewing a change',
       'A review from several angles',
-      'Resolving conflicts'
+      'Resolving conflicts',
+      'Task cards'
     ]) {
       expect(await screen.findByLabelText(label)).toBeInTheDocument()
     }
@@ -157,7 +158,8 @@ describe('the instruction every project falls back to', () => {
       'multiAgentReview',
       'resolveConflicts',
       'setupScripts',
-      'diagnoseRun'
+      'diagnoseRun',
+      'taskCards'
     ])
   })
 

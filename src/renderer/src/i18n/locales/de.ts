@@ -550,7 +550,10 @@ export const de: Translation = {
       'Wird als erste Nachricht eines neuen Gesprächs gesendet, wenn du Hilfe → „Dieses Projekt startklar machen“ wählst. Octopus fügt darunter den Checkout, Name, Slug und Port des Workspace, die geltenden Skripte, die mitgenommenen Dateien und die Namen der Variablen an — nie ihre Werte.',
     diagnoseRun: 'Einen fehlgeschlagenen Lauf untersuchen',
     diagnoseRunHint:
-      'Wird als erste Nachricht eines neuen Gesprächs gesendet, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten, ob auf dem Port gerade etwas lauscht, und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.'
+      'Wird als erste Nachricht eines neuen Gesprächs gesendet, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten, ob auf dem Port gerade etwas lauscht, und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.',
+    taskCards: 'Aufgabenkarten',
+    taskCardsHint:
+      'Wird in der ersten Nachricht gesendet, wenn du auf dem Board Aufgaben mit dem Agenten planst oder eine mit ihm bearbeitest. Sagt, wie dieses Projekt eine Aufgabe geschrieben haben will; octopus fügt hinzu, was der Agent tun soll, die Prioritäten und Tags des Boards und deine Idee oder die Aufgabe.'
   },
 
   help: {

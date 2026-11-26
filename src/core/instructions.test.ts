@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ARCHIVE_OUTPUT_TAIL_BYTES, ARCHIVE_TIMEOUT_MS } from './archive.js'
 import {
   effectiveInstruction,
+  INSTRUCTION_FILES,
   InstructionBodySchema,
   InstructionKindSchema,
   instructionPath,
@@ -318,5 +319,22 @@ describe('the two Help asks for', () => {
   // An edited script disables Run until it is allowed again.
   it('say that a script it changes waits to be allowed', () => {
     expect(instructionTemplate('diagnoseRun')).toContain('Run is gated again')
+  })
+})
+
+describe('the task cards the board asks for', () => {
+  it('are a file of their own and push nothing', () => {
+    expect(INSTRUCTION_FILES.taskCards).toBe('task-cards.md')
+    expect(PUBLISHES_AFTER.taskCards).toBe(false)
+  })
+
+  // The brainstorm's own text says how to propose; the template says only how a task reads.
+  it('say how one task is told from several, and what a task holds', () => {
+    const template = instructionTemplate('taskCards')
+
+    expect(template).toContain('merged on its own')
+    expect(template).toContain('"After: <title>"')
+    expect(template).toContain('**Done when**: a checklist of `- [ ]` items')
+    expect(template).not.toContain('propose_tasks')
   })
 })
