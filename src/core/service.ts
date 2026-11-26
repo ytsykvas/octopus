@@ -5742,7 +5742,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         skillOverrides: {},
         autoCompactWindow: null,
         // No map to draw a status line in, and one is a model call.
-        agentProgressSummaries: false
+        agentProgressSummaries: false,
+        confined: null
       },
       {
         query: runQuery,
@@ -5876,7 +5877,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         env,
         skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow,
-        agentProgressSummaries: config.agentProgressSummaries
+        agentProgressSummaries: config.agentProgressSummaries,
+        confined: null
       },
       {
         query: runQuery,

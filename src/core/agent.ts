@@ -16,6 +16,7 @@ import type { UUID } from 'node:crypto'
 import type {
   HookCallback,
   AgentInfo,
+  McpServerConfig,
   ModelInfo,
   Options,
   Settings,
@@ -155,6 +156,17 @@ export interface SessionOptions {
    * option of the query, not a flag a running session takes.
    */
   readonly agentProgressSummaries: boolean
+  /** A session shut in to a few tools for one sitting, or null for the agent's whole set. */
+  readonly confined: Confinement | null
+}
+
+/**
+ * `tools` is the built-in set itself, not an allow-list: a rule in the user's settings allowing
+ * `Edit` cannot reach a tool left out. The servers replace every other (`strictMcpConfig`).
+ */
+export interface Confinement {
+  readonly tools: readonly string[]
+  readonly servers: Readonly<Record<string, McpServerConfig>>
 }
 
 /** What the agent wants to do, as handed to whoever decides. */
@@ -1060,6 +1072,12 @@ export function startSession(options: SessionOptions, hooks: SessionHooks): Agen
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       permissionMode: options.permissionMode,
       allowedTools: [...options.allowedTools],
+      ...(options.confined !== null && {
+        tools: [...options.confined.tools],
+        mcpServers: { ...options.confined.servers },
+        strictMcpConfig: true,
+        persistSession: false
+      }),
       // These own `hooks`, `disallowedTools` and `env`: a key of the same name
       // later in this object would take the guard away.
       ...publishLocked(

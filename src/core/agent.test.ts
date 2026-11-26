@@ -1,5 +1,6 @@
 import type {
   AgentInfo,
+  McpServerConfig,
   ModelInfo,
   PermissionUpdate,
   Query,
@@ -215,6 +216,7 @@ function fakeAgent(
       skillOverrides: {},
       autoCompactWindow: null,
       agentProgressSummaries: true,
+      confined: null,
       ...overrides
     },
     {
@@ -2072,6 +2074,28 @@ describe('a session', () => {
     expect(agent.options().settings).toMatchObject({ autoCompactWindow: 500_000 })
   })
 
+  it('shuts a confined session in to its tools and servers, and keeps nothing of it', () => {
+    const server = { type: 'sdk', name: 'octopus' } as unknown as McpServerConfig
+    const { agent } = fakeAgent({
+      confined: { tools: ['Read', 'AskUserQuestion'], servers: { octopus: server } }
+    })
+
+    expect(agent.options()).toMatchObject({
+      tools: ['Read', 'AskUserQuestion'],
+      mcpServers: { octopus: server },
+      strictMcpConfig: true,
+      persistSession: false
+    })
+  })
+
+  it('leaves the tools, the servers and the saving to the agent when not confined', () => {
+    const options = fakeAgent().agent.options()
+
+    for (const key of ['tools', 'mcpServers', 'strictMcpConfig', 'persistSession']) {
+      expect(options).not.toHaveProperty(key)
+    }
+  })
+
   it("asks for the subagents' status lines unless the setting is off", () => {
     expect(fakeAgent().agent.options()).toMatchObject({ agentProgressSummaries: true })
     expect(fakeAgent({ agentProgressSummaries: false }).agent.options()).toMatchObject({
@@ -2448,7 +2472,8 @@ describe('a session that will not close', () => {
         env: {},
         skillOverrides: {},
         autoCompactWindow: null,
-        agentProgressSummaries: true
+        agentProgressSummaries: true,
+        confined: null
       },
       {
         query: () => conversation,

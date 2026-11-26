@@ -90,7 +90,8 @@ const session = startSession(
     env: {},
     skillOverrides: {},
     autoCompactWindow: null,
-    agentProgressSummaries: false
+    agentProgressSummaries: false,
+    confined: null
   },
   {
     // Kept so the raw reply can be written out beside the parsed one.
