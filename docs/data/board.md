@@ -23,7 +23,7 @@ A project and its folder are matched by name (`boardFolderName`, then `sameName`
 
 ## A card file
 
-An optional YAML header, only when the first line is exactly `---` and a closing `---` follows; then the description, whose first `# ` line outside a code fence is the title (none: the file name); then, after the line `<!-- octopus:comments -->`, the comments, each under `### <ISO time>`.
+An optional YAML header, only when the first line is exactly `---` and a closing `---` follows; then the description, whose first `# ` line outside a code fence is the title (none: the file name); then, after the line `<!-- octopus:comments -->`, the comments, each under `### <ISO time>`. A description that leaves a code fence open gets its closing fence written before the marker, when a description is saved over comments or the first comment is added (`withFenceClosed`): left open, the block would carry the marker and every comment into the description.
 
 | Key        | Type                                | Absent means                     |
 | ---------- | ----------------------------------- | -------------------------------- |

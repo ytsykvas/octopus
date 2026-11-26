@@ -15,7 +15,14 @@ import {
   type CardDraft,
   type CardMeta
 } from './boardSchema.js'
-import { COMMENTS_MARKER, retitled, splitBody, threadOf, titleOf } from './boardText.js'
+import {
+  COMMENTS_MARKER,
+  retitled,
+  splitBody,
+  threadOf,
+  titleOf,
+  withFenceClosed
+} from './boardText.js'
 
 const BOM = '\uFEFF'
 
@@ -195,7 +202,7 @@ export function withDescription(raw: string, text: string): string {
   const { head, body } = splitCard(raw)
   const { tail } = splitBody(body)
   const blank = text.trim() === ''
-  if (tail !== '') return head + (blank ? tail : `${text.trimEnd()}\n\n${tail}`)
+  if (tail !== '') return head + (blank ? tail : `${withFenceClosed(text).trimEnd()}\n\n${tail}`)
   return head + (blank ? '' : `${text.trimEnd()}\n`)
 }
 
@@ -204,7 +211,7 @@ export function withComment(raw: string, at: string, text: string): string {
   const { description, tail } = splitBody(body)
   const entry = `### ${at}\n\n${text.trim()}\n`
   if (tail !== '') return `${head}${description}${tail.trimEnd()}\n\n${entry}`
-  const prefix = description.trimEnd()
+  const prefix = withFenceClosed(description).trimEnd()
   return `${head}${prefix === '' ? '' : `${prefix}\n\n`}${COMMENTS_MARKER}\n\n${entry}`
 }
 

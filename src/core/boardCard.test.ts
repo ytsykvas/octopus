@@ -345,6 +345,18 @@ describe('withDescription', () => {
   ])('%j with %j', (raw, text, expected) => {
     expect(withDescription(raw, text)).toBe(expected)
   })
+
+  it('closes a code block the text leaves open, so the comments after it stay comments', () => {
+    const raw = withDescription(
+      `# A\n\n${M}\n\n### 2026-01-02T03:04:05.000Z\n\nhi\n`,
+      '# A\n\n````sh\nls\n'
+    )
+
+    expect(raw).toBe(
+      `# A\n\n${'`'.repeat(4)}sh\nls\n${'`'.repeat(4)}\n\n${M}\n\n### 2026-01-02T03:04:05.000Z\n\nhi\n`
+    )
+    expect(parseCard(raw, 'A.md').thread).toHaveLength(1)
+  })
 })
 
 describe('withComment', () => {
@@ -362,6 +374,13 @@ describe('withComment', () => {
     ['---\na: 1\n---\n# A\n', '2026-01-02T03:04:05.000Z', 'hi', `---\na: 1\n---\n${once}`]
   ])('%j at %s', (raw, at, text, expected) => {
     expect(withComment(raw, at, text)).toBe(expected)
+  })
+
+  it('closes a code block the description leaves open before the first comment', () => {
+    const raw = withComment('# A\n\n~~~\ncode\n', '2026-01-02T03:04:05.000Z', 'hi')
+
+    expect(raw).toBe(`# A\n\n~~~\ncode\n~~~\n\n${M}\n\n### 2026-01-02T03:04:05.000Z\n\nhi\n`)
+    expect(parseCard(raw, 'A.md').thread).toEqual([{ at: '2026-01-02T03:04:05.000Z', text: 'hi' }])
   })
 })
 

@@ -18,6 +18,7 @@ interface Line {
   readonly text: string
   /** Outside every fenced block and not a fence line itself. */
   readonly prose: boolean
+  readonly open: string | null
 }
 
 /** The fence character a line opens or closes a block with, or null. Up to three spaces before it. */
@@ -33,17 +34,30 @@ function fenceOf(text: string): string | null {
 function linesOf(text: string): Line[] {
   const lines: Line[] = []
   let fence: string | null = null
+  let open: string | null = null
   for (let start = 0; start < text.length;) {
     const newline = text.indexOf('\n', start)
     const end = newline === -1 ? text.length : newline + 1
     const line = text.slice(start, end).replace(/\r?\n?$/, '')
     const marker = fenceOf(line)
-    lines.push({ start, text: line, prose: fence === null && marker === null })
-    if (marker !== null && fence === null) fence = marker
-    else if (marker !== null && marker === fence) fence = null
+    const prose = fence === null && marker === null
+    if (marker !== null && fence === null) {
+      fence = marker
+      open = line.trimStart().replace(/[^`~][\s\S]*$/, '')
+    } else if (marker !== null && marker === fence) {
+      fence = null
+      open = null
+    }
+    lines.push({ start, text: line, prose, open })
     start = end
   }
   return lines
+}
+
+// Before a marker: a block left open would carry the marker, and every comment after it, inside.
+export function withFenceClosed(text: string): string {
+  const open = linesOf(text).at(-1)?.open ?? null
+  return open === null ? text : `${text.trimEnd()}\n${open}\n`
 }
 
 const isTitleLine = (line: Line): boolean => line.prose && /^#[ \t]+\S/.test(line.text)
