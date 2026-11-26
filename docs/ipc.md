@@ -256,29 +256,45 @@ what knows whether it names a project. Reads take no turn; writes to one board
 folder run one after another — two projects whose names give one folder share it
 — and an id that names no project is refused before it waits.
 
-| Channel                 | Arguments                   | Notes                                                                                                                   |
-| ----------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `board:list`            | `projectId`                 | the folder, its columns and every card in it; a project with no folder yet is an empty board, and nothing is made       |
-| `board:read`            | `projectId`, `ref`          | one card whole: description and comments                                                                                |
-| `board:create`          | `projectId`, `draft`        | a new card at the top of its column, answering its ref; a file that reached the name first is refused (`cardNameTaken`) |
-| `board:update`          | `projectId`, `ref`, `patch` | priority, tag and links; a key the patch leaves out is left alone                                                       |
-| `board:rename`          | `projectId`, `ref`, `title` | the `# ` line; the file keeps its name                                                                                  |
-| `board:saveDescription` | `projectId`, `ref`, `save`  | refused with `cardChanged` when the description changed since `base`, unless `base` is null                             |
-| `board:comment`         | `projectId`, `ref`, `text`  | a comment stamped by main, under the card's marker                                                                      |
-| `board:move`            | `projectId`, `ref`, `move`  | into a column at an index, answering the new ref; never replaces a file                                                 |
-| `board:remove`          | `projectId`, `ref`          | to the Trash                                                                                                            |
-| `board:run`             | `projectId`, `ref`          | starts a workspace from the card, or answers the one already started from it here (`CardLaunch`)                        |
-| `board:attach`          | `projectId`, `ref`          | copies what was picked in main's file dialog into the card's `_attachments/<stem>/`; how many, `0` when cancelled       |
-| `board:revealFile`      | `projectId`, `ref`, `name`  | shows one of the card's files selected in Finder, never opens it                                                        |
-| `board:removeFile`      | `projectId`, `ref`, `name`  | one of the card's files to the Trash, as `board:remove` sends the card                                                  |
-| `board:revealCard`      | `projectId`, `ref`          | shows the card's own file selected in Finder                                                                            |
-| `board:columns`         | `projectId` or `null`       | the project's columns and whether they are its own; `null` answers the default ones                                     |
-| `board:editColumns`     | `projectId`/`null`, `edit`  | adds, renames or removes one column, or takes a new order; `null` edits the default ones and pushes `config:changed`    |
-| `board:resetColumns`    | `projectId`                 | the project back to the default columns; refused while a column that would go holds a card                              |
+| Channel                 | Arguments                     | Notes                                                                                                                                          |
+| ----------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `board:list`            | `projectId`                   | the folder, its columns and every card in it; a project with no folder yet is an empty board, and nothing is made                              |
+| `board:read`            | `projectId`, `ref`            | one card whole: description and comments                                                                                                       |
+| `board:create`          | `projectId`, `draft`          | a new card at the top of its column, answering its ref; a file that reached the name first is refused (`cardNameTaken`)                        |
+| `board:createMany`      | `projectId`, `drafts`         | up to ten cards, each with an optional description, priority and tag; every ref in order, null where one was refused, and the earliest refusal |
+| `board:rewrite`         | `projectId`, `ref`, `rewrite` | title, description, priority and tag over whole; refused with `cardChanged` when the description is not `base`                                 |
+| `board:update`          | `projectId`, `ref`, `patch`   | priority, tag and links; a key the patch leaves out is left alone                                                                              |
+| `board:rename`          | `projectId`, `ref`, `title`   | the `# ` line; the file keeps its name                                                                                                         |
+| `board:saveDescription` | `projectId`, `ref`, `save`    | refused with `cardChanged` when the description changed since `base`, unless `base` is null                                                    |
+| `board:comment`         | `projectId`, `ref`, `text`    | a comment stamped by main, under the card's marker                                                                                             |
+| `board:move`            | `projectId`, `ref`, `move`    | into a column at an index, answering the new ref; never replaces a file                                                                        |
+| `board:remove`          | `projectId`, `ref`            | to the Trash                                                                                                                                   |
+| `board:run`             | `projectId`, `ref`            | starts a workspace from the card, or answers the one already started from it here (`CardLaunch`)                                               |
+| `board:attach`          | `projectId`, `ref`            | copies what was picked in main's file dialog into the card's `_attachments/<stem>/`; how many, `0` when cancelled                              |
+| `board:revealFile`      | `projectId`, `ref`, `name`    | shows one of the card's files selected in Finder, never opens it                                                                               |
+| `board:removeFile`      | `projectId`, `ref`, `name`    | one of the card's files to the Trash, as `board:remove` sends the card                                                                         |
+| `board:revealCard`      | `projectId`, `ref`            | shows the card's own file selected in Finder                                                                                                   |
+| `board:columns`         | `projectId` or `null`         | the project's columns and whether they are its own; `null` answers the default ones                                                            |
+| `board:editColumns`     | `projectId`/`null`, `edit`    | adds, renames or removes one column, or takes a new order; `null` edits the default ones and pushes `config:changed`                           |
+| `board:resetColumns`    | `projectId`                   | the project back to the default columns; refused while a column that would go holds a card                                                     |
 
 `board:run` answers the workspace, the card's description as a draft (null once
 a conversation of a workspace already here has started), the first kind detour,
 and `created`, false when the workspace was already here.
+
+### The brainstorm
+
+One conversation at a time, held in memory by `brainstorm.ts`: starting one closes any other, which
+also ends one a reloaded window left behind. Its lines come on `brainstorm:entry`.
+
+| Channel                | Arguments                              | Notes                                                                                                                      |
+| ---------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `brainstorm:start`     | `projectId`, `text`                    | a conversation in the project's checkout planning new tasks; answers its id. Refused before a session with no board folder |
+| `brainstorm:startEdit` | `projectId`, `ref`, `text`             | the same, on one card; refused before a session for a card that is not text or whose header cannot be read                 |
+| `brainstorm:send`      | `brainstormId`, `text`                 | the next message; `brainstormGone` once it ended                                                                           |
+| `brainstorm:answer`    | `brainstormId`, `requestId`, `answers` | the agent's questions, as `chats:answerQuestions`                                                                          |
+| `brainstorm:stop`      | `brainstormId`                         | interrupts the turn under way                                                                                              |
+| `brainstorm:close`     | `brainstormId`                         | ends it; nothing of it is kept                                                                                             |
 
 ### Workspaces
 
@@ -391,6 +407,10 @@ Mac through whatever syncs the folder — and when that board's columns were
 edited, which for the default columns is every board that follows them. It names the project and nothing else,
 and the window reads the board again: a list of what changed would be a second
 copy of the folder to keep true.
+
+**`brainstorm:entry`** carries `{ brainstormId, entry }` — a line of the board's conversation as the
+log draws one, the person's messages included, so the panel keeps no copy of its own. Deltas are
+not sent: the panel draws a message when it is whole.
 
 **`chats:status`** carries `{ chatId, workspaceId, status, interrupted, turnStartedAt }` — `interrupted` false on every one, since any move ends it, and said rather than assumed so the rule lives in core alone; the last when the turn under way began, kept by the service by the same rule the working line reads a log with (`turns.ts`), so the status bar can count a turn whose log no window has loaded. The twin of the
 one above, a level in: the tab strip draws a conversation while

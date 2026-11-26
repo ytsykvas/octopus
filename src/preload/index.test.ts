@@ -71,6 +71,7 @@ describe('the exposed bridge', () => {
       'accounts',
       'attachments',
       'board',
+      'brainstorm',
       'chats',
       'config',
       'dialog',
@@ -584,6 +585,38 @@ describe('channel names', () => {
       'board:resetColumns'
     ],
     [
+      'board.createMany',
+      () => method('board', 'createMany')('p' as never, [] as never),
+      'board:createMany'
+    ],
+    [
+      'board.rewrite',
+      () => method('board', 'rewrite')('p' as never, 'backlog/a.md' as never, {} as never),
+      'board:rewrite'
+    ],
+    [
+      'brainstorm.start',
+      () => method('brainstorm', 'start')('p' as never, 'x' as never),
+      'brainstorm:start'
+    ],
+    [
+      'brainstorm.startEdit',
+      () => method('brainstorm', 'startEdit')('p' as never, 'a.md' as never, 'x' as never),
+      'brainstorm:startEdit'
+    ],
+    [
+      'brainstorm.send',
+      () => method('brainstorm', 'send')('b' as never, 'x' as never),
+      'brainstorm:send'
+    ],
+    [
+      'brainstorm.answer',
+      () => method('brainstorm', 'answer')('b' as never, 'r' as never, [] as never),
+      'brainstorm:answer'
+    ],
+    ['brainstorm.stop', () => method('brainstorm', 'stop')('b' as never), 'brainstorm:stop'],
+    ['brainstorm.close', () => method('brainstorm', 'close')('b' as never), 'brainstorm:close'],
+    [
       'library.list',
       () => method('library', 'list')({ kind: 'global' } as never, 'command' as never),
       'library:list'
@@ -799,6 +832,7 @@ describe('channel names', () => {
     'workspaces.onStatus',
     'workspaces.onPushed',
     'board.onChanged',
+    'brainstorm.onEntry',
     'workspaces.onDraft',
     'terminal.onData',
     'terminal.onExit',
@@ -1205,6 +1239,22 @@ describe('the rest of the surface', () => {
 
     stop()
     expect(off).toHaveBeenCalledWith('board:changed', expect.any(Function))
+  })
+
+  it('brainstorm.onEntry delivers the line and unsubscribes', () => {
+    const handler = vi.fn()
+    const stop = method('brainstorm', 'onEntry')(handler as never) as () => void
+
+    const listener = on.mock.calls.find(([channel]) => channel === 'brainstorm:entry')?.[1] as (
+      event: unknown,
+      payload: unknown
+    ) => void
+
+    listener({}, { brainstormId: 'b1' })
+    expect(handler).toHaveBeenCalledWith({ brainstormId: 'b1' })
+
+    stop()
+    expect(off).toHaveBeenCalledWith('brainstorm:entry', expect.any(Function))
   })
 })
 

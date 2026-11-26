@@ -16,6 +16,7 @@ import { type BackupRecovery, openWithRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
 import {
   pushBoardChanged,
+  pushBrainstormEntry,
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
@@ -260,6 +261,9 @@ async function start(): Promise<void> {
     },
     broadcastBoardChanged: (event) => {
       pushBoardChanged(BrowserWindow.getAllWindows(), event)
+    },
+    broadcastBrainstormEntry: (entry) => {
+      pushBrainstormEntry(BrowserWindow.getAllWindows(), entry)
     },
     broadcastUsageWindows: (windows) => {
       pushUsageWindows(BrowserWindow.getAllWindows(), windows)

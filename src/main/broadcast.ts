@@ -83,6 +83,11 @@ export function pushBoardChanged(targets: readonly PushTarget[], event: unknown)
   pushAll(targets, 'board:changed', event)
 }
 
+/** A line of the board's brainstorm log: a message sent, or something its agent did. */
+export function pushBrainstormEntry(targets: readonly PushTarget[], entry: unknown): void {
+  pushAll(targets, 'brainstorm:entry', entry)
+}
+
 export function pushUsageWindows(targets: readonly PushTarget[], windows: unknown): void {
   pushAll(targets, 'usage:windows', windows)
 }
