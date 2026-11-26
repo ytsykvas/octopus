@@ -324,7 +324,8 @@ Colours always go through tokens, never raw hex, otherwise the dark theme breaks
 ### 10.7 Rules that are easy to break
 
 - Text on an accent uses the `on-accent` token, not `text-white`; a mark on a
-  project colour uses `on-project`, dark in both themes.
+  project colour uses `on-project`, and the label and icon of a green action
+  `on-success` — both dark in both themes, because white sinks into green.
 - Statuses (`success`, `danger`, …) colour text or icons; only the paired `*-bg` is used as a background. Solid colour blocks make a list look like confetti.
 - Empty states and hints use `ink-soft` so they do not compete with the content.
 
