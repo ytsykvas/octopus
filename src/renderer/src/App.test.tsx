@@ -3547,7 +3547,10 @@ describe('App', () => {
     // What it offers instead: the two things a request that exists can have
     // done to it, rather than an invitation to open a second one.
     // Green, like every press that finishes the work.
-    expect(screen.getByRole('button', { name: 'Merge' })).toHaveClass('bg-success')
+    expect(screen.getByRole('button', { name: 'Merge' })).toHaveClass(
+      'bg-success',
+      'text-on-success'
+    )
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
   })
 

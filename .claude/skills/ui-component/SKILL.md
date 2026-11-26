@@ -92,7 +92,7 @@ inconsistency that reads as sloppiness rather than as variety.
 ## The tokens
 
 Available: `canvas`, `surface`, `muted`, `line`, `line-strong`, `ink`,
-`ink-soft`, `ink-faint`, `accent`, `accent-hover`, `on-accent`, `success`,
+`ink-soft`, `ink-faint`, `accent`, `accent-hover`, `on-accent`, `on-success`, `success`,
 `danger`, `warning`, `info`, plus paired backgrounds `success-bg`, `danger-bg`,
 `warning-bg`, `info-bg`.
 
