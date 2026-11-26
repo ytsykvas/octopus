@@ -7,8 +7,10 @@
 import { z } from 'zod'
 
 import type { Column } from './boardColumns.js'
+import { COMMENTS_MARKER, splitBody } from './boardText.js'
 import { CodedError } from './codedError.js'
 import { isExternalUrl } from './externalUrls.js'
+import type { Failure } from './failure.js'
 import { WorkspaceKindSchema } from './workspaceKinds.js'
 import type { KindDetour } from './workspaces.js'
 
@@ -31,7 +33,6 @@ export const CARD_PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const
 export const CardPrioritySchema = z.enum(CARD_PRIORITIES)
 export type CardPriority = z.infer<typeof CardPrioritySchema>
 
-export const COMMENTS_MARKER = '<!-- octopus:comments -->'
 export const ATTACHMENTS_DIR = '_attachments'
 export const ATTACHMENT_NAME_MAX = 255
 export const CARD_TITLE_MAX = 200
@@ -114,7 +115,31 @@ export const CardTitleSchema = z
   .min(1)
   .max(CARD_TITLE_MAX)
   .refine((title) => !/[\r\n]/.test(title))
-export const CardDraftSchema = z.strictObject({ status: ColumnIdSchema, title: CardTitleSchema })
+/** The comments marker written after it must still be the first: none of its own, no fence left open. */
+export const CardDescriptionSchema = z
+  .string()
+  .max(CARD_TEXT_MAX)
+  .refine((text) => splitBody(`${text}\n${COMMENTS_MARKER}\n`).description === `${text}\n`)
+export const CardDraftSchema = z.strictObject({
+  status: ColumnIdSchema,
+  title: CardTitleSchema,
+  description: CardDescriptionSchema.optional(),
+  priority: CardPrioritySchema.optional(),
+  tag: WorkspaceKindSchema.optional()
+})
+/**
+ * A card written over whole from what a brainstorm proposed and the person applied. `base` is
+ * its description as the brainstorm read it: a change made since is refused (`cardChanged`).
+ */
+export const CardRewriteSchema = z.strictObject({
+  title: CardTitleSchema,
+  description: CardDescriptionSchema,
+  priority: CardPrioritySchema.nullable(),
+  tag: WorkspaceKindSchema.nullable(),
+  base: z.string().max(CARD_TEXT_MAX)
+})
+export const CARDS_PER_BATCH = 10
+export const CardBatchSchema = z.array(CardDraftSchema).min(1).max(CARDS_PER_BATCH)
 export const CardPatchSchema = z
   .strictObject({
     priority: CardPrioritySchema.nullable(),
@@ -134,6 +159,7 @@ export const DescriptionSaveSchema = z.strictObject({
 export const CommentTextSchema = z.string().trim().min(1).max(20_000)
 
 export type CardDraft = z.infer<typeof CardDraftSchema>
+export type CardRewrite = z.infer<typeof CardRewriteSchema>
 export type CardPatch = z.infer<typeof CardPatchSchema>
 export type CardMove = z.infer<typeof CardMoveSchema>
 export type DescriptionSave = z.infer<typeof DescriptionSaveSchema>
@@ -169,6 +195,11 @@ export interface CardLaunch {
   readonly detour: KindDetour | null
   /** False when one started from the card was already here: the window must keep its drafts. */
   readonly created: boolean
+}
+/** Each draft's ref in the order asked, null where it was not written; the earliest refusal, if any. */
+export interface CreatedCards {
+  readonly refs: readonly (string | null)[]
+  readonly failure: Failure | null
 }
 export interface BoardChangedEvent {
   readonly projectId: string

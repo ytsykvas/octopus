@@ -11,11 +11,11 @@ import { type Document, isMap, isSeq, parseDocument, type YAMLMap } from 'yaml'
 import {
   BoardError,
   CardMetaSchema,
-  COMMENTS_MARKER,
   type CardComment,
+  type CardDraft,
   type CardMeta
 } from './boardSchema.js'
-import { retitled, splitBody, threadOf, titleOf } from './boardText.js'
+import { COMMENTS_MARKER, retitled, splitBody, threadOf, titleOf } from './boardText.js'
 
 const BOM = '\uFEFF'
 
@@ -229,6 +229,13 @@ export function parseCard(
   }
 }
 
-export function newCard(title: string, order: number): string {
-  return `---\norder: ${String(order)}\n---\n# ${title}\n`
+/** Every field in the one write that makes the file, so no Mac ever syncs a card half made. */
+export function newCard(card: Omit<CardDraft, 'status'>, order: number): string {
+  const header = [
+    `order: ${String(order)}`,
+    ...(card.priority === undefined ? [] : [`priority: ${card.priority}`]),
+    ...(card.tag === undefined ? [] : [`tag: ${card.tag}`])
+  ]
+  const body = card.description?.trim() ?? ''
+  return `---\n${header.join('\n')}\n---\n# ${card.title}\n${body === '' ? '' : `\n${body}\n`}`
 }

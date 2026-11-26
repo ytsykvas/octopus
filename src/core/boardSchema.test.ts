@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BoardError,
+  CardBatchSchema,
   CardDraftSchema,
+  CARD_TEXT_MAX,
+  CARDS_PER_BATCH,
   CardMetaSchema,
   CardMoveSchema,
   COLUMN_ID_MAX,
@@ -14,6 +17,7 @@ import {
   isCardRef,
   isCardUrl
 } from './boardSchema.js'
+import { COMMENTS_MARKER } from './boardText.js'
 import { CodedError, isCoded } from './codedError.js'
 
 const S = '2026-11-21T10:00:00.000Z'
@@ -175,10 +179,45 @@ describe('CardDraftSchema', () => {
     { status: 'backlog', title: 'A\rB' },
     { status: '', title: 'A' },
     { status: 'x'.repeat(COLUMN_ID_MAX + 1), title: 'A' },
-    { status: 'backlog', title: 'A', order: 1 }
+    { status: 'backlog', title: 'A', order: 1 },
+    { status: 'backlog', title: 'A', priority: 'soon' },
+    { status: 'backlog', title: 'A', tag: 'idea' },
+    { status: 'backlog', title: 'A', description: 'x'.repeat(CARD_TEXT_MAX + 1) },
+    { status: 'backlog', title: 'A', description: `Before\n${COMMENTS_MARKER}  \nAfter` },
+    { status: 'backlog', title: 'A', description: 'An example left open:\n\n```\ncode' }
   ])('refuses %j', (draft) => {
     expect(CardDraftSchema.safeParse(draft).success).toBe(false)
   })
+
+  it('takes a description, a priority and a tag beside the title', () => {
+    const draft = {
+      status: 'backlog',
+      title: 'A',
+      description: `Says ${COMMENTS_MARKER} inside a line, and quotes it:\n\n\`\`\`\n${COMMENTS_MARKER}\n\`\`\`\n\n    ${COMMENTS_MARKER}`,
+      priority: 'high',
+      tag: 'fix'
+    }
+
+    expect(CardDraftSchema.parse(draft)).toEqual(draft)
+  })
+})
+
+describe('CardBatchSchema', () => {
+  const draft = { status: 'backlog', title: 'A' }
+
+  it('takes one draft up to a batch of them', () => {
+    expect(CardBatchSchema.safeParse([draft]).success).toBe(true)
+    expect(
+      CardBatchSchema.safeParse(Array.from({ length: CARDS_PER_BATCH }, () => draft)).success
+    ).toBe(true)
+  })
+
+  it.each([[[]], [Array.from({ length: CARDS_PER_BATCH + 1 }, () => draft)]])(
+    'refuses %#',
+    (drafts) => {
+      expect(CardBatchSchema.safeParse(drafts).success).toBe(false)
+    }
+  )
 })
 
 describe('CardTitleSchema', () => {

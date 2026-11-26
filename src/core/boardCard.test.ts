@@ -376,11 +376,28 @@ describe('newCard', () => {
     ['Fix login', 0, '---\norder: 0\n---\n# Fix login\n'],
     ['Виправити', -1.5, '---\norder: -1.5\n---\n# Виправити\n']
   ])('%s at %d', (title, order, expected) => {
-    expect(newCard(title, order)).toBe(expected)
+    expect(newCard({ title }, order)).toBe(expected)
   })
 
   it('reads back its own order', () => {
-    expect(parseCard(newCard('X', 2), 'X.md').meta.order).toBe(2)
+    expect(parseCard(newCard({ title: 'X' }, 2), 'X.md').meta.order).toBe(2)
+  })
+
+  it('writes the priority, the tag and the description it is given', () => {
+    const raw = newCard(
+      { title: 'X', description: '\n\nWhy.\n\n- [ ] Done\n\n', priority: 'high', tag: 'fix' },
+      3
+    )
+
+    expect(raw).toBe('---\norder: 3\npriority: high\ntag: fix\n---\n# X\n\nWhy.\n\n- [ ] Done\n')
+    expect(parseCard(raw, 'X.md')).toMatchObject({
+      title: 'X',
+      meta: { order: 3, priority: 'high', tag: 'fix' }
+    })
+  })
+
+  it('writes no body for a description of blanks', () => {
+    expect(newCard({ title: 'X', description: ' \n ' }, 0)).toBe('---\norder: 0\n---\n# X\n')
   })
 })
 

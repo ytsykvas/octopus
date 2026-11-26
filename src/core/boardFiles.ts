@@ -31,8 +31,11 @@ import {
   type CardDraft,
   type CardMove,
   type CardPatch,
+  type CardRewrite,
+  type CreatedCards,
   type DescriptionSave
 } from './boardSchema.js'
+import { type Failure, failureOf } from './failure.js'
 import { allOf } from './parallel.js'
 import { unlinkedInside } from './paths.js'
 import {
@@ -305,13 +308,39 @@ export async function createCard(layout: BoardLayout, draft: CardDraft): Promise
   await mkdir(join(layout.dir, folder), { recursive: true })
   const path = await guardRef(layout, ref)
   try {
-    await writeNewFile(path, newCard(draft.title, firstOrder(columnCards(cards, draft.status))))
+    await writeNewFile(path, newCard(draft, firstOrder(columnCards(cards, draft.status))))
   } catch (error) {
     if (isAlreadyThere(error))
       throw new BoardError('cardNameTaken', { name }, `${name} is already there`)
     throw error
   }
   return ref
+}
+
+/**
+ * Every draft written, the last first: each new card goes to the top of its column, so they
+ * stand in the order asked. A refused one is passed over and the rest are still written; the
+ * refusal kept is the earliest draft's.
+ */
+export async function createCards(
+  layout: BoardLayout,
+  drafts: readonly CardDraft[]
+): Promise<CreatedCards> {
+  const refs: (string | null)[] = drafts.map(() => null)
+  let failure: Failure | null = null
+  // `exists` is read once: still false after the first card made the folder, the next listing
+  // would come back empty and give a second card of the same title the same name.
+  let current = layout
+  for (const [index, draft] of [...drafts.entries()].reverse()) {
+    try {
+      refs[index] = await createCard(current, draft)
+      current = { ...current, exists: true }
+    } catch (error) {
+      // Written last first, so the last one kept is the earliest draft refused.
+      failure = failureOf(error)
+    }
+  }
+  return { refs, failure }
 }
 
 // Only the keys the patch carries; null and an empty list remove a key (`undefined` to `setMeta`).
@@ -332,19 +361,37 @@ export function renameCard(layout: BoardLayout, ref: string, title: string): Pro
   return editCard(layout, ref, (raw) => withTitle(raw, title))
 }
 
-/**
- * The token is the description alone: a header or a comment changed meanwhile is no conflict.
- * Compared without trailing whitespace: the first comment adds a blank line before its marker.
- */
+// Blank lines at the end aside: the first comment adds one before its marker.
+function assertDescribed(raw: string, base: string, name: string): void {
+  if (descriptionOf(raw).trimEnd() !== base.trimEnd())
+    throw new BoardError('cardChanged', { name }, `${name} changed on disk`)
+}
+
+/** The token is the description alone: a header or a comment changed meanwhile is no conflict. */
 export function saveDescription(
   layout: BoardLayout,
   ref: string,
   save: DescriptionSave
 ): Promise<void> {
   return editCard(layout, ref, (raw, name) => {
-    if (save.base !== null && descriptionOf(raw).trimEnd() !== save.base.trimEnd())
-      throw new BoardError('cardChanged', { name }, `${name} changed on disk`)
+    if (save.base !== null) assertDescribed(raw, save.base, name)
     return withDescription(raw, save.text)
+  })
+}
+
+/** Title, description, priority and tag in one write; the file keeps its name and its comments. */
+export function rewriteCard(layout: BoardLayout, ref: string, rewrite: CardRewrite): Promise<void> {
+  return editCard(layout, ref, (raw, name) => {
+    assertDescribed(raw, rewrite.base, name)
+    // The header first: a malformed one is refused there, before the description is rewritten —
+    // `withDescription` reads an unparsed header as text and would write over it.
+    const fields = setMeta(
+      raw,
+      { priority: rewrite.priority ?? undefined, tag: rewrite.tag ?? undefined },
+      name
+    )
+    const body = rewrite.description.trim()
+    return withDescription(fields, `# ${rewrite.title}\n${body === '' ? '' : `\n${body}\n`}`)
   })
 }
 

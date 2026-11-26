@@ -22,6 +22,7 @@ import {
   type BoardLayout,
   cardOnDisk,
   createCard,
+  createCards,
   editCard,
   findCard,
   findLayout,
@@ -32,12 +33,14 @@ import {
   readCard,
   removeCard,
   renameCard,
+  rewriteCard,
   saveDescription,
   updateCard
 } from './boardFiles.js'
 import { type Column, columnKey, DEFAULT_COLUMNS } from './boardColumns.js'
 import { sameName } from './boardNames.js'
 import { type BoardCard, BoardError } from './boardSchema.js'
+import { COMMENTS_MARKER } from './boardText.js'
 
 let root: string
 
@@ -791,6 +794,64 @@ describe('createCard', () => {
   })
 })
 
+describe('createCards', () => {
+  it('puts the cards on top of their columns in the order asked', async () => {
+    await card('backlog/old.md', '---\norder: 0\n---\n# Old\n')
+
+    const created = await createCards(await layoutOf(), [
+      { status: 'backlog', title: 'First', description: 'One.', priority: 'high', tag: 'feature' },
+      { status: 'testing', title: 'Elsewhere' },
+      { status: 'backlog', title: 'Second' }
+    ])
+
+    expect(created).toEqual({
+      refs: ['backlog/First.md', 'testing/Elsewhere.md', 'backlog/Second.md'],
+      failure: null
+    })
+    await expect(read('backlog/First.md')).resolves.toBe(
+      '---\norder: -2\npriority: high\ntag: feature\n---\n# First\n\nOne.\n'
+    )
+    await expect(read('backlog/Second.md')).resolves.toBe('---\norder: -1\n---\n# Second\n')
+    await expect(read('testing/Elsewhere.md')).resolves.toBe('---\norder: 0\n---\n# Elsewhere\n')
+  })
+
+  it('keeps two titles apart on a board that had no folder yet', async () => {
+    const created = await createCards(await layoutOf(), [
+      { status: 'backlog', title: 'Same' },
+      { status: 'backlog', title: 'Same' }
+    ])
+
+    expect(created).toEqual({
+      refs: ['backlog/Same-2.md', 'backlog/Same.md'],
+      failure: null
+    })
+    await expect(read('backlog/Same-2.md')).resolves.toBe('---\norder: -1\n---\n# Same\n')
+  })
+
+  it('writes the rest when one is refused, and says why', async () => {
+    const created = await createCards(await layoutOf(), [
+      { status: 'backlog', title: 'A' },
+      { status: 'Ideas', title: 'B' },
+      { status: 'backlog', title: 'C' }
+    ])
+
+    expect(created).toEqual({
+      refs: ['backlog/A.md', null, 'backlog/C.md'],
+      failure: expect.objectContaining({ code: 'columnMissing', params: { id: 'Ideas' } })
+    })
+  })
+
+  it("says the earliest draft's refusal when several are refused", async () => {
+    const created = await createCards(await layoutOf(), [
+      { status: 'First', title: 'A' },
+      { status: 'Last', title: 'B' }
+    ])
+
+    expect(created.refs).toEqual([null, null])
+    expect(created.failure).toMatchObject({ params: { id: 'First' } })
+  })
+})
+
 describe('updateCard', () => {
   async function updated(before: string, patch: Parameters<typeof updateCard>[2]): Promise<string> {
     await card('backlog/a.md', before)
@@ -932,6 +993,76 @@ describe('saveDescription', () => {
     const detail = await readCard(layout, 'backlog/a.md')
     expect(detail.thread).toEqual([{ at: '2026-01-02T03:04:05.000Z', text: 'hi' }])
     expect(detail.description.startsWith('# A\n\nnew')).toBe(true)
+  })
+})
+
+describe('rewriteCard', () => {
+  const ID = '6f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f'
+  const rewrite = {
+    title: 'Export as CSV',
+    description: '\n## Context\n\nWhy.\n\n',
+    priority: 'high' as const,
+    tag: 'feature' as const,
+    base: '# Export\n\nOld.\n'
+  }
+
+  it('writes the title, description, priority and tag, and keeps the rest of the file', async () => {
+    await card(
+      'backlog/export.md',
+      `---\nid: ${ID}\norder: 2\npriority: low\n---\n# Export\n\nOld.\n\n${COMMENTS_MARKER}\n\n### 2026-11-20T10:00:00.000Z\n\nKeep me\n`
+    )
+
+    await rewriteCard(await layoutOf(), 'backlog/export.md', rewrite)
+
+    await expect(read('backlog/export.md')).resolves.toBe(
+      `---\nid: ${ID}\norder: 2\npriority: high\ntag: feature\n---\n# Export as CSV\n\n## Context\n\nWhy.\n\n${COMMENTS_MARKER}\n\n### 2026-11-20T10:00:00.000Z\n\nKeep me\n`
+    )
+  })
+
+  it('takes a priority and a tag away when told none', async () => {
+    await card('backlog/export.md', '---\npriority: low\ntag: fix\n---\n# Export\n\nOld.\n')
+
+    await rewriteCard(await layoutOf(), 'backlog/export.md', {
+      ...rewrite,
+      description: '',
+      priority: null,
+      tag: null
+    })
+
+    await expect(read('backlog/export.md')).resolves.toBe('# Export as CSV\n')
+  })
+
+  it('gives a card with no header none when it has nothing to hold', async () => {
+    await card('backlog/export.md', '# Export\n\nOld.\n')
+
+    await rewriteCard(await layoutOf(), 'backlog/export.md', {
+      ...rewrite,
+      priority: null,
+      tag: null
+    })
+
+    await expect(read('backlog/export.md')).resolves.toBe('# Export as CSV\n\n## Context\n\nWhy.\n')
+  })
+
+  it('refuses a card whose description changed since it was read, and writes nothing', async () => {
+    await card('backlog/export.md', '# Export\n\nEdited meanwhile.\n')
+
+    await expect(rewriteCard(await layoutOf(), 'backlog/export.md', rewrite)).rejects.toMatchObject(
+      { code: 'cardChanged', params: { name: 'export.md' } }
+    )
+    await expect(read('backlog/export.md')).resolves.toBe('# Export\n\nEdited meanwhile.\n')
+  })
+
+  it('refuses a header it cannot read, and writes nothing', async () => {
+    await card('backlog/export.md', `${BROKEN.replace('# A\n', '')}# Export\n\nOld.\n`)
+    const before = await read('backlog/export.md')
+    const layout = await layoutOf()
+    const { description } = await readCard(layout, 'backlog/export.md')
+
+    await expect(
+      rewriteCard(layout, 'backlog/export.md', { ...rewrite, base: description })
+    ).rejects.toMatchObject({ code: 'cardFrontmatterUnreadable' })
+    await expect(read('backlog/export.md')).resolves.toBe(before)
   })
 })
 

@@ -6,8 +6,10 @@
  * line by the same rule the core reads it with. Every rule reads past fenced
  * code, so a marker or a heading quoted in an example never cuts a card.
  */
-import { COMMENTS_MARKER, type CardComment } from './boardSchema.js'
+import type { CardComment } from './boardSchema.js'
 import { stemOf } from './boardNames.js'
+
+export const COMMENTS_MARKER = '<!-- octopus:comments -->'
 
 interface Line {
   /** Offset of the line's first character. */
