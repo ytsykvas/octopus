@@ -132,6 +132,7 @@ const ITEM_LABELS = {
   'instruction.resolveConflicts': 'instructions.resolveConflicts',
   'instruction.setupScripts': 'instructions.setupScripts',
   'instruction.diagnoseRun': 'instructions.diagnoseRun',
+  'instruction.taskCards': 'instructions.taskCards',
   'project.baseBranch': 'project.baseBranch',
   'project.envFile': 'project.envFile',
   'project.carry': 'project.files'

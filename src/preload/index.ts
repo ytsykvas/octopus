@@ -43,8 +43,11 @@ import type {
   CardLaunch,
   CardMove,
   CardPatch,
+  CardRewrite,
+  CreatedCards,
   DescriptionSave
 } from '@core/boardSchema.js'
+import type { BrainstormEntry } from '@core/brainstorm.js'
 import type { CleanupOutcome, LeftBehind } from '@core/archive.js'
 import type { SideAnswer, SideExchange } from '@core/sideQuestions.js'
 import type { StrayServer } from '@core/strayServers.js'
@@ -1036,7 +1039,43 @@ const api = {
     editColumns: (projectId: string | null, edit: ColumnEdit): Promise<Result<BoardColumnSet>> =>
       ipcRenderer.invoke('board:editColumns', projectId, edit) as Promise<Result<BoardColumnSet>>,
     resetColumns: (projectId: string): Promise<Result<BoardColumnSet>> =>
-      ipcRenderer.invoke('board:resetColumns', projectId) as Promise<Result<BoardColumnSet>>
+      ipcRenderer.invoke('board:resetColumns', projectId) as Promise<Result<BoardColumnSet>>,
+    createMany: (projectId: string, drafts: readonly CardDraft[]): Promise<Result<CreatedCards>> =>
+      ipcRenderer.invoke('board:createMany', projectId, drafts) as Promise<Result<CreatedCards>>,
+    rewrite: (projectId: string, ref: string, rewrite: CardRewrite): Promise<Result<void>> =>
+      ipcRenderer.invoke('board:rewrite', projectId, ref, rewrite) as Promise<Result<void>>
+  },
+
+  brainstorm: {
+    onEntry: (handler: (entry: BrainstormEntry) => void): (() => void) => {
+      const listener = (_event: unknown, entry: BrainstormEntry): void => {
+        handler(entry)
+      }
+      ipcRenderer.on('brainstorm:entry', listener)
+      return () => {
+        ipcRenderer.off('brainstorm:entry', listener)
+      }
+    },
+    start: (projectId: string, idea: string): Promise<Result<string>> =>
+      ipcRenderer.invoke('brainstorm:start', projectId, idea) as Promise<Result<string>>,
+    startEdit: (projectId: string, ref: string, request: string): Promise<Result<string>> =>
+      ipcRenderer.invoke('brainstorm:startEdit', projectId, ref, request) as Promise<
+        Result<string>
+      >,
+    send: (brainstormId: string, text: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('brainstorm:send', brainstormId, text) as Promise<Result<void>>,
+    answer: (
+      brainstormId: string,
+      requestId: string,
+      answers: readonly QuestionAnswer[]
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('brainstorm:answer', brainstormId, requestId, answers) as Promise<
+        Result<void>
+      >,
+    stop: (brainstormId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('brainstorm:stop', brainstormId) as Promise<Result<void>>,
+    close: (brainstormId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('brainstorm:close', brainstormId) as Promise<Result<void>>
   },
 
   skills: {

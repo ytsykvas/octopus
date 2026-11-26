@@ -38,7 +38,8 @@ export const InstructionKindSchema = z.enum([
   'multiAgentReview',
   'resolveConflicts',
   'setupScripts',
-  'diagnoseRun'
+  'diagnoseRun',
+  'taskCards'
 ])
 export type InstructionKind = z.infer<typeof InstructionKindSchema>
 
@@ -62,7 +63,9 @@ export const PUBLISHES_AFTER: Readonly<Record<InstructionKind, boolean>> = {
   // False should that change — they write scripts at most, and nobody asked
   // for a push.
   setupScripts: false,
-  diagnoseRun: false
+  diagnoseRun: false,
+  // Never read either: the board's brainstorm sends it, and the agent there writes nothing.
+  taskCards: false
 }
 
 /** How a message is sent, as accepted from the renderer: the prompt a pane button sent, if any. */
@@ -302,6 +305,31 @@ Find out why before changing anything.
 You may run checks that change nothing: \`lsof -nP -iTCP:<port> -sTCP:LISTEN\`, \`pg_isready\`, \`docker ps\`, \`bash -n\` or \`sh -n\` on a script, \`test -f\` and \`test -x\` on a path, and \`command -v <tool>\` through \`$SHELL -i -c\`, since that is how a script is started. You may not kill a process, install anything, run a migration, or run \`setup.sh\` or \`run.sh\` yourself: the person presses Run.
 
 Then say, in order: what failed, why, and the smallest change that fixes it. Propose the change; if it is in a script, write it and \`chmod +x\`, and say that Run is gated again until the person presses "Allow these". Never write a variable's value anywhere.
+`,
+  taskCards: `# Task cards
+
+How the agent should write the tasks it proposes for this project's board, when
+tasks are planned with it on the board, or one is edited with it.
+
+## One task or several
+
+- One task is one change that can be merged on its own and leaves the project
+  working.
+- Split when the parts can ship separately, or when one would be too big to
+  review as one pull request. Do not split for the sake of it.
+- Put the tasks in the order they should be done. A task that needs another
+  says so on a line of its own: "After: <title>".
+
+## Each task
+
+- The title: short, in the imperative, under 80 characters. It is also the
+  card's file name.
+- The description, in Markdown, under these headings:
+  - **Context**: why this is needed, in two to four sentences.
+  - **What to do**: the steps, naming the files and functions you read.
+  - **Done when**: a checklist of \`- [ ]\` items someone can check.
+  - **Out of scope**: what this task deliberately leaves alone.
+- A priority and a tag only where the conversation made them clear.
 `
 }
 
@@ -326,7 +354,8 @@ export const INSTRUCTION_FILES: Record<InstructionKind, string> = {
   multiAgentReview: 'multi-agent-review.md',
   resolveConflicts: 'resolve-conflicts.md',
   setupScripts: 'setup-scripts.md',
-  diagnoseRun: 'diagnose-run.md'
+  diagnoseRun: 'diagnose-run.md',
+  taskCards: 'task-cards.md'
 }
 
 /**

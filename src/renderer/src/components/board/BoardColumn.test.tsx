@@ -16,6 +16,7 @@ function renderColumn(props: Partial<BoardColumnProps> = {}): BoardColumnProps {
     creating: false,
     onCreating: vi.fn(),
     onCreate: vi.fn(),
+    onBrainstorm: vi.fn(),
     openRef: null,
     onOpen: vi.fn(),
     onRename: vi.fn(),
@@ -142,6 +143,14 @@ describe('BoardColumn', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New task' }))
 
     expect(onCreating).toHaveBeenCalledWith(true)
+  })
+
+  it('plans tasks with the agent', async () => {
+    const { onBrainstorm } = renderColumn()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create with the agent' }))
+
+    expect(onBrainstorm).toHaveBeenCalledTimes(1)
   })
 
   it('creates the task typed in', async () => {

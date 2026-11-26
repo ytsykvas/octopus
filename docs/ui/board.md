@@ -89,6 +89,40 @@ should show it. A refusal is reported after that read, so the read cannot clear 
 whose board leaves before it settles — before its answer or during that read — reports nothing and
 answers as refused, so the next board never opens or follows a card the last one wrote.
 
+## Planning tasks with the agent
+
+The sparkle beside a column's + (or `⇧C`) opens the brainstorm in the card panel's place: a
+conversation with the agent that ends in tasks, kept for as long as the panel is open and nowhere
+else — no chat record, no transcript, no CLI session on disk. The column it was opened from is the
+column every proposed task goes to unless the person picks another. **Edit with the agent** in the
+card panel opens the same panel on that card: the agent proposes the whole new version of it.
+
+The first message is shown whole — the project's `task-cards.md`, the board's priorities and tags,
+and what the person typed — since octopus adds nothing to the agent's system prompt. The agent
+reads the project's main checkout and the board's folder, asks through the same question
+card the chat uses, and shows what it proposes through a tool of octopus's own
+(`propose_tasks`, `propose_edit`) rather than as text — `brainstorm.ts` in core. The proposal is
+drawn under the log (`TaskProposalCard`) from the newest such call: the title renames on a
+double-click, priority, tag and column use the card panel's own menus (`cardMenus.tsx`), the
+description opens the Markdown editor with Done and Cancel (Done stays off, the reason under the
+field, while a code block is left open or a line is the comments marker: the card could not hold
+either), and ↑/↓ and Leave out shape a set. A
+newer proposal replaces the edits made to the one before. The next message tells the agent what the
+person changed by hand (`withEditedTasks`), once: what it was told is kept per proposal.
+
+**Create N tasks** writes the set in one turn of the board's queue (`createCards`); a task refused —
+a name taken a moment before — stays in the proposal with the reason, and the ones written are
+gone from it. **Apply changes** writes the card over whole (`rewriteCard`) and opens its panel again. It is
+refused when the description changed since the brainstorm opened (`cardChanged`): the refusal is
+the board's banner, as every write's, and the brainstorm stays open. Once everything is written the
+conversation ends without asking.
+
+Closing a conversation that started — Close, a click on a card, another sparkle — asks first
+(“Close this conversation?”); one where nothing was said yet closes at once. Another project, another
+board folder or leaving the board ends it without asking, like the card panel's editor. A task
+created by hand with + while the brainstorm is open does not take its panel. Esc does not close it:
+the field is where the person types.
+
 ## The card panel
 
 A click on a card opens its panel on the right — a panel rather than a modal, so the board stays
@@ -109,7 +143,9 @@ Another project or another board folder closes the panel and the new-task field.
 **Delete asks first** and sends the file to the Trash through core; it closes the panel only when
 it was that card's. Copy description puts the whole description on the clipboard, its `# title`
 line included, with the whitespace around it trimmed. A file that is not UTF-8 shows a warning in
-place of its description and has nothing to copy or edit; its comments still show.
+place of its description and has nothing to copy or edit; its comments still show. **Edit with the
+agent** waits for the card to be read, and is off for such a file and for one whose header cannot be
+read: a rewrite could write neither, and core refuses to start one (`startCardEdit`).
 A double-click on the title renames the card, in the panel or on its tile — not a file that is not
 UTF-8, which core would refuse: only its `# ` line changes, and the file keeps its name, which is
 what other Macs and links know it by. The tile puts the new-task field where its title was, keeps
@@ -201,15 +237,16 @@ key acts on the focused card, or on the open one when nothing has the focus. C, 
 as typed on a Latin layout and by the key's place on any other, so a Cyrillic layout's `с`, `о`
 and `л` work too.
 
-| Key               | Action                                                        |
-| ----------------- | ------------------------------------------------------------- |
-| `C`               | new task in the target's column, or in Backlog with no target |
-| `↓` `J` / `↑` `K` | next / previous task in the column                            |
-| `→` / `←`         | the neighbouring column that has tasks, at the same position  |
-| `⌥↓` / `⌥↑`       | move the task one place down / up                             |
-| `Esc`             | close the panel; with it closed, let go of the focused task   |
-| `⌘⌫`              | delete the task, after asking                                 |
-| `/`               | put the focus in the search                                   |
+| Key               | Action                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `C`               | new task in the target's column, or in Backlog with no target                               |
+| `⇧C`              | plan tasks with the agent, for the same column                                              |
+| `↓` `J` / `↑` `K` | next / previous task in the column                                                          |
+| `→` / `←`         | the neighbouring column that has tasks, at the same position                                |
+| `⌥↓` / `⌥↑`       | move the task one place down / up                                                           |
+| `Esc`             | close the card's panel (never the brainstorm's); with none open, let go of the focused task |
+| `⌘⌫`              | delete the task, after asking                                                               |
+| `/`               | put the focus in the search                                                                 |
 
 An open menu or popover — a status-bar list — keeps every key: its Escape listener is added after
 the board's, so the board checks for `[role="menu"]` and `[role="dialog"]` rather than

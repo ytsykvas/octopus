@@ -550,7 +550,10 @@ export const de: Translation = {
       'Wird als erste Nachricht eines neuen Gesprächs gesendet, wenn du Hilfe → „Dieses Projekt startklar machen“ wählst. Octopus fügt darunter den Checkout, Name, Slug und Port des Workspace, die geltenden Skripte, die mitgenommenen Dateien und die Namen der Variablen an — nie ihre Werte.',
     diagnoseRun: 'Einen fehlgeschlagenen Lauf untersuchen',
     diagnoseRunHint:
-      'Wird als erste Nachricht eines neuen Gesprächs gesendet, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten, ob auf dem Port gerade etwas lauscht, und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.'
+      'Wird als erste Nachricht eines neuen Gesprächs gesendet, wenn du Hilfe → „Warum funktioniert Run nicht?“ wählst. Octopus fügt dieselben Fakten, ob auf dem Port gerade etwas lauscht, und die letzten Zeilen des jüngsten Builds und Servers mit ihren Exit-Codes an.',
+    taskCards: 'Aufgabenkarten',
+    taskCardsHint:
+      'Wird in der ersten Nachricht gesendet, wenn du auf dem Board Aufgaben mit dem Agenten planst oder eine mit ihm bearbeitest. Sagt, wie dieses Projekt eine Aufgabe geschrieben haben will; octopus fügt hinzu, was der Agent tun soll, die Prioritäten und Tags des Boards und deine Idee oder die Aufgabe.'
   },
 
   help: {
@@ -2003,6 +2006,42 @@ export const de: Translation = {
       newTaskPlaceholder: 'Titel der Aufgabe',
       count: '{{shown}} von {{total}}'
     },
+    brainstorm: {
+      create: 'Mit dem Agenten erstellen',
+      edit: 'Mit dem Agenten bearbeiten',
+      createTitle: 'Neue Aufgaben mit dem Agenten',
+      editTitle: 'Mit dem Agenten bearbeiten: {{title}}',
+      close: 'Schließen',
+      createIntro:
+        'Sag, was getan werden soll. Der Agent liest den Code und dieses Board, fragt, was er wissen muss, und schlägt eine oder mehrere Aufgaben vor. Geschrieben wird nichts, bevor du sie erstellst.',
+      editIntro:
+        'Sag, was sich ändern soll. Der Agent liest diese Aufgabe, ihre Kommentare und den Code und schlägt eine neue Fassung vor. Geändert wird nichts, bevor du sie übernimmst.',
+      ideaPlaceholder: 'Was soll getan werden?',
+      requestPlaceholder: 'Was soll sich an dieser Aufgabe ändern?',
+      replyPlaceholder: 'Antworten oder um Änderungen bitten',
+      send: 'Senden',
+      stop: 'Stoppen',
+      proposal: 'Vorschlag',
+      createTasks_one: '{{count}} Aufgabe erstellen',
+      createTasks_few: '{{count}} Aufgaben erstellen',
+      createTasks_many: '{{count}} Aufgaben erstellen',
+      createTasks_other: '{{count}} Aufgaben erstellen',
+      apply: 'Änderungen übernehmen',
+      up: 'Nach oben',
+      down: 'Nach unten',
+      leaveOut: 'Weglassen',
+      description: 'Beschreibung',
+      editDescription: 'Beschreibung bearbeiten',
+      descriptionDone: 'Fertig',
+      descriptionCancel: 'Abbrechen',
+      descriptionUnwritable:
+        'Ein Codeblock ist nicht geschlossen, oder eine Zeile ist die Kommentarmarke. Schließe den Block oder entferne die Zeile.',
+      allLeftOut: 'Alle Aufgaben sind weggelassen. Bitte um einen neuen Vorschlag oder schließe.',
+      discardTitle: 'Dieses Gespräch schließen?',
+      discardBody: 'Das Gespräch und sein Vorschlag werden nicht behalten.',
+      discard: 'Gespräch beenden',
+      keep: 'Weiterreden'
+    },
     columns: {
       title: 'Spalten',
       defaultHint: 'Das Board jedes Projekts zeigt diese, bis das Projekt eigene Spalten hat.',
@@ -2290,6 +2329,7 @@ export const de: Translation = {
       '„{{name}}“ ist kein UTF-8-Text, daher lässt octopus die Datei unverändert. Ändere sie in einem Editor, der sie als UTF-8 speichern kann.',
     cardTooLong:
       '„{{name}}“ ist länger als 100.000 Zeichen – mehr, als eine Nachricht an den Agenten fassen kann. Kürze die Aufgabe und führe sie dann erneut aus.',
+    brainstormGone: 'Dieses Gespräch ist beendet. Schließe es und beginne ein neues.',
     columnMissing: 'Diese Spalte gibt es auf dem Board nicht mehr.',
     columnBuiltIn:
       'Diese Spalte ist fest: Sie lässt sich verschieben, aber nicht umbenennen oder entfernen.',

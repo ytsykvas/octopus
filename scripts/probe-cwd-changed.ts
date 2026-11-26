@@ -63,7 +63,8 @@ const session = startSession(
     env: {},
     skillOverrides: {},
     autoCompactWindow: null,
-    agentProgressSummaries: false
+    agentProgressSummaries: false,
+    confined: null
   },
   {
     query,

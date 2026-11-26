@@ -26,6 +26,7 @@ import { chatTranscript } from '../core/paths.js'
 import type { RemoteRefWatchDeps } from '../core/remoteRefs.js'
 import { type Column, DEFAULT_COLUMNS } from '../core/boardColumns.js'
 import type { BoardChangedEvent } from '../core/boardSchema.js'
+import type { BrainstormEntry } from '../core/brainstorm.js'
 import type { BoardWatchDeps } from '../core/boardWatch.js'
 import {
   createService as makeService,
@@ -81,6 +82,7 @@ interface Harness {
   readonly pushedEvents: WorkspacePushedEvent[]
   /** Every board folder heard to change on disk. */
   readonly boardEvents: BoardChangedEvent[]
+  readonly brainstormEntries: BrainstormEntry[]
   readonly chatStatusEvents: ChatStatusEvent[]
   /** Every announcement that a workspace's set of conversations moved. */
   readonly chatsChangedEvents: ChatsChangedEvent[]
@@ -113,6 +115,7 @@ function harness(): Harness {
   const statusEvents: WorkspaceStatusEvent[] = []
   const pushedEvents: WorkspacePushedEvent[] = []
   const boardEvents: BoardChangedEvent[] = []
+  const brainstormEntries: BrainstormEntry[] = []
   const chatStatusEvents: ChatStatusEvent[] = []
   const chatsChangedEvents: ChatsChangedEvent[] = []
   const taskEvents: TasksEvent[] = []
@@ -130,6 +133,7 @@ function harness(): Harness {
     statusEvents,
     pushedEvents,
     boardEvents,
+    brainstormEntries,
     chatStatusEvents,
     chatsChangedEvents,
     taskEvents,
@@ -158,6 +162,7 @@ function harness(): Harness {
       broadcastWorkspaceStatus: (event) => statusEvents.push(event),
       broadcastWorkspacePushed: (event) => pushedEvents.push(event),
       broadcastBoardChanged: (event) => boardEvents.push(event),
+      broadcastBrainstormEntry: (entry) => brainstormEntries.push(entry),
       broadcastUsageWindows: (windows) => usageBroadcasts.push(windows),
       broadcastChatStatus: (event) => chatStatusEvents.push(event),
       broadcastChatsChanged: (event) => chatsChangedEvents.push(event),
@@ -474,6 +479,14 @@ describe('channel table', () => {
     'board:columns',
     'board:editColumns',
     'board:resetColumns',
+    'board:createMany',
+    'board:rewrite',
+    'brainstorm:start',
+    'brainstorm:startEdit',
+    'brainstorm:send',
+    'brainstorm:answer',
+    'brainstorm:stop',
+    'brainstorm:close',
     'dialog:pickSkill',
     'dialog:pickMarkdown',
     'dialog:pickFiles',
@@ -1813,7 +1826,7 @@ describe('scripts and instructions of a real project', () => {
     }
 
     expect(answer.ok).toBe(true)
-    expect(answer.value).toHaveLength(15)
+    expect(answer.value).toHaveLength(16)
     // The workspace is parsed rather than trusted.
     await expect(invoke('sources:read', projectId, 7)).resolves.toMatchObject({ ok: false })
   })
@@ -4012,6 +4025,81 @@ describe('the saved prompts channels', () => {
   })
 })
 
+describe('brainstorm channels', () => {
+  const BRAINSTORM = '0b9f5f0e-6a1c-4c3e-9d2a-5f4e3d2c1b0a'
+
+  it('starts a brainstorm and an edit with what the window sent', async () => {
+    const start = vi.spyOn(service, 'startBrainstorm').mockResolvedValue(BRAINSTORM)
+    const edit = vi.spyOn(service, 'startCardEdit').mockResolvedValue(BRAINSTORM)
+
+    await expect(invoke('brainstorm:start', 'planner', 'Export the board')).resolves.toEqual({
+      ok: true,
+      value: BRAINSTORM
+    })
+    await expect(
+      invoke('brainstorm:startEdit', 'planner', 'backlog/A.md', 'Sharper')
+    ).resolves.toEqual({ ok: true, value: BRAINSTORM })
+    expect(start).toHaveBeenCalledWith('planner', 'Export the board')
+    expect(edit).toHaveBeenCalledWith('planner', 'backlog/A.md', 'Sharper')
+  })
+
+  it('carries a message, an answer, a stop and a close to the service', async () => {
+    const send = vi.spyOn(service, 'sendToBrainstorm').mockReturnValue(undefined)
+    const answer = vi.spyOn(service, 'answerBrainstorm').mockReturnValue(undefined)
+    const stop = vi.spyOn(service, 'stopBrainstorm').mockResolvedValue(undefined)
+    const close = vi.spyOn(service, 'closeBrainstorm').mockResolvedValue(undefined)
+
+    await invoke('brainstorm:send', BRAINSTORM, 'More.')
+    await invoke('brainstorm:answer', BRAINSTORM, 'r-1', [{ question: 'Which?', selected: ['A'] }])
+    await invoke('brainstorm:stop', BRAINSTORM)
+    await invoke('brainstorm:close', BRAINSTORM)
+
+    expect(send).toHaveBeenCalledWith(BRAINSTORM, 'More.')
+    expect(answer).toHaveBeenCalledWith(BRAINSTORM, 'r-1', [
+      { question: 'Which?', selected: ['A'], other: null }
+    ])
+    expect(stop).toHaveBeenCalledWith(BRAINSTORM)
+    expect(close).toHaveBeenCalledWith(BRAINSTORM)
+  })
+
+  it('refuses a malformed payload in each channel', async () => {
+    const answers = await Promise.all([
+      invoke('brainstorm:start', '', 'x'),
+      invoke('brainstorm:start', 'planner', ''),
+      invoke('brainstorm:startEdit', 'planner', '../a.md', 'x'),
+      invoke('brainstorm:startEdit', 'planner', 'backlog/a.md', ''),
+      invoke('brainstorm:send', 'not-an-id', 'x'),
+      invoke('brainstorm:send', BRAINSTORM, ''),
+      invoke('brainstorm:answer', BRAINSTORM, '', []),
+      invoke('brainstorm:answer', BRAINSTORM, 'r-1', [{ selected: [] }]),
+      invoke('brainstorm:stop', 'not-an-id'),
+      invoke('brainstorm:close', 'not-an-id')
+    ])
+
+    for (const answer of answers) {
+      expect(answer).toMatchObject({ ok: false, code: 'valueRefused' })
+    }
+  })
+
+  it('passes every line of a brainstorm log to the windows', () => {
+    const entry: BrainstormEntry = {
+      brainstormId: BRAINSTORM,
+      entry: { role: 'user', at: '2026-11-26T10:00:00.000Z', text: 'Plan this.' }
+    }
+    let heard: (entry: BrainstormEntry) => void = () => undefined
+    vi.spyOn(service, 'onBrainstormEntry').mockImplementation((handler) => {
+      heard = handler
+      return () => undefined
+    })
+    const fresh = harness()
+    registerIpc(service, terminals, fresh.host)
+
+    heard(entry)
+
+    expect(fresh.brainstormEntries).toEqual([entry])
+  })
+})
+
 describe('board channels', () => {
   const IDEAS: Column = { kind: 'custom', id: 'Ideas', name: 'Ideas' }
   let id: string
@@ -4141,9 +4229,38 @@ describe('board channels', () => {
     }
   })
 
+  it('writes a batch of cards and an applied edit through their channels', async () => {
+    await expect(
+      invoke('board:createMany', id, [
+        { status: 'backlog', title: 'One', description: 'Why.', tag: 'docs' },
+        { status: 'backlog', title: 'Two' }
+      ])
+    ).resolves.toEqual({
+      ok: true,
+      value: { refs: ['backlog/One.md', 'backlog/Two.md'], failure: null }
+    })
+
+    await expect(
+      invoke('board:rewrite', id, 'backlog/Two.md', {
+        title: 'Two, sharper',
+        description: 'Now with a why.',
+        priority: 'urgent',
+        tag: null,
+        base: '# Two\n'
+      })
+    ).resolves.toEqual({ ok: true, value: undefined })
+    await expect(invoke('board:read', id, 'backlog/Two.md')).resolves.toMatchObject({
+      ok: true,
+      value: { title: 'Two, sharper', meta: { priority: 'urgent' } }
+    })
+  })
+
   it('refuses a malformed payload in each channel that takes one', async () => {
     const ref = 'backlog/a.md'
     const answers = await Promise.all([
+      invoke('board:createMany', id, []),
+      invoke('board:createMany', id, [{ status: 'backlog', title: 'A', order: 1 }]),
+      invoke('board:rewrite', id, ref, { title: 'A', description: '', priority: null, tag: null }),
       invoke('board:list', ''),
       invoke('board:create', id, { status: 'backlog', title: '  ' }),
       invoke('board:create', id, { status: '', title: 'A' }),

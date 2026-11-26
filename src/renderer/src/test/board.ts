@@ -138,6 +138,8 @@ export function boardController(overrides: Partial<BoardController> = {}): Board
     removeFile: vi.fn(() => Promise.resolve(true)),
     revealCard: vi.fn(() => Promise.resolve(true)),
     editColumns: vi.fn(() => Promise.resolve(true)),
+    createMany: vi.fn(() => Promise.resolve({ refs: ['backlog/Fix login.md'], failure: null })),
+    rewrite: vi.fn(() => Promise.resolve(true)),
     ...overrides
   }
 }

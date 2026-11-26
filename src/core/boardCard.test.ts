@@ -345,6 +345,18 @@ describe('withDescription', () => {
   ])('%j with %j', (raw, text, expected) => {
     expect(withDescription(raw, text)).toBe(expected)
   })
+
+  it('closes a code block the text leaves open, so the comments after it stay comments', () => {
+    const raw = withDescription(
+      `# A\n\n${M}\n\n### 2026-01-02T03:04:05.000Z\n\nhi\n`,
+      '# A\n\n````sh\nls\n'
+    )
+
+    expect(raw).toBe(
+      `# A\n\n${'`'.repeat(4)}sh\nls\n${'`'.repeat(4)}\n\n${M}\n\n### 2026-01-02T03:04:05.000Z\n\nhi\n`
+    )
+    expect(parseCard(raw, 'A.md').thread).toHaveLength(1)
+  })
 })
 
 describe('withComment', () => {
@@ -363,6 +375,13 @@ describe('withComment', () => {
   ])('%j at %s', (raw, at, text, expected) => {
     expect(withComment(raw, at, text)).toBe(expected)
   })
+
+  it('closes a code block the description leaves open before the first comment', () => {
+    const raw = withComment('# A\n\n~~~\ncode\n', '2026-01-02T03:04:05.000Z', 'hi')
+
+    expect(raw).toBe(`# A\n\n~~~\ncode\n~~~\n\n${M}\n\n### 2026-01-02T03:04:05.000Z\n\nhi\n`)
+    expect(parseCard(raw, 'A.md').thread).toEqual([{ at: '2026-01-02T03:04:05.000Z', text: 'hi' }])
+  })
 })
 
 describe('descriptionOf', () => {
@@ -376,11 +395,28 @@ describe('newCard', () => {
     ['Fix login', 0, '---\norder: 0\n---\n# Fix login\n'],
     ['Виправити', -1.5, '---\norder: -1.5\n---\n# Виправити\n']
   ])('%s at %d', (title, order, expected) => {
-    expect(newCard(title, order)).toBe(expected)
+    expect(newCard({ title }, order)).toBe(expected)
   })
 
   it('reads back its own order', () => {
-    expect(parseCard(newCard('X', 2), 'X.md').meta.order).toBe(2)
+    expect(parseCard(newCard({ title: 'X' }, 2), 'X.md').meta.order).toBe(2)
+  })
+
+  it('writes the priority, the tag and the description it is given', () => {
+    const raw = newCard(
+      { title: 'X', description: '\n\nWhy.\n\n- [ ] Done\n\n', priority: 'high', tag: 'fix' },
+      3
+    )
+
+    expect(raw).toBe('---\norder: 3\npriority: high\ntag: fix\n---\n# X\n\nWhy.\n\n- [ ] Done\n')
+    expect(parseCard(raw, 'X.md')).toMatchObject({
+      title: 'X',
+      meta: { order: 3, priority: 'high', tag: 'fix' }
+    })
+  })
+
+  it('writes no body for a description of blanks', () => {
+    expect(newCard({ title: 'X', description: ' \n ' }, 0)).toBe('---\norder: 0\n---\n# X\n')
   })
 })
 

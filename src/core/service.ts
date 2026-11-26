@@ -263,12 +263,15 @@ import {
 import {
   addComment as addCommentIn,
   createCard as createCardIn,
+  createCards as createCardsIn,
   findLayout,
   listBoard as listBoardIn,
   moveCard as moveCardIn,
   readCard as readCardIn,
+  readRewritable,
   removeCard as removeCardIn,
   renameCard as renameCardIn,
+  rewriteCard as rewriteCardIn,
   saveDescription as saveDescriptionIn,
   updateCard as updateCardIn,
   cardOnDisk,
@@ -288,8 +291,17 @@ import {
   type CardLaunch,
   type CardMove,
   type CardPatch,
+  type CardRewrite,
+  type CreatedCards,
   type DescriptionSave
 } from './boardSchema.js'
+import {
+  type BrainstormEntry,
+  brainstormMessage,
+  type BrainstormPurpose,
+  cardEditMessage,
+  createBrainstorms
+} from './brainstorm.js'
 import { parseCard, readMeta, type RunFields, setMeta, upsertRun } from './boardCard.js'
 import { type BoardWatch, type BoardWatchDeps, createBoardWatch } from './boardWatch.js'
 import { foldRunUsage } from './boardRun.js'
@@ -1403,6 +1415,19 @@ export interface OctopusService {
   readCard(projectId: string, ref: string): Promise<CardDetail>
   /** A new card at the top of its column; answers its ref. */
   createCard(projectId: string, draft: CardDraft): Promise<string>
+  createCards(projectId: string, drafts: readonly CardDraft[]): Promise<CreatedCards>
+  /** Answers the brainstorm's id; its log arrives on `onBrainstormEntry`. */
+  startBrainstorm(projectId: string, idea: string): Promise<string>
+  startCardEdit(projectId: string, ref: string, request: string): Promise<string>
+  rewriteCard(projectId: string, ref: string, rewrite: CardRewrite): Promise<void>
+  sendToBrainstorm(brainstormId: string, text: string): void
+  answerBrainstorm(
+    brainstormId: string,
+    requestId: string,
+    answers: readonly QuestionAnswer[]
+  ): void
+  stopBrainstorm(brainstormId: string): Promise<void>
+  closeBrainstorm(brainstormId: string): Promise<void>
   /** Priority, tag and links; a key the patch leaves out is left alone. */
   updateCard(projectId: string, ref: string, patch: CardPatch): Promise<void>
   /** The `# ` line; the file keeps its name. */
@@ -1968,6 +1993,7 @@ export interface OctopusService {
   onWorkspacePushed(handler: (event: WorkspacePushedEvent) => void): () => void
   /** A project's board folder changed on disk, by anyone, or its columns were edited: the window reads that board again. */
   onBoardChanged(handler: (event: BoardChangedEvent) => void): () => void
+  onBrainstormEntry(handler: (entry: BrainstormEntry) => void): () => void
   /**
    * The account's windows, whenever they move.
    *
@@ -2105,6 +2131,16 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     for (const listener of boardListeners) listener({ projectId })
   }
   const boardWatch = (options.boardWatch ?? createBoardWatch)({ onChange: announceBoard })
+
+  const brainstormListeners = new Set<(entry: BrainstormEntry) => void>()
+  const brainstorms = createBrainstorms({
+    query: runQuery,
+    now,
+    onEntry: (entry) => {
+      for (const listener of brainstormListeners) listener(entry)
+    },
+    onDiagnostic
+  })
 
   /*
    * A project's variables used to be one file. Giving each project its `envs/`
@@ -5097,14 +5133,40 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
    * supplying its own pull-request instruction was obeyed everywhere except in
    * the one place the app writes a description itself.
    */
-  async function instructionFor(workspace: Workspace, kind: InstructionKind): Promise<string> {
-    const project = requireProject(workspace.projectId)
+  function instructionFor(workspace: Workspace, kind: InstructionKind): Promise<string> {
+    return instructionIn(requireProject(workspace.projectId), workspace.path, kind)
+  }
+
+  async function brainstormOn(
+    project: Project,
+    layout: BoardLayout,
+    purpose: BrainstormPurpose,
+    message: (convention: string) => string
+  ): Promise<string> {
+    const cwd = project.repoPath
+    return brainstorms.start({
+      purpose,
+      cwd,
+      settingSources: await sourcesIn(cwd, project),
+      additionalDirectories: layout.exists ? [layout.dir] : [],
+      // A brainstorm plans, so it takes the planning model where one is set apart.
+      model: config.planModel ?? config.model,
+      effort: config.effort,
+      message: message(await instructionIn(project, cwd, 'taskCards'))
+    })
+  }
+
+  async function instructionIn(
+    project: Project,
+    cwd: string,
+    kind: InstructionKind
+  ): Promise<string> {
     // "Use mine instead": the repository is not read at all.
     const supplied = project.preferLocal.includes(instructionItem(kind))
       ? null
-      : await repoInstruction(kind, workspace.path)
+      : await repoInstruction(kind, cwd)
 
-    return supplied?.body ?? effectiveInstruction(kind, workspace.projectId, dataRoot)
+    return supplied?.body ?? effectiveInstruction(kind, project.id, dataRoot)
   }
 
   /** Where a store's files sit; a path, so reading one creates nothing. */
@@ -5742,7 +5804,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         skillOverrides: {},
         autoCompactWindow: null,
         // No map to draw a status line in, and one is a model call.
-        agentProgressSummaries: false
+        agentProgressSummaries: false,
+        confined: null
       },
       {
         query: runQuery,
@@ -5876,7 +5939,8 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         env,
         skillOverrides: skillMapOf(chat),
         autoCompactWindow: chat.autoCompactWindow,
-        agentProgressSummaries: config.agentProgressSummaries
+        agentProgressSummaries: config.agentProgressSummaries,
+        confined: null
       },
       {
         query: runQuery,
@@ -6849,6 +6913,53 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     },
     createCard(projectId, draft) {
       return boardWork(projectId, async () => createCardIn(await layoutOf(projectId), draft))
+    },
+    createCards(projectId, drafts) {
+      return boardWork(projectId, async () => createCardsIn(await layoutOf(projectId), drafts))
+    },
+    async startBrainstorm(projectId, idea) {
+      const project = requireProject(projectId)
+      // Before the session: no board folder is a refusal (`boardFolderUnset`), not an agent started.
+      const layout = await layoutFor(project)
+      return brainstormOn(project, layout, 'tasks', (convention) =>
+        brainstormMessage({
+          project: project.name,
+          boardDir: layout.exists ? layout.dir : null,
+          convention,
+          idea
+        })
+      )
+    },
+    async startCardEdit(projectId, ref, request) {
+      const project = requireProject(projectId)
+      const layout = await layoutFor(project)
+      const card = await readRewritable(layout, ref)
+      return brainstormOn(project, layout, 'edit', (convention) =>
+        cardEditMessage({
+          project: project.name,
+          file: join(layout.dir, ref),
+          convention,
+          card,
+          request
+        })
+      )
+    },
+    rewriteCard(projectId, ref, rewrite) {
+      return boardWork(projectId, async () =>
+        rewriteCardIn(await layoutOf(projectId), ref, rewrite)
+      )
+    },
+    sendToBrainstorm(brainstormId, text) {
+      brainstorms.send(brainstormId, text)
+    },
+    answerBrainstorm(brainstormId, requestId, answers) {
+      brainstorms.answer(brainstormId, requestId, answers)
+    },
+    stopBrainstorm(brainstormId) {
+      return brainstorms.stop(brainstormId)
+    },
+    closeBrainstorm(brainstormId) {
+      return brainstorms.close(brainstormId)
     },
     updateCard(projectId, ref, patch) {
       return boardWork(projectId, async () => {
@@ -8474,6 +8585,11 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
       return () => boardListeners.delete(handler)
     },
 
+    onBrainstormEntry(handler) {
+      brainstormListeners.add(handler)
+      return () => brainstormListeners.delete(handler)
+    },
+
     onChatsChanged(handler) {
       chatsChangedListeners.add(handler)
       return () => chatsChangedListeners.delete(handler)
@@ -8514,7 +8630,10 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
         (async () => {
           // Every one of them, even if an earlier close fails: each holds a
           // child process, and one that is not closed outlives the application.
-          await Promise.allSettled(live.map((session) => session.close()))
+          await Promise.allSettled([
+            ...live.map((session) => session.close()),
+            brainstorms.closeAll()
+          ])
 
           // And what they started on their way out, which is the half of
           // shutting down that has nothing to do with child processes.

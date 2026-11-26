@@ -13,6 +13,8 @@ import type { OctopusApi } from '../../../preload/index.js'
 
 type Api = OctopusApi
 
+export const BRAINSTORM_ID = '0b9f5f0e-6a1c-4c3e-9d2a-5f4e3d2c1b0a'
+
 /**
  * A stand-in for the preload bridge.
  *
@@ -332,7 +334,19 @@ export function installOctopusStub(): Api {
       attach: vi.fn(() => ok(0)),
       revealFile: vi.fn(() => ok(undefined)),
       removeFile: vi.fn(() => ok(undefined)),
-      revealCard: vi.fn(() => ok(undefined))
+      revealCard: vi.fn(() => ok(undefined)),
+      createMany: vi.fn(() => ok({ refs: ['backlog/Fix login.md'], failure: null })),
+      rewrite: vi.fn(() => ok(undefined))
+    },
+
+    brainstorm: {
+      onEntry: vi.fn(subscription),
+      start: vi.fn(() => ok(BRAINSTORM_ID)),
+      startEdit: vi.fn(() => ok(BRAINSTORM_ID)),
+      send: vi.fn(() => ok(undefined)),
+      answer: vi.fn(() => ok(undefined)),
+      stop: vi.fn(() => ok(undefined)),
+      close: vi.fn(() => ok(undefined))
     },
 
     skills: {

@@ -12,6 +12,7 @@ import type { WorkspaceView } from '@core/workspaces.js'
 
 import { useBoard } from '../../hooks/useBoard.js'
 import { useBoardDrag } from '../../hooks/useBoardDrag.js'
+import { type BrainstormTarget, useBrainstorm } from '../../hooks/useBrainstorm.js'
 import { type OpenCard, useCardDetail } from '../../hooks/useCardDetail.js'
 import { useColumnEditing } from '../../hooks/useColumnEditing.js'
 import { useConfirm } from '../../hooks/useConfirm.js'
@@ -35,9 +36,11 @@ import {
 } from './boardKeys.js'
 import { cardMark, linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.js'
 import { sidewaysDelta } from './boardScroll.js'
+import { BrainstormPanel } from './BrainstormPanel.js'
 import { CardMarks } from './CardMarks.js'
-import { CardPanel, PANEL_WIDTH } from './CardPanel.js'
+import { CardPanel } from './CardPanel.js'
 import { columnMenu } from './columnMenu.js'
+import { PANEL_WIDTH } from './SidePanel.js'
 
 export interface BoardScreenProps {
   /** null while no project is selected; App shows its own pane when there are none at all (B201b). */
@@ -113,6 +116,8 @@ export function BoardScreen({
   const openRef = open?.ref ?? null
   const [panelWidth, setPanelWidth] = useState(PANEL_WIDTH)
   const { confirm, dialog } = useConfirm()
+  const brainstorms = useBrainstorm(projectId, boardKey)
+  const thinking = brainstorms.current
   const openCard = board.listing?.cards.find((card) => card.ref === openRef) ?? null
   const { detail, failure } = useCardDetail(
     projectId,
@@ -190,12 +195,47 @@ export function BoardScreen({
     setOpen({ ref, session: openings.current })
   }
 
+  // Synchronous when nothing was said yet: a click on a card must open it in the same tick.
+  const whenLetGo = (then: () => void): void => {
+    if (thinking?.started !== true) {
+      then()
+      return
+    }
+    void confirm({
+      title: t('board.brainstorm.discardTitle'),
+      message: t('board.brainstorm.discardBody'),
+      confirmLabel: t('board.brainstorm.discard'),
+      cancelLabel: t('board.brainstorm.keep'),
+      destructive: true
+    }).then(({ confirmed }) => {
+      if (confirmed) then()
+    })
+  }
+
+  const openBrainstorm = (target: BrainstormTarget): void => {
+    whenLetGo(() => {
+      setOpen(null)
+      brainstorms.open(target)
+    })
+  }
+
+  const openFromBoard = (ref: string): void => {
+    whenLetGo(() => {
+      brainstorms.close()
+      openCardAt(ref)
+    })
+  }
+
   const createIn = async (status: ColumnId, title: string): Promise<void> => {
     const ref = await board.create({ status, title })
     if (ref === null) return
     onDraft(ref, null)
-    openCardAt(ref)
+    // The brainstorm keeps the panel: a task typed in beside it is not a reason to end it.
+    if (thinking === null) openCardAt(ref)
   }
+
+  const columnFrom = (ref: string | null): ColumnId =>
+    (ref === null ? null : statusOf(columns, ref)) ?? 'backlog'
 
   // Put back only from the body: React keeps the focus on a tile it moves, but a loose card
   // comes back from a move as a new node under a new ref, and a key pressed meanwhile may have
@@ -216,11 +256,12 @@ export function BoardScreen({
 
   const runKey = (action: BoardKeyAction): void => {
     switch (action.kind) {
-      case 'create': {
-        const status = action.from === null ? null : statusOf(columns, action.from)
-        setCreatingIn(status ?? 'backlog')
+      case 'create':
+        setCreatingIn(columnFrom(action.from))
         return
-      }
+      case 'brainstorm':
+        openBrainstorm({ purpose: 'tasks', column: columnFrom(action.from) })
+        return
       case 'close':
         setOpen(null)
         setRefocus({ ref: action.ref })
@@ -328,8 +369,11 @@ export function BoardScreen({
               setCreatingIn(on ? column.id : null)
             }}
             onCreate={(title) => void createIn(column.id, title)}
+            onBrainstorm={() => {
+              openBrainstorm({ purpose: 'tasks', column: column.id })
+            }}
             openRef={openRef}
-            onOpen={openCardAt}
+            onOpen={openFromBoard}
             onRename={(ref, title) => void board.rename(ref, title)}
             marksOf={marksOf}
             drag={drag}
@@ -352,7 +396,24 @@ export function BoardScreen({
           </IconButton>
         </div>
       </div>
-      {openCard !== null && (
+      {thinking !== null && (
+        <BrainstormPanel
+          key={thinking.opening}
+          brainstorm={thinking}
+          columns={board.listing.columns}
+          board={board}
+          width={panelWidth}
+          onWidth={setPanelWidth}
+          onClose={() => {
+            whenLetGo(brainstorms.close)
+          }}
+          onDone={() => {
+            brainstorms.close()
+            if (thinking.target.purpose === 'edit') openCardAt(thinking.target.card.ref)
+          }}
+        />
+      )}
+      {thinking === null && openCard !== null && (
         <CardPanel
           key={panelKey}
           card={openCard}
@@ -371,6 +432,9 @@ export function BoardScreen({
           }}
           onMove={(to) => void moveCard(openCard.ref, to)}
           onRemove={() => void removeCard(openCard)}
+          onEditWithAgent={(detail) => {
+            openBrainstorm({ purpose: 'edit', card: detail })
+          }}
           linked={linked}
           onRun={() => runCard(project.id, openCard, linked)}
           deviceId={deviceId}

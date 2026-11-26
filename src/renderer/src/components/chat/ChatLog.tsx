@@ -96,31 +96,30 @@ interface ChatLogProps {
   /** Every MCP server's question still open, by request id. */
   readonly answerableElicitations: ReadonlySet<string>
   readonly onAnswer: (requestId: string, answer: PermissionAnswer) => void
-  /** Answers an MCP server's question, which is neither a permission nor a tool. */
-  readonly onAnswerElicitation: (
-    requestId: string,
-    answer: 'accept' | 'decline',
-    values?: FormValues
-  ) => void
+  // An MCP server's question, neither a permission nor a tool. Null where none is asked
+  // (the brainstorm declines them): the question is then not drawn.
+  readonly onAnswerElicitation:
+    ((requestId: string, answer: 'accept' | 'decline', values?: FormValues) => void) | null
   /** Answers the agent's own questions, which is not a permission. */
   readonly onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
   /** Asks for a plan already in the log to be carried out. */
-  readonly onExecutePlan: (plan: string) => void
+  readonly onExecutePlan: ((plan: string) => void) | null
   /**
    * Asks for the files to be put back to how they were when a message was sent.
    *
    * The log only offers it; the pane asks the question and does the work, since
    * there is a dialog in between and a bridge call either side of it.
    */
-  readonly onRewind: (messageId: string) => void
+  readonly onRewind: ((messageId: string) => void) | null
   /** The messages the agent has not taken yet, by id — see `useChat`. */
   readonly waiting: ReadonlySet<string>
   /** Whether every row is open, and how many times that was asked — see `Expansion`. */
   readonly expansion: Expansion
   /** The checkout the agent works in, so a path it names can be opened. */
   readonly workspacePath: string
-  /** Opens a workspace-relative path in the centre: kept open, or as a preview. */
-  readonly onOpenFile: (path: string, pinned: boolean) => void
+  // Opens a workspace-relative path in the centre, kept open or as a preview.
+  // Null where there is no centre (the brainstorm): a path is then only text.
+  readonly onOpenFile: ((path: string, pinned: boolean) => void) | null
 }
 
 /**
@@ -189,7 +188,10 @@ export const ChatLog = memo(function ChatLog({
   const turnStart = useMemo(() => turnStartedAt(entries), [entries])
   // Held still, so the rows reading it are left alone when the log renders for
   // some other reason: the pane hands over a callback that keeps its identity.
-  const links = useMemo(() => ({ workspacePath, onOpenFile }), [workspacePath, onOpenFile])
+  const links = useMemo(
+    () => (onOpenFile === null ? null : { workspacePath, onOpenFile }),
+    [workspacePath, onOpenFile]
+  )
   // Which calls handed over a plan, so that a plan sent back for another round
   // is not drawn as something that broke.
   const plans = useSameValue(
@@ -407,17 +409,14 @@ interface AnswerProps {
   answerable: ReadonlySet<string>
   answerableElicitations: ReadonlySet<string>
   elicitationAnswers: Map<string, 'accept' | 'decline' | 'cancel'>
-  onAnswerElicitation: (
-    requestId: string,
-    answer: 'accept' | 'decline',
-    values?: FormValues
-  ) => void
+  onAnswerElicitation:
+    ((requestId: string, answer: 'accept' | 'decline', values?: FormValues) => void) | null
   /** What was chosen, by request, for questions read back from the transcript. */
   answers: Map<string, readonly QuestionAnswer[]>
   onAnswer: (requestId: string, answer: PermissionAnswer) => void
   onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
-  onExecutePlan: (plan: string) => void
-  onRewind: (messageId: string) => void
+  onExecutePlan: ((plan: string) => void) | null
+  onRewind: ((messageId: string) => void) | null
 }
 
 /** Everything a row needs on top of the entry itself. */
@@ -436,6 +435,7 @@ function EntryRow({
 }: { entry: ChatEntry } & RowProps): React.JSX.Element | null {
   if (entry.role === 'user') {
     const messageId = entry.uuid
+    const { onRewind } = answering
 
     return (
       <UserMessage
@@ -447,10 +447,10 @@ function EntryRow({
         // which the core would refuse anyway: a button that can only fail is a
         // promise the interface does not keep.
         onRewind={
-          messageId === undefined || answering.busy
+          messageId === undefined || answering.busy || onRewind === null
             ? null
             : () => {
-                answering.onRewind(messageId)
+                onRewind(messageId)
               }
         }
       />
@@ -535,6 +535,7 @@ function AgentRow({
       )
 
     case 'elicitation_request':
+      if (onAnswerElicitation === null) return null
       return (
         <ElicitationCard
           serverName={event.serverName}
@@ -922,7 +923,7 @@ function Plan({
   busy: boolean
   /** The plan as the user rewrote it, rather than as the agent wrote it. */
   edited?: boolean
-  onExecute: (plan: string) => void
+  onExecute: ((plan: string) => void) | null
 }): React.JSX.Element {
   const { t } = useTranslation()
 
@@ -941,17 +942,19 @@ function Plan({
             changing your mind about a plan you can still read meant retyping
             the request. Absent while the agent is working: it would be queued
             behind the turn, and the plan may be the very thing being redone. */}
-        <Button
-          className="ml-auto"
-          size="sm"
-          disabled={busy}
-          onClick={() => {
-            onExecute(text)
-          }}
-        >
-          <Play aria-hidden size={11} />
-          {t('chat.executePlan')}
-        </Button>
+        {onExecute !== null && (
+          <Button
+            className="ml-auto"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              onExecute(text)
+            }}
+          >
+            <Play aria-hidden size={11} />
+            {t('chat.executePlan')}
+          </Button>
+        )}
       </div>
 
       <div className="px-3 py-2.5">

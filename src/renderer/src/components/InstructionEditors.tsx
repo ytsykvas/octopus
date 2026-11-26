@@ -24,6 +24,7 @@ export const INSTRUCTION_KINDS: readonly {
     | 'instructions.resolveConflicts'
     | 'instructions.setupScripts'
     | 'instructions.diagnoseRun'
+    | 'instructions.taskCards'
   readonly hintKey:
     | 'instructions.pullRequestHint'
     | 'instructions.commitMessageHint'
@@ -34,6 +35,7 @@ export const INSTRUCTION_KINDS: readonly {
     | 'instructions.resolveConflictsHint'
     | 'instructions.setupScriptsHint'
     | 'instructions.diagnoseRunHint'
+    | 'instructions.taskCardsHint'
 }[] = [
   {
     kind: 'pullRequest',
@@ -71,6 +73,11 @@ export const INSTRUCTION_KINDS: readonly {
     kind: 'diagnoseRun',
     labelKey: 'instructions.diagnoseRun',
     hintKey: 'instructions.diagnoseRunHint'
+  },
+  {
+    kind: 'taskCards',
+    labelKey: 'instructions.taskCards',
+    hintKey: 'instructions.taskCardsHint'
   }
 ]
 

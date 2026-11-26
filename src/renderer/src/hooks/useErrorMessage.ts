@@ -295,6 +295,7 @@ export function useErrorMessage(): (failure: Failure) => string {
           return t(`errors.${failure.code}`, { name: failure.params?.name ?? '' })
         case 'columnMissing':
         case 'columnBuiltIn':
+        case 'brainstormGone':
           return t(`errors.${failure.code}`)
         case 'columnNameTaken':
           return t('errors.columnNameTaken', { name: failure.params?.name ?? '' })

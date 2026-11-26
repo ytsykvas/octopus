@@ -27,7 +27,8 @@ export const SOURCE_INSTRUCTION_KINDS: readonly InstructionKind[] = [
   'multiAgentReview',
   'resolveConflicts',
   'setupScripts',
-  'diagnoseRun'
+  'diagnoseRun',
+  'taskCards'
 ]
 
 /**
@@ -57,6 +58,7 @@ export const SOURCE_ITEM_IDS = [
   'instruction.resolveConflicts',
   'instruction.setupScripts',
   'instruction.diagnoseRun',
+  'instruction.taskCards',
   'project.baseBranch',
   'project.envFile',
   'project.carry'

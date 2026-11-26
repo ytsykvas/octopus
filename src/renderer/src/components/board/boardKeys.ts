@@ -7,6 +7,7 @@ export type BoardDirection = 'up' | 'down' | 'left' | 'right'
 
 export type BoardKeyAction =
   | { readonly kind: 'create'; readonly from: string | null }
+  | { readonly kind: 'brainstorm'; readonly from: string | null }
   | { readonly kind: 'close'; readonly ref: string }
   | { readonly kind: 'blur'; readonly ref: string }
   | { readonly kind: 'focus'; readonly from: string | null; readonly direction: BoardDirection }
@@ -44,7 +45,7 @@ export function boardKeyAction(
   event: BoardKey,
   { focused, open, reorderable }: BoardKeyContext
 ): BoardKeyAction | null {
-  // Caps Lock gives `C` without Shift; Shift itself is ruled out by the modifier checks.
+  // Caps Lock gives `C` without Shift, read as `c`; Shift with it is `⇧C`, told by `shiftKey`.
   // A Latin letter as typed (Dvorak moves them); on a Cyrillic layout, `с`, the key's place.
   const key = /^[a-z]$/i.test(event.key)
     ? event.key.toLowerCase()
@@ -52,6 +53,8 @@ export function boardKeyAction(
   const target = focused ?? open
   const { metaKey, ctrlKey, altKey, shiftKey } = event
   if (!metaKey && !ctrlKey && !altKey && !shiftKey) return plainAction(key, focused, open)
+  if (shiftKey && !metaKey && !ctrlKey && !altKey)
+    return key === 'c' ? { kind: 'brainstorm', from: target } : null
   if (altKey && !metaKey && !ctrlKey && !shiftKey && reorderable && target !== null) {
     if (key === 'ArrowUp') return { kind: 'step', ref: target, step: -1 }
     if (key === 'ArrowDown') return { kind: 'step', ref: target, step: 1 }

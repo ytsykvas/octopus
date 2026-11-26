@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   type PushTarget,
   pushBoardChanged,
+  pushBrainstormEntry,
   pushChatEvent,
   pushChatsChanged,
   pushChatStatus,
@@ -125,6 +126,15 @@ describe('what the main process pushes, and on which channel', () => {
     pushBoardChanged([window], { projectId: 'p1' })
 
     expect(window.sent).toEqual([['board:changed', { projectId: 'p1' }]])
+  })
+
+  it("announces a line of the board's brainstorm", () => {
+    const window = target()
+    const entry = { brainstormId: 'b1', entry: { role: 'user', at: 'now', text: 'x' } }
+
+    pushBrainstormEntry([window], entry)
+
+    expect(window.sent).toEqual([['brainstorm:entry', entry]])
   })
 
   it('announces the account windows', () => {

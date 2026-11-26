@@ -11,11 +11,18 @@ import { type Document, isMap, isSeq, parseDocument, type YAMLMap } from 'yaml'
 import {
   BoardError,
   CardMetaSchema,
-  COMMENTS_MARKER,
   type CardComment,
+  type CardDraft,
   type CardMeta
 } from './boardSchema.js'
-import { retitled, splitBody, threadOf, titleOf } from './boardText.js'
+import {
+  COMMENTS_MARKER,
+  retitled,
+  splitBody,
+  threadOf,
+  titleOf,
+  withFenceClosed
+} from './boardText.js'
 
 const BOM = '\uFEFF'
 
@@ -102,15 +109,19 @@ function serialise(bom: string, doc: Document, body: string): string {
   return empty ? bom + body : `${bom}---\n${doc.toString({ lineWidth: 0 })}---\n${body}`
 }
 
+export function headerUnreadable(name: string): BoardError {
+  return new BoardError(
+    'cardFrontmatterUnreadable',
+    { name },
+    `The header of ${name} cannot be read.`
+  )
+}
+
 /** The header to edit, refusing one that looks like a header and will not parse. */
 function editable(raw: string, fileName: string): { bom: string; doc: Document; body: string } {
   const block = blockOf(raw)
   if (block !== null && block.doc === null && isKeyLike(block.front)) {
-    throw new BoardError(
-      'cardFrontmatterUnreadable',
-      { name: fileName },
-      `The header of ${fileName} cannot be read.`
-    )
+    throw headerUnreadable(fileName)
   }
   const { head, body } = splitCard(raw)
   return { bom: head.startsWith(BOM) ? BOM : '', doc: block?.doc ?? parseDocument(''), body }
@@ -191,7 +202,7 @@ export function withDescription(raw: string, text: string): string {
   const { head, body } = splitCard(raw)
   const { tail } = splitBody(body)
   const blank = text.trim() === ''
-  if (tail !== '') return head + (blank ? tail : `${text.trimEnd()}\n\n${tail}`)
+  if (tail !== '') return head + (blank ? tail : `${withFenceClosed(text).trimEnd()}\n\n${tail}`)
   return head + (blank ? '' : `${text.trimEnd()}\n`)
 }
 
@@ -200,7 +211,7 @@ export function withComment(raw: string, at: string, text: string): string {
   const { description, tail } = splitBody(body)
   const entry = `### ${at}\n\n${text.trim()}\n`
   if (tail !== '') return `${head}${description}${tail.trimEnd()}\n\n${entry}`
-  const prefix = description.trimEnd()
+  const prefix = withFenceClosed(description).trimEnd()
   return `${head}${prefix === '' ? '' : `${prefix}\n\n`}${COMMENTS_MARKER}\n\n${entry}`
 }
 
@@ -229,6 +240,17 @@ export function parseCard(
   }
 }
 
-export function newCard(title: string, order: number): string {
-  return `---\norder: ${String(order)}\n---\n# ${title}\n`
+/** Every field in the one write that makes the file, so no Mac ever syncs a card half made. */
+export function newCard(card: Omit<CardDraft, 'status'>, order: number): string {
+  const header = [
+    `order: ${String(order)}`,
+    ...(card.priority === undefined ? [] : [`priority: ${card.priority}`]),
+    ...(card.tag === undefined ? [] : [`tag: ${card.tag}`])
+  ]
+  return `---\n${header.join('\n')}\n---\n${titledBody(card.title, card.description ?? '')}`
+}
+
+export function titledBody(title: string, description: string): string {
+  const body = description.trim()
+  return `# ${title}\n${body === '' ? '' : `\n${body}\n`}`
 }

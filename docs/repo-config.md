@@ -162,7 +162,7 @@ readable afterwards rather than only at the moment of agreeing.
   instructions/
     pull-request.md  commit-message.md  fix-checks.md  address-review.md
     review.md  multi-agent-review.md  resolve-conflicts.md
-    setup-scripts.md  diagnose-run.md
+    setup-scripts.md  diagnose-run.md  task-cards.md
 ```
 
 It mirrors the layout under the data root exactly, and the filenames are not

@@ -664,7 +664,10 @@ export const en = {
       'Sent as the first message of a new conversation when you choose Help → “Set this project up to run”. Octopus adds the checkout, the workspace’s name, slug and port, the scripts in effect, the files it carries and the names of the variables below it — never their values.',
     diagnoseRun: 'Diagnosing a run that failed',
     diagnoseRunHint:
-      'Sent as the first message of a new conversation when you choose Help → “Why does Run not work?”. Octopus adds the same facts, whether anything is listening on the port, and the last lines of the latest build and server, with their exit codes.'
+      'Sent as the first message of a new conversation when you choose Help → “Why does Run not work?”. Octopus adds the same facts, whether anything is listening on the port, and the last lines of the latest build and server, with their exit codes.',
+    taskCards: 'Task cards',
+    taskCardsHint:
+      'Sent in the first message when you plan tasks with the agent on the board, or edit one with it. It says how this project wants a task written; octopus adds what the agent is to do, the board’s priorities and tags, and your idea or the task.'
   },
 
   help: {
@@ -2442,6 +2445,42 @@ export const en = {
       newTaskPlaceholder: 'Task title',
       count: '{{shown}} of {{total}}'
     },
+    brainstorm: {
+      create: 'Create with the agent',
+      edit: 'Edit with the agent',
+      createTitle: 'New tasks with the agent',
+      editTitle: 'Editing with the agent: {{title}}',
+      close: 'Close',
+      createIntro:
+        'Say what you want done. The agent reads the code and this board, asks what it needs to know and proposes one task or several. Nothing is written until you create them.',
+      editIntro:
+        'Say what should change. The agent reads this task, its comments and the code, and proposes a new version. Nothing changes until you apply it.',
+      ideaPlaceholder: 'What needs doing?',
+      requestPlaceholder: 'What should change in this task?',
+      replyPlaceholder: 'Reply, or ask for changes',
+      send: 'Send',
+      stop: 'Stop',
+      proposal: 'Proposal',
+      createTasks_one: 'Create {{count}} task',
+      createTasks_few: 'Create {{count}} tasks',
+      createTasks_many: 'Create {{count}} tasks',
+      createTasks_other: 'Create {{count}} tasks',
+      apply: 'Apply changes',
+      up: 'Move up',
+      down: 'Move down',
+      leaveOut: 'Leave out',
+      description: 'Description',
+      editDescription: 'Edit description',
+      descriptionDone: 'Done',
+      descriptionCancel: 'Cancel',
+      descriptionUnwritable:
+        'A code block is left open, or a line is the comments marker. Close the block or remove the line.',
+      allLeftOut: 'Every task is left out. Ask for another proposal, or close.',
+      discardTitle: 'Close this conversation?',
+      discardBody: 'The conversation and its proposal are not kept.',
+      discard: 'End the conversation',
+      keep: 'Keep talking'
+    },
     columns: {
       title: 'Columns',
       defaultHint: 'Every project\u2019s board shows these until it has columns of its own.',
@@ -2745,6 +2784,7 @@ export const en = {
       '“{{name}}” is not UTF-8 text, so octopus leaves it as it is. Change it in an editor that can save it as UTF-8.',
     cardTooLong:
       '“{{name}}” is longer than 100,000 characters — more than one message to the agent can hold. Shorten it, then run it again.',
+    brainstormGone: 'This conversation has ended. Close it and start another.',
     columnMissing: 'That column is no longer on the board.',
     columnBuiltIn: 'That column is built in: it can be moved, but not renamed or removed.',
     columnNameTaken: 'A column is already called “{{name}}”.',

@@ -68,15 +68,18 @@ import { NotesBodySchema } from '../core/notes.js'
 import { PromptDraftSchema, PromptIdSchema } from '../core/promptSchema.js'
 import {
   ATTACHMENT_NAME_MAX,
+  CardBatchSchema,
   CardDraftSchema,
   CardMoveSchema,
   CardPatchSchema,
   CardRefSchema,
+  CardRewriteSchema,
   CardTitleSchema,
   CommentTextSchema,
   DescriptionSaveSchema,
   type BoardChangedEvent
 } from '../core/boardSchema.js'
+import { type BrainstormEntry, BrainstormIdSchema } from '../core/brainstorm.js'
 import { ColumnEditSchema } from '../core/boardColumns.js'
 import { StoreSchema } from '../core/stores.js'
 import { CommandDigestSchema, PluginIdSchema, PluginTargetSchema } from '../core/plugins.js'
@@ -160,6 +163,7 @@ export interface IpcHost {
   readonly broadcastWorkspacePushed: (event: WorkspacePushedEvent) => void
   /** A project's board folder changed on disk. */
   readonly broadcastBoardChanged: (event: BoardChangedEvent) => void
+  readonly broadcastBrainstormEntry: (entry: BrainstormEntry) => void
   /** The account's windows, whenever the service learns they moved. */
   readonly broadcastUsageWindows: (windows: UsageWindows) => void
   /**
@@ -921,6 +925,62 @@ export function registerIpc(
   host.handle('board:resetColumns', (_event, projectId: unknown) =>
     attempt(() => service.resetBoardColumns(ProjectIdSchema.parse(projectId)))
   )
+  host.handle('board:createMany', (_event, projectId: unknown, drafts: unknown) =>
+    attempt(() =>
+      service.createCards(ProjectIdSchema.parse(projectId), CardBatchSchema.parse(drafts))
+    )
+  )
+  host.handle('board:rewrite', (_event, projectId: unknown, ref: unknown, rewrite: unknown) =>
+    attempt(() =>
+      service.rewriteCard(
+        ProjectIdSchema.parse(projectId),
+        CardRefSchema.parse(ref),
+        CardRewriteSchema.parse(rewrite)
+      )
+    )
+  )
+
+  host.handle('brainstorm:start', (_event, projectId: unknown, idea: unknown) =>
+    attempt(() =>
+      service.startBrainstorm(ProjectIdSchema.parse(projectId), ChatMessageSchema.parse(idea))
+    )
+  )
+  host.handle(
+    'brainstorm:startEdit',
+    (_event, projectId: unknown, ref: unknown, request: unknown) =>
+      attempt(() =>
+        service.startCardEdit(
+          ProjectIdSchema.parse(projectId),
+          CardRefSchema.parse(ref),
+          ChatMessageSchema.parse(request)
+        )
+      )
+  )
+  host.handle('brainstorm:send', (_event, brainstormId: unknown, text: unknown) =>
+    attempt(() => {
+      service.sendToBrainstorm(
+        BrainstormIdSchema.parse(brainstormId),
+        ChatMessageSchema.parse(text)
+      )
+    })
+  )
+  host.handle(
+    'brainstorm:answer',
+    (_event, brainstormId: unknown, requestId: unknown, answers: unknown) =>
+      attempt(() => {
+        service.answerBrainstorm(
+          BrainstormIdSchema.parse(brainstormId),
+          z.string().min(1).parse(requestId),
+          z.array(QuestionAnswerSchema).parse(answers)
+        )
+      })
+  )
+  host.handle('brainstorm:stop', (_event, brainstormId: unknown) =>
+    attempt(() => service.stopBrainstorm(BrainstormIdSchema.parse(brainstormId)))
+  )
+  host.handle('brainstorm:close', (_event, brainstormId: unknown) =>
+    attempt(() => service.closeBrainstorm(BrainstormIdSchema.parse(brainstormId)))
+  )
 
   host.handle('skills:inRepository', (_event, workspaceId: string) =>
     attempt(() => service.listRepositorySkills(workspaceId))
@@ -1236,6 +1296,7 @@ export function registerIpc(
   service.onWorkspaceStatus(host.broadcastWorkspaceStatus)
   service.onWorkspacePushed(host.broadcastWorkspacePushed)
   service.onBoardChanged(host.broadcastBoardChanged)
+  service.onBrainstormEntry(host.broadcastBrainstormEntry)
   service.onUsageWindows(host.broadcastUsageWindows)
   service.onChatStatus(host.broadcastChatStatus)
   service.onChatsChanged(host.broadcastChatsChanged)

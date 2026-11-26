@@ -47,6 +47,7 @@ function renderPanel(props: Partial<CardPanelProps> = {}): CardPanelProps {
     onClose: vi.fn(),
     onMove: vi.fn(),
     onRemove: vi.fn(),
+    onEditWithAgent: vi.fn(),
     linked: null,
     onRun: vi.fn(() => Promise.resolve()),
     deviceId: 'device-one',
@@ -248,6 +249,31 @@ describe('CardPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Copy description' }))
 
     expect(await screen.findByRole('button', { name: 'Copy failed' })).toBeInTheDocument()
+  })
+
+  it('edits the card with the agent, as it was read', async () => {
+    const detail = cardDetail()
+    const { onEditWithAgent } = renderPanel({ detail })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit with the agent' }))
+
+    expect(onEditWithAgent).toHaveBeenCalledWith(detail)
+  })
+
+  it.each([
+    ['before the card is read', { detail: null }],
+    [
+      'a file that is not UTF-8',
+      { card: boardCard({ notText: true }), detail: cardDetail({ notText: true }) }
+    ],
+    [
+      'a card whose header cannot be read',
+      { card: boardCard({ malformed: true }), detail: cardDetail({ malformed: true }) }
+    ]
+  ])('cannot edit with the agent %s', (_, props: Partial<CardPanelProps>) => {
+    renderPanel(props)
+
+    expect(screen.getByRole('button', { name: 'Edit with the agent' })).toBeDisabled()
   })
 
   it('cannot copy before the description arrives', () => {
