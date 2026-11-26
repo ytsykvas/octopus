@@ -289,6 +289,52 @@ describe('a subagent’s work', () => {
   })
 })
 
+describe('a path the agent read', () => {
+  const read: ChatEntry = {
+    role: 'agent',
+    at: AT,
+    event: {
+      type: 'tool_use',
+      toolUseId: 't1',
+      name: 'Read',
+      input: { file_path: `${WORKSPACE}/src/a.ts` }
+    }
+  }
+
+  it('opens in the centre where there is one', () => {
+    renderLog({ entries: [read] })
+
+    expect(screen.getByRole('button', { name: /a\.ts/ })).toBeInTheDocument()
+  })
+
+  it('is only text where nothing can open it', () => {
+    renderLog({ entries: [read], onOpenFile: null })
+
+    expect(screen.queryByRole('button', { name: /a\.ts/ })).toBeNull()
+    expect(screen.getByText(/a\.ts/)).toBeInTheDocument()
+  })
+})
+
+describe('a plan where nothing can carry one out', () => {
+  it('is drawn without Execute — the board’s brainstorm', () => {
+    renderLog({
+      onExecutePlan: null,
+      entries: [
+        fromAgent({
+          type: 'tool_use',
+          toolUseId: 'p1',
+          name: 'ExitPlanMode',
+          input: { plan: '# Do' }
+        }),
+        fromAgent({ type: 'plan_edited', plan: '# Only the tests' })
+      ]
+    })
+
+    expect(screen.getByText('Only the tests')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Execute' })).toBeNull()
+  })
+})
+
 describe('a plan the user rewrote', () => {
   // What the agent was actually told to do, named so it is not mistaken for the
   // one it wrote above — and carried out from here like any other.
@@ -375,6 +421,17 @@ describe('rewinding from a message', () => {
     await user.click(screen.getByRole('button', { name: 'Rewind to before this message' }))
 
     expect(onRewind).toHaveBeenCalledExactlyOnceWith(MESSAGE)
+  })
+
+  it('offers nothing where nothing can rewind — the board’s brainstorm', () => {
+    renderLog({
+      onRewind: null,
+      entries: [{ role: 'user', at: AT, text: 'rename the helper', uuid: MESSAGE }]
+    })
+
+    expect(
+      screen.queryByRole('button', { name: 'Rewind to before this message' })
+    ).not.toBeInTheDocument()
   })
 
   // Sent before ids were kept: there is nothing to rewind to.
@@ -2477,6 +2534,12 @@ describe('a question from an MCP server, in the log', () => {
     title: '',
     fields: []
   }
+
+  it('is not drawn where nothing can answer one — the board’s brainstorm declines them', () => {
+    renderLog({ entries: [fromAgent(REQUEST)], onAnswerElicitation: null })
+
+    expect(screen.queryByText('A question from ledger')).toBeNull()
+  })
 
   it('is drawn as a card of its own', () => {
     renderLog({ entries: [fromAgent(REQUEST)], answerableElicitations: new Set(['e-1']) })
