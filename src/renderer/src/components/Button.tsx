@@ -15,7 +15,7 @@ export type ButtonSize = 'sm' | 'md'
 
 const VARIANTS: Record<ButtonVariant, string> = {
   accent: 'bg-accent text-on-accent hover:bg-accent-hover border-transparent',
-  success: 'bg-success text-on-accent hover:brightness-110 border-transparent',
+  success: 'bg-success text-on-success hover:brightness-110 border-transparent',
   quiet: 'bg-canvas text-ink border-line hover:bg-muted',
   danger: 'bg-transparent text-danger border-transparent hover:bg-danger-bg',
   // Filled: for the primary action of a confirmation, where it must be the

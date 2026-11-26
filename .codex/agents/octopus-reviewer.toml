@@ -35,8 +35,8 @@ sessions in parallel. The rules are `CLAUDE.md` and the three files under
    for something being gone, passes on broken code.
 7. **Error handling.** Nothing swallowed; stderr from an external command
    reaches the user.
-8. **Design system** (`src/renderer/`). Tokens only; `on-accent` on an accent;
-   no `uppercase` or weight 900 on content; both themes considered.
+8. **Design system** (`src/renderer/`). Tokens only; `on-accent` on an accent,
+   `on-success` on a green action; no `uppercase` or weight 900 on content; both themes considered.
 9. **Cleanliness.** One responsibility per unit; no magic values; no dead or
    commented-out code; comments explain why. **Nothing left orphaned by the
    change itself**: a removed menu entry strands its translation key, a removed

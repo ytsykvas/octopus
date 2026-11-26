@@ -16,8 +16,8 @@ classes and components are listed in the `ui-component` skill.
   caller goes.
 - **Colours only through the tokens in `styles.css`**, never raw hex or a
   Tailwind palette colour — the dark theme breaks otherwise. Text on an accent
-  uses `on-accent`. There is no `project-*` utility class: a project's colour
-  is `var(--project-color)`.
+  uses `on-accent`; on a green action, `on-success`. There is no `project-*`
+  utility class: a project's colour is `var(--project-color)`.
 - **Check both themes.** `.dark` on `<html>` swaps every token at once.
 - **No `uppercase`, no weight 900, no shadows between panels** — the content
   is chat, diffs and logs read for hours. Hierarchy comes from colour and
