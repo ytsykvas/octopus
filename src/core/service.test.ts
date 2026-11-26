@@ -38,6 +38,8 @@ import { descriptionOf, readMeta } from './boardCard.js'
 import { DEFAULT_COLUMNS } from './boardColumns.js'
 import { machineLabel } from './boardNames.js'
 import { CARD_TEXT_MAX, type CardRunEntry } from './boardSchema.js'
+import type { BrainstormEntry } from './brainstorm.js'
+import { PROPOSE_EDIT_TOOL } from './taskProposal.js'
 import {
   ABANDONED,
   COMPACTION_WATCH_SETTINGS,
@@ -18792,6 +18794,249 @@ describe('the board', () => {
 
     await expect(service.cardPath(projectId, 'backlog/Fix login.md')).resolves.toBe(
       join(folder, 'backlog', 'Fix login.md')
+    )
+  })
+
+  it('writes a batch of cards, each with its fields, in the order given', async () => {
+    await expect(
+      service.createCards(projectId, [
+        { status: 'backlog', title: 'One', description: 'Why.', priority: 'low' },
+        { status: 'backlog', title: 'Two' }
+      ])
+    ).resolves.toEqual({ refs: ['backlog/One.md', 'backlog/Two.md'], failure: null })
+
+    const { cards } = await service.listBoard(projectId)
+    expect(cards.map((card) => [card.title, card.meta.order, card.meta.priority])).toEqual(
+      expect.arrayContaining([
+        ['One', -1, 'low'],
+        ['Two', 0, undefined]
+      ])
+    )
+  })
+
+  describe('a brainstorm', () => {
+    interface Opened {
+      readonly options: Record<string, unknown>
+      readonly sent: string[]
+      readonly closed: () => boolean
+    }
+
+    /** A session that stays open, saying nothing, until it is closed. */
+    function heldQuery(): { query: QueryFn; opened: Opened[] } {
+      const opened: Opened[] = []
+      const query: QueryFn = (params) => {
+        const sent: string[] = []
+        let closed = false
+        let release = (): void => undefined
+        const open = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        void (async () => {
+          for await (const message of params.prompt) {
+            const { content } = message.message
+            if (typeof content === 'string') sent.push(content)
+          }
+        })()
+        opened.push({
+          options: params.options ?? {},
+          sent,
+          closed: () => closed
+        })
+        return Object.assign(
+          {
+            [Symbol.asyncIterator]: () => ({
+              next: () => open.then(() => ({ done: true, value: undefined }))
+            })
+          },
+          {
+            interrupt: () => Promise.resolve(),
+            close: () => {
+              closed = true
+              release()
+            }
+          }
+        ) as unknown as Query
+      }
+      return { query, opened }
+    }
+
+    async function brainstorming(): Promise<{
+      on: OctopusService
+      opened: Opened[]
+      entries: BrainstormEntry[]
+    }> {
+      const { query, opened } = heldQuery()
+      const on = await createService({ ...paths(dir), query })
+      await on.updateConfig({ boardFolder: board, model: 'sonnet', effort: 'high' })
+      const entries: BrainstormEntry[] = []
+      on.onBrainstormEntry((entry) => entries.push(entry))
+      return { on, opened, entries }
+    }
+
+    const sole = (opened: readonly Opened[]): Opened => present(opened[0], 'a session')
+    // The session takes its messages off the prompt stream on a later tick.
+    const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+
+    it("reads the project's checkout and its board, with the project's convention", async () => {
+      const { on, opened } = await brainstorming()
+      await put(join(folder, 'backlog', 'A.md'), '# A\n')
+      const repo = join(dir, 'planner')
+      await put(join(repo, '.octopus', 'instructions', 'task-cards.md'), 'Write it in Ukrainian.\n')
+
+      await on.startBrainstorm(projectId, 'Export the board')
+
+      await settled()
+      const session = sole(opened)
+      expect(session.options).toMatchObject({
+        cwd: await realpath(repo),
+        additionalDirectories: [folder],
+        model: 'sonnet',
+        settingSources: ['user', 'project', 'local'],
+        persistSession: false
+      })
+      const [first] = session.sent
+      expect(first).toContain(`the board's tasks in ${folder}`)
+      expect(first).toContain('# How this project wants tasks written\n\nWrite it in Ukrainian.')
+      expect(first).toMatch(/# The idea\n\nExport the board$/)
+    })
+
+    it('takes the planning model where one is set apart', async () => {
+      const { on, opened } = await brainstorming()
+      await on.updateConfig({ planModel: 'opus' })
+
+      await on.startBrainstorm(projectId, 'x')
+
+      expect(sole(opened).options.model).toBe('opus')
+    })
+
+    it('reads no board on a project whose folder is not made yet', async () => {
+      const { on, opened } = await brainstorming()
+
+      await on.startBrainstorm(projectId, 'x')
+      await settled()
+
+      expect(sole(opened).options).not.toHaveProperty('additionalDirectories')
+      expect(sole(opened).sent[0]).toContain('1. Read the code the idea touches.')
+    })
+
+    it('starts nothing without a board folder', async () => {
+      const { on, opened } = await brainstorming()
+      await on.updateConfig({ boardFolder: '' })
+
+      await expect(on.startBrainstorm(projectId, 'x')).rejects.toMatchObject({
+        code: 'boardFolderUnset'
+      })
+      expect(opened).toEqual([])
+    })
+
+    it("gives an unapproved repository only the user's own layer", async () => {
+      const { on, opened } = await brainstorming()
+      await put(
+        join(dir, 'planner', '.claude', 'settings.json'),
+        '{"permissions":{"allow":["Edit"]}}'
+      )
+
+      await on.startBrainstorm(projectId, 'x')
+
+      expect(sole(opened).options.settingSources).toEqual(['user'])
+    })
+
+    it('carries what is sent, answered, stopped and closed to its session', async () => {
+      const { on, opened, entries } = await brainstorming()
+      const id = await on.startBrainstorm(projectId, 'x')
+
+      on.sendToBrainstorm(id, 'More.')
+      on.answerBrainstorm(id, 'no such question', [])
+      await on.stopBrainstorm(id)
+      await on.closeBrainstorm(id)
+
+      expect(entries.map(({ brainstormId, entry }) => [brainstormId, entry.role])).toEqual([
+        [id, 'user'],
+        [id, 'user']
+      ])
+      expect(sole(opened).closed()).toBe(true)
+      expect(() => {
+        on.sendToBrainstorm(id, 'Still there?')
+      }).toThrow(expect.objectContaining({ code: 'brainstormGone' }))
+    })
+
+    it('stops telling a listener that let go', async () => {
+      const { on } = await brainstorming()
+      const heard: BrainstormEntry[] = []
+      const unsubscribe = on.onBrainstormEntry((entry) => heard.push(entry))
+
+      unsubscribe()
+      await on.startBrainstorm(projectId, 'x')
+
+      expect(heard).toEqual([])
+    })
+
+    it('ends with the application', async () => {
+      const { on, opened } = await brainstorming()
+      await on.startBrainstorm(projectId, 'x')
+
+      await on.closeChats()
+
+      expect(sole(opened).closed()).toBe(true)
+    })
+
+    it('reworks one card from its own text, with the tool that proposes an edit', async () => {
+      const { on, opened } = await brainstorming()
+      await put(
+        join(folder, 'backlog', 'Export.md'),
+        '---\npriority: high\n---\n# Export\n\nAs CSV.\n'
+      )
+
+      await on.startCardEdit(projectId, 'backlog/Export.md', 'Make it sharper')
+      await settled()
+
+      const session = sole(opened)
+      expect(session.options.allowedTools).toContain(PROPOSE_EDIT_TOOL)
+      expect(session.options.additionalDirectories).toEqual([folder])
+      const [first] = session.sent
+      expect(first).toContain(`the board of planner: ${join(folder, 'backlog', 'Export.md')}.`)
+      expect(first).toContain('- Priority: high\n- Tag: none\n\n# Export\n\nAs CSV.')
+      expect(first).toMatch(/# What I want changed\n\nMake it sharper$/)
+    })
+
+    it.each([
+      ['cardNotText', Buffer.from([0x23, 0x20, 0xcf, 0xf0, 0x0a])],
+      ['cardFrontmatterUnreadable', '---\npriority: high\ntag: [feature\n---\n# A\n']
+    ])('starts no edit of a card no rewrite could write: %s', async (code, bytes) => {
+      const { on, opened } = await brainstorming()
+      await mkdir(join(folder, 'backlog'), { recursive: true })
+      await writeFile(join(folder, 'backlog', 'A.md'), bytes)
+
+      await expect(on.startCardEdit(projectId, 'backlog/A.md', 'x')).rejects.toMatchObject({
+        code,
+        params: { name: 'A.md' }
+      })
+      expect(opened).toEqual([])
+    })
+
+    it('starts no edit of a card that is gone', async () => {
+      const { on, opened } = await brainstorming()
+
+      await expect(on.startCardEdit(projectId, 'backlog/Gone.md', 'x')).rejects.toMatchObject({
+        code: 'cardMissing'
+      })
+      expect(opened).toEqual([])
+    })
+  })
+
+  it('writes an applied edit over the card in one go', async () => {
+    await put(join(folder, 'backlog', 'Export.md'), '# Export\n\nAs CSV.\n')
+
+    await service.rewriteCard(projectId, 'backlog/Export.md', {
+      title: 'Export as CSV',
+      description: 'Sharper.',
+      priority: 'low',
+      tag: null,
+      base: '# Export\n\nAs CSV.\n'
+    })
+
+    await expect(readFile(join(folder, 'backlog', 'Export.md'), 'utf8')).resolves.toBe(
+      '---\npriority: low\n---\n# Export as CSV\n\nSharper.\n'
     )
   })
 })

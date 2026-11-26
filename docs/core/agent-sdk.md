@@ -243,6 +243,21 @@ arrives apart from that `result`, on `compact_boundary`, which `mapMessage` turn
 into `conversation_compacted` (read through zod, above): that is what draws the
 compaction row in the log and moves the context gauge to its `postTokens`.
 
+## A session shut in to a few tools
+
+The board's brainstorm (`brainstorm.ts`) is the one session that runs outside a workspace and the
+one that is handed a tool of octopus's own. `SessionOptions.confined` does both halves: `tools`
+narrows the CLI's built-in set itself — not a permission, the tools are simply absent — and the
+servers are passed with `strictMcpConfig`, so no `.mcp.json` of the checkout and no server of the
+user's settings comes in beside them. `persistSession: false` keeps the CLI from writing a session
+file: nothing of the conversation outlives the panel.
+
+The proposal arrives as the tool's arguments (`createSdkMcpServer`, `tool`), so the SDK checks them
+against the zod shape before the handler runs and answers the model with what was wrong; the
+handler only says the proposal is shown. Measured on SDK 0.3.329 with a live session: `tools`
+restricts the built-ins exactly, the tool is named `mcp__octopus__propose_tasks`, `AskUserQuestion`
+still reaches `canUseTool`, and one server instance serves two sessions one after another.
+
 ## An answer travels as the tool's own arguments
 
 `AskUserQuestion` is an ordinary tool, so the agent's questions arrive as a
