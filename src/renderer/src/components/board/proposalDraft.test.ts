@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  cardDraftsOf,
-  type DraftTask,
-  draftTasks,
-  proposedOf,
-  swapped,
-  withTask
-} from './proposalDraft.js'
+import { cardDraftsOf, type DraftTask, draftTasks, proposedOf, withTask } from './proposalDraft.js'
 
 const A: DraftTask = {
   key: 0,
@@ -25,7 +18,6 @@ const B: DraftTask = {
   tag: 'docs',
   status: 'backlog'
 }
-const C: DraftTask = { ...B, key: 2, title: 'C' }
 
 describe('draftTasks', () => {
   it('puts every task in the column the brainstorm was opened from', () => {
@@ -62,17 +54,5 @@ describe('withTask', () => {
       A,
       { ...B, title: 'B2', tag: null }
     ])
-  })
-})
-
-describe('swapped', () => {
-  it('moves a task one place up or down', () => {
-    expect(swapped([A, B, C], 1, -1)).toEqual([B, A, C])
-    expect(swapped([A, B, C], 1, 1)).toEqual([A, C, B])
-  })
-
-  it('leaves the list as it is at either end', () => {
-    expect(swapped([A, B], 0, -1)).toEqual([A, B])
-    expect(swapped([A, B], 1, 1)).toEqual([A, B])
   })
 })

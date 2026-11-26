@@ -41,6 +41,9 @@ describe('boardKeyAction', () => {
       { kind: 'brainstorm', from: null }
     ],
     [key('J', { shiftKey: true }), {}, null],
+    [key('C', { shiftKey: true, metaKey: true }), {}, null],
+    [key('C', { shiftKey: true, ctrlKey: true }), {}, null],
+    [key('C', { shiftKey: true, altKey: true }), {}, null],
     [key('c', { ctrlKey: true }), {}, null],
     [key('Enter'), {}, null],
     [key('Escape'), { open: 'b' }, { kind: 'close', ref: 'b' }],

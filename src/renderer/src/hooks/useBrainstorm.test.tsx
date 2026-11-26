@@ -22,7 +22,6 @@ function renderBrainstorm(
   })
 }
 
-/** What main pushes: the hook's own subscription, as the bridge would call it. */
 function hear(entry: BrainstormEntry): void {
   const handler = vi.mocked(octopus().brainstorm.onEntry).mock.calls[0]?.[0]
   if (handler === undefined) throw new Error('nothing listens')
@@ -70,6 +69,17 @@ describe('useBrainstorm', () => {
     hear({ brainstormId: 'another', entry: line('Not ours') })
 
     expect(result.current.current?.entries).toEqual([line('Plan')])
+  })
+
+  it('hears no line before its first message', () => {
+    const { result } = renderBrainstorm()
+    act(() => {
+      result.current.open(TASKS)
+    })
+
+    hear({ brainstormId: 'left-behind', entry: line('Not ours') })
+
+    expect(result.current.current?.entries).toEqual([])
   })
 
   it('starts an edit of the card it was opened on', async () => {
@@ -158,13 +168,14 @@ describe('useBrainstorm', () => {
     act(() => {
       result.current.current?.stop()
       result.current.close()
+      result.current.open(TASKS)
     })
     await act(async () => {
       stopping.resolve(refusal('brainstormGone'))
       await stopping.promise
     })
 
-    expect(result.current.current).toBeNull()
+    expect(result.current.current).toMatchObject({ started: false, failure: null })
   })
 
   it('answers and stops nothing before it started', () => {

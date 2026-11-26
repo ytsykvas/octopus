@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_COLUMNS } from '@core/boardColumns.js'
@@ -33,6 +34,22 @@ function renderCard(props: Partial<TaskProposalCardProps> = {}): TaskProposalCar
   }
   render(<TaskProposalCard {...all} />)
   return all
+}
+
+function Stateful(): React.JSX.Element {
+  const [tasks, setTasks] = useState<DraftTask[]>([A, B])
+  return (
+    <TaskProposalCard
+      purpose="tasks"
+      summary="Two tasks."
+      tasks={tasks}
+      onTasks={setTasks}
+      columns={DEFAULT_COLUMNS}
+      writing={false}
+      failure={null}
+      onWrite={vi.fn()}
+    />
+  )
 }
 
 const row = (title: string): HTMLElement =>
@@ -95,6 +112,19 @@ describe('TaskProposalCard', () => {
     expect(onTasks).toHaveBeenNthCalledWith(3, [B])
   })
 
+  it('keeps an open editor with its task when the task moves', async () => {
+    render(<Stateful />)
+
+    await userEvent.click(
+      within(row('Read issues')).getByRole('button', { name: 'Edit description' })
+    )
+    await userEvent.click(within(row('Read issues')).getByRole('button', { name: 'Move down' }))
+
+    const field = within(row('Read issues')).getByRole('textbox', { name: 'Description' })
+    expect(editorText(field)).toBe('Import them.')
+    expect(within(row('Write issues back')).queryByRole('textbox')).toBeNull()
+  })
+
   it('edits a description and gives an edit up', async () => {
     const { onTasks } = renderCard({ tasks: [A] })
 
@@ -116,12 +146,34 @@ describe('TaskProposalCard', () => {
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 
+  it('keeps a description open while a code block is left open in it', async () => {
+    const { onTasks } = renderCard({ tasks: [A] })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit description' }))
+    const field = screen.getByRole('textbox', { name: 'Description' })
+    await userEvent.type(field, '{Enter}```', { skipClick: true })
+    expect(editorText(field)).toBe('Import them.\n```')
+    expect(screen.getByText(/A code block is left open/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeDisabled()
+    await userEvent.keyboard('{Meta>}{Enter}{/Meta}')
+    expect(onTasks).not.toHaveBeenCalled()
+
+    await userEvent.type(field, '{Enter}```', { skipClick: true })
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    expect(onTasks).toHaveBeenCalledWith([{ ...A, description: 'Import them.\n```\n```' }])
+  })
+
   it('takes a description on ⌘↩ and gives it up on Escape', async () => {
     const { onTasks } = renderCard({ tasks: [A] })
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit description' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Description' }), '?', {
+      skipClick: true
+    })
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('textbox')).toBeNull()
+    expect(onTasks).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Edit description' }))
     await userEvent.type(screen.getByRole('textbox', { name: 'Description' }), '!', {
       skipClick: true

@@ -1,13 +1,13 @@
 import { readProposal, type TaskProposal } from '@core/taskProposal.js'
 import type { ChatEntry } from '@core/transcript.js'
+import { closesTurn } from '@core/turns.js'
 
-/** The proposal drawn under the log, by the call that made it: edits belong to one call. */
 export interface ShownProposal {
   readonly callId: string
   readonly proposal: TaskProposal
 }
 
-/** The newest proposal the agent made; a refused call reads as none (`readProposal`). */
+/** A call the tool refused is passed over: the proposal before it still shows. */
 export function latestProposal(entries: readonly ChatEntry[]): ShownProposal | null {
   for (const entry of entries.toReversed()) {
     if (entry.role !== 'agent' || entry.event.type !== 'tool_use') continue
@@ -17,7 +17,6 @@ export function latestProposal(entries: readonly ChatEntry[]): ShownProposal | n
   return null
 }
 
-/** The questions asked and neither answered nor taken back. */
 export function openQuestions(entries: readonly ChatEntry[]): ReadonlySet<string> {
   const open = new Set<string>()
   for (const entry of entries) {
@@ -30,13 +29,7 @@ export function openQuestions(entries: readonly ChatEntry[]): ReadonlySet<string
   return open
 }
 
-/** A message was sent and no turn has ended since: a result, or an error that ended it. */
 export function isWorking(entries: readonly ChatEntry[]): boolean {
-  const last = entries.findLast(
-    (entry) =>
-      entry.role === 'user' ||
-      entry.event.type === 'result' ||
-      (entry.event.type === 'error' && entry.event.code !== 'background')
-  )
+  const last = entries.findLast((entry) => entry.role === 'user' || closesTurn(entry.event))
   return last?.role === 'user'
 }

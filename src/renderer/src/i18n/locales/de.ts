@@ -2034,6 +2034,8 @@ export const de: Translation = {
       editDescription: 'Beschreibung bearbeiten',
       descriptionDone: 'Fertig',
       descriptionCancel: 'Abbrechen',
+      descriptionUnwritable:
+        'Ein Codeblock ist nicht geschlossen, oder eine Zeile ist die Kommentarmarke. Schließe den Block oder entferne die Zeile.',
       allLeftOut: 'Alle Aufgaben sind weggelassen. Bitte um einen neuen Vorschlag oder schließe.',
       discardTitle: 'Dieses Gespräch schließen?',
       discardBody: 'Das Gespräch und sein Vorschlag werden nicht behalten.',

@@ -102,15 +102,19 @@ function serialise(bom: string, doc: Document, body: string): string {
   return empty ? bom + body : `${bom}---\n${doc.toString({ lineWidth: 0 })}---\n${body}`
 }
 
+export function headerUnreadable(name: string): BoardError {
+  return new BoardError(
+    'cardFrontmatterUnreadable',
+    { name },
+    `The header of ${name} cannot be read.`
+  )
+}
+
 /** The header to edit, refusing one that looks like a header and will not parse. */
 function editable(raw: string, fileName: string): { bom: string; doc: Document; body: string } {
   const block = blockOf(raw)
   if (block !== null && block.doc === null && isKeyLike(block.front)) {
-    throw new BoardError(
-      'cardFrontmatterUnreadable',
-      { name: fileName },
-      `The header of ${fileName} cannot be read.`
-    )
+    throw headerUnreadable(fileName)
   }
   const { head, body } = splitCard(raw)
   return { bom: head.startsWith(BOM) ? BOM : '', doc: block?.doc ?? parseDocument(''), body }
@@ -236,6 +240,10 @@ export function newCard(card: Omit<CardDraft, 'status'>, order: number): string 
     ...(card.priority === undefined ? [] : [`priority: ${card.priority}`]),
     ...(card.tag === undefined ? [] : [`tag: ${card.tag}`])
   ]
-  const body = card.description?.trim() ?? ''
-  return `---\n${header.join('\n')}\n---\n# ${card.title}\n${body === '' ? '' : `\n${body}\n`}`
+  return `---\n${header.join('\n')}\n---\n${titledBody(card.title, card.description ?? '')}`
+}
+
+export function titledBody(title: string, description: string): string {
+  const body = description.trim()
+  return `# ${title}\n${body === '' ? '' : `\n${body}\n`}`
 }

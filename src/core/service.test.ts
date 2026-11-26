@@ -18821,7 +18821,6 @@ describe('the board', () => {
       readonly closed: () => boolean
     }
 
-    /** A session that stays open, saying nothing, until it is closed. */
     function heldQuery(): { query: QueryFn; opened: Opened[] } {
       const opened: Opened[] = []
       const query: QueryFn = (params) => {
@@ -18891,6 +18890,7 @@ describe('the board', () => {
         cwd: await realpath(repo),
         additionalDirectories: [folder],
         model: 'sonnet',
+        effort: 'high',
         settingSources: ['user', 'project', 'local'],
         persistSession: false
       })
@@ -18958,6 +18958,10 @@ describe('the board', () => {
       expect(() => {
         on.sendToBrainstorm(id, 'Still there?')
       }).toThrow(expect.objectContaining({ code: 'brainstormGone' }))
+      expect(() => {
+        on.answerBrainstorm(id, 'r1', [])
+      }).toThrow(expect.objectContaining({ code: 'brainstormGone' }))
+      await expect(on.stopBrainstorm(id)).rejects.toMatchObject({ code: 'brainstormGone' })
     })
 
     it('stops telling a listener that let go', async () => {

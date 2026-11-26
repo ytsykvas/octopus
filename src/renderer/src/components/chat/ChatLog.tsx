@@ -96,21 +96,19 @@ interface ChatLogProps {
   /** Every MCP server's question still open, by request id. */
   readonly answerableElicitations: ReadonlySet<string>
   readonly onAnswer: (requestId: string, answer: PermissionAnswer) => void
-  /**
-   * Answers an MCP server's question, which is neither a permission nor a tool. Null where none
-   * is ever asked — the board's brainstorm declines them — and a question is then not drawn.
-   */
+  // An MCP server's question, neither a permission nor a tool. Null where none is asked
+  // (the brainstorm declines them): the question is then not drawn.
   readonly onAnswerElicitation:
     ((requestId: string, answer: 'accept' | 'decline', values?: FormValues) => void) | null
   /** Answers the agent's own questions, which is not a permission. */
   readonly onAnswerQuestions: (requestId: string, answers: readonly QuestionAnswer[]) => void
-  /** Asks for a plan already in the log to be carried out; null where nothing can. */
+  /** Asks for a plan already in the log to be carried out. */
   readonly onExecutePlan: ((plan: string) => void) | null
   /**
    * Asks for the files to be put back to how they were when a message was sent.
    *
    * The log only offers it; the pane asks the question and does the work, since
-   * there is a dialog in between and a bridge call either side of it. Null where nothing can.
+   * there is a dialog in between and a bridge call either side of it.
    */
   readonly onRewind: ((messageId: string) => void) | null
   /** The messages the agent has not taken yet, by id — see `useChat`. */
@@ -119,10 +117,8 @@ interface ChatLogProps {
   readonly expansion: Expansion
   /** The checkout the agent works in, so a path it names can be opened. */
   readonly workspacePath: string
-  /**
-   * Opens a workspace-relative path in the centre: kept open, or as a preview. Null where there
-   * is no centre to open one in — the board's brainstorm — and a path is then only text.
-   */
+  // Opens a workspace-relative path in the centre, kept open or as a preview.
+  // Null where there is no centre (the brainstorm): a path is then only text.
   readonly onOpenFile: ((path: string, pinned: boolean) => void) | null
 }
 

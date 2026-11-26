@@ -12,17 +12,18 @@
  * the renderer may import values from here.
  */
 
-import { isTaskBoundary } from './events.js'
+import { type AgentEvent, isTaskBoundary } from './events.js'
 import type { ChatEntry } from './transcript.js'
 
-// The main agent's first entry since the turn closed. An `error` closes the turn as a `result`
-// does, unless it is a `background` one: the session outlived that.
+// An `error` closes the turn as a `result` does, unless it is a `background` one: the session
+// outlived that.
+export function closesTurn(event: AgentEvent): boolean {
+  return event.type === 'result' || (event.type === 'error' && event.code !== 'background')
+}
+
+/** The main agent's first entry since the turn closed. */
 export function nextTurnStart(start: string | null, entry: ChatEntry): string | null {
-  const closes =
-    entry.role === 'agent' &&
-    (entry.event.type === 'result' ||
-      (entry.event.type === 'error' && entry.event.code !== 'background'))
-  if (closes) return null
+  if (entry.role === 'agent' && closesTurn(entry.event)) return null
   return start ?? (isMainTurnEntry(entry) ? entry.at : null)
 }
 

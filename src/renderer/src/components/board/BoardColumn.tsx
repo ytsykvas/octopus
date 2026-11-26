@@ -29,7 +29,6 @@ export interface BoardColumnProps {
   readonly creating: boolean
   readonly onCreating: (creating: boolean) => void
   readonly onCreate: (title: string) => void
-  /** Opens the board's brainstorm, its tasks going to this column. */
   readonly onBrainstorm: () => void
   readonly openRef: string | null
   readonly onOpen: (ref: string) => void

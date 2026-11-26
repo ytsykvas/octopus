@@ -1046,7 +1046,6 @@ const api = {
       ipcRenderer.invoke('board:rewrite', projectId, ref, rewrite) as Promise<Result<void>>
   },
 
-  /** The board's brainstorm: a conversation that proposes tasks, for as long as its panel is open. */
   brainstorm: {
     onEntry: (handler: (entry: BrainstormEntry) => void): (() => void) => {
       const listener = (_event: unknown, entry: BrainstormEntry): void => {

@@ -163,7 +163,6 @@ export interface IpcHost {
   readonly broadcastWorkspacePushed: (event: WorkspacePushedEvent) => void
   /** A project's board folder changed on disk. */
   readonly broadcastBoardChanged: (event: BoardChangedEvent) => void
-  /** A line of the board's brainstorm log. */
   readonly broadcastBrainstormEntry: (entry: BrainstormEntry) => void
   /** The account's windows, whenever the service learns they moved. */
   readonly broadcastUsageWindows: (windows: UsageWindows) => void
@@ -941,7 +940,6 @@ export function registerIpc(
     )
   )
 
-  /* The board's brainstorm: one conversation for one panel (`brainstorm.ts`). */
   host.handle('brainstorm:start', (_event, projectId: unknown, idea: unknown) =>
     attempt(() =>
       service.startBrainstorm(ProjectIdSchema.parse(projectId), ChatMessageSchema.parse(idea))

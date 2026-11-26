@@ -20,17 +20,13 @@ import { DropdownMenu } from '../DropdownMenu.js'
 import { NameEditor } from '../NameEditor.js'
 import { IconButton } from '../paneControls.js'
 import { Callout } from '../pr/Callout.js'
-import { ResizeHandle } from '../ResizeHandle.js'
 import type { DescriptionDraft } from './boardDrafts.js'
 import { CardComments } from './CardComments.js'
 import { CardDescription } from './CardDescription.js'
 import { PriorityMenu, StatusMenu, TagMenu } from './cardMenus.js'
 import { CardResources } from './CardResources.js'
 import { CardRuns } from './CardRuns.js'
-
-export const PANEL_WIDTH = 420
-export const PANEL_MIN = 320
-export const PANEL_MAX = 720
+import { SidePanel } from './SidePanel.js'
 
 export interface CardPanelProps {
   /** From the listing: the header draws at once, before the detail arrives. */
@@ -49,7 +45,6 @@ export interface CardPanelProps {
   readonly onMove: (move: CardMove) => void
   /** Asks to delete; the screen confirms, because ⌘⌫ (B205) deletes with no panel open. */
   readonly onRemove: () => void
-  /** Opens the board's brainstorm on this card, as it was read. */
   readonly onEditWithAgent: (detail: CardDetail) => void
   /** The workspace on this machine started from this card, or null. */
   readonly linked: WorkspaceView | null
@@ -117,19 +112,7 @@ export function CardPanel({
   }
 
   return (
-    <aside
-      aria-label={card.title}
-      style={{ width }}
-      className="border-line bg-surface project-tinted-top relative flex min-h-0 shrink-0 flex-col border-l"
-    >
-      <ResizeHandle
-        grows="left"
-        width={width}
-        min={PANEL_MIN}
-        max={PANEL_MAX}
-        onResize={onWidth}
-        onCommit={onWidth}
-      />
+    <SidePanel label={card.title} width={width} onWidth={onWidth}>
       <header className="border-line flex h-10 shrink-0 items-center gap-1 border-b px-2">
         <StatusMenu
           columns={columns}
@@ -254,6 +237,6 @@ export function CardPanel({
           </>
         )}
       </div>
-    </aside>
+    </SidePanel>
   )
 }

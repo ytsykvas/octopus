@@ -268,6 +268,7 @@ import {
   listBoard as listBoardIn,
   moveCard as moveCardIn,
   readCard as readCardIn,
+  readRewritable,
   removeCard as removeCardIn,
   renameCard as renameCardIn,
   rewriteCard as rewriteCardIn,
@@ -1414,20 +1415,10 @@ export interface OctopusService {
   readCard(projectId: string, ref: string): Promise<CardDetail>
   /** A new card at the top of its column; answers its ref. */
   createCard(projectId: string, draft: CardDraft): Promise<string>
-  /** Several at once, each at the top of its column, in the order given: what a brainstorm proposed. */
   createCards(projectId: string, drafts: readonly CardDraft[]): Promise<CreatedCards>
-  /**
-   * The board's brainstorm, started on the project's own checkout with the person's idea as the
-   * first message; answers its id. Its log arrives on `onBrainstormEntry` (`brainstorm.ts`).
-   */
+  /** Answers the brainstorm's id; its log arrives on `onBrainstormEntry`. */
   startBrainstorm(projectId: string, idea: string): Promise<string>
-  /**
-   * The same, for reworking one card: its text and comments go into the first message, and the
-   * agent proposes its new version. Refused before an agent starts for a card no rewrite could
-   * write — one that is not UTF-8 text, or whose header cannot be read.
-   */
   startCardEdit(projectId: string, ref: string, request: string): Promise<string>
-  /** What an edit proposed and the person applied, in one write (`rewriteCard`). */
   rewriteCard(projectId: string, ref: string, rewrite: CardRewrite): Promise<void>
   sendToBrainstorm(brainstormId: string, text: string): void
   answerBrainstorm(
@@ -2002,7 +1993,6 @@ export interface OctopusService {
   onWorkspacePushed(handler: (event: WorkspacePushedEvent) => void): () => void
   /** A project's board folder changed on disk, by anyone, or its columns were edited: the window reads that board again. */
   onBoardChanged(handler: (event: BoardChangedEvent) => void): () => void
-  /** A line of a brainstorm's log: a message sent, or something its agent did. */
   onBrainstormEntry(handler: (entry: BrainstormEntry) => void): () => void
   /**
    * The account's windows, whenever they move.
@@ -5147,7 +5137,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     return instructionIn(requireProject(workspace.projectId), workspace.path, kind)
   }
 
-  /** A brainstorm on the project's own checkout, reading the board's tasks where there are any. */
   async function brainstormOn(
     project: Project,
     layout: BoardLayout,
@@ -5167,7 +5156,6 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     })
   }
 
-  /** The same, read from any checkout of the project: the board's brainstorm has no workspace. */
   async function instructionIn(
     project: Project,
     cwd: string,
@@ -6945,15 +6933,7 @@ export async function createService(options: ServiceOptions = {}): Promise<Octop
     async startCardEdit(projectId, ref, request) {
       const project = requireProject(projectId)
       const layout = await layoutFor(project)
-      const card = await readCardIn(layout, ref)
-      const name = basename(ref)
-      if (card.notText) throw new BoardError('cardNotText', { name }, `${name} is not UTF-8 text`)
-      if (card.malformed)
-        throw new BoardError(
-          'cardFrontmatterUnreadable',
-          { name },
-          `The header of ${name} cannot be read.`
-        )
+      const card = await readRewritable(layout, ref)
       return brainstormOn(project, layout, 'edit', (convention) =>
         cardEditMessage({
           project: project.name,

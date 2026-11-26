@@ -156,14 +156,11 @@ export interface SessionOptions {
    * option of the query, not a flag a running session takes.
    */
   readonly agentProgressSummaries: boolean
-  /** A session shut in to a few tools for one sitting, or null for the agent's whole set. */
   readonly confined: Confinement | null
 }
 
-/**
- * `tools` is the built-in set itself, not an allow-list: a rule in the user's settings allowing
- * `Edit` cannot reach a tool left out. The servers replace every other (`strictMcpConfig`).
- */
+// `tools` is the built-in set itself, not an allow-list: a settings rule allowing `Edit`
+// cannot reach a tool left out. `servers` replace every other one (`strictMcpConfig`).
 export interface Confinement {
   readonly tools: readonly string[]
   readonly servers: Readonly<Record<string, McpServerConfig>>

@@ -75,12 +75,9 @@ describe('isWorking', () => {
     expect(isWorking([sent('Plan'), result, sent('More')])).toBe(true)
   })
 
-  it('takes an error as the end of the turn, unless it failed beside it', () => {
+  it('takes an error as the end of the turn', () => {
     expect(
       isWorking([sent('Plan'), said({ type: 'error', message: 'gone', code: 'endedQuietly' })])
     ).toBe(false)
-    expect(
-      isWorking([sent('Plan'), said({ type: 'error', message: 'x', code: 'background' })])
-    ).toBe(true)
   })
 })

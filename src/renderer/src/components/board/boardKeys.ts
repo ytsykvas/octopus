@@ -45,7 +45,7 @@ export function boardKeyAction(
   event: BoardKey,
   { focused, open, reorderable }: BoardKeyContext
 ): BoardKeyAction | null {
-  // Caps Lock gives `C` without Shift; Shift itself is ruled out by the modifier checks.
+  // Caps Lock gives `C` without Shift, read as `c`; Shift with it is `⇧C`, told by `shiftKey`.
   // A Latin letter as typed (Dvorak moves them); on a Cyrillic layout, `с`, the key's place.
   const key = /^[a-z]$/i.test(event.key)
     ? event.key.toLowerCase()

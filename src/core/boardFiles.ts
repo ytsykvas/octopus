@@ -4,9 +4,11 @@ import { basename, isAbsolute, join } from 'node:path'
 
 import {
   descriptionOf,
+  headerUnreadable,
   newCard,
   parseCard,
   setMeta,
+  titledBody,
   withComment,
   withDescription,
   withTitle
@@ -265,6 +267,20 @@ export async function readCard(
   return cardOf(layout, ref, bytes)
 }
 
+const notText = (name: string): BoardError =>
+  new BoardError('cardNotText', { name }, `${name} is not UTF-8 text`)
+
+export async function readRewritable(
+  layout: BoardLayout,
+  ref: string
+): Promise<Omit<CardDetail, 'attachments'>> {
+  const card = await readCard(layout, ref)
+  const name = basename(ref)
+  if (card.notText) throw notText(name)
+  if (card.malformed) throw headerUnreadable(name)
+  return card
+}
+
 // What `editCard` compares before reading and before writing: a file that changed in between
 // was written by someone else — Finder, an editor, another Mac.
 async function stamp(path: string, ref: string): Promise<string> {
@@ -288,7 +304,7 @@ export async function editCard(
   })
   const raw = decoded(bytes)
   const name = basename(ref)
-  if (raw === null) throw new BoardError('cardNotText', { name }, `${name} is not UTF-8 text`)
+  if (raw === null) throw notText(name)
   const next = change(raw, name)
   if (next === raw) return
   if ((await stamp(path, ref)) !== before)
@@ -317,11 +333,7 @@ export async function createCard(layout: BoardLayout, draft: CardDraft): Promise
   return ref
 }
 
-/**
- * Every draft written, the last first: each new card goes to the top of its column, so they
- * stand in the order asked. A refused one is passed over and the rest are still written; the
- * refusal kept is the earliest draft's.
- */
+// Last first: each new card goes to the top of its column, so they stand in the order asked.
 export async function createCards(
   layout: BoardLayout,
   drafts: readonly CardDraft[]
@@ -379,7 +391,7 @@ export function saveDescription(
   })
 }
 
-/** Title, description, priority and tag in one write; the file keeps its name and its comments. */
+// The file keeps its name though the title changes, and keeps its comments.
 export function rewriteCard(layout: BoardLayout, ref: string, rewrite: CardRewrite): Promise<void> {
   return editCard(layout, ref, (raw, name) => {
     assertDescribed(raw, rewrite.base, name)
@@ -390,8 +402,7 @@ export function rewriteCard(layout: BoardLayout, ref: string, rewrite: CardRewri
       { priority: rewrite.priority ?? undefined, tag: rewrite.tag ?? undefined },
       name
     )
-    const body = rewrite.description.trim()
-    return withDescription(fields, `# ${rewrite.title}\n${body === '' ? '' : `\n${body}\n`}`)
+    return withDescription(fields, titledBody(rewrite.title, rewrite.description))
   })
 }
 

@@ -13,6 +13,8 @@ import type { OctopusApi } from '../../../preload/index.js'
 
 type Api = OctopusApi
 
+export const BRAINSTORM_ID = '0b9f5f0e-6a1c-4c3e-9d2a-5f4e3d2c1b0a'
+
 /**
  * A stand-in for the preload bridge.
  *
@@ -24,9 +26,6 @@ type Api = OctopusApi
  * one resolves successfully by default — a test that cares about failure says
  * so, and the rest are not obliged to describe a working application.
  */
-/** What `brainstorm.start` answers unless a test says otherwise. */
-export const BRAINSTORM_ID = '0b9f5f0e-6a1c-4c3e-9d2a-5f4e3d2c1b0a'
-
 export function installOctopusStub(): Api {
   draftListeners.clear()
   nextDraft = WRITTEN

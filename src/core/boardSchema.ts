@@ -115,11 +115,15 @@ export const CardTitleSchema = z
   .min(1)
   .max(CARD_TITLE_MAX)
   .refine((title) => !/[\r\n]/.test(title))
-/** The comments marker written after it must still be the first: none of its own, no fence left open. */
+// The comments marker written after it must still be the first, in the text as written, trimmed:
+// four spaces before a fence or a marker on its first line are prose only until the trim.
 export const CardDescriptionSchema = z
   .string()
   .max(CARD_TEXT_MAX)
-  .refine((text) => splitBody(`${text}\n${COMMENTS_MARKER}\n`).description === `${text}\n`)
+  .refine((text) => {
+    const body = text.trim()
+    return splitBody(`${body}\n${COMMENTS_MARKER}\n`).description === `${body}\n`
+  })
 export const CardDraftSchema = z.strictObject({
   status: ColumnIdSchema,
   title: CardTitleSchema,
@@ -127,15 +131,12 @@ export const CardDraftSchema = z.strictObject({
   priority: CardPrioritySchema.optional(),
   tag: WorkspaceKindSchema.optional()
 })
-/**
- * A card written over whole from what a brainstorm proposed and the person applied. `base` is
- * its description as the brainstorm read it: a change made since is refused (`cardChanged`).
- */
 export const CardRewriteSchema = z.strictObject({
   title: CardTitleSchema,
   description: CardDescriptionSchema,
   priority: CardPrioritySchema.nullable(),
   tag: WorkspaceKindSchema.nullable(),
+  // The description as the brainstorm read it: a change made since is refused (`cardChanged`).
   base: z.string().max(CARD_TEXT_MAX)
 })
 export const CARDS_PER_BATCH = 10
@@ -196,7 +197,7 @@ export interface CardLaunch {
   /** False when one started from the card was already here: the window must keep its drafts. */
   readonly created: boolean
 }
-/** Each draft's ref in the order asked, null where it was not written; the earliest refusal, if any. */
+/** `failure` is the earliest refusal only; a later one shows only as a null ref. */
 export interface CreatedCards {
   readonly refs: readonly (string | null)[]
   readonly failure: Failure | null

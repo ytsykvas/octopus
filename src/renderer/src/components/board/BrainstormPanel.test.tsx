@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -139,6 +139,16 @@ describe('BrainstormPanel', () => {
     expect(held.send).toHaveBeenLastCalledWith('Again')
   })
 
+  it('sends nothing on the Enter that confirms an IME candidate', async () => {
+    const held = brainstorm()
+    renderPanel({ brainstorm: held })
+
+    await userEvent.type(field('What needs doing?'), 'Sync')
+    fireEvent.keyDown(field('What needs doing?'), { key: 'Enter', isComposing: true })
+
+    expect(held.send).not.toHaveBeenCalled()
+  })
+
   it('sends a message once, however often Enter is pressed while it goes', async () => {
     const going = held<boolean>()
     const held_ = brainstorm({ send: vi.fn(() => going.promise) })
@@ -239,6 +249,9 @@ describe('BrainstormPanel', () => {
     expect(screen.queryByRole('heading', { name: 'Read issues' })).toBeNull()
     expect(screen.getByText('A file named “Write issues back.md” is already there.')).toBeVisible()
     expect(all.onDone).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'No priority' }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'High' }))
+    expect(screen.getByText(/already there/)).toBeVisible()
 
     rerender({ brainstorm: brainstorm({ entries: [PROPOSED, proposing('c2', [IMPORT])] }) })
 

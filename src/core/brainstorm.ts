@@ -1,7 +1,5 @@
-/**
- * Not a chat: nothing of it is kept, and its agent has no tool that writes. The user's hooks still
- * run, as in any session; the cards are written by the board from what the person approved.
- */
+// Nothing of a brainstorm is kept and its agent has no tool that writes, but the user's hooks
+// still run, as in any session. The board writes the cards, from what the person approved.
 import { randomUUID } from 'node:crypto'
 
 import { createSdkMcpServer, type SettingSource, tool } from '@anthropic-ai/claude-agent-sdk'
@@ -37,20 +35,21 @@ import {
   TASK_PROPOSAL_SHAPE
 } from './taskProposal.js'
 import type { ChatEntry } from './transcript.js'
+import { closesTurn } from './turns.js'
 import { WORKSPACE_KINDS } from './workspaceKinds.js'
 
-/** What the agent is told when it reaches for any other tool; it reads a refusal as instruction. */
+// The agent reads a refusal as an instruction: say what the conversation is for.
 export const READ_ONLY =
   'This conversation only plans tasks: it reads, asks and proposes, and changes nothing.'
 
-/** What the tool answers, so the agent's turn ends on the proposal rather than going past it. */
+// Without it the agent goes on past the proposal instead of ending its turn there.
 export const PROPOSAL_SHOWN =
   'The proposal is in front of the person now. Stop here and wait for their reply.'
 
 const shown = (): Promise<{ content: { type: 'text'; text: string }[] }> =>
   Promise.resolve({ content: [{ type: 'text', text: PROPOSAL_SHOWN }] })
 
-/** Stateless, so one definition serves every brainstorm's server; the window draws the call. */
+// Stateless, so one definition serves every brainstorm's server; the window draws the call.
 export const proposeTasks = tool(
   PROPOSE_TASKS,
   'Show the person the tasks you propose for the board. They edit them, ask for changes or create them; nothing is written until they do.',
@@ -64,14 +63,12 @@ export const proposeEdit = tool(
   shown
 )
 
-/** What a brainstorm ends in: new tasks, or one card's new version. Each has its own tool. */
 const PROPOSALS = {
   tasks: { definition: proposeTasks, tool: PROPOSE_TASKS_TOOL },
   edit: { definition: proposeEdit, tool: PROPOSE_EDIT_TOOL }
 } as const
 export type BrainstormPurpose = keyof typeof PROPOSALS
 
-/** `randomUUID`'s, as a brainstorm id crosses IPC. */
 export const BrainstormIdSchema = z.uuid()
 
 export type BrainstormErrorCode = 'brainstormGone'
@@ -80,7 +77,6 @@ export class BrainstormError extends CodedError<BrainstormErrorCode> {
   override readonly name = 'BrainstormError'
 }
 
-/** One line of a brainstorm's log: a message sent, or something the agent did. */
 export interface BrainstormEntry {
   readonly brainstormId: string
   readonly entry: ChatEntry
@@ -90,7 +86,6 @@ export interface BrainstormFacts {
   readonly project: string
   /** The project's folder in the board folder, or null while the board holds nothing yet. */
   readonly boardDir: string | null
-  /** The `taskCards` instruction in effect: how this project writes a task. */
   readonly convention: string
   readonly idea: string
 }
@@ -98,7 +93,6 @@ export interface BrainstormFacts {
 const ASKING =
   '2. Where a decision is mine, ask with AskUserQuestion: several questions at once, each with options.'
 
-// An empty instruction is how a project says "nothing extra" (`repoInstruction`).
 function conventionPart(convention: string): string[] {
   const text = convention.trim()
   return text === '' ? [] : [`# How this project wants tasks written\n\n${text}`]
@@ -106,7 +100,6 @@ function conventionPart(convention: string): string[] {
 
 const BOARD_PART = `# The board\n\n- Priorities: ${CARD_PRIORITIES.join(', ')}\n- Tags: ${WORKSPACE_KINDS.join(', ')}`
 
-/** Shown whole in the log, as the pull request's and Help's are: octopus adds no system prompt. */
 export function brainstormMessage({
   project,
   boardDir,
@@ -133,7 +126,6 @@ export function brainstormMessage({
 
 export interface CardEditFacts {
   readonly project: string
-  /** The card's file, where the agent can read it whole. */
   readonly file: string
   readonly convention: string
   readonly card: Pick<CardDetail, 'description' | 'thread'> & {
@@ -167,10 +159,8 @@ export function cardEditMessage({
 
 export interface BrainstormStart {
   readonly purpose: BrainstormPurpose
-  /** The project's own checkout: there is no workspace yet. */
   readonly cwd: string
   readonly settingSources: readonly SettingSource[]
-  /** The board's folder, when it exists, so its tasks can be read. */
   readonly additionalDirectories: readonly string[]
   readonly model: string | null
   readonly effort: EffortChoice
@@ -185,7 +175,7 @@ export interface BrainstormHooks {
 }
 
 export interface Brainstorms {
-  /** A new one with its first message sent; any other is closed first, as there is one panel. */
+  /** Closes any other first: there is one panel. */
   start: (start: BrainstormStart) => Promise<string>
   send: (id: string, text: string) => void
   /** An answer to a question that is no longer open is dropped: it was answered or withdrawn. */
@@ -203,7 +193,6 @@ interface Question {
 interface Live {
   readonly session: AgentSession
   readonly questions: Map<string, Question>
-  /** A message went and neither a result nor an error has ended its turn. */
   turnOpen: boolean
 }
 
@@ -302,12 +291,7 @@ export function createBrainstorms(hooks: BrainstormHooks): Brainstorms {
           {
             query: hooks.query,
             onEvent: (event) => {
-              if (
-                event.type === 'result' ||
-                (event.type === 'error' && event.code !== 'background')
-              )
-                record.turnOpen = false
-              // The streamed text and the rate limit draw nothing in a brainstorm's log.
+              if (closesTurn(event)) record.turnOpen = false
               if (!isEphemeral(event)) said(id, event)
             },
             askPermission: (ask) => askPerson(id, record, ask),

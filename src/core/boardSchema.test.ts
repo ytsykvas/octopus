@@ -184,7 +184,9 @@ describe('CardDraftSchema', () => {
     { status: 'backlog', title: 'A', tag: 'idea' },
     { status: 'backlog', title: 'A', description: 'x'.repeat(CARD_TEXT_MAX + 1) },
     { status: 'backlog', title: 'A', description: `Before\n${COMMENTS_MARKER}  \nAfter` },
-    { status: 'backlog', title: 'A', description: 'An example left open:\n\n```\ncode' }
+    { status: 'backlog', title: 'A', description: 'An example left open:\n\n```\ncode' },
+    { status: 'backlog', title: 'A', description: '    ```js\ncode' },
+    { status: 'backlog', title: 'A', description: `\n    ${COMMENTS_MARKER}\nAfter` }
   ])('refuses %j', (draft) => {
     expect(CardDraftSchema.safeParse(draft).success).toBe(false)
   })

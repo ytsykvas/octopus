@@ -2473,6 +2473,8 @@ export const en = {
       editDescription: 'Edit description',
       descriptionDone: 'Done',
       descriptionCancel: 'Cancel',
+      descriptionUnwritable:
+        'A code block is left open, or a line is the comments marker. Close the block or remove the line.',
       allLeftOut: 'Every task is left out. Ask for another proposal, or close.',
       discardTitle: 'Close this conversation?',
       discardBody: 'The conversation and its proposal are not kept.',

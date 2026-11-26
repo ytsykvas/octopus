@@ -38,8 +38,9 @@ import { cardMark, linkedByCard, linkedTo, openRunElsewhere } from './boardRuns.
 import { sidewaysDelta } from './boardScroll.js'
 import { BrainstormPanel } from './BrainstormPanel.js'
 import { CardMarks } from './CardMarks.js'
-import { CardPanel, PANEL_WIDTH } from './CardPanel.js'
+import { CardPanel } from './CardPanel.js'
 import { columnMenu } from './columnMenu.js'
+import { PANEL_WIDTH } from './SidePanel.js'
 
 export interface BoardScreenProps {
   /** null while no project is selected; App shows its own pane when there are none at all (B201b). */
@@ -194,7 +195,7 @@ export function BoardScreen({
     setOpen({ ref, session: openings.current })
   }
 
-  // At once when nothing was said yet: a click on a card opens it in the same tick as before.
+  // Synchronous when nothing was said yet: a click on a card must open it in the same tick.
   const whenLetGo = (then: () => void): void => {
     if (thinking?.started !== true) {
       then()

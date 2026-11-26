@@ -9,7 +9,6 @@ import type { Failure, Result } from '../../../preload/index.js'
 import { isWorking, openQuestions } from '../components/board/brainstormLog.js'
 import { useLatest } from './useLatest.js'
 
-/** What the panel is for: new tasks in a column, or the new version of one card. */
 export type BrainstormTarget =
   | { readonly purpose: 'tasks'; readonly column: ColumnId }
   | { readonly purpose: 'edit'; readonly card: CardDetail }
@@ -19,11 +18,9 @@ export interface Brainstorm {
   readonly opening: number
   readonly target: BrainstormTarget
   readonly entries: readonly ChatEntry[]
-  /** False until the first message started the conversation. */
   readonly started: boolean
   readonly working: boolean
   readonly answerable: ReadonlySet<string>
-  /** Why the last call did not go through, until the next one does. */
   readonly failure: Failure | null
   /** False when it did not go, so the field keeps the text. */
   readonly send: (text: string) => Promise<boolean>
@@ -49,15 +46,8 @@ interface Sitting {
   readonly failure: Failure | null
 }
 
-const failureOf = (answer: Result<unknown>): Failure | null => (answer.ok ? null : answer)
-
-/**
- * The board's brainstorm, for as long as its panel is open (`brainstorm.ts`).
- *
- * `board` is the screen's key for one project's board in one folder: another board drops the
- * sitting during render, as the screen drops its open card, and the effect below then closes the
- * session — so does unmounting, and so does `close`.
- */
+// Another `board` drops the sitting during render, as the screen drops its open card; the
+// effect on `openId` then closes the session, as unmounting and `close` do.
 export function useBrainstorm(projectId: string | null, board: string): BrainstormController {
   const [sitting, setSitting] = useState<Sitting | null>(null)
   const [shownBoard, setShownBoard] = useState(board)
@@ -114,10 +104,9 @@ export function useBrainstorm(projectId: string | null, board: string): Brainsto
   }, [])
 
   const report = useCallback((id: string, answer: Result<unknown>) => {
-    setSitting((held) => (held?.id === id ? { ...held, failure: failureOf(answer) } : held))
+    setSitting((held) => (held?.id === id ? { ...held, failure: answer.ok ? null : answer } : held))
   }, [])
 
-  /** What a first message's answer leaves: a conversation, a refusal, or nothing at all. */
   const landed = useCallback(
     (opening: number, answer: Result<string>): boolean => {
       // Closed, opened again or gone with the screen while it started: the session is nobody's.
@@ -130,7 +119,7 @@ export function useBrainstorm(projectId: string | null, board: string): Brainsto
         ...present(now, 'the brainstorm that started'),
         starting: false,
         id: answer.ok ? answer.value : null,
-        failure: failureOf(answer)
+        failure: answer.ok ? null : answer
       }))
       return answer.ok
     },

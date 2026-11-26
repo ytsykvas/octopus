@@ -14,18 +14,17 @@ import { useErrorMessage } from '../../hooks/useErrorMessage.js'
 import { Button } from '../Button.js'
 import { ChatLog } from '../chat/ChatLog.js'
 import { COLLAPSED } from '../chat/expansion.js'
+import { isSubmitEnter } from '../chat/submitKey.js'
 import { IconButton } from '../paneControls.js'
 import { Callout } from '../pr/Callout.js'
-import { ResizeHandle } from '../ResizeHandle.js'
 import { latestProposal } from './brainstormLog.js'
-import { PANEL_MAX, PANEL_MIN } from './CardPanel.js'
 import { cardDraftsOf, type DraftTask, draftTasks, proposedOf } from './proposalDraft.js'
+import { SidePanel } from './SidePanel.js'
 import { TaskProposalCard } from './TaskProposalCard.js'
 
 // Held still for the memoised log: the brainstorm has no queue and no MCP server's questions.
 const NONE: ReadonlySet<string> = new Set()
 
-/** The proposal as the person has it: their edits, and what the last write left unwritten. */
 interface Edit {
   readonly callId: string
   readonly tasks: readonly DraftTask[]
@@ -50,7 +49,6 @@ export interface BrainstormPanelProps {
   readonly width: number
   readonly onWidth: (width: number) => void
   readonly onClose: () => void
-  /** Everything proposed is written: the conversation is over. */
   readonly onDone: () => void
 }
 
@@ -138,19 +136,7 @@ export function BrainstormPanel({
       : t('board.brainstorm.requestPlaceholder')
 
   return (
-    <aside
-      aria-label={title}
-      style={{ width }}
-      className="border-line bg-surface project-tinted-top relative flex min-h-0 shrink-0 flex-col border-l"
-    >
-      <ResizeHandle
-        grows="left"
-        width={width}
-        min={PANEL_MIN}
-        max={PANEL_MAX}
-        onResize={onWidth}
-        onCommit={onWidth}
-      />
+    <SidePanel label={title} width={width} onWidth={onWidth}>
       <header className="border-line flex h-10 shrink-0 items-center gap-1.5 border-b px-2">
         <Sparkles aria-hidden size={14} className="text-ink-faint shrink-0" />
         <h2 className="text-ink min-w-0 flex-1 truncate text-[13px] font-semibold">{title}</h2>
@@ -208,7 +194,7 @@ export function BrainstormPanel({
             setText(event.target.value)
           }}
           onKeyDown={(event) => {
-            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+            if (!isSubmitEnter(event)) return
             event.preventDefault()
             void submit()
           }}
@@ -230,6 +216,6 @@ export function BrainstormPanel({
           )}
         </div>
       </footer>
-    </aside>
+    </SidePanel>
   )
 }

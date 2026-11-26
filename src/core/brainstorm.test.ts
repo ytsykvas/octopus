@@ -55,9 +55,8 @@ interface FakeSession {
   readonly options: Record<string, unknown>
   readonly sent: string[]
   emit: (message: unknown) => void
-  /** The stream ends on its own: the process died. */
+  // `die` ends the stream quietly; `crash` throws from it, as the SDK does on a failed spawn.
   die: () => void
-  /** The stream throws, as the SDK does for a failed spawn or a crashed process. */
   crash: (error: Error) => void
   ask: (name: string, input: unknown, signal?: AbortSignal) => ReturnType<CanUseTool>
   interrupted: () => number
@@ -359,6 +358,9 @@ describe('createBrainstorms', () => {
         event: { type: 'question_answered', requestId: request.event.requestId, answers }
       }
     })
+    const heard = entries.length
+    brainstorms.answer(id, request.event.requestId, answers)
+    expect(entries).toHaveLength(heard)
   })
 
   it('declines a form a server asks for', async () => {

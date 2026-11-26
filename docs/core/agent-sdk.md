@@ -256,7 +256,8 @@ The proposal arrives as the tool's arguments (`createSdkMcpServer`, `tool`), so 
 against the zod shape before the handler runs and answers the model with what was wrong; the
 handler only says the proposal is shown. Measured on SDK 0.3.329 with a live session: `tools`
 restricts the built-ins exactly, the tool is named `mcp__octopus__propose_tasks`, `AskUserQuestion`
-still reaches `canUseTool`, and one server instance serves two sessions one after another.
+still reaches `canUseTool`, and one server instance serves two sessions one after another — octopus still makes a server per
+brainstorm, sharing only the tool definitions.
 
 ## An answer travels as the tool's own arguments
 

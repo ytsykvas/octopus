@@ -328,7 +328,6 @@ describe('the task cards the board asks for', () => {
     expect(PUBLISHES_AFTER.taskCards).toBe(false)
   })
 
-  // The brainstorm's own text says how to propose; the template says only how a task reads.
   it('say how one task is told from several, and what a task holds', () => {
     const template = instructionTemplate('taskCards')
 

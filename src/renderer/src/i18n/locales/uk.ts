@@ -2001,6 +2001,8 @@ export const uk: Translation = {
       editDescription: 'Змінити опис',
       descriptionDone: 'Готово',
       descriptionCancel: 'Скасувати',
+      descriptionUnwritable:
+        'Блок коду не закрито, або один із рядків — позначка коментарів. Закрийте блок або приберіть рядок.',
       allLeftOut: 'Не лишилося жодної задачі. Попросіть нову пропозицію або закрийте.',
       discardTitle: 'Закрити цю розмову?',
       discardBody: 'Розмова та її пропозиція не зберігаються.',

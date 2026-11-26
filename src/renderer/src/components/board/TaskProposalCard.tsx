@@ -3,7 +3,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Column } from '@core/boardColumns.js'
-import { CARD_TEXT_MAX, CARD_TITLE_MAX } from '@core/boardSchema.js'
+import type { BrainstormPurpose } from '@core/brainstorm.js'
+import { CARD_TEXT_MAX, CARD_TITLE_MAX, CardDescriptionSchema } from '@core/boardSchema.js'
+import { movedTo } from '@core/lists.js'
 
 import type { Failure } from '../../../../preload/index.js'
 import { useErrorMessage } from '../../hooks/useErrorMessage.js'
@@ -14,18 +16,15 @@ import { NameEditor } from '../NameEditor.js'
 import { IconButton } from '../paneControls.js'
 import { Callout } from '../pr/Callout.js'
 import { PriorityMenu, StatusMenu, TagMenu } from './cardMenus.js'
-import { type DraftTask, swapped, withTask } from './proposalDraft.js'
+import { type DraftTask, withTask } from './proposalDraft.js'
 
 export interface TaskProposalCardProps {
-  /** New tasks, each to a column; or one card's new version, written over it. */
-  readonly purpose: 'tasks' | 'edit'
+  readonly purpose: BrainstormPurpose
   readonly summary: string
   readonly tasks: readonly DraftTask[]
   readonly onTasks: (tasks: DraftTask[]) => void
   readonly columns: readonly Column[]
-  /** The write is out: the button waits for it. */
   readonly writing: boolean
-  /** Why the last write left something unwritten. */
   readonly failure: Failure | null
   readonly onWrite: () => void
 }
@@ -40,7 +39,7 @@ function ProposedTaskRow({
   onMove,
   onLeaveOut
 }: {
-  readonly purpose: 'tasks' | 'edit'
+  readonly purpose: BrainstormPurpose
   readonly task: DraftTask
   readonly first: boolean
   readonly last: boolean
@@ -51,9 +50,10 @@ function ProposedTaskRow({
 }): React.JSX.Element {
   const { t } = useTranslation()
   const [renaming, setRenaming] = useState(false)
-  // The text being typed, or null when the description is only shown.
   const [describing, setDescribing] = useState<string | null>(null)
+  const unwritable = (text: string): boolean => !CardDescriptionSchema.safeParse(text).success
   const describe = (description: string): void => {
+    if (unwritable(description)) return
     setDescribing(null)
     onChange({ description })
   }
@@ -146,6 +146,9 @@ function ProposedTaskRow({
               setDescribing(null)
             }}
           />
+          {unwritable(describing) && (
+            <p className="text-danger text-[11px]">{t('board.brainstorm.descriptionUnwritable')}</p>
+          )}
           <div className="flex justify-end gap-2">
             <Button
               size="sm"
@@ -158,6 +161,7 @@ function ProposedTaskRow({
             <Button
               size="sm"
               variant="accent"
+              disabled={unwritable(describing)}
               onClick={() => {
                 describe(describing)
               }}
@@ -183,7 +187,6 @@ function ProposedTaskRow({
   )
 }
 
-/** The proposal under the log: what the agent proposed, as the person has edited it so far. */
 export function TaskProposalCard({
   purpose,
   summary,
@@ -220,7 +223,7 @@ export function TaskProposalCard({
                 onTasks(withTask(tasks, index, change))
               }}
               onMove={(step) => {
-                onTasks(swapped(tasks, index, step))
+                onTasks(movedTo(tasks, index, index + step))
               }}
               onLeaveOut={() => {
                 onTasks(tasks.filter((_, at) => at !== index))

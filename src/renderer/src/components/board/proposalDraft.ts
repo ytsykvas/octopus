@@ -2,7 +2,6 @@ import type { CardDraft, CardPriority, ColumnId } from '@core/boardSchema.js'
 import type { ProposedTask, TaskProposal } from '@core/taskProposal.js'
 import type { WorkspaceKind } from '@core/workspaceKinds.js'
 
-/** One proposed task as the person has it in front of them, with the column it will go to. */
 export interface DraftTask {
   /** Its place in the proposal it came from: a row keeps its own editor through a move. */
   readonly key: number
@@ -34,7 +33,6 @@ function proposedTask({ title, description, priority, tag }: DraftTask): Propose
   }
 }
 
-/** The tasks as the agent's own tool takes them: the column is the board's business, not its. */
 export function proposedOf(tasks: readonly DraftTask[]): ProposedTask[] {
   return tasks.map(proposedTask)
 }
@@ -49,12 +47,4 @@ export function withTask(
   change: Partial<DraftTask>
 ): DraftTask[] {
   return tasks.map((task, at) => (at === index ? { ...task, ...change } : task))
-}
-
-/** The task one place up or down; the list unchanged at either end. */
-export function swapped(tasks: readonly DraftTask[], index: number, step: -1 | 1): DraftTask[] {
-  const other = index + step
-  const [moving, staying] = [tasks[index], tasks[other]]
-  if (moving === undefined || staying === undefined) return [...tasks]
-  return tasks.map((task, at) => (at === index ? staying : at === other ? moving : task))
 }

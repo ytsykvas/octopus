@@ -40,7 +40,7 @@ export interface BoardController {
   readonly revealCard: (ref: string) => Promise<boolean>
   /** Gives the project columns of its own the first time it is asked. */
   readonly editColumns: (edit: ColumnEdit) => Promise<boolean>
-  /** What a brainstorm proposed; a card refused among them is the caller's to say, in `failure`. */
+  /** A card refused among them is the caller's to report, from `failure`. */
   readonly createMany: (drafts: readonly CardDraft[]) => Promise<CreatedCards | null>
   readonly rewrite: (ref: string, rewrite: CardRewrite) => Promise<boolean>
 }
