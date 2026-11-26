@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { AttachmentErrorCode } from '@core/attachments.js'
 import type { BoardErrorCode } from '@core/boardSchema.js'
+import type { BrainstormErrorCode } from '@core/brainstorm.js'
 import type { ChatErrorCode } from '@core/chats.js'
 import type { DiffErrorCode } from '@core/diff.js'
 import type { EnvProfileCode } from '@core/envProfiles.js'
@@ -37,6 +38,7 @@ import { useErrorMessage } from './useErrorMessage.js'
 type CoreErrorCode =
   | AttachmentErrorCode
   | BoardErrorCode
+  | BrainstormErrorCode
   | ChatErrorCode
   | DiffErrorCode
   | EnvProfileCode
@@ -80,6 +82,7 @@ const CODE_PARAMETERS: Record<CoreErrorCode, Interpolated> = {
   columnNameTaken: { name: 'Ideas' },
   columnsFull: { max: '24' },
   columnNotEmpty: { project: 'planner', count: '3' },
+  brainstormGone: null,
   attachmentTooLarge: { limit: '12' },
   libraryNameInvalid: { name: 'Ship It' },
   libraryExists: { name: 'ship' },

@@ -12,6 +12,9 @@ import type {
   CardRunEntry
 } from '@core/boardSchema.js'
 
+import type { BrainstormEntry } from '@core/brainstorm.js'
+import { PROPOSE_EDIT_TOOL, PROPOSE_TASKS_TOOL } from '@core/taskProposal.js'
+
 import type { Result } from '../../../../preload/index.js'
 import {
   boardCard,
@@ -28,7 +31,7 @@ import {
 import { stubDialogElement } from '../../test/dialog.js'
 import { editorText } from '../../test/editor.js'
 import { held } from '../../test/held.js'
-import { octopus } from '../../test/octopus.js'
+import { BRAINSTORM_ID, octopus } from '../../test/octopus.js'
 import { workspaceView } from '../../test/workspaces.js'
 import { type BoardFilter, EMPTY_BOARD_FILTER } from './boardFilter.js'
 import type { BoardScreenProps } from './BoardScreen.js'
@@ -1816,6 +1819,238 @@ describe('BoardScreen', () => {
 
       expect(screen.getByRole('complementary', { name: 'Notes' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Notes' })).toBeNull()
+    })
+  })
+
+  describe('the brainstorm', () => {
+    beforeAll(stubDialogElement)
+
+    let heard: (line: BrainstormEntry) => void = () => undefined
+
+    beforeEach(() => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.read).mockResolvedValue(ok(cardDetail()))
+      vi.mocked(octopus().brainstorm.onEntry).mockImplementation((listener) => {
+        heard = listener
+        return vi.fn()
+      })
+    })
+
+    function propose(name: string, input: unknown): void {
+      act(() => {
+        heard({
+          brainstormId: BRAINSTORM_ID,
+          entry: {
+            role: 'agent',
+            at: '2026-11-26T10:00:00.000Z',
+            event: { type: 'tool_use', toolUseId: 'c1', name, input }
+          }
+        })
+      })
+    }
+
+    async function openIn(user: UserEvent, column: string): Promise<HTMLElement> {
+      const region = await screen.findByRole('region', { name: column })
+      await user.click(within(region).getByRole('button', { name: 'Create with the agent' }))
+      return screen.getByRole('complementary', { name: 'New tasks with the agent' })
+    }
+
+    async function say(user: UserEvent, panel: HTMLElement, text: string): Promise<void> {
+      await user.type(within(panel).getByRole('textbox'), `${text}{Enter}`)
+      await waitFor(() => {
+        expect(within(panel).getByRole('textbox')).toHaveValue('')
+      })
+    }
+
+    it('creates the tasks proposed in the column it was opened from, and closes', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openIn(user, 'Testing')
+      await say(user, panel, 'Sync issues')
+      expect(octopus().brainstorm.start).toHaveBeenCalledWith('planner', 'Sync issues')
+
+      propose(PROPOSE_TASKS_TOOL, { summary: 'One.', tasks: [{ title: 'Read', description: '' }] })
+      await user.click(within(panel).getByRole('button', { name: 'Create 1 task' }))
+
+      expect(octopus().board.createMany).toHaveBeenCalledWith('planner', [
+        { status: 'testing', title: 'Read', description: '' }
+      ])
+      await waitFor(() => {
+        expect(screen.queryByRole('complementary')).toBeNull()
+      })
+      expect(octopus().brainstorm.close).toHaveBeenCalledWith(BRAINSTORM_ID)
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    it('closes at once before anything was said', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openIn(user, 'Backlog')
+
+      await user.click(within(panel).getByRole('button', { name: 'Close' }))
+
+      expect(screen.queryByRole('complementary')).toBeNull()
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    it('asks before a started conversation is closed, and keeps it on Keep talking', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openIn(user, 'Backlog')
+      await say(user, panel, 'Sync issues')
+
+      await user.click(within(panel).getByRole('button', { name: 'Close' }))
+      const asked = await screen.findByRole('dialog', { name: 'Close this conversation?' })
+      await user.click(within(asked).getByRole('button', { name: 'Keep talking' }))
+      expect(panel).toBeInTheDocument()
+
+      await user.click(within(panel).getByRole('button', { name: 'Close' }))
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', {
+          name: 'End the conversation'
+        })
+      )
+
+      await waitFor(() => {
+        expect(screen.queryByRole('complementary')).toBeNull()
+      })
+      expect(octopus().brainstorm.close).toHaveBeenCalledWith(BRAINSTORM_ID)
+    })
+
+    it('asks before a card or another brainstorm takes its place', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      const panel = await openIn(user, 'Backlog')
+      await say(user, panel, 'Sync issues')
+
+      await user.click(screen.getByRole('button', { name: 'Fix login' }))
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: 'Keep talking' })
+      )
+      expect(panel).toBeInTheDocument()
+      const testing = screen.getByRole('region', { name: 'Testing' })
+      await user.click(within(testing).getByRole('button', { name: 'Create with the agent' }))
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: 'Keep talking' })
+      )
+      expect(panel).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Fix login' }))
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', {
+          name: 'End the conversation'
+        })
+      )
+
+      expect(await screen.findByRole('complementary', { name: 'Fix login' })).toBeVisible()
+      expect(screen.queryByRole('complementary', { name: 'New tasks with the agent' })).toBeNull()
+    })
+
+    it('takes the place of the card panel, and keeps it on a task created by hand', async () => {
+      vi.mocked(octopus().board.create).mockResolvedValueOnce(ok('testing/New.md'))
+      const user = userEvent.setup()
+      renderScreen()
+      await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+      await screen.findByRole('complementary', { name: 'Fix login' })
+
+      await openIn(user, 'Backlog')
+      expect(screen.queryByRole('complementary', { name: 'Fix login' })).toBeNull()
+      givenBoard([
+        boardCard(),
+        boardCard({ ref: 'testing/New.md', status: 'testing', title: 'New' })
+      ])
+      const testing = screen.getByRole('region', { name: 'Testing' })
+      await user.click(within(testing).getByRole('button', { name: 'New task' }))
+      await user.type(within(testing).getByRole('textbox', { name: 'Task title' }), 'New{Enter}')
+
+      expect(await screen.findByRole('button', { name: 'New' })).toBeVisible()
+      expect(screen.getAllByRole('complementary')).toHaveLength(1)
+      const panel = screen.getByRole('complementary', { name: 'New tasks with the agent' })
+      await user.click(within(panel).getByRole('button', { name: 'Close' }))
+
+      expect(screen.queryByRole('complementary')).toBeNull()
+    })
+
+    it('opens on ⇧C in the column of the focused task, and in the backlog with none', async () => {
+      givenBoard([boardCard({ ref: 'testing/A.md', status: 'testing', title: 'A' })])
+      const user = userEvent.setup()
+      renderScreen()
+      const tile = await screen.findByRole('button', { name: 'A' })
+      act(() => {
+        tile.focus()
+      })
+
+      await user.keyboard('{Shift>}C{/Shift}')
+      const panel = screen.getByRole('complementary', { name: 'New tasks with the agent' })
+      await say(user, panel, 'Sync')
+      propose(PROPOSE_TASKS_TOOL, { summary: 'One.', tasks: [{ title: 'Read', description: '' }] })
+      await user.click(within(panel).getByRole('button', { name: 'Create 1 task' }))
+
+      expect(octopus().board.createMany).toHaveBeenCalledWith('planner', [
+        { status: 'testing', title: 'Read', description: '' }
+      ])
+      await waitFor(() => {
+        expect(screen.queryByRole('complementary')).toBeNull()
+      })
+      act(() => {
+        ;(document.activeElement as HTMLElement).blur()
+      })
+      await user.keyboard('{Shift>}C{/Shift}')
+      await say(user, screen.getByRole('complementary'), 'Again')
+      propose(PROPOSE_TASKS_TOOL, { summary: 'One.', tasks: [{ title: 'Two', description: '' }] })
+      await user.click(screen.getByRole('button', { name: 'Create 1 task' }))
+
+      expect(octopus().board.createMany).toHaveBeenLastCalledWith('planner', [
+        { status: 'backlog', title: 'Two', description: '' }
+      ])
+    })
+
+    it('edits a card with the agent and opens it again once applied', async () => {
+      const user = userEvent.setup()
+      renderScreen()
+      await user.click(await screen.findByRole('button', { name: 'Fix login' }))
+      const card = await screen.findByRole('complementary', { name: 'Fix login' })
+      await waitFor(() => {
+        expect(within(card).getByRole('button', { name: 'Edit with the agent' })).toBeEnabled()
+      })
+
+      await user.click(within(card).getByRole('button', { name: 'Edit with the agent' }))
+      const panel = screen.getByRole('complementary', { name: 'Editing with the agent: Fix login' })
+      await say(user, panel, 'Sharper')
+      expect(octopus().brainstorm.startEdit).toHaveBeenCalledWith(
+        'planner',
+        'backlog/Fix login.md',
+        'Sharper'
+      )
+      propose(PROPOSE_EDIT_TOOL, {
+        summary: 'Sharper.',
+        task: { title: 'Fix the login form', description: 'Keep it.' }
+      })
+      await user.click(within(panel).getByRole('button', { name: 'Apply changes' }))
+
+      expect(octopus().board.rewrite).toHaveBeenCalledWith('planner', 'backlog/Fix login.md', {
+        title: 'Fix the login form',
+        description: 'Keep it.',
+        priority: null,
+        tag: null,
+        base: cardDetail().description
+      })
+      expect(await screen.findByRole('complementary', { name: 'Fix login' })).toBeVisible()
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    it('ends without asking when another project is shown', async () => {
+      const user = userEvent.setup()
+      const { rerender } = renderScreen()
+      const panel = await openIn(user, 'Backlog')
+      await say(user, panel, 'Sync issues')
+
+      rerender({ project: { ...boardProject(), id: 'other' } })
+
+      await waitFor(() => {
+        expect(octopus().brainstorm.close).toHaveBeenCalledWith(BRAINSTORM_ID)
+      })
+      expect(screen.queryByRole('dialog')).toBeNull()
     })
   })
 

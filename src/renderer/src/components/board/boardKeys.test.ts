@@ -34,7 +34,13 @@ describe('boardKeyAction', () => {
     [key('c'), {}, { kind: 'create', from: 'a' }],
     [key('c'), { focused: null }, { kind: 'create', from: null }],
     [key('C'), {}, { kind: 'create', from: 'a' }],
-    [key('C', { shiftKey: true }), {}, null],
+    [key('C', { shiftKey: true }), {}, { kind: 'brainstorm', from: 'a' }],
+    [
+      key('С', { code: 'KeyC', shiftKey: true }),
+      { focused: null },
+      { kind: 'brainstorm', from: null }
+    ],
+    [key('J', { shiftKey: true }), {}, null],
     [key('c', { ctrlKey: true }), {}, null],
     [key('Enter'), {}, null],
     [key('Escape'), { open: 'b' }, { kind: 'close', ref: 'b' }],

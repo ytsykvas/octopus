@@ -1,4 +1,4 @@
-import { Copy, Ellipsis, FolderOpen, Play, Trash2, X } from 'lucide-react'
+import { Copy, Ellipsis, FolderOpen, Play, Sparkles, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -49,6 +49,8 @@ export interface CardPanelProps {
   readonly onMove: (move: CardMove) => void
   /** Asks to delete; the screen confirms, because ⌘⌫ (B205) deletes with no panel open. */
   readonly onRemove: () => void
+  /** Opens the board's brainstorm on this card, as it was read. */
+  readonly onEditWithAgent: (detail: CardDetail) => void
   /** The workspace on this machine started from this card, or null. */
   readonly linked: WorkspaceView | null
   /** Runs the card, or opens its workspace; the screen asks first when another Mac has it. */
@@ -95,6 +97,7 @@ export function CardPanel({
   onClose,
   onMove,
   onRemove,
+  onEditWithAgent,
   linked,
   onRun,
   deviceId
@@ -207,6 +210,21 @@ export function CardPanel({
             </Button>
           )}
           <CopyDescription description={card.notText ? null : (detail?.description ?? null)} />
+          <Button
+            size="sm"
+            variant="agent"
+            disabled={detail === null || card.notText || card.malformed}
+            onClick={
+              detail === null
+                ? undefined
+                : () => {
+                    onEditWithAgent(detail)
+                  }
+            }
+          >
+            <Sparkles aria-hidden size={13} />
+            {t('board.brainstorm.edit')}
+          </Button>
         </div>
         {failure !== null && <Callout tone="warning">{describeFailure(failure)}</Callout>}
         {detail !== null && (

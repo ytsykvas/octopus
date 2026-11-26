@@ -89,6 +89,38 @@ should show it. A refusal is reported after that read, so the read cannot clear 
 whose board leaves before it settles — before its answer or during that read — reports nothing and
 answers as refused, so the next board never opens or follows a card the last one wrote.
 
+## Planning tasks with the agent
+
+The sparkle beside a column's + (or `⇧C`) opens the brainstorm in the card panel's place: a
+conversation with the agent that ends in tasks, kept for as long as the panel is open and nowhere
+else — no chat record, no transcript, no CLI session on disk. The column it was opened from is the
+column every proposed task goes to unless the person picks another. **Edit with the agent** in the
+card panel opens the same panel on that card: the agent proposes the whole new version of it.
+
+The first message is shown whole — the project's `task-cards.md`, the board's priorities and tags,
+and what the person typed — since octopus adds nothing to the agent's system prompt. The agent
+reads the project's main checkout and the board's folder, asks through the same question
+card the chat uses, and shows what it proposes through a tool of octopus's own
+(`propose_tasks`, `propose_edit`) rather than as text — `brainstorm.ts` in core. The proposal is
+drawn under the log (`TaskProposalCard`) from the newest such call: the title renames on a
+double-click, priority, tag and column use the card panel's own menus (`cardMenus.tsx`), the
+description opens the Markdown editor with Done and Cancel, and ↑/↓ and Leave out shape a set. A
+newer proposal replaces the edits made to the one before. The next message tells the agent what the
+person changed by hand (`withEditedTasks`), once: what it was told is kept per proposal.
+
+**Create N tasks** writes the set in one turn of the board's queue (`createCards`); a task refused —
+a name taken a moment before — stays in the proposal with the reason, and the ones written are
+gone from it. **Apply changes** writes the card over whole (`rewriteCard`) and opens its panel again. It is
+refused when the description changed since the brainstorm opened (`cardChanged`): the refusal is
+the board's banner, as every write's, and the brainstorm stays open. Once everything is written the
+conversation ends without asking.
+
+Closing a conversation that started — Close, a click on a card, another sparkle — asks first
+(“Close this conversation?”); one where nothing was said yet closes at once. Another project, another
+board folder or leaving the board ends it without asking, like the card panel's editor. A task
+created by hand with + while the brainstorm is open does not take its panel. Esc does not close it:
+the field is where the person types.
+
 ## The card panel
 
 A click on a card opens its panel on the right — a panel rather than a modal, so the board stays
@@ -204,6 +236,7 @@ and `л` work too.
 | Key               | Action                                                        |
 | ----------------- | ------------------------------------------------------------- |
 | `C`               | new task in the target's column, or in Backlog with no target |
+| `⇧C`              | plan tasks with the agent, for the same column                |
 | `↓` `J` / `↑` `K` | next / previous task in the column                            |
 | `→` / `←`         | the neighbouring column that has tasks, at the same position  |
 | `⌥↓` / `⌥↑`       | move the task one place down / up                             |

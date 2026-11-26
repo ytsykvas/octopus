@@ -6,6 +6,8 @@ import type {
   CardDraft,
   CardMove,
   CardPatch,
+  CardRewrite,
+  CreatedCards,
   DescriptionSave
 } from '@core/boardSchema.js'
 
@@ -38,6 +40,9 @@ export interface BoardController {
   readonly revealCard: (ref: string) => Promise<boolean>
   /** Gives the project columns of its own the first time it is asked. */
   readonly editColumns: (edit: ColumnEdit) => Promise<boolean>
+  /** What a brainstorm proposed; a card refused among them is the caller's to say, in `failure`. */
+  readonly createMany: (drafts: readonly CardDraft[]) => Promise<CreatedCards | null>
+  readonly rewrite: (ref: string, rewrite: CardRewrite) => Promise<boolean>
 }
 
 interface BoardSource {
@@ -279,6 +284,25 @@ export function useBoard(
     [source, settle]
   )
 
+  const createMany = useCallback(
+    async (drafts: readonly CardDraft[]): Promise<CreatedCards | null> => {
+      if (source === null) return null
+      const answer = await settle(window.octopus.board.createMany(source.projectId, drafts))
+      return answer?.ok === true ? answer.value : null
+    },
+    [source, settle]
+  )
+
+  const rewrite = useCallback(
+    async (ref: string, change: CardRewrite): Promise<boolean> => {
+      if (source === null) return false
+      return (
+        (await settle(window.octopus.board.rewrite(source.projectId, ref, change)))?.ok === true
+      )
+    },
+    [source, settle]
+  )
+
   // A sync service writes while the window is elsewhere; coming back is when that matters.
   useWindowEvent('focus', () => void refresh(), { active: source !== null })
 
@@ -311,6 +335,8 @@ export function useBoard(
     revealFile,
     removeFile,
     revealCard,
-    editColumns
+    editColumns,
+    createMany,
+    rewrite
   }
 }

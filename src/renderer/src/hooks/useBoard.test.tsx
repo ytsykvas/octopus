@@ -982,6 +982,60 @@ describe('useBoard', () => {
       expect(onError).toHaveBeenLastCalledWith('A column is already called “Done”.')
     })
 
+    it('creates a batch and rewrites a card, reading the board again after each', async () => {
+      givenBoard([boardCard()])
+      const { result } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+      const drafts = [{ status: 'backlog', title: 'One' }]
+      const rewrite = { title: 'A', description: '', priority: null, tag: null, base: '# A\n' }
+
+      const created = await act(() => result.current.createMany(drafts))
+      const rewritten = await act(() => result.current.rewrite('backlog/A.md', rewrite))
+
+      expect(created).toEqual({ refs: ['backlog/Fix login.md'], failure: null })
+      expect(rewritten).toBe(true)
+      expect(octopus().board.createMany).toHaveBeenCalledWith('planner', drafts)
+      expect(octopus().board.rewrite).toHaveBeenCalledWith('planner', 'backlog/A.md', rewrite)
+      expect(octopus().board.list).toHaveBeenCalledTimes(3)
+    })
+
+    it('answers nothing for a batch the bridge refused, and reports it', async () => {
+      givenBoard([boardCard()])
+      vi.mocked(octopus().board.createMany).mockResolvedValueOnce(refusal('boardFolderUnset'))
+      const { result, onError } = renderBoard()
+      await waitFor(() => {
+        expect(result.current.listing).not.toBeNull()
+      })
+
+      expect(
+        await act(() => result.current.createMany([{ status: 'backlog', title: 'A' }]))
+      ).toBeNull()
+      expect(onError).toHaveBeenLastCalledWith(expect.any(String))
+    })
+
+    it('writes no batch and rewrites nothing without a folder', async () => {
+      const { result } = renderBoard({ folder: '' })
+
+      expect(
+        await act(() => result.current.createMany([{ status: 'backlog', title: 'A' }]))
+      ).toBeNull()
+      expect(
+        await act(() =>
+          result.current.rewrite('a.md', {
+            title: 'A',
+            description: '',
+            priority: null,
+            tag: null,
+            base: ''
+          })
+        )
+      ).toBe(false)
+      expect(octopus().board.createMany).not.toHaveBeenCalled()
+      expect(octopus().board.rewrite).not.toHaveBeenCalled()
+    })
+
     it('edits no columns without a folder', async () => {
       const { result } = renderBoard({ folder: '' })
 

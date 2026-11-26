@@ -2445,6 +2445,40 @@ export const en = {
       newTaskPlaceholder: 'Task title',
       count: '{{shown}} of {{total}}'
     },
+    brainstorm: {
+      create: 'Create with the agent',
+      edit: 'Edit with the agent',
+      createTitle: 'New tasks with the agent',
+      editTitle: 'Editing with the agent: {{title}}',
+      close: 'Close',
+      createIntro:
+        'Say what you want done. The agent reads the code and this board, asks what it needs to know and proposes one task or several. Nothing is written until you create them.',
+      editIntro:
+        'Say what should change. The agent reads this task, its comments and the code, and proposes a new version. Nothing changes until you apply it.',
+      ideaPlaceholder: 'What needs doing?',
+      requestPlaceholder: 'What should change in this task?',
+      replyPlaceholder: 'Reply, or ask for changes',
+      send: 'Send',
+      stop: 'Stop',
+      proposal: 'Proposal',
+      createTasks_one: 'Create {{count}} task',
+      createTasks_few: 'Create {{count}} tasks',
+      createTasks_many: 'Create {{count}} tasks',
+      createTasks_other: 'Create {{count}} tasks',
+      apply: 'Apply changes',
+      up: 'Move up',
+      down: 'Move down',
+      leaveOut: 'Leave out',
+      description: 'Description',
+      editDescription: 'Edit description',
+      descriptionDone: 'Done',
+      descriptionCancel: 'Cancel',
+      allLeftOut: 'Every task is left out. Ask for another proposal, or close.',
+      discardTitle: 'Close this conversation?',
+      discardBody: 'The conversation and its proposal are not kept.',
+      discard: 'End the conversation',
+      keep: 'Keep talking'
+    },
     columns: {
       title: 'Columns',
       defaultHint: 'Every project\u2019s board shows these until it has columns of its own.',
@@ -2748,6 +2782,7 @@ export const en = {
       '“{{name}}” is not UTF-8 text, so octopus leaves it as it is. Change it in an editor that can save it as UTF-8.',
     cardTooLong:
       '“{{name}}” is longer than 100,000 characters — more than one message to the agent can hold. Shorten it, then run it again.',
+    brainstormGone: 'This conversation has ended. Close it and start another.',
     columnMissing: 'That column is no longer on the board.',
     columnBuiltIn: 'That column is built in: it can be moved, but not renamed or removed.',
     columnNameTaken: 'A column is already called “{{name}}”.',

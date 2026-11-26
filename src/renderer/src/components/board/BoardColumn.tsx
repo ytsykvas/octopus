@@ -1,4 +1,4 @@
-import { Ellipsis, Plus } from 'lucide-react'
+import { Ellipsis, Plus, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { Column } from '@core/boardColumns.js'
@@ -29,6 +29,8 @@ export interface BoardColumnProps {
   readonly creating: boolean
   readonly onCreating: (creating: boolean) => void
   readonly onCreate: (title: string) => void
+  /** Opens the board's brainstorm, its tasks going to this column. */
+  readonly onBrainstorm: () => void
   readonly openRef: string | null
   readonly onOpen: (ref: string) => void
   readonly onRename: (ref: string, title: string) => void
@@ -46,6 +48,7 @@ export function BoardColumn({
   creating,
   onCreating,
   onCreate,
+  onBrainstorm,
   openRef,
   onOpen,
   onRename,
@@ -107,6 +110,9 @@ export function BoardColumn({
               </IconButton>
             )}
           />
+          <IconButton label={t('board.brainstorm.create')} onClick={onBrainstorm}>
+            <Sparkles aria-hidden size={14} />
+          </IconButton>
           <IconButton
             label={t('board.column.newTask')}
             onClick={() => {
