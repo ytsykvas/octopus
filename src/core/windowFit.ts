@@ -23,6 +23,7 @@ export interface WindowFit {
 }
 
 // Capped at the display: a floor wider than the screen would put the window's edge out of reach.
+// Below 940 the window's own minimum still wins, so a narrower display is overrun.
 export function fitWindow(bounds: Rect, workArea: Rect, wanted: number): WindowFit {
   const minWidth = Math.max(WINDOW_MIN_WIDTH, Math.min(wanted, workArea.width))
   if (bounds.width >= minWidth) return { minWidth, bounds: null }

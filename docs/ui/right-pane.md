@@ -141,8 +141,9 @@ it is down to 440px for each conversation on screen (`SESSION_MIN_WIDTH` in
 `layout.ts`) and the pane begins to give way, never below what its tabs need.
 Then the list gives way, down to its own 180. Past that the window stops: `App`
 sends `frame:fit` the strip, each pane on screen at its floor and the
-conversations, and main makes that the window's minimum width — never under
-940, never wider than the display — widening the window at once if it is
+conversations, and main makes that the window's minimum width — never wider
+than the display, yet never under 940, which wins on a display narrower than
+that — widening the window at once if it is
 narrower, moved left where its display ends. Nothing is sent before the config
 is read: the pane starts open in the window's state, and a floor counting a pane
 the config keeps folded would widen a window for nothing.

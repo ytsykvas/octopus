@@ -45,6 +45,15 @@ describe('fitWindow', () => {
     })
   })
 
+  it('holds to the window’s own minimum on a display narrower than it', () => {
+    const narrow = { x: 0, y: 25, width: 900, height: 700 }
+
+    expect(fitWindow({ x: 100, y: 40, width: 800, height: 600 }, narrow, 1320)).toEqual({
+      minWidth: WINDOW_MIN_WIDTH,
+      bounds: { x: 0, y: 40, width: WINDOW_MIN_WIDTH, height: 600 }
+    })
+  })
+
   it('keeps the window on a display that starts right of the main one', () => {
     const second = { x: 1512, y: 0, width: 2560, height: 1440 }
 
