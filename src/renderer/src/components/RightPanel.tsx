@@ -40,6 +40,7 @@ import { PullRequestPanel } from './pr/PullRequestPanel.js'
 import { WorkspaceEnv } from './WorkspaceEnv.js'
 import { WorkspaceScripts } from './WorkspaceScripts.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
+import { RIGHT_PANE_MIN_WIDTH } from '../layout.js'
 
 /**
  * Right pane — changes and terminal in tabs (§10.8).
@@ -85,12 +86,6 @@ const TABS: readonly {
 ]
 
 /**
- * Floor before the tabs are measured, and the lower bound the config schema
- * holds. The real floor is whatever the tab row needs — see `measureTabs`.
- */
-const MIN_WIDTH = 280
-
-/**
  * How narrow the pane can be before its tabs stop fitting.
  *
  * Measured rather than chosen: the labels change width with the language, and
@@ -114,13 +109,6 @@ function measureTabs(row: HTMLElement): number {
   return Math.ceil(side + buttons + gap * Math.max(0, row.children.length - 1))
 }
 
-/**
- * Enough centre pane to still be one. The pane can take everything else, so on
- * a wide display the terminal gets genuinely wide, while on a laptop the
- * working area survives.
- */
-const MIN_CENTRE_WIDTH = 360
-
 /** What the row above the two halves says while the sequence runs its course. */
 const STAGE_HINTS = {
   idle: 'scripts.runHint',
@@ -140,8 +128,13 @@ const STAGE_HINTS = {
  * the promised 360, and with the list dragged wide it reached nothing at all.
  * Only `App` knows both halves, so only `App` can say.
  */
-function maxWidthFor(windowWidth: number, leftWidth: number, minWidth: number): number {
-  return Math.max(minWidth, windowWidth - leftWidth - MIN_CENTRE_WIDTH)
+function maxWidthFor(
+  windowWidth: number,
+  leftWidth: number,
+  minWidth: number,
+  centreMin: number
+): number {
+  return Math.max(minWidth, windowWidth - leftWidth - centreMin)
 }
 
 interface RightPanelProps {
@@ -210,6 +203,9 @@ interface RightPanelProps {
   readonly onOpenChange: (open: boolean) => void
   /** The project strip plus the workspace list, or just the strip when folded. */
   readonly leftWidth: number
+  /** What the centre keeps: each conversation on screen at its narrowest. */
+  readonly centreMin: number
+  readonly onFloor: (floor: number) => void
   /** How the reader asked for diffs to be laid out, across sessions. */
   readonly diffView: DiffView
   readonly onDiffView: (view: DiffView) => void
@@ -275,6 +271,8 @@ export function RightPanel({
   open,
   onOpenChange,
   leftWidth,
+  centreMin,
+  onFloor,
   diffView,
   onDiffView,
   tab,
@@ -299,7 +297,7 @@ export function RightPanel({
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
-  const [minWidth, setMinWidth] = useState(MIN_WIDTH)
+  const [minWidth, setMinWidth] = useState(RIGHT_PANE_MIN_WIDTH)
   /*
    * Whether the build half is open. Folded to start with, every time.
    *
@@ -514,10 +512,12 @@ export function RightPanel({
 
     if (!open) return
 
-    setMinWidth(Math.max(MIN_WIDTH, measureTabs(row)))
-  }, [i18n.language, open])
+    const floor = Math.max(RIGHT_PANE_MIN_WIDTH, measureTabs(row))
+    setMinWidth(floor)
+    onFloor(floor)
+  }, [i18n.language, open, onFloor])
 
-  const maxWidth = maxWidthFor(windowWidth, leftWidth, minWidth)
+  const maxWidth = maxWidthFor(windowWidth, leftWidth, minWidth, centreMin)
 
   /*
    * The pane keeps the width it was given, and the window's edge moves the

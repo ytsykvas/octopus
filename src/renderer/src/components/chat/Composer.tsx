@@ -750,8 +750,8 @@ export function Composer({
           className="focus-ring font-prompt field-sizing-content max-h-80 min-h-[8rem] w-full resize-none bg-transparent px-3 py-2.5 text-[13px] outline-none"
         />
 
-        {/* Wraps rather than overflows. The centre pane may be dragged down to
-            `MIN_CENTRE_WIDTH`, and at that width the row cannot hold three
+        {/* Wraps rather than overflows. A conversation may be narrowed down to
+            `SESSION_MIN_WIDTH`, and near that width the row may not hold three
             pickers and the send button side by side — it used to run past the
             rounded border, taking the send button off the edge of the block.
             Two lines keep every control named and reachable; widen the pane and

@@ -78,15 +78,13 @@ import { useWorkspaces } from './hooks/useWorkspaces.js'
 import { useAttention } from './hooks/useAttention.js'
 import { AttentionToasts } from './components/AttentionToasts.js'
 import { StatusBar, type StatusTarget } from './components/statusBar/StatusBar.js'
-
-/**
- * The project strip's width, `w-15` in `ProjectTabs`.
- *
- * Stated twice, which is once too many — but the right pane has to reserve the
- * left column's room and cannot read a Tailwind class. The strip is the one
- * part of that column whose width is not already a number here.
- */
-const TAB_STRIP_WIDTH = 60
+import {
+  PROJECT_STRIP_WIDTH,
+  RIGHT_PANE_MIN_WIDTH,
+  SESSION_MIN_WIDTH,
+  sidebarCeiling,
+  windowFloor
+} from './layout.js'
 
 /** The schema's own default, for the render before the config has been read. */
 const DEFAULT_SIDEBAR_WIDTH = 240
@@ -183,9 +181,18 @@ export function App(): React.JSX.Element {
   // Not persisted, unlike the right pane: the workspace list's fold lasts for
   // the session.
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [rightFloor, setRightFloor] = useState(RIGHT_PANE_MIN_WIDTH)
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
+  useWindowEvent('resize', () => {
+    setWindowWidth(window.innerWidth)
+  })
   // Not persisted, like the list's fold: which screen is in front lasts for the session.
   const [screen, setScreen] = useState<Screen>('octopus')
   const onBoard = screen === 'board'
+  // The list belongs to the Octopus screen; on the board the strip stands alone.
+  const listShown = sidebarOpen && !onBoard
+  const rightShown = rightPanelOpen && !onBoard
+  const rightRoom = rightShown ? rightFloor : null
   // Filled by the board itself: core finds its folder by name regardless of case, so only the
   // board knows the path it actually reads.
   const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null)
@@ -874,8 +881,13 @@ export function App(): React.JSX.Element {
   // disagreement would show up as a centre pane with nowhere to go.
   const sidebarWidth = config?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH
   const deviceId = config?.deviceId ?? ''
-  // The list belongs to the Octopus screen; on the board the strip stands alone.
-  const listShown = sidebarOpen && !onBoard
+  const columns = 1
+  const listCeiling = sidebarCeiling(windowWidth, rightRoom, columns)
+  const listWidth = Math.min(sidebarWidth, listCeiling)
+  const floor = windowFloor({ listShown, rightFloor: rightRoom, columns })
+  useEffect(() => {
+    void window.octopus.frame.fit(floor)
+  }, [floor])
 
   // Read twice: the right pane hands it to the scripts, and the hint they
   // draw when there is none sends the user to edit that same project.
@@ -1232,7 +1244,8 @@ export function App(): React.JSX.Element {
                 editingWorkspaceId={workspaces.editingId}
                 onEditingWorkspaceChange={workspaces.setEditingId}
                 onReorderWorkspaces={(projectId, ids) => void workspaces.reorder(projectId, ids)}
-                width={sidebarWidth}
+                width={listWidth}
+                maxWidth={listCeiling}
                 onWidthChange={(next) => void updateConfig({ sidebarWidth: next })}
                 onHelp={startHelp}
                 canStartChat={chatTabs.canCreate}
@@ -1356,7 +1369,7 @@ export function App(): React.JSX.Element {
             and the servers running there belong to their workspaces, and
             unmounting the pane used to end every one of them. */}
         <RightPanel
-          open={rightPanelOpen && !onBoard}
+          open={rightShown}
           onOpenChange={(open) => {
             showRightPanel(open)
           }}
@@ -1443,7 +1456,9 @@ export function App(): React.JSX.Element {
           // none of it — and the pane may have that room too. Not so on the
           // board, where the pane is offstage: widening it there would resize
           // every terminal in it.
-          leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
+          leftWidth={PROJECT_STRIP_WIDTH + (sidebarOpen ? listWidth : 0)}
+          centreMin={columns * SESSION_MIN_WIDTH}
+          onFloor={setRightFloor}
         />
       </div>
 

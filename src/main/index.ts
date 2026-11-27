@@ -1,6 +1,16 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeTheme,
+  screen,
+  session,
+  shell
+} from 'electron'
 
 import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
@@ -14,6 +24,7 @@ import {
 } from '../core/service.js'
 import { type BackupRecovery, openWithRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
+import { fitWindow, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH } from '../core/windowFit.js'
 import {
   pushBoardChanged,
   pushBrainstormEntry,
@@ -59,8 +70,8 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
-    minWidth: 940,
-    minHeight: 620,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
     show: false,
     backgroundColor: canvasColor(theme),
     // §10.5: hiddenInset stays; vibrancy is deliberately unused — translucent
@@ -286,6 +297,13 @@ async function start(): Promise<void> {
     openPath: (path) => shell.openPath(path),
     showItemInFolder: (path) => {
       shell.showItemInFolder(path)
+    },
+    setWindowFloor: (target, minWidth) => {
+      if (!(target instanceof BrowserWindow)) return
+      const bounds = target.getBounds()
+      const fitted = fitWindow(bounds, screen.getDisplayMatching(bounds).workArea, minWidth)
+      target.setMinimumSize(fitted.minWidth, WINDOW_MIN_HEIGHT)
+      if (fitted.bounds !== null) target.setBounds(fitted.bounds)
     }
   })
   watchSystemTheme(service)

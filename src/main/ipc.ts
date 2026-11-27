@@ -65,6 +65,7 @@ import { FormValuesSchema } from '../core/elicitation.js'
 import { LibraryImportSchema, LibraryRawSchema } from '../core/library.js'
 import { LibraryKindSchema, LibraryNameSchema } from '../core/libraryNames.js'
 import { NotesBodySchema } from '../core/notes.js'
+import { WindowFloorSchema } from '../core/windowFit.js'
 import { PromptDraftSchema, PromptIdSchema } from '../core/promptSchema.js'
 import {
   ATTACHMENT_NAME_MAX,
@@ -203,6 +204,8 @@ export interface IpcHost {
   readonly openPath: (path: string) => Promise<string>
   /** Shows a file selected in Finder, without opening it. */
   readonly showItemInFolder: (path: string) => void
+  /** Makes `minWidth` the window's minimum, widening it now if it is narrower. */
+  readonly setWindowFloor: (window: unknown, minWidth: number) => void
 }
 
 /**
@@ -284,6 +287,14 @@ export function registerIpc(
   host: IpcHost
 ): void {
   host.handle('theme:get', () => resolveTheme(service.getConfig().theme, host.prefersDark()))
+
+  host.handle('window:fit', (event, minWidth: unknown) =>
+    attempt(() => {
+      const floor = WindowFloorSchema.parse(minWidth)
+      const window = host.windowFor(event)
+      if (window !== null) host.setWindowFloor(window, floor)
+    })
+  )
 
   host.handle('config:get', () => attempt(() => service.getConfig()))
 

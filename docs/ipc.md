@@ -523,6 +523,7 @@ carrying its own session id.
 | `accounts:signOut`     | `kind`, `login` | signing in is interactive and runs in a terminal instead. `kind` is `claude` or `github`; `login` is a string or null                     |
 | `dialog:pickDirectory` | `title`         | `null` when cancelled                                                                                                                     |
 | `dialog:pickSkill`     | `title`         | a file **or** a folder: a skill arrives as either                                                                                         |
+| `window:fit`           | `minWidth`      | an integer: becomes the calling window's minimum width, never under 940 nor past its display, and widens it now if narrower               |
 
 ## Validation
 

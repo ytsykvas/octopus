@@ -136,8 +136,13 @@ left the centre nothing at all.
 the centre** — the way a sidebar behaves in most desktop applications. Widen the
 window and the pane travels with its right edge at the same width while the
 conversation gets the room; narrow it and the centre gives the room back, until
-it is down to its own 360 and the pane begins to give way, never below what its
-tabs need. The list on the left never yields a pixel.
+it is down to 440px for each conversation on screen (`SESSION_MIN_WIDTH` in
+`layout.ts`) and the pane begins to give way, never below what its tabs need.
+Then the list gives way, down to its own 180. Past that the window stops: `App`
+sends `window:fit` the strip, each pane on screen at its floor and the
+conversations, and main makes that the window's minimum width — never under
+940, never wider than the display — widening the window at once if it is
+narrower, moved left where its display ends.
 
 It was the other way round for a while: the pane absorbed every pixel the window
 gained or lost, on the grounds that the conversation stops widening at 72rem and

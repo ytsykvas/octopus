@@ -501,7 +501,7 @@ describe('App', () => {
    * tests are handed the number: told the wrong one, every last of them passes.
    *
    * 1024 less the strip (60), the list at its default (240) and the centre's
-   * own 360 leaves 364; folding the list hands its 240 straight to the pane.
+   * own 440 leaves 284; folding the list hands its 240 straight to the pane.
    */
   it('offers the pane the room the folded list gives up', async () => {
     givenTwoProjects()
@@ -515,11 +515,11 @@ describe('App', () => {
       return edge
     }
 
-    expect(paneEdge()).toHaveAttribute('aria-valuemax', '364')
+    expect(paneEdge()).toHaveAttribute('aria-valuemax', '284')
 
     await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
 
-    expect(paneEdge()).toHaveAttribute('aria-valuemax', '604')
+    expect(paneEdge()).toHaveAttribute('aria-valuemax', '524')
   })
 
   it('opens the settings dialog from the sidebar', async () => {
@@ -1445,12 +1445,46 @@ describe('App', () => {
   })
 
   it('remembers the width the workspace list was resized to', async () => {
+    // Widened as the right pane's twin below is: at 1024 the list's ceiling is 244.
+    const narrow = window.innerWidth
+    window.innerWidth = 1400
+
+    try {
+      const user = await openApp()
+      edges().list.focus()
+
+      await user.keyboard('{ArrowRight}')
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ sidebarWidth: 256 })
+    } finally {
+      window.innerWidth = narrow
+    }
+  })
+
+  // 1024 less the strip, the right pane's 280 and one conversation's 440 leaves the list 244.
+  it('narrows the list once the right pane is down to its floor', async () => {
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ sidebarWidth: 400 })
+    })
+    await openApp()
+
+    await waitFor(() => {
+      expect(edges().list).toHaveAttribute('aria-valuenow', '244')
+    })
+  })
+
+  it('holds the window wide enough for the panes on screen and the conversation', async () => {
+    givenTwoProjects()
     const user = await openApp()
-    edges().list.focus()
 
-    await user.keyboard('{ArrowRight}')
+    await waitFor(() => {
+      expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 280 + 440)
+    })
 
-    expect(window.octopus.config.update).toHaveBeenCalledWith({ sidebarWidth: 256 })
+    await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
+
+    expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 280 + 440)
   })
 
   it('remembers the width the right pane was resized to', async () => {

@@ -140,6 +140,8 @@ function renderPanel(overrides: Partial<Props> = {}): {
     open: true,
     onOpenChange: vi.fn(),
     leftWidth: LEFT_WIDTH,
+    centreMin: 360,
+    onFloor: vi.fn(),
     diffView: 'unified',
     onDiffView: vi.fn(),
     tab: 'diff',
@@ -1955,6 +1957,19 @@ describe('RightPanel', () => {
 
     // 1400 less a list dragged to its widest, less the centre's own 360.
     expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '424')
+  })
+
+  it('keeps the centre the room its conversations need', () => {
+    renderPanel({ leftWidth: 300, centreMin: 660 })
+
+    // 1400 less the left column, less one and a half conversations' worth of centre.
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '440')
+  })
+
+  it('tells the window how narrow its tabs let it go', () => {
+    const { props } = renderPanel()
+
+    expect(props.onFloor).toHaveBeenCalledWith(280)
   })
 
   // Folded away, the list takes none of the window — and the pane may have the

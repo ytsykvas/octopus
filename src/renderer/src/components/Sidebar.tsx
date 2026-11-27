@@ -17,10 +17,7 @@ import type { HelpKind } from './helpMessage.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { projectColorStyle } from './projectTint.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
-
-/** Matches the bounds on `sidebarWidth` in the config schema. */
-const MIN_WIDTH = 180
-const MAX_WIDTH = 560
+import { SIDEBAR_MIN_WIDTH } from '../layout.js'
 
 interface SidebarProps {
   /** The project whose workspaces are listed; null when none is selected. */
@@ -47,6 +44,7 @@ interface SidebarProps {
   readonly width: number
   /** Persists the width; called when a drag ends, not during it. */
   readonly onWidthChange: (width: number) => void
+  readonly maxWidth: number
   readonly onRenameWorkspace: (workspaceId: string, name: string) => void
   readonly onRemoveWorkspace: (workspaceId: string) => void
   readonly onSetWorkspaceKind: (workspaceId: string, kind: WorkspaceKind) => void
@@ -79,6 +77,7 @@ export function Sidebar({
   onCreateWorkspace,
   creating,
   width,
+  maxWidth,
   onWidthChange,
   onRenameWorkspace,
   onRemoveWorkspace,
@@ -110,8 +109,8 @@ export function Sidebar({
       <ResizeHandle
         grows="right"
         width={dragWidth ?? width}
-        min={MIN_WIDTH}
-        max={MAX_WIDTH}
+        min={SIDEBAR_MIN_WIDTH}
+        max={maxWidth}
         onResize={setDragWidth}
         onCommit={(committed) => {
           setDragWidth(null)
