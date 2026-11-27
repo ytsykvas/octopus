@@ -1,11 +1,13 @@
 import {
   Check,
   ClipboardCopy,
+  Columns2,
   GitBranchPlus,
   History,
   MoreHorizontal,
   Pencil,
   Plus,
+  Square,
   TriangleAlert,
   X
 } from 'lucide-react'
@@ -52,20 +54,34 @@ export function ChatTabs({
 
   return (
     <nav aria-label={t('chat.tabs')} className="flex shrink-0 items-center">
-      {tabs.tabs.map((tab, index) => (
-        <TabButton
-          key={tab.key}
-          tab={tab}
-          number={index + 1}
-          active={tab.key === tabs.activeKey && !filesInFront}
-          // The last conversation cannot be closed — a workspace with none has
-          // no way back to one but the first message, and emptying the only one
-          // is what `/clear` is for.
-          closable={tabs.tabs.length > 1}
-          controller={tabs}
-          waiting={notesWaiting(tab.key)}
-        />
-      ))}
+      {runsOf(tabs.tabs, tabs.group).flatMap(({ start, grouped, members }) => {
+        const buttons = members.map((tab, offset) => (
+          <TabButton
+            key={tab.key}
+            tab={tab}
+            number={start + offset + 1}
+            active={tab.key === tabs.activeKey && !filesInFront}
+            // The last conversation cannot be closed — a workspace with none has
+            // no way back to one but the first message, and emptying the only one
+            // is what `/clear` is for.
+            closable={tabs.tabs.length > 1}
+            controller={tabs}
+            waiting={notesWaiting(tab.key)}
+          />
+        ))
+        return grouped
+          ? [
+              <span
+                key={`group-${String(start)}`}
+                role="group"
+                aria-label={t('chat.splitGroup')}
+                className="border-line bg-muted/50 flex h-7 items-center rounded-[var(--radius-control)] border"
+              >
+                {buttons}
+              </span>
+            ]
+          : buttons
+      })}
 
       {tabs.canCreate && (
         <button
@@ -82,6 +98,26 @@ export function ChatTabs({
       <HistoryMenu tabs={tabs} />
     </nav>
   )
+}
+
+interface Run {
+  readonly start: number
+  readonly grouped: boolean
+  readonly members: readonly ChatTab[]
+}
+
+function runsOf(tabs: readonly ChatTab[], group: readonly string[]): Run[] {
+  const runs: Run[] = []
+  tabs.forEach((tab, index) => {
+    const grouped = group.includes(tab.key)
+    const last = runs.at(-1)
+    if (grouped && last?.grouped === true) {
+      runs.splice(-1, 1, { ...last, members: [...last.members, tab] })
+    } else {
+      runs.push({ start: index, grouped, members: [tab] })
+    }
+  })
+  return runs
 }
 
 /**
@@ -211,6 +247,7 @@ function TabButton({
   // Read into a constant so the closures below carry a string rather than a
   // nullable field they would each have to answer for.
   const id = tab.id
+  const grouped = controller.group.includes(tab.key)
 
   const actions =
     id === null
@@ -248,6 +285,30 @@ function TabButton({
                     void controller.copyTranscript(id, named).then((copied) => {
                       setCopy(copied ? 'copied' : 'failed')
                     })
+                }
+              ]
+            : []),
+          ...(!grouped && (controller.group.length > 0 || tab.key !== controller.activeKey)
+            ? [
+                {
+                  id: 'split',
+                  label: t('chat.splitTab'),
+                  icon: <Columns2 aria-hidden size={13} />,
+                  onSelect: () => {
+                    controller.split(tab.key)
+                  }
+                }
+              ]
+            : []),
+          ...(grouped
+            ? [
+                {
+                  id: 'unsplit',
+                  label: t('chat.unsplitTab'),
+                  icon: <Square aria-hidden size={13} />,
+                  onSelect: () => {
+                    controller.unsplit(tab.key)
+                  }
                 }
               ]
             : []),
@@ -291,82 +352,93 @@ function TabButton({
     )
   }
 
+  const tabButton = (onContextMenu?: (event: React.MouseEvent) => void): React.JSX.Element => (
+    <button
+      type="button"
+      onClick={() => {
+        controller.select(tab.key)
+      }}
+      // The same way a workspace is renamed one pane to the left, so the
+      // gesture is learned once.
+      onDoubleClick={() => {
+        if (id !== null) controller.setEditingKey(tab.key)
+      }}
+      onContextMenu={onContextMenu}
+      aria-current={active ? 'page' : undefined}
+      title={described}
+      className={`focus-ring flex ${grouped ? 'h-7' : 'h-9'} items-center gap-1.5 px-2.5 text-[12px] transition-colors ${
+        active
+          ? 'text-ink after:bg-[var(--project-color)] after:absolute after:inset-x-1.5 after:bottom-0 after:h-px after:content-[""]'
+          : 'text-ink-faint hover:text-ink-soft'
+      }`}
+    >
+      {/* Always drawn, quiet state included: a dot that appeared only once a
+          turn started would shift the whole strip sideways the moment the
+          agent began working. */}
+      <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(tab)}`} />
+      <span aria-hidden>{named}</span>
+      {/* Notes written in the viewer and aimed at this conversation. The
+          viewer stays in front when one is added, so this is where it shows
+          that the note landed — and where, among three. */}
+      {waiting > 0 && (
+        <span
+          aria-hidden
+          className="bg-muted text-ink-soft rounded-full px-1.5 text-[10px] leading-4 tabular-nums"
+        >
+          {waiting}
+        </span>
+      )}
+      {/* The visible label is a name, and the dot beside it says nothing
+          aloud at all. The button's whole meaning is in here. */}
+      <span className="sr-only">
+        {waiting > 0
+          ? t('chat.tabWithNotes', {
+              described,
+              waiting: t('chat.notesWaiting', { count: waiting })
+            })
+          : described}
+      </span>
+    </button>
+  )
+
   return (
     <span className="group relative flex items-center">
-      <button
-        type="button"
-        onClick={() => {
-          controller.select(tab.key)
-        }}
-        // The same way a workspace is renamed one pane to the left, so the
-        // gesture is learned once.
-        onDoubleClick={() => {
-          if (id !== null) controller.setEditingKey(tab.key)
-        }}
-        aria-current={active ? 'page' : undefined}
-        title={described}
-        className={`focus-ring flex h-9 items-center gap-1.5 px-2.5 text-[12px] transition-colors ${
-          active
-            ? 'text-ink after:bg-[var(--project-color)] after:absolute after:inset-x-1.5 after:bottom-0 after:h-px after:content-[""]'
-            : 'text-ink-faint hover:text-ink-soft'
-        }`}
-      >
-        {/* Always drawn, quiet state included: a dot that appeared only once a
-            turn started would shift the whole strip sideways the moment the
-            agent began working. */}
-        <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${chatStatusTone(tab)}`} />
-        <span aria-hidden>{named}</span>
-        {/* Notes written in the viewer and aimed at this conversation. The
-            viewer stays in front when one is added, so this is where it shows
-            that the note landed — and where, among three. */}
-        {waiting > 0 && (
-          <span
-            aria-hidden
-            className="bg-muted text-ink-soft rounded-full px-1.5 text-[10px] leading-4 tabular-nums"
-          >
-            {waiting}
-          </span>
-        )}
-        {/* The visible label is a name, and the dot beside it says nothing
-            aloud at all. The button's whole meaning is in here. */}
-        <span className="sr-only">
-          {waiting > 0
-            ? t('chat.tabWithNotes', {
-                described,
-                waiting: t('chat.notesWaiting', { count: waiting })
-              })
-            : described}
-        </span>
-      </button>
+      {actions.length > 0 ? (
+        <DropdownMenu
+          align="left"
+          actions={actions}
+          trigger={({ onClick, open }) => (
+            <>
+              {tabButton((event) => {
+                event.preventDefault()
+                onClick(event)
+              })}
+              <button
+                type="button"
+                onClick={onClick}
+                title={named}
+                aria-label={named}
+                // Held in the layout rather than added on hover, so the strip
+                // does not jump under the pointer as it crosses a tab.
+                className={`text-ink-faint hover:text-ink focus-ring -ml-1 flex size-5 items-center justify-center rounded transition-opacity ${
+                  open || copy !== 'idle'
+                    ? 'opacity-100'
+                    : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
+                }`}
+              >
+                <TriggerIcon outcome={copy} />
+              </button>
+            </>
+          )}
+        />
+      ) : (
+        tabButton()
+      )}
 
       {copy !== 'idle' && (
         <span role="status" className="sr-only">
           {t(copy === 'copied' ? 'chat.copied' : 'chat.copyFailed')}
         </span>
-      )}
-
-      {actions.length > 0 && (
-        <DropdownMenu
-          align="left"
-          actions={actions}
-          trigger={({ onClick, open }) => (
-            <button
-              type="button"
-              onClick={onClick}
-              title={named}
-              aria-label={named}
-              // Held in the layout rather than added on hover, so the strip
-              // does not jump under the pointer as it crosses a tab.
-              className={`text-ink-faint hover:text-ink focus-ring -ml-1 flex size-5 items-center justify-center rounded transition-opacity ${
-                open || copy !== 'idle'
-                  ? 'opacity-100'
-                  : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
-              }`}
-            >
-              <TriggerIcon outcome={copy} />
-            </button>
-          )}
-        />
       )}
     </span>
   )

@@ -57,6 +57,8 @@ import { usePullRequestQuotes } from './hooks/usePullRequestQuotes.js'
 import {
   type ChatTab,
   type ChatTabsController,
+  columnsAfterSplit,
+  columnsFor,
   FIRST_TAB,
   useChatTabs
 } from './hooks/useChatTabs.js'
@@ -82,6 +84,7 @@ import {
   PROJECT_STRIP_WIDTH,
   RIGHT_PANE_MIN_WIDTH,
   SESSION_MIN_WIDTH,
+  foldsFor,
   sidebarCeiling,
   windowFloor
 } from './layout.js'
@@ -273,6 +276,50 @@ export function App(): React.JSX.Element {
   const attachedFiles = useAttachedFiles(selectedWorkspaceId)
   const sideQuestions = useSideQuestions()
 
+  /** Takes the config a write answered with, or says why there was none. */
+  const settleConfig = useCallback(
+    (result: Result<Config>) => {
+      if (result.ok) {
+        setConfig(result.value)
+      } else {
+        setError(describeFailure(result))
+      }
+    },
+    [describeFailure]
+  )
+
+  const updateConfig = useCallback(
+    async (patch: ConfigPatch) => {
+      settleConfig(await window.octopus.config.update(patch))
+    },
+    [settleConfig]
+  )
+
+  /**
+   * Folds or unfolds the right pane, and keeps the choice for the next launch.
+   *
+   * One way in for every caller — the header's button, a drag past the floor,
+   * and the shortcuts that unfold it onto a tab — so none of them can show the
+   * pane without remembering it. A tab that comes along rides in the same
+   * write rather than racing it.
+   */
+  const showRightPanel = useCallback(
+    (open: boolean, patch: ConfigPatch = {}) => {
+      setRightPanelOpen(open)
+      void updateConfig({ ...patch, rightPanelOpen: open })
+    },
+    [updateConfig]
+  )
+
+  const makeRoom = useCallback(
+    (columns: number) => {
+      const folds = foldsFor(window.innerWidth, { listShown, rightFloor: rightRoom, columns })
+      if (folds.right) showRightPanel(false)
+      if (folds.list) setSidebarOpen(false)
+    },
+    [listShown, rightRoom, showRightPanel]
+  )
+
   /*
    * The selected workspace's conversations.
    *
@@ -329,13 +376,20 @@ export function App(): React.JSX.Element {
 
     return {
       ...conversations,
-      select: forward(conversations.select),
+      select: forward((keyOrId: string) => {
+        makeRoom(columnsFor(conversations.tabs, conversations.group, keyOrId))
+        conversations.select(keyOrId)
+      }),
+      split: forward((key: string) => {
+        makeRoom(columnsAfterSplit(conversations.group))
+        conversations.split(key)
+      }),
       create: forward(conversations.create),
       fork: forward(conversations.fork),
       reopen: forward(conversations.reopen),
       reopenLast: forward(conversations.reopenLast)
     }
-  }, [conversations, fileTabs])
+  }, [conversations, fileTabs, makeRoom])
 
   /*
    * The right pane's ways into the composer, the same rule again: a review note
@@ -548,25 +602,6 @@ export function App(): React.JSX.Element {
     }
   }, [config, i18n])
 
-  /** Takes the config a write answered with, or says why there was none. */
-  const settleConfig = useCallback(
-    (result: Result<Config>) => {
-      if (result.ok) {
-        setConfig(result.value)
-      } else {
-        setError(describeFailure(result))
-      }
-    },
-    [describeFailure]
-  )
-
-  const updateConfig = useCallback(
-    async (patch: ConfigPatch) => {
-      settleConfig(await window.octopus.config.update(patch))
-    },
-    [settleConfig]
-  )
-
   const pickBoardFolder = useCallback(async () => {
     const picked = await window.octopus.dialog.pickDirectory(t('settings.boardFolder'))
     if (!picked.ok) {
@@ -588,22 +623,6 @@ export function App(): React.JSX.Element {
     setStoredPanelOpen(config.rightPanelOpen)
     setRightPanelOpen(config.rightPanelOpen)
   }
-
-  /**
-   * Folds or unfolds the right pane, and keeps the choice for the next launch.
-   *
-   * One way in for every caller — the header's button, a drag past the floor,
-   * and the shortcuts that unfold it onto a tab — so none of them can show the
-   * pane without remembering it. A tab that comes along rides in the same
-   * write rather than racing it.
-   */
-  const showRightPanel = useCallback(
-    (open: boolean, patch: ConfigPatch = {}) => {
-      setRightPanelOpen(open)
-      void updateConfig({ ...patch, rightPanelOpen: open })
-    },
-    [updateConfig]
-  )
 
   // The viewer's "Show changes": the pane unfolded onto Changes, which opens the
   // file in the same render it shows itself in — ⌘⇧D's own write plus the request.
@@ -881,7 +900,7 @@ export function App(): React.JSX.Element {
   // disagreement would show up as a centre pane with nowhere to go.
   const sidebarWidth = config?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH
   const deviceId = config?.deviceId ?? ''
-  const columns = 1
+  const columns = onBoard || fileTabs.active !== null ? 1 : chatTabs.shownKeys.length
   const listCeiling = sidebarCeiling(windowWidth, rightRoom, columns)
   const listWidth = Math.min(sidebarWidth, listCeiling)
   const floor = windowFloor({ listShown, rightFloor: rightRoom, columns })

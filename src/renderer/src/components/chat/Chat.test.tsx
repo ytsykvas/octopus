@@ -29,11 +29,13 @@ const WORKSPACE = workspaceView('anna')
 function Pane({
   workspace = WORKSPACE,
   onForget,
-  onShowChanges = vi.fn()
+  onShowChanges = vi.fn(),
+  onSelect
 }: {
   workspace?: WorkspaceView
   onForget?: (chatId: string) => void
   onShowChanges?: (path: string) => void
+  onSelect?: (keyOrId: string) => void
 }): React.JSX.Element {
   const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
   const files = useFileTabs(workspace.id)
@@ -52,7 +54,13 @@ function Pane({
     <>
       <Chat
         workspace={workspace}
-        tabs={tabs}
+        tabs={{
+          ...tabs,
+          select: (keyOrId) => {
+            onSelect?.(keyOrId)
+            tabs.select(keyOrId)
+          }
+        }}
         files={files}
         onError={vi.fn()}
         draftOf={() => ''}
@@ -670,5 +678,136 @@ describe('the way from the viewer to the Changes pane', () => {
     await user.click(await screen.findByRole('button', { name: 'Show changes' }))
 
     expect(onShowChanges).toHaveBeenCalledExactlyOnceWith('src/a.ts')
+  })
+})
+
+describe('conversations side by side', () => {
+  async function splitSecond(
+    ids: readonly string[] = ['chat-1', 'chat-2'],
+    onSelect: (keyOrId: string) => void = vi.fn()
+  ): Promise<ReturnType<typeof userEvent.setup>> {
+    givenChats(ids.map((id) => chat({ id })))
+    const user = userEvent.setup()
+    render(<Pane onSelect={onSelect} />)
+    await screen.findByRole('button', { name: new RegExp(`^Claude ${String(ids.length)}:`) })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+    return user
+  }
+
+  function column(at: number): HTMLElement {
+    const found = screen.getAllByRole('log').at(at)
+    if (!found) throw new Error(`no column at ${String(at)}`)
+    return found
+  }
+
+  it('draws the conversation split off beside the one in front', async () => {
+    await splitSecond()
+
+    expect(screen.getAllByRole('log')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: /^Claude 2:/ })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  it('brings forward the column pressed in', async () => {
+    const user = await splitSecond()
+
+    await user.click(column(0))
+
+    expect(screen.getByRole('button', { name: /^Claude 1:/ })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  it('brings forward the column the focus lands in', async () => {
+    await splitSecond()
+
+    act(() => {
+      within(column(0).parentElement ?? column(0))
+        .getByRole('textbox')
+        .focus()
+    })
+
+    expect(screen.getByRole('button', { name: /^Claude 1:/ })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  it('asks for nothing when the column in front is pressed', async () => {
+    const onSelect = vi.fn()
+    const user = await splitSecond(['chat-1', 'chat-2'], onSelect)
+    onSelect.mockClear()
+
+    await user.click(column(-1))
+
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('draws only the column in front where the screen holds one', async () => {
+    const observers: ResizeObserverCallback[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          observers.push(callback)
+        }
+        observe = vi.fn()
+        unobserve = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
+
+    try {
+      await splitSecond()
+      act(() => {
+        for (const notify of observers) {
+          notify([{ contentRect: { width: 600 } } as ResizeObserverEntry], {} as ResizeObserver)
+        }
+      })
+
+      expect(screen.getAllByRole('log')).toHaveLength(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('raises a plan only in the column in front, offering it beside', async () => {
+    givenChats([
+      chat({ id: 'chat-1', planMode: true, sessionId: 'sess-1' }),
+      chat({ id: 'chat-2' })
+    ])
+    const user = userEvent.setup()
+    render(<Pane />)
+    await screen.findByRole('button', { name: /^Claude 2:/ })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalledTimes(2)
+    })
+
+    emitAgentEvent({
+      type: 'permission_request',
+      requestId: 'r-plan',
+      toolName: 'ExitPlanMode',
+      input: { plan: '# Plan' }
+    })
+
+    expect(
+      await screen.findByRole('region', { name: 'The plan is waiting for your answer' })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Fork in new chat' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Open the plan' }))
+    expect(await screen.findByRole('button', { name: 'Fork in new chat' })).toBeInTheDocument()
   })
 })

@@ -893,6 +893,9 @@ export const uk: Translation = {
     copyTranscript: 'Скопіювати транскрипцію',
     copyTranscriptHint: 'Щоб ввести в курс іншу розмову.',
     closeTab: 'Закрити розмову',
+    splitTab: 'Показати поруч',
+    unsplitTab: 'Більше не показувати поруч',
+    splitGroup: 'Поруч',
     todos: 'Завдання',
     todosProgress: '{{done}} з {{total}}',
     todoStatus: {

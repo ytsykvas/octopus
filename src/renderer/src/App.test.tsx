@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { GitHubAccount } from '@core/accounts.js'
 import { DEFAULT_COLUMNS } from '@core/boardColumns.js'
@@ -1485,6 +1485,110 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
 
     expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 280 + 440)
+  })
+
+  describe('conversations side by side', () => {
+    let width: number
+
+    beforeEach(() => {
+      width = window.innerWidth
+    })
+
+    afterEach(() => {
+      window.innerWidth = width
+    })
+
+    async function openAnna(ids: readonly string[]): Promise<ReturnType<typeof userEvent.setup>> {
+      vi.mocked(window.octopus.chats.list).mockResolvedValue({
+        ok: true,
+        value: ids.map((id) => chat({ id, workspaceId: 'planner/anna' }))
+      })
+      givenTwoProjects()
+      const user = await openApp()
+      await user.click(await findTab('PL'))
+      await user.click(screen.getByRole('button', { name: /anna/ }))
+      await screen.findByRole('button', { name: new RegExp(`^Claude ${String(ids.length)}: `) })
+      return user
+    }
+
+    async function split(user: ReturnType<typeof userEvent.setup>, number: number): Promise<void> {
+      await user.pointer({
+        keys: '[MouseRight]',
+        target: screen.getByRole('button', { name: new RegExp(`^Claude ${String(number)}: `) })
+      })
+      await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+    }
+
+    it('folds the right pane, and only that, when two conversations need its room', async () => {
+      window.innerWidth = 1300
+      const user = await openAnna(['chat-1', 'chat-2'])
+
+      await split(user, 2)
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+      expect(screen.getByRole('button', { name: 'Hide workspaces' })).toBeInTheDocument()
+      await waitFor(() => {
+        expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 880)
+      })
+    })
+
+    it('folds the list as well when the right pane’s room is not enough', async () => {
+      window.innerWidth = 1024
+      const user = await openAnna(['chat-1', 'chat-2'])
+
+      await split(user, 2)
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+      expect(screen.getByRole('button', { name: 'Show workspaces' })).toBeInTheDocument()
+    })
+
+    it('folds nothing on a window with room for every column', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+
+      await split(user, 2)
+
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
+      await waitFor(() => {
+        expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 280 + 880)
+      })
+    })
+
+    it('counts no right pane that is already folded', async () => {
+      vi.mocked(window.octopus.config.get).mockResolvedValue({
+        ok: true,
+        value: config({ rightPanelOpen: false })
+      })
+      window.innerWidth = 1200
+      const user = await openAnna(['chat-1', 'chat-2'])
+
+      await split(user, 2)
+
+      expect(screen.getByRole('button', { name: 'Hide workspaces' })).toBeInTheDocument()
+    })
+
+    it('makes room when ⌥1 brings the group back', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2', 'chat-3'])
+      await split(user, 2)
+      await user.click(screen.getByRole('button', { name: /^Claude 3: / }))
+      window.innerWidth = 1300
+
+      fireEvent.keyDown(document.body, { key: '¡', code: 'Digit1', altKey: true })
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+    })
+
+    it('makes no room for a tab shown alone', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2', 'chat-3'])
+      await split(user, 2)
+      window.innerWidth = 1300
+
+      await user.click(screen.getByRole('button', { name: /^Claude 3: / }))
+
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
+    })
   })
 
   it('remembers the width the right pane was resized to', async () => {

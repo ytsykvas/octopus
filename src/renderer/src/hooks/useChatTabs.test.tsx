@@ -6,7 +6,7 @@ import type { Chat, ClosedChat } from '@core/chats.js'
 import { chat, emitChatsChanged, emitChatStatus, givenChats } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
-import { type ChatTab, useChatTabs } from './useChatTabs.js'
+import { type ChatTab, columnsAfterSplit, columnsFor, useChatTabs } from './useChatTabs.js'
 import { inProject } from './workspaceSlots.js'
 
 const WORKSPACE = 'planner/anna'
@@ -1794,5 +1794,218 @@ describe('a status that moves nothing', () => {
     emitChatStatus('chat-1', 'running')
     expect(result.current.tabs).not.toBe(before)
     expect(result.current.tabs[0]?.status).toBe('running')
+  })
+})
+
+describe('conversations side by side', () => {
+  // The first record takes the key `first` (`keepKeys`); the others keep their ids.
+  async function openWith(ids: readonly string[]): Promise<ReturnType<typeof open>> {
+    givenChats(ids.map((id) => chat({ id })))
+    const opened = open()
+    await waitFor(() => {
+      expect(opened.result.current.tabs).toHaveLength(ids.length)
+    })
+    return opened
+  }
+
+  it('shows the tab in front beside the one split off, in strip order, the new one in front', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2'])
+
+    act(() => {
+      result.current.split('chat-2')
+    })
+
+    expect(result.current.group).toEqual(['first', 'chat-2'])
+    expect(result.current.shownKeys).toEqual(['first', 'chat-2'])
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
+  it('shows a tab outside the group alone, and the whole group again from any of its tabs', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2', 'chat-3'])
+    act(() => {
+      result.current.split('chat-2')
+    })
+
+    act(() => {
+      result.current.select('chat-3')
+    })
+    expect(result.current.shownKeys).toEqual(['chat-3'])
+    expect(result.current.group).toEqual(['first', 'chat-2'])
+
+    act(() => {
+      result.current.select('first')
+    })
+    expect(result.current.shownKeys).toEqual(['first', 'chat-2'])
+    expect(result.current.activeKey).toBe('first')
+  })
+
+  it('adds a third tab to the group there is', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2', 'chat-3'])
+    act(() => {
+      result.current.split('chat-3')
+    })
+
+    act(() => {
+      result.current.split('chat-2')
+    })
+
+    expect(result.current.shownKeys).toEqual(['first', 'chat-2', 'chat-3'])
+    expect(result.current.activeKey).toBe('chat-2')
+  })
+
+  it('keeps each workspace’s group to itself', async () => {
+    const { result, rerender } = await openWith(['chat-1', 'chat-2'])
+    act(() => {
+      result.current.split('chat-2')
+    })
+
+    rerender({ id: 'planner/bob' })
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+    expect(result.current.group).toEqual([])
+
+    rerender({ id: WORKSPACE })
+    expect(result.current.group).toEqual(['first', 'chat-2'])
+  })
+
+  it('splits nothing without a workspace', () => {
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), vi.fn()))
+
+    act(() => {
+      result.current.split('chat-2')
+    })
+
+    expect(result.current.group).toEqual([])
+    expect(result.current.shownKeys).toEqual(['first'])
+  })
+
+  it('takes the tab in front out of the group and keeps the rest on screen', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2', 'chat-3'])
+    act(() => {
+      result.current.split('chat-2')
+    })
+    act(() => {
+      result.current.split('chat-3')
+    })
+
+    act(() => {
+      result.current.unsplit('chat-3')
+    })
+
+    expect(result.current.group).toEqual(['first', 'chat-2'])
+    expect(result.current.activeKey).toBe('first')
+    expect(result.current.shownKeys).toEqual(['first', 'chat-2'])
+  })
+
+  it('leaves the tab in front where it is when another one leaves the group', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2', 'chat-3'])
+    act(() => {
+      result.current.split('chat-2')
+    })
+    act(() => {
+      result.current.split('chat-3')
+    })
+
+    act(() => {
+      result.current.unsplit('first')
+    })
+
+    expect(result.current.activeKey).toBe('chat-3')
+    expect(result.current.shownKeys).toEqual(['chat-2', 'chat-3'])
+  })
+
+  it('ends the group when one tab would be left in it', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2'])
+    act(() => {
+      result.current.split('chat-2')
+    })
+
+    act(() => {
+      result.current.unsplit('chat-2')
+    })
+
+    expect(result.current.group).toEqual([])
+    expect(result.current.shownKeys).toEqual(['first'])
+  })
+
+  it('changes nothing for a tab taken out of no group', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2'])
+
+    act(() => {
+      result.current.unsplit('first')
+    })
+
+    expect(result.current.activeKey).toBe('first')
+    expect(result.current.shownKeys).toEqual(['first'])
+  })
+
+  it('takes nothing out without a workspace', () => {
+    const { result } = renderHook(() => useChatTabs(null, vi.fn(), vi.fn()))
+
+    act(() => {
+      result.current.unsplit('first')
+    })
+
+    expect(result.current.shownKeys).toEqual(['first'])
+  })
+
+  it('drops a closed conversation from its group, so reopening it does not bring it back', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2'])
+    act(() => {
+      result.current.split('chat-2')
+    })
+
+    givenChats([chat({ id: 'chat-1' })])
+    emitChatsChanged()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(1)
+    })
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+    emitChatsChanged()
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    expect(result.current.group).toEqual([])
+  })
+
+  it('forgets the group of a removed workspace', async () => {
+    const { result, rerender } = await openWith(['chat-1', 'chat-2'])
+    act(() => {
+      result.current.split('chat-2')
+    })
+    rerender({ id: 'planner/bob' })
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    act(() => {
+      result.current.forget((id) => id === WORKSPACE)
+    })
+    rerender({ id: WORKSPACE })
+    await waitFor(() => {
+      expect(result.current.tabs).toHaveLength(2)
+    })
+
+    expect(result.current.group).toEqual([])
+  })
+
+  it('counts the columns a tab brings forward, by key or by chat id', async () => {
+    const { result } = await openWith(['chat-1', 'chat-2', 'chat-3'])
+    act(() => {
+      result.current.split('chat-2')
+    })
+    const { tabs, group } = result.current
+
+    expect(columnsFor(tabs, group, 'chat-2')).toBe(2)
+    expect(columnsFor(tabs, group, 'chat-1')).toBe(2)
+    expect(columnsFor(tabs, group, 'chat-3')).toBe(1)
+    expect(columnsFor(tabs, group, 'chat-9')).toBe(1)
+  })
+
+  it('counts the columns a split brings forward', () => {
+    expect(columnsAfterSplit([])).toBe(2)
+    expect(columnsAfterSplit(['first', 'chat-2'])).toBe(3)
   })
 })

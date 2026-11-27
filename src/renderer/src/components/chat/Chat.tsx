@@ -15,6 +15,8 @@ import type { CodeNoteController } from '../../hooks/useCodeNotes.js'
 import type { SideQuestionController } from '../../hooks/useSideQuestions.js'
 import type { DiffCommentController } from '../../hooks/useDiffComments.js'
 import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
+import { useElementWidth } from '../../hooks/useElementWidth.js'
+import { columnsOnScreen } from '../../layout.js'
 import { ChatSession } from './ChatSession.js'
 import { ChatTabs } from './ChatTabs.js'
 import { chatName } from './chatName.js'
@@ -138,6 +140,9 @@ export function Chat({
   const [reviewing, setReviewing] = useState(false)
   // Where the visible conversation draws its way back to the first message.
   const [headerEnd, setHeaderEnd] = useState<HTMLElement | null>(null)
+  const [row, setRow] = useState<HTMLDivElement | null>(null)
+  const rowWidth = useElementWidth(row)
+  const onScreen = columnsOnScreen(tabs.shownKeys, tabs.activeKey, rowWidth)
   /*
    * The verdict, and the workspace it belongs to.
    *
@@ -241,52 +246,59 @@ export function Chat({
         />
       )}
 
-      {tabs.tabs.map((tab) => (
-        <ChatSession
-          // Fixed for the tab's life, and deliberately not the chat id: the
-          // record appears on the first message, and a key that moved with it
-          // would remount the pane in the middle of the turn that created it.
-          key={tab.key}
-          workspace={workspace}
-          tab={tab}
-          // Behind a file as well as behind another conversation: only the
-          // pane on screen may raise a dialog (§10.8).
-          visible={tab.key === tabs.activeKey && files.active === null}
-          onOpened={(chat: ChatRecord) => {
-            tabs.bind(tab.key, chat)
-          }}
-          draft={draftOf(tab.key)}
-          onDraftLeave={(text) => {
-            onDraftLeave(tab.key, text)
-          }}
-          comments={comments}
-          quotes={quotes}
-          codeNotes={codeNotes}
-          attachedFiles={attachedFiles}
-          sideQuestions={sideQuestions}
-          onForkSide={tabs.fork}
-          onForkPlan={tabs.forkPlan}
-          defaultWorkingMode={defaultWorkingMode}
-          planExecutionMode={planExecutionMode}
-          defaultEffort={defaultEffort}
-          defaultModel={defaultModel}
-          defaultPlanModel={defaultPlanModel}
-          onOpenSkillSettings={onOpenSkillSettings}
-          onOpenPromptSettings={onOpenPromptSettings}
-          focusComposer={focusComposer && tab.key === tabs.activeKey}
-          projectEnvProfile={projectEnvProfile}
-          onWorkspacesChanged={onWorkspacesChanged}
-          dismissedTips={dismissedTips}
-          onDismissTip={onDismissTip}
-          headerEnd={headerEnd}
-          // A path named in the log, as the right pane's tree opens one: one
-          // click previews it, a second keeps it.
-          onOpenFile={(path, pinned) => {
-            if (pinned) files.open(path)
-            else files.preview(path)
-          }}
-        />
-      ))}
+      <div ref={setRow} className={`min-h-0 flex-1 ${files.active === null ? 'flex' : 'hidden'}`}>
+        {tabs.tabs.map((tab) => (
+          <ChatSession
+            // Fixed for the tab's life, and deliberately not the chat id: the
+            // record appears on the first message, and a key that moved with it
+            // would remount the pane in the middle of the turn that created it.
+            key={tab.key}
+            workspace={workspace}
+            tab={tab}
+            // Behind a file as well as behind another conversation; only the one
+            // in front may raise a dialog (§10.8).
+            visible={files.active === null && onScreen.includes(tab.key)}
+            focused={files.active === null && tab.key === tabs.activeKey}
+            divided={onScreen.indexOf(tab.key) > 0}
+            onFocusPane={() => {
+              if (tab.key !== tabs.activeKey) tabs.select(tab.key)
+            }}
+            onOpened={(chat: ChatRecord) => {
+              tabs.bind(tab.key, chat)
+            }}
+            draft={draftOf(tab.key)}
+            onDraftLeave={(text) => {
+              onDraftLeave(tab.key, text)
+            }}
+            comments={comments}
+            quotes={quotes}
+            codeNotes={codeNotes}
+            attachedFiles={attachedFiles}
+            sideQuestions={sideQuestions}
+            onForkSide={tabs.fork}
+            onForkPlan={tabs.forkPlan}
+            defaultWorkingMode={defaultWorkingMode}
+            planExecutionMode={planExecutionMode}
+            defaultEffort={defaultEffort}
+            defaultModel={defaultModel}
+            defaultPlanModel={defaultPlanModel}
+            onOpenSkillSettings={onOpenSkillSettings}
+            onOpenPromptSettings={onOpenPromptSettings}
+            focusComposer={focusComposer && tab.key === tabs.activeKey}
+            projectEnvProfile={projectEnvProfile}
+            onWorkspacesChanged={onWorkspacesChanged}
+            dismissedTips={dismissedTips}
+            onDismissTip={onDismissTip}
+            headerEnd={headerEnd}
+            // A path named in the log, as the right pane's tree opens one: one
+            // click previews it, a second keeps it.
+            onOpenFile={(path, pinned) => {
+              if (pinned) files.open(path)
+              else files.preview(path)
+            }}
+          />
+        ))}
+      </div>
 
       {/* Mounted only while in front, unlike the conversations: a file is read
           again each time it comes forward, which is when it may have changed,

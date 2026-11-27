@@ -72,13 +72,37 @@ the whole meaning is in the button's label: "Claude 2: Waiting for your
 answer", or the conversation's own name where it has been given one.
 
 A tab's menu — right-click, or the ellipsis that appears on hover — offers to
-**rename** it, to **continue the conversation in a new tab**, and to **close**
-it. No inline cross: the workspace list settled that question with the menu
+**rename** it, to **continue the conversation in a new tab**, to show it **side
+by side** with the one in front or take it back out, and to **close** it. No
+inline cross: the workspace list settled that question with the menu
 alone, and two answers to one question is a disagreement rather than a
 convenience. An item that could not work is absent rather than disabled: nothing
 to continue before a session has run, and the last conversation cannot be closed
 at all — a workspace with none has no way back to one but the first message, and
 emptying the only one is `/clear`.
+
+**Up to three conversations can be on screen at once, side by side.** "Show side
+by side" puts a tab in the workspace's group — started from the tab in front when
+there is none — and brings it forward. The group's tabs share one 1px frame in
+the strip (two frames when a tab outside it sits between them), the columns run
+in the strip's order, and the underline still marks the one in front: it alone
+takes `⌘O`, raises its plan — a plan waiting in a column beside it shows the
+strip above that field instead — and draws the way back to the first message
+into the header. A press or the focus landing in a column brings it in front. A
+tab outside the group is shown alone and leaves the group as it was; any of the
+group's tabs, by click or `⌥1–3`, brings the whole group back. "Stop showing side
+by side" takes a tab out and the rest stay on screen; a group of one is no group.
+Like the tab in front, the group lives in memory per workspace, and a
+conversation closed from it does not rejoin it when reopened.
+
+**A column is never narrower than 440px** (`SESSION_MIN_WIDTH`, `layout.ts`).
+Bringing a group forward first folds the right pane and then the workspace list
+if their floors leave the columns no room — folded as the button folds them, and
+left so; `makeRoom` in `App` is the one place that decides. The window's minimum
+width then rises to the strip, the panes still on screen and every column (see
+[the right pane](right-pane.md)), and a narrower window is widened at once. Only
+a display too narrow for that drops columns, keeping the one in front, until the
+room comes back.
 
 **Closing keeps the conversation, so it does not ask.** It used to delete the
 transcript, and a confirmation was the only protection a slip had; now the tab
@@ -159,7 +183,7 @@ program or a bundle with `notOpenable` — the system opener would run those, no
 show them.
 
 A file in front hides every conversation behind it — still mounted, still
-streaming — and only the conversation on screen may raise a dialog, so none can
+streaming — and only the conversation in front may raise a dialog, so none can
 while a file is showing. Every way of asking for a conversation (its tab, `⌘T`,
 `⌘⇧T`, `⌥1–3`, a fork, the history) puts the files behind it again, and so does
 everything the right pane sends to a composer — a review note from Changes, a

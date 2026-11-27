@@ -1146,6 +1146,9 @@ export const en = {
     copyTranscript: 'Copy transcript',
     copyTranscriptHint: 'To brief another conversation on this one.',
     closeTab: 'Close conversation',
+    splitTab: 'Show side by side',
+    unsplitTab: 'Stop showing side by side',
+    splitGroup: 'Side by side',
     /* The agent's own task list, pinned above the field while it has work
        left. The progress reads "3 of 7". */
     todos: 'Tasks',
