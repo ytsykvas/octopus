@@ -6,7 +6,7 @@ import type { Chat, ClosedChat } from '@core/chats.js'
 import { chat, emitChatsChanged, emitChatStatus, givenChats } from '../test/chat.js'
 import { held } from '../test/held.js'
 import { octopus } from '../test/octopus.js'
-import { type ChatTab, columnsAfterSplit, columnsFor, useChatTabs } from './useChatTabs.js'
+import { type ChatTab, useChatTabs } from './useChatTabs.js'
 import { inProject } from './workspaceSlots.js'
 
 const WORKSPACE = 'planner/anna'
@@ -1989,23 +1989,5 @@ describe('conversations side by side', () => {
     })
 
     expect(result.current.group).toEqual([])
-  })
-
-  it('counts the columns a tab brings forward, by key or by chat id', async () => {
-    const { result } = await openWith(['chat-1', 'chat-2', 'chat-3'])
-    act(() => {
-      result.current.split('chat-2')
-    })
-    const { tabs, group } = result.current
-
-    expect(columnsFor(tabs, group, 'chat-2')).toBe(2)
-    expect(columnsFor(tabs, group, 'chat-1')).toBe(2)
-    expect(columnsFor(tabs, group, 'chat-3')).toBe(1)
-    expect(columnsFor(tabs, group, 'chat-9')).toBe(1)
-  })
-
-  it('counts the columns a split brings forward', () => {
-    expect(columnsAfterSplit([])).toBe(2)
-    expect(columnsAfterSplit(['first', 'chat-2'])).toBe(3)
   })
 })

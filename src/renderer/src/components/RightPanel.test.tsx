@@ -1955,7 +1955,7 @@ describe('RightPanel', () => {
   it('reserves the room the left column actually takes', () => {
     renderPanel({ leftWidth: 616 })
 
-    // 1400 less a list dragged to its widest, less the centre's own 360.
+    // 1400 less a list dragged to its widest, less the 360 of centre these props keep.
     expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '424')
   })
 

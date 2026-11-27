@@ -31,12 +31,13 @@ The only channels outside this shape are `theme:get`, which cannot fail, and
 
 ### Theme and config
 
-| Channel         | Arguments | Notes                                                                                                                                                                                                                                                                      |
-| --------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `theme:get`     | —         | resolves `system` against the OS                                                                                                                                                                                                                                           |
-| `config:get`    | —         |                                                                                                                                                                                                                                                                            |
-| `config:update` | `patch`   | parsed strictly with `ConfigPatchSchema`: lists (`config:edit`, `board:editColumns`), `version`, `deviceId`, `installedAt`, unknown keys and an `undefined` value are refused; a setting left out is kept. Broadcasts `theme:changed` and `config:changed` to every window |
-| `config:edit`   | `edit`    | one list changed by an operation (`ConfigEditSchema`): a skill off or on by default, a tip dismissed, a standing permission forgotten. Broadcasts like `config:update`                                                                                                     |
+| Channel         | Arguments  | Notes                                                                                                                                                                                                                                                                      |
+| --------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `theme:get`     | —          | resolves `system` against the OS                                                                                                                                                                                                                                           |
+| `frame:fit`     | `minWidth` | an integer: becomes the calling window's minimum width, never under 940 nor past its display, and widens it now if narrower                                                                                                                                                |
+| `config:get`    | —          |                                                                                                                                                                                                                                                                            |
+| `config:update` | `patch`    | parsed strictly with `ConfigPatchSchema`: lists (`config:edit`, `board:editColumns`), `version`, `deviceId`, `installedAt`, unknown keys and an `undefined` value are refused; a setting left out is kept. Broadcasts `theme:changed` and `config:changed` to every window |
+| `config:edit`   | `edit`     | one list changed by an operation (`ConfigEditSchema`): a skill off or on by default, a tip dismissed, a standing permission forgotten. Broadcasts like `config:update`                                                                                                     |
 
 ### Projects
 
@@ -523,7 +524,6 @@ carrying its own session id.
 | `accounts:signOut`     | `kind`, `login` | signing in is interactive and runs in a terminal instead. `kind` is `claude` or `github`; `login` is a string or null                     |
 | `dialog:pickDirectory` | `title`         | `null` when cancelled                                                                                                                     |
 | `dialog:pickSkill`     | `title`         | a file **or** a folder: a skill arrives as either                                                                                         |
-| `window:fit`           | `minWidth`      | an integer: becomes the calling window's minimum width, never under 940 nor past its display, and widens it now if narrower               |
 
 ## Validation
 

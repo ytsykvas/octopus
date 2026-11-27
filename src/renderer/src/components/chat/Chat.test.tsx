@@ -9,6 +9,8 @@ import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import { useSideQuestions } from '../../hooks/useSideQuestions.js'
 import { chat, emitAgentEvent, givenChats } from '../../test/chat.js'
 import { commentController, quoteController } from '../../test/comments.js'
+import type { DiffCommentController } from '../../hooks/useDiffComments.js'
+import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -30,12 +32,16 @@ function Pane({
   workspace = WORKSPACE,
   onForget,
   onShowChanges = vi.fn(),
-  onSelect
+  onSelect,
+  comments = commentController(),
+  quotes = quoteController()
 }: {
   workspace?: WorkspaceView
   onForget?: (chatId: string) => void
   onShowChanges?: (path: string) => void
   onSelect?: (keyOrId: string) => void
+  comments?: DiffCommentController
+  quotes?: PullRequestQuoteController
 }): React.JSX.Element {
   const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
   const files = useFileTabs(workspace.id)
@@ -65,8 +71,8 @@ function Pane({
         onError={vi.fn()}
         draftOf={() => ''}
         onDraftLeave={vi.fn()}
-        comments={commentController()}
-        quotes={quoteController()}
+        comments={comments}
+        quotes={quotes}
         codeNotes={codeNotes}
         attachedFiles={attachedFiles}
         sideQuestions={sideQuestions}
@@ -809,5 +815,49 @@ describe('conversations side by side', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open the plan' }))
     expect(await screen.findByRole('button', { name: 'Fork in new chat' })).toBeInTheDocument()
+  })
+
+  it('offers a note from the diff to the column in front only', async () => {
+    const note = {
+      path: 'src/core/diff.ts',
+      side: 'new' as const,
+      line: 42,
+      endLine: 42,
+      code: 'const b = 2',
+      text: 'This should be 3.'
+    }
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+    const user = userEvent.setup()
+    render(<Pane comments={commentController({ pending: [note] })} />)
+    await screen.findByRole('button', { name: /^Claude 2:/ })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+
+    expect(screen.getAllByRole('button', { name: 'Remove this note' })).toHaveLength(1)
+  })
+
+  it('offers a remark from the pull request to the column in front only', async () => {
+    const quote = {
+      key: 'inline:PRRC_1',
+      reference: '#7',
+      author: 'olena',
+      place: 'src/core/git.ts:42',
+      quote: '@@ -1 +1 @@',
+      body: 'Why the second case?'
+    }
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+    const user = userEvent.setup()
+    render(<Pane quotes={quoteController({ pending: [quote] })} />)
+    await screen.findByRole('button', { name: /^Claude 2:/ })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+
+    expect(screen.getAllByRole('button', { name: 'Remove this note' })).toHaveLength(1)
   })
 })

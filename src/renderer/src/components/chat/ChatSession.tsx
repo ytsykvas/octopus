@@ -81,7 +81,7 @@ interface ChatSessionProps {
   /** Which of the workspace's conversations this is. */
   readonly tab: ChatTab
   /**
-   * Whether this is the tab on screen.
+   * Whether this conversation is on screen, in front or in a column beside it.
    *
    * Passed rather than left to the parent's `hidden` class: a hidden element
    * measures zero, so the log would pin itself to the top of a conversation it
@@ -159,9 +159,9 @@ interface ChatSessionProps {
  * One conversation: its log, its composer and what it is waiting on.
  *
  * Up to three of these are mounted at once, one per tab, and one to three are
- * showing — the same arrangement the right pane uses for its own tabs, and for
- * the same reason: a conversation that unmounted would lose its scroll position
- * and the answer half-streamed into it every time you looked at another.
+ * showing. They stay mounted for the reason the right pane keeps its own tabs:
+ * a conversation that unmounted would lose its scroll position and the answer
+ * half-streamed into it every time you looked at another.
  */
 export function ChatSession({
   workspace,
@@ -981,7 +981,13 @@ export function ChatSession({
            this is already the layer that adapts a controller to a prop, and the
            composer has no business knowing there are two places a note can come
            from. */
-              notes={mergeNotes(comments.pending, quotes.pending, codeNotes.pendingFor(tab.key))}
+              // The diff's notes and the review's are the window's, not a tab's: only the column
+              // in front offers them, or two composers beside each other would both send them.
+              notes={mergeNotes(
+                focused ? comments.pending : [],
+                focused ? quotes.pending : [],
+                codeNotes.pendingFor(tab.key)
+              )}
               onRemoveNote={(note: ChatNote) => {
                 if (note.kind === 'diff') comments.remove(note)
                 else if (note.kind === 'code') codeNotes.remove(tab.key, note)

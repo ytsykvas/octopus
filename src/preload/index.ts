@@ -170,7 +170,7 @@ const api = {
   frame: {
     /** Holds the window at least this wide: each pane on screen and conversation at its narrowest. */
     fit: (minWidth: number): Promise<Result<void>> =>
-      ipcRenderer.invoke('window:fit', minWidth) as Promise<Result<void>>
+      ipcRenderer.invoke('frame:fit', minWidth) as Promise<Result<void>>
   },
 
   config: {

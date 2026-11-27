@@ -1564,6 +1564,7 @@ describe('App', () => {
 
       await split(user, 2)
 
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
       expect(screen.getByRole('button', { name: 'Hide workspaces' })).toBeInTheDocument()
     })
 
@@ -1573,6 +1574,7 @@ describe('App', () => {
       await split(user, 2)
       await user.click(screen.getByRole('button', { name: /^Claude 3: / }))
       window.innerWidth = 1300
+      fireEvent.resize(window)
 
       fireEvent.keyDown(document.body, { key: '¡', code: 'Digit1', altKey: true })
 
@@ -1584,9 +1586,44 @@ describe('App', () => {
       const user = await openAnna(['chat-1', 'chat-2', 'chat-3'])
       await split(user, 2)
       window.innerWidth = 1300
+      fireEvent.resize(window)
 
       await user.click(screen.getByRole('button', { name: /^Claude 3: / }))
 
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
+    })
+
+    it('makes room when coming back to a workspace whose group is in front', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+      await user.click(screen.getByRole('button', { name: /bob/ }))
+      window.innerWidth = 1300
+      fireEvent.resize(window)
+
+      await user.click(screen.getByRole('button', { name: /anna/ }))
+
+      await waitFor(() => {
+        expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+      })
+    })
+
+    it('folds nothing as the focus moves between the columns on screen', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+      window.innerWidth = 1300
+      fireEvent.resize(window)
+
+      const [first] = screen.getAllByRole('log')
+      if (!first) throw new Error('no first column')
+      await user.click(first)
+
+      expect(
+        within(screen.getByRole('navigation', { name: 'Conversations' })).getByRole('button', {
+          name: /^Claude 1: /
+        })
+      ).toHaveAttribute('aria-current', 'page')
       expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
     })
   })

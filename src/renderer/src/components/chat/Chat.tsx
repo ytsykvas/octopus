@@ -138,7 +138,7 @@ export function Chat({
 }: ChatProps): React.JSX.Element {
   const { t } = useTranslation()
   const [reviewing, setReviewing] = useState(false)
-  // Where the visible conversation draws its way back to the first message.
+  // Where the conversation in front draws its way back to the first message.
   const [headerEnd, setHeaderEnd] = useState<HTMLElement | null>(null)
   const [row, setRow] = useState<HTMLDivElement | null>(null)
   const rowWidth = useElementWidth(row)

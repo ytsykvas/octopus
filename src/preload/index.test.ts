@@ -97,7 +97,7 @@ describe('channel names', () => {
   // the feature is used, and then says only "no handler registered".
   const CALLS: readonly [string, () => unknown, string][] = [
     ['theme.get', () => method('theme', 'get')(), 'theme:get'],
-    ['frame.fit', () => method('frame', 'fit')(1000 as never), 'window:fit'],
+    ['frame.fit', () => method('frame', 'fit')(1000 as never), 'frame:fit'],
     ['config.get', () => method('config', 'get')(), 'config:get'],
     ['config.update', () => method('config', 'update')({} as never), 'config:update'],
     ['config.edit', () => method('config', 'edit')({} as never), 'config:edit'],

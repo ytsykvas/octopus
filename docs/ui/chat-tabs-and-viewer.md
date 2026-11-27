@@ -14,7 +14,7 @@ latest one, and in a long conversation the start was otherwise reachable only by
 scrolling. It is a quiet icon button, not the log's floating round one, because
 it sits in a header that does not move. The header belongs to `Chat` and the
 scroller to each `ChatSession`, so `Chat` keeps an empty slot at the row's end
-and the conversation on screen portals its button into it — the scroll and the
+and the conversation in front portals its button into it — the scroll and the
 pinning stay beside the scroller. It is drawn only while that conversation is in
 front and has entries, so a file opened over the chat, or an empty conversation,
 leaves no button that scrolls nothing. It is always enabled: a button that
@@ -96,13 +96,15 @@ Like the tab in front, the group lives in memory per workspace, and a
 conversation closed from it does not rejoin it when reopened.
 
 **A column is never narrower than 440px** (`SESSION_MIN_WIDTH`, `layout.ts`).
-Bringing a group forward first folds the right pane and then the workspace list
-if their floors leave the columns no room — folded as the button folds them, and
-left so; `makeRoom` in `App` is the one place that decides. The window's minimum
-width then rises to the strip, the panes still on screen and every column (see
-[the right pane](right-pane.md)), and a narrower window is widened at once. Only
-a display too narrow for that drops columns, keeping the one in front, until the
-room comes back.
+Whenever more columns come on screen — a split, a group's tab, `⌥1–3`, a return
+to the workspace or from the board, a file closed — the right pane folds and then
+the workspace list if their floors leave the columns no room, folded as the button
+folds them and left so. `App` decides once, while drawing, against the number of
+columns it last made room for, so moving between columns already on screen folds
+nothing. The window's minimum width then rises to the strip, the panes still on
+screen and every column (see [the right pane](right-pane.md)), and a narrower
+window is widened at once. Only a display too narrow for that drops columns,
+keeping the one in front, until the room comes back.
 
 **Closing keeps the conversation, so it does not ask.** It used to delete the
 transcript, and a confirmation was the only protection a slip had; now the tab

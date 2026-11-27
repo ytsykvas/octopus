@@ -352,10 +352,15 @@ function TabButton({
     )
   }
 
-  const tabButton = (onContextMenu?: (event: React.MouseEvent) => void): React.JSX.Element => (
+  const tabButton = (menu?: {
+    readonly open: boolean
+    readonly toggle: (event: React.MouseEvent) => void
+  }): React.JSX.Element => (
     <button
       type="button"
-      onClick={() => {
+      onClick={(event) => {
+        // The menu sits inside its own trigger, so a click here would not dismiss it.
+        if (menu?.open === true) menu.toggle(event)
         controller.select(tab.key)
       }}
       // The same way a workspace is renamed one pane to the left, so the
@@ -363,7 +368,13 @@ function TabButton({
       onDoubleClick={() => {
         if (id !== null) controller.setEditingKey(tab.key)
       }}
-      onContextMenu={onContextMenu}
+      onContextMenu={
+        menu &&
+        ((event) => {
+          event.preventDefault()
+          menu.toggle(event)
+        })
+      }
       aria-current={active ? 'page' : undefined}
       title={described}
       className={`focus-ring flex ${grouped ? 'h-7' : 'h-9'} items-center gap-1.5 px-2.5 text-[12px] transition-colors ${
@@ -409,10 +420,7 @@ function TabButton({
           actions={actions}
           trigger={({ onClick, open }) => (
             <>
-              {tabButton((event) => {
-                event.preventDefault()
-                onClick(event)
-              })}
+              {tabButton({ open, toggle: onClick })}
               <button
                 type="button"
                 onClick={onClick}

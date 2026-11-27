@@ -13,7 +13,7 @@ import { isSubmitEnter } from './submitKey.js'
 
 interface SideQuestionsProps {
   readonly thread: SideThread
-  /** Whether this conversation is the one on screen; a hidden one ignores the window. */
+  /** Whether this conversation is on screen; a hidden one ignores the window. */
   readonly visible: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly onAsk: (question: string) => void

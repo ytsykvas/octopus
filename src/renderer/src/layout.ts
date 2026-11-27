@@ -1,10 +1,14 @@
+// `w-15` in `ProjectTabs`: a Tailwind class cannot be read, so it is stated twice.
 export const PROJECT_STRIP_WIDTH = 60
 
+// The bounds on `sidebarWidth` in the config schema; change them together.
 export const SIDEBAR_MIN_WIDTH = 180
 export const SIDEBAR_MAX_WIDTH = 560
 
+// The schema's floor on `rightPanelWidth`; the real one is the pane's measured tab row.
 export const RIGHT_PANE_MIN_WIDTH = 280
 
+// Where the composer's bottom row wraps onto a second line and no further.
 export const SESSION_MIN_WIDTH = 440
 
 export interface PaneRoom {

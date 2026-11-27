@@ -202,20 +202,6 @@ function groupOf(tabs: readonly ChatTab[], held: readonly string[] | undefined):
   return keys.length > 1 ? keys : NO_GROUP
 }
 
-export function columnsFor(
-  tabs: readonly ChatTab[],
-  group: readonly string[],
-  keyOrId: string
-): number {
-  const key = tabs.find((tab) => answersTo(tab, keyOrId))?.key
-  return key !== undefined && group.includes(key) ? group.length : 1
-}
-
-// No group yet: a split starts one from the tab in front.
-export function columnsAfterSplit(group: readonly string[]): number {
-  return Math.max(2, group.length + 1)
-}
-
 function withoutGone(
   active: ReadonlyMap<string, string>,
   workspaceId: string,

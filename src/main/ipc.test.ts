@@ -388,7 +388,7 @@ describe('channel table', () => {
   // fails at runtime with nothing but "no handler", far from the cause.
   const EXPECTED = [
     'theme:get',
-    'window:fit',
+    'frame:fit',
     'config:get',
     'config:update',
     'config:edit',
@@ -605,13 +605,13 @@ describe('theme', () => {
 
 describe('window floor', () => {
   it('holds the window a call came from to the floor it asks for', async () => {
-    await expect(invoke('window:fit', 1320)).resolves.toEqual({ ok: true, value: undefined })
+    await expect(invoke('frame:fit', 1320)).resolves.toEqual({ ok: true, value: undefined })
 
     expect(bench.fitted).toEqual([{ window: bench.window, minWidth: 1320 }])
   })
 
   it('refuses a floor that is not a whole number of pixels', async () => {
-    await expect(invoke('window:fit', '1320')).resolves.toMatchObject({ ok: false })
+    await expect(invoke('frame:fit', '1320')).resolves.toMatchObject({ ok: false })
 
     expect(bench.fitted).toEqual([])
   })
@@ -619,7 +619,7 @@ describe('window floor', () => {
   it('leaves a window that has gone alone', async () => {
     bench.window = null
 
-    await expect(invoke('window:fit', 1320)).resolves.toMatchObject({ ok: true })
+    await expect(invoke('frame:fit', 1320)).resolves.toMatchObject({ ok: true })
     expect(bench.fitted).toEqual([])
   })
 })

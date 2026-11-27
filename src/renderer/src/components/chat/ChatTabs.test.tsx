@@ -478,6 +478,17 @@ describe('side by side', () => {
     expect(screen.getByRole('menuitem', { name: 'Rename…' })).toBeInTheDocument()
   })
 
+  it('closes the menu when its tab is clicked', async () => {
+    const select = vi.fn()
+    render(<ChatTabs tabs={controller({ tabs: three, select })} />)
+    await rightClick(2)
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Claude 2:/ }))
+
+    expect(screen.queryByRole('menuitem', { name: 'Rename…' })).not.toBeInTheDocument()
+    expect(select).toHaveBeenCalledWith('chat-2')
+  })
+
   it('offers to show another tab beside the one in front', async () => {
     const split = vi.fn()
     render(<ChatTabs tabs={controller({ tabs: three, split })} />)

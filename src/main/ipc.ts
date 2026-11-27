@@ -288,7 +288,7 @@ export function registerIpc(
 ): void {
   host.handle('theme:get', () => resolveTheme(service.getConfig().theme, host.prefersDark()))
 
-  host.handle('window:fit', (event, minWidth: unknown) =>
+  host.handle('frame:fit', (event, minWidth: unknown) =>
     attempt(() => {
       const floor = WindowFloorSchema.parse(minWidth)
       const window = host.windowFor(event)
