@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { columnsOnScreen, foldsFor, sidebarCeiling, windowFloor } from './layout.js'
+import {
+  columnsOnScreen,
+  foldsFor,
+  rightPaneCeiling,
+  sidebarCeiling,
+  windowFloor
+} from './layout.js'
 
 describe('windowFloor', () => {
   it('counts the strip, each pane on screen at its narrowest and every conversation', () => {
@@ -37,6 +43,20 @@ describe('sidebarCeiling', () => {
 
   it('never below the list’s narrowest', () => {
     expect(sidebarCeiling(940, { listShown: true, rightFloor: 300, columns: 1 })).toBe(180)
+  })
+})
+
+describe('rightPaneCeiling', () => {
+  it('leaves the strip, the list and the conversation their room', () => {
+    expect(rightPaneCeiling(1400, 240, 1)).toBe(1400 - 60 - 240 - 440)
+  })
+
+  it('takes the room of a folded list', () => {
+    expect(rightPaneCeiling(1400, 0, 1)).toBe(1400 - 60 - 440)
+  })
+
+  it('makes room for every conversation shown side by side', () => {
+    expect(rightPaneCeiling(1600, 240, 2)).toBe(1600 - 60 - 240 - 880)
   })
 })
 

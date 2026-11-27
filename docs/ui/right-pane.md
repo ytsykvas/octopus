@@ -127,10 +127,11 @@ content, so nothing there looks different.
 
 The right pane's ceiling
 is whatever the window has left after the left column and a usable centre, so it
-grows on a large display without a number to maintain. That column is passed
-down from `App`: it is the project strip plus a list that is resizable and folds
-away, and against the constant it used to be measured by, a list dragged wide
-left the centre nothing at all.
+grows on a large display without a number to maintain. `App` works it out
+(`rightPaneCeiling` in `layout.ts`) and hands the pane the number: only it holds
+the window's width, the list — resizable, and folding away — and the
+conversations on screen, and against the constant the left column used to be
+measured by, a list dragged wide left the centre nothing at all.
 
 **The right pane keeps the width it was dragged to, and the window's edge moves
 the centre** — the way a sidebar behaves in most desktop applications. Widen the

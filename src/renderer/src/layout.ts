@@ -27,6 +27,10 @@ export function sidebarCeiling(windowWidth: number, room: PaneRoom): number {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, left))
 }
 
+export function rightPaneCeiling(windowWidth: number, listWidth: number, columns: number): number {
+  return windowWidth - PROJECT_STRIP_WIDTH - listWidth - columns * SESSION_MIN_WIDTH
+}
+
 export interface Folds {
   readonly right: boolean
   readonly list: boolean

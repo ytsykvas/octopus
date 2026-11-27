@@ -493,7 +493,7 @@ describe('App', () => {
     expect(tab('LE')).toBeInTheDocument()
   })
 
-  // Asserted here because the pane's own tests are handed the left column's width.
+  // Asserted here because the pane's own tests are handed their ceiling.
   // 1024 less the strip (60), the list (240) and one conversation (440) leaves 284;
   // folding the list hands its 240 to the pane.
   it('offers the pane the room the folded list gives up', async () => {
@@ -513,6 +513,25 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
 
     expect(paneEdge()).toHaveAttribute('aria-valuemax', '524')
+  })
+
+  it('lowers the right pane’s ceiling as the window narrows', async () => {
+    const wide = window.innerWidth
+    window.innerWidth = 1400
+
+    try {
+      givenTwoProjects()
+      await openApp()
+
+      expect(edges().panel).toHaveAttribute('aria-valuemax', String(1400 - 60 - 240 - 440))
+
+      window.innerWidth = 1200
+      fireEvent.resize(window)
+
+      expect(edges().panel).toHaveAttribute('aria-valuemax', String(1200 - 60 - 240 - 440))
+    } finally {
+      window.innerWidth = wide
+    }
   })
 
   it('opens the settings dialog from the sidebar', async () => {

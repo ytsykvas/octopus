@@ -23,7 +23,6 @@ import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import type { ServerControls } from '../hooks/useServerControls.js'
 import { useEnvProfiles } from '../hooks/useEnvProfiles.js'
 import { useServingPort } from '../hooks/useServingPort.js'
-import { useWindowEvent } from '../hooks/useWindowEvent.js'
 import type { WorkspaceView } from '@core/workspaces.js'
 import { RIGHT_PANE_MIN_WIDTH } from '@core/windowFit.js'
 
@@ -118,15 +117,6 @@ const STAGE_HINTS = {
   failed: 'scripts.runHint'
 } as const
 
-function maxWidthFor(
-  windowWidth: number,
-  leftWidth: number,
-  minWidth: number,
-  centreMin: number
-): number {
-  return Math.max(minWidth, windowWidth - leftWidth - centreMin)
-}
-
 interface RightPanelProps {
   readonly workspaces: readonly WorkspaceView[]
   readonly activeWorkspaceId: string | null
@@ -191,9 +181,8 @@ interface RightPanelProps {
   readonly open: boolean
   /** Asked for by a drag past the floor, which folds the pane, and back. */
   readonly onOpenChange: (open: boolean) => void
-  /** The project strip plus the workspace list, or just the strip when folded. */
-  readonly leftWidth: number
-  readonly centreMin: number
+  /** What the window leaves the pane; the floor its tabs need wins over it. */
+  readonly ceiling: number
   readonly onFloor: (floor: number) => void
   /** How the reader asked for diffs to be laid out, across sessions. */
   readonly diffView: DiffView
@@ -259,8 +248,7 @@ export function RightPanel({
   onWidthChange,
   open,
   onOpenChange,
-  leftWidth,
-  centreMin,
+  ceiling,
   onFloor,
   diffView,
   onDiffView,
@@ -285,7 +273,6 @@ export function RightPanel({
   // The pane follows the cursor from local state; the config only hears about
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
-  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
   const [minWidth, setMinWidth] = useState(RIGHT_PANE_MIN_WIDTH)
   /*
    * Whether the build half is open. Folded to start with, every time.
@@ -484,12 +471,6 @@ export function RightPanel({
    */
   const scriptable = workspaces
 
-  // The ceiling moves with the window: shrinking it must not leave the pane
-  // covering the centre, and growing it should make the extra room available.
-  useWindowEvent('resize', () => {
-    setWindowWidth(window.innerWidth)
-  })
-
   // Re-measured on a language change, which is when the labels get longer —
   // and on unfolding, since a pane that started folded measured its tabs while
   // they had no size at all and would otherwise keep a floor of nothing.
@@ -506,7 +487,7 @@ export function RightPanel({
     onFloor(floor)
   }, [i18n.language, open, onFloor])
 
-  const maxWidth = maxWidthFor(windowWidth, leftWidth, minWidth, centreMin)
+  const maxWidth = Math.max(minWidth, ceiling)
 
   /*
    * The pane keeps the width it was given, and the window's edge moves the

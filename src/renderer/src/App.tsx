@@ -81,13 +81,7 @@ import { useWorkspaces } from './hooks/useWorkspaces.js'
 import { useAttention } from './hooks/useAttention.js'
 import { AttentionToasts } from './components/AttentionToasts.js'
 import { StatusBar, type StatusTarget } from './components/statusBar/StatusBar.js'
-import {
-  PROJECT_STRIP_WIDTH,
-  SESSION_MIN_WIDTH,
-  foldsFor,
-  sidebarCeiling,
-  windowFloor
-} from './layout.js'
+import { foldsFor, rightPaneCeiling, sidebarCeiling, windowFloor } from './layout.js'
 
 /** The schema's own default, for the render before the config has been read. */
 const DEFAULT_SIDEBAR_WIDTH = 240
@@ -1471,12 +1465,9 @@ export function App(): React.JSX.Element {
           onAttachFile={attachFile}
           reveal={diffReveal}
           onError={setError}
-          // The room the pane must leave alone. Folded away, the list takes
-          // none of it — and the pane may have that room too. Not so on the
-          // board, where the pane is offstage: widening it there would resize
-          // every terminal in it.
-          leftWidth={PROJECT_STRIP_WIDTH + (sidebarOpen ? listWidth : 0)}
-          centreMin={columns * SESSION_MIN_WIDTH}
+          // `sidebarOpen`, not `listShown`: on the board the pane is offstage, and
+          // widening it into the list's room there would resize every terminal in it.
+          ceiling={rightPaneCeiling(windowWidth, sidebarOpen ? listWidth : 0, columns)}
           onFloor={setRightFloor}
         />
       </div>
