@@ -1,6 +1,16 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeTheme,
+  screen,
+  session,
+  shell
+} from 'electron'
 
 import { describeError } from '../core/persist.js'
 import { claimDataRoot, type DataLock } from '../core/dataLock.js'
@@ -14,6 +24,7 @@ import {
 } from '../core/service.js'
 import { type BackupRecovery, openWithRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
+import { WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH } from '../core/windowFit.js'
 import {
   pushBoardChanged,
   pushBrainstormEntry,
@@ -59,8 +70,8 @@ function createWindow(theme: ThemeName, terminals: TerminalManager): BrowserWind
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
-    minWidth: 940,
-    minHeight: 620,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
     show: false,
     backgroundColor: canvasColor(theme),
     // §10.5: hiddenInset stays; vibrancy is deliberately unused — translucent
@@ -242,7 +253,8 @@ async function start(): Promise<void> {
     ...electronIpcHost({
       ipcMain,
       dialog,
-      fromWebContents: (sender) => BrowserWindow.fromWebContents(sender)
+      fromWebContents: (sender) => BrowserWindow.fromWebContents(sender),
+      screen
     }),
     prefersDark: () => nativeTheme.shouldUseDarkColors,
     // Each one hands `broadcast.ts` the windows to reach. The channel names

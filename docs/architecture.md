@@ -132,8 +132,8 @@ it acts on as parameters — the contents, the disposal and the dialogs — so t
 decisions are tested without Electron, and `index.ts` passes in the real ones.
 
 `electronHost.ts` is the part of `IpcHost` that needs a cast to meet Electron's
-types: the handler table and the folder picker, with `windowFor`, whose answer
-is the picker's parent. The two casts live there, where a test reaches them,
+types: the handler table, the folder picker and the window's floor, with
+`windowFor`, whose answer is the picker's parent and the window held to that floor. The two casts live there, where a test reaches them,
 rather than in `index.ts`. `windows.ts` answers what the Dock and the last closed window do,
 `theme.ts` what a change of the OS appearance does under each preference, and
 `core/paths.ts` where a copy with its own data root keeps Electron's folder.

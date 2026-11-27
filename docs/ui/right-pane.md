@@ -127,17 +127,26 @@ content, so nothing there looks different.
 
 The right pane's ceiling
 is whatever the window has left after the left column and a usable centre, so it
-grows on a large display without a number to maintain. That column is passed
-down from `App`: it is the project strip plus a list that is resizable and folds
-away, and against the constant it used to be measured by, a list dragged wide
-left the centre nothing at all.
+grows on a large display without a number to maintain. `App` works it out
+(`rightPaneCeiling` in `layout.ts`) and hands the pane the number: only it holds
+the window's width, the list — resizable, and folding away — and the
+conversations on screen, and against the constant the left column used to be
+measured by, a list dragged wide left the centre nothing at all.
 
 **The right pane keeps the width it was dragged to, and the window's edge moves
 the centre** — the way a sidebar behaves in most desktop applications. Widen the
 window and the pane travels with its right edge at the same width while the
 conversation gets the room; narrow it and the centre gives the room back, until
-it is down to its own 360 and the pane begins to give way, never below what its
-tabs need. The list on the left never yields a pixel.
+it is down to 440px for each conversation on screen (`SESSION_MIN_WIDTH` in
+`layout.ts`) and the pane begins to give way, never below what its tabs need.
+Then the list gives way, down to its own 180. Past that the window stops: `App`
+sends `frame:fit` the strip, each pane on screen at its floor and the
+conversations, and main makes that the window's minimum width — never wider
+than the display, yet never under 940, which wins on a display narrower than
+that — widening the window at once if it is
+narrower, moved left where its display ends. Nothing is sent before the config
+is read: the pane starts open in the window's state, and a floor counting a pane
+the config keeps folded would widen a window for nothing.
 
 It was the other way round for a while: the pane absorbed every pixel the window
 gained or lost, on the grounds that the conversation stops widening at 72rem and

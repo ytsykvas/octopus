@@ -160,10 +160,11 @@ pixels above the screen in any long conversation, and a send that failed looked
 like an agent that never answered. A ceiling rather than a width: it
 only applies once the panes are dragged that far apart.
 
-**The composer's two rows wrap rather than overflow.** The centre reaches
-`MIN_CENTRE_WIDTH` (360, in `RightPanel.tsx`) — by a drag, or by a narrowed
-window, which the centre absorbs before the right pane gives way — and at that width the
-footer cannot hold its three settings and the send button side by side. It used
+**The composer's two rows wrap rather than overflow.** A conversation reaches
+`SESSION_MIN_WIDTH` (440, in `layout.ts`) — by a drag, by a narrowed window,
+which the centre absorbs before the panes give way, or by sharing the centre
+side by side — and near that width the footer may not hold its three settings
+and the send button side by side. It used
 to run past the rounded border and take the send button off the edge of the
 block — Enter still sent, but the pane's primary control was not on screen. Each
 control carries `min-w-0` rather than `shrink-0` for the same reason: `truncate`

@@ -1,5 +1,5 @@
-import type { BrowserWindow, OpenDialogOptions, WebContents } from 'electron'
-import { describe, expect, it } from 'vitest'
+import type { BrowserWindow, Display, OpenDialogOptions, WebContents } from 'electron'
+import { describe, expect, it, vi } from 'vitest'
 
 import { electronIpcHost } from './electronHost.js'
 
@@ -29,7 +29,11 @@ function fakeHost(): {
     ipc: electronIpcHost({
       ipcMain: { handle },
       dialog: { showOpenDialog },
-      fromWebContents: (sender) => (sender === SENDER ? WINDOW : null)
+      fromWebContents: (sender) => (sender === SENDER ? WINDOW : null),
+      screen: {
+        getDisplayMatching: () =>
+          ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }) as Display
+      }
     })
   }
 }
@@ -66,4 +70,39 @@ describe('electronIpcHost', () => {
     expect(ipc.windowFor({ sender: SENDER })).toBe(WINDOW)
     expect(ipc.windowFor({ sender: {} as WebContents })).toBeNull()
   })
+
+  it('holds the window to its floor, widening one narrower', () => {
+    const { ipc } = fakeHost()
+    const { window, setMinimumSize, setBounds } = windowAt(1000)
+
+    ipc.setWindowFloor(window, 1200)
+
+    expect(setMinimumSize).toHaveBeenCalledWith(1200, 620)
+    expect(setBounds).toHaveBeenCalledWith({ x: 240, y: 0, width: 1200, height: 800 })
+  })
+
+  it('leaves a window already wide enough where it is', () => {
+    const { ipc } = fakeHost()
+    const { window, setMinimumSize, setBounds } = windowAt(1300)
+
+    ipc.setWindowFloor(window, 1200)
+
+    expect(setMinimumSize).toHaveBeenCalledWith(1200, 620)
+    expect(setBounds).not.toHaveBeenCalled()
+  })
 })
+
+function windowAt(width: number): {
+  readonly window: BrowserWindow
+  readonly setMinimumSize: ReturnType<typeof vi.fn>
+  readonly setBounds: ReturnType<typeof vi.fn>
+} {
+  const setMinimumSize = vi.fn()
+  const setBounds = vi.fn()
+  const window = {
+    getBounds: () => ({ x: 300, y: 0, width, height: 800 }),
+    setMinimumSize,
+    setBounds
+  } as unknown as BrowserWindow
+  return { window, setMinimumSize, setBounds }
+}

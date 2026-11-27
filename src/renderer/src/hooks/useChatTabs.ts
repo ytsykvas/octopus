@@ -59,6 +59,12 @@ export interface ChatTabsController {
   readonly select: (keyOrId: string) => void
   /** Chooses the tab a workspace opens on, before it is the one on screen. */
   readonly selectIn: (workspaceId: string, keyOrId: string) => void
+  /** The tabs drawn side by side while one of them is in front, in strip order. */
+  readonly group: readonly string[]
+  readonly shownKeys: readonly string[]
+  /** Adds a tab to the group — started from the tab in front — and brings it forward. */
+  readonly split: (key: string) => void
+  readonly unsplit: (key: string) => void
   /** Whether another conversation may be opened here; false at the cap. */
   readonly canCreate: boolean
   /**
@@ -189,6 +195,13 @@ function answersTo(tab: ChatTab, keyOrId: string | undefined): boolean {
   return tab.key === keyOrId || tab.id === keyOrId
 }
 
+const NO_GROUP: readonly string[] = []
+
+function groupOf(tabs: readonly ChatTab[], held: readonly string[] | undefined): readonly string[] {
+  const keys = tabs.filter((tab) => held?.includes(tab.key) === true).map((tab) => tab.key)
+  return keys.length > 1 ? keys : NO_GROUP
+}
+
 function withoutGone(
   active: ReadonlyMap<string, string>,
   workspaceId: string,
@@ -200,6 +213,16 @@ function withoutGone(
   const rest = new Map(active)
   rest.delete(workspaceId)
   return rest
+}
+
+function withoutGoneFromGroup(
+  groups: ReadonlyMap<string, readonly string[]>,
+  workspaceId: string,
+  tabs: readonly ChatTab[]
+): ReadonlyMap<string, readonly string[]> {
+  const held = groups.get(workspaceId) ?? NO_GROUP
+  const kept = held.filter((key) => tabs.some((tab) => tab.key === key))
+  return kept.length === held.length ? groups : new Map(groups).set(workspaceId, kept)
 }
 
 function stripOf(
@@ -245,6 +268,9 @@ export function useChatTabs(
    * on conversation 3 is losing your place for no reason.
    */
   const [activeByWorkspace, setActiveByWorkspace] = useState<ReadonlyMap<string, string>>(new Map())
+  const [groupByWorkspace, setGroupByWorkspace] = useState<ReadonlyMap<string, readonly string[]>>(
+    new Map()
+  )
   const [editingKey, setEditingKey] = useState<string | null>(null)
 
   // The workspace on screen, for the callbacks to check against. Updated in an
@@ -345,6 +371,7 @@ export function useChatTabs(
       keep(id, next)
       // Held on, a tab that has gone would pull the view back to it when it returns.
       setActiveByWorkspace((current) => withoutGone(current, id, next))
+      setGroupByWorkspace((current) => withoutGoneFromGroup(current, id, next))
     },
     [describeFailure, keep]
   )
@@ -441,6 +468,7 @@ export function useChatTabs(
       }
       setStrips((current) => withoutWorkspaces(current, gone))
       setActiveByWorkspace((current) => withoutWorkspaces(current, gone))
+      setGroupByWorkspace((current) => withoutWorkspaces(current, gone))
       // A removed workspace can stay the selected id, and one made under it draws no reset.
       const id = shown.current
       if (id !== null && gone(id)) setTabs(VIRGIN)
@@ -457,6 +485,36 @@ export function useChatTabs(
     tabs.find((tab) => answersTo(tab, remembered)) ?? tabs[0],
     'a tab on the strip'
   ).key
+  const group = groupOf(tabs, workspaceId === null ? undefined : groupByWorkspace.get(workspaceId))
+  const shownKeys = group.includes(activeKey) ? group : [activeKey]
+
+  const split = useCallback(
+    (key: string) => {
+      const id = shown.current
+      if (id === null) return
+
+      const next = group.length === 0 ? [activeKey, key] : [...group, key]
+      setGroupByWorkspace((current) => new Map(current).set(id, next))
+      setActiveByWorkspace((current) => new Map(current).set(id, key))
+    },
+    [group, activeKey, shown]
+  )
+
+  const unsplit = useCallback(
+    (key: string) => {
+      const id = shown.current
+      if (id === null) return
+
+      const rest = group.filter((held) => held !== key)
+      setGroupByWorkspace((current) => new Map(current).set(id, rest))
+      const [next] = rest
+      // Shown alone once out of the group, it would take the rest off screen with it.
+      if (key === activeKey && next !== undefined) {
+        setActiveByWorkspace((current) => new Map(current).set(id, next))
+      }
+    },
+    [group, activeKey, shown]
+  )
 
   /**
    * Opens another conversation, materialising the first if it is still virtual.
@@ -676,6 +734,10 @@ export function useChatTabs(
     activeKey,
     select,
     selectIn,
+    group,
+    shownKeys,
+    split,
+    unsplit,
     rename,
     editingKey,
     setEditingKey,

@@ -907,6 +907,9 @@ export const de: Translation = {
     copyTranscript: 'Verlauf kopieren',
     copyTranscriptHint: 'Um einen anderen Chat über diesen zu informieren.',
     closeTab: 'Chat schließen',
+    splitTab: 'Nebeneinander zeigen',
+    unsplitTab: 'Nicht mehr nebeneinander zeigen',
+    splitGroup: 'Nebeneinander',
     todos: 'Aufgaben',
     todosProgress: '{{done}} von {{total}}',
     todoStatus: {

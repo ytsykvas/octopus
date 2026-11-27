@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type ComponentProps, useState } from 'react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { stubDialogElement } from '../test/dialog.js'
 import { octopus } from '../test/octopus.js'
@@ -62,24 +62,8 @@ function processExits(n: number, exitCode = 0): void {
   })
 }
 
-/**
- * The pane's ceiling is derived from the window, so a test that narrows the
- * window has to put it back — the next one reads its own ceiling on mount and
- * would otherwise inherit a window nobody in it asked for.
- */
-const WINDOW_WIDTH = window.innerWidth
-
-/**
- * A window wide enough that the ceiling is not what these tests measure.
- *
- * jsdom's own 1024 leaves the pane eight pixels of headroom once the left
- * column and the centre have their share, so a drag test there would be
- * asserting the clamp rather than the drag.
- */
-const ROOMY = 1400
-
-/** The project strip plus a workspace list at its default width. */
-const LEFT_WIDTH = 296
+// High enough that a drag test measures the drag rather than the clamp.
+const CEILING = 744
 
 /**
  * The pane, with something above it holding the tab.
@@ -139,7 +123,8 @@ function renderPanel(overrides: Partial<Props> = {}): {
     onWidthChange: vi.fn(),
     open: true,
     onOpenChange: vi.fn(),
-    leftWidth: LEFT_WIDTH,
+    ceiling: CEILING,
+    onFloor: vi.fn(),
     diffView: 'unified',
     onDiffView: vi.fn(),
     tab: 'diff',
@@ -225,16 +210,11 @@ beforeAll(stubDialogElement)
 describe('RightPanel', () => {
   beforeEach(() => {
     stubTerminalHost()
-    window.innerWidth = ROOMY
     exits.length = 0
     vi.mocked(octopus().terminal.onExit).mockImplementation((handler) => {
       exits.push(handler)
       return vi.fn()
     })
-  })
-
-  afterEach(() => {
-    window.innerWidth = WINDOW_WIDTH
   })
 
   // The pane identifies its project the way the tab strip, the sidebar and the
@@ -1788,7 +1768,7 @@ describe('RightPanel', () => {
       toJSON: () => ({})
     })
 
-    renderPanel({ width: 280 })
+    const { props } = renderPanel({ width: 280 })
 
     await waitFor(() => {
       /*
@@ -1802,6 +1782,7 @@ describe('RightPanel', () => {
        */
       expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '540')
     })
+    expect(props.onFloor).toHaveBeenLastCalledWith(540)
   })
 
   // Folded away, the pane is hidden rather than unmounted — its terminals and
@@ -1930,91 +1911,48 @@ describe('RightPanel', () => {
     expect(props.onWidthChange).toHaveBeenCalledExactlyOnceWith(376)
   })
 
-  // A window narrowed after the pane was sized must not leave the pane covering
-  // the centre: the ceiling follows the window rather than being read once.
-  it('lowers the ceiling as the window narrows, never below the floor', () => {
-    renderPanel({ width: 360 })
-    const edge = screen.getByRole('separator')
+  it('never offers less than its floor, however little room the window leaves', () => {
+    renderPanel({ width: 360, ceiling: 44 })
 
-    window.innerWidth = 700
-    fireEvent.resize(window)
-
-    // 700 has no room for the left column, a usable centre and this pane, so
-    // the floor is what is left — the ceiling stops there rather than below it.
-    expect(edge).toHaveAttribute('aria-valuemax', '280')
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '280')
   })
 
-  /*
-   * The room reserved for the rest of the window used to be the constant 256,
-   * and the 360 of centre it claimed to keep was fiction: the left column is a
-   * project strip plus a list that is resizable between 180 and 560 and folds
-   * away entirely. Dragged wide, it left the centre nothing at all.
-   */
-  it('reserves the room the left column actually takes', () => {
-    renderPanel({ leftWidth: 616 })
+  it('takes the room the window leaves it as its ceiling', () => {
+    renderPanel({ ceiling: 460 })
 
-    // 1400 less a list dragged to its widest, less the centre's own 360.
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '424')
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '460')
   })
 
-  // Folded away, the list takes none of the window — and the pane may have the
-  // room it was holding.
-  it('offers the folded list’s room to the pane', () => {
-    renderPanel({ leftWidth: 56 })
+  // The pane keeps the width it was given and the window's edge moves the centre.
+  it('keeps its width when the room grows, so the centre takes it', () => {
+    const { rerender } = renderPanel({ width: 360 })
 
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '984')
-  })
-
-  /*
-   * The pane keeps the width it was given and the window's edge moves the
-   * centre, as a sidebar does in most desktop applications. It used to take
-   * every pixel the window gained or lost, which read as the pane having a mind
-   * of its own.
-   */
-  it('keeps its width when the window widens, so the centre takes the room', () => {
-    renderPanel({ width: 360 })
-
-    window.innerWidth = 1600
-    fireEvent.resize(window)
+    rerender({ ceiling: 944 })
 
     expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '360')
   })
 
-  it('keeps its width when the window narrows while the centre has room to give', () => {
-    renderPanel({ width: 360 })
+  it('keeps its width while the room still holds it', () => {
+    const { rerender } = renderPanel({ width: 360 })
 
-    // 1100 less the left column's 296 and this pane's 360 leaves the centre
-    // 444 — more than its floor, so the centre is what got narrower.
-    window.innerWidth = 1100
-    fireEvent.resize(window)
+    rerender({ ceiling: 444 })
 
     expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '360')
   })
 
-  /*
-   * Where the pane finally gives way: the centre is down to its own floor of
-   * 360. jsdom lays nothing out, so the centre's share is not observable here;
-   * what is, is that the pane stops claiming what the centre needs — `main` is
-   * the only flexible child of the layout row in `App`, so the two are one
-   * budget.
-   */
-  it('gives way only once the centre is down to its floor', () => {
-    renderPanel({ width: 360 })
-    const edge = screen.getByRole('separator')
+  it('gives way once the room is narrower than its width', () => {
+    const { rerender } = renderPanel({ width: 360 })
 
-    // 1000 less 296 less the centre's 360 leaves 344 for the pane.
-    window.innerWidth = 1000
-    fireEvent.resize(window)
+    rerender({ ceiling: 344 })
 
-    expect(edge).toHaveAttribute('aria-valuenow', '344')
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '344')
   })
 
   it('stops at the width its tabs need and leaves the rest to the centre', () => {
-    renderPanel({ width: 360 })
+    const { rerender } = renderPanel({ width: 360 })
     const edge = screen.getByRole('separator')
 
-    window.innerWidth = 900
-    fireEvent.resize(window)
+    rerender({ ceiling: 244 })
 
     expect(edge).toHaveAttribute('aria-valuenow', '280')
     expect(edge).toHaveAttribute('aria-valuemin', '280')
@@ -2022,14 +1960,12 @@ describe('RightPanel', () => {
 
   // What the window took is shown, never saved — the dragged width comes back
   // once the room does.
-  it('comes back to the width it was given when the window has room again', () => {
-    renderPanel({ width: 360 })
+  it('comes back to the width it was given when the room does', () => {
+    const { rerender } = renderPanel({ width: 360 })
     const edge = screen.getByRole('separator')
 
-    window.innerWidth = 900
-    fireEvent.resize(window)
-    window.innerWidth = 1600
-    fireEvent.resize(window)
+    rerender({ ceiling: 244 })
+    rerender({ ceiling: 944 })
 
     expect(edge).toHaveAttribute('aria-valuenow', '360')
   })

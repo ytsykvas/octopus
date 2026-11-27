@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,6 +9,8 @@ import { useCodeNotes } from '../../hooks/useCodeNotes.js'
 import { useSideQuestions } from '../../hooks/useSideQuestions.js'
 import { chat, emitAgentEvent, givenChats } from '../../test/chat.js'
 import { commentController, quoteController } from '../../test/comments.js'
+import type { DiffCommentController } from '../../hooks/useDiffComments.js'
+import type { PullRequestQuoteController } from '../../hooks/usePullRequestQuotes.js'
 import { stubDialogElement } from '../../test/dialog.js'
 import { octopus } from '../../test/octopus.js'
 import type { WorkspaceView } from '@core/workspaces.js'
@@ -29,11 +31,17 @@ const WORKSPACE = workspaceView('anna')
 function Pane({
   workspace = WORKSPACE,
   onForget,
-  onShowChanges = vi.fn()
+  onShowChanges = vi.fn(),
+  onSelect,
+  comments = commentController(),
+  quotes = quoteController()
 }: {
   workspace?: WorkspaceView
   onForget?: (chatId: string) => void
   onShowChanges?: (path: string) => void
+  onSelect?: (keyOrId: string) => void
+  comments?: DiffCommentController
+  quotes?: PullRequestQuoteController
 }): React.JSX.Element {
   const tabs = useChatTabs(workspace.id, vi.fn(), vi.fn())
   const files = useFileTabs(workspace.id)
@@ -52,13 +60,19 @@ function Pane({
     <>
       <Chat
         workspace={workspace}
-        tabs={tabs}
+        tabs={{
+          ...tabs,
+          select: (keyOrId) => {
+            onSelect?.(keyOrId)
+            tabs.select(keyOrId)
+          }
+        }}
         files={files}
         onError={vi.fn()}
         draftOf={() => ''}
         onDraftLeave={vi.fn()}
-        comments={commentController()}
-        quotes={quoteController()}
+        comments={comments}
+        quotes={quotes}
         codeNotes={codeNotes}
         attachedFiles={attachedFiles}
         sideQuestions={sideQuestions}
@@ -192,6 +206,20 @@ describe('the way back to the first message', () => {
 
     const jump = screen.getByRole('button', { name: 'Jump to the first message' })
     expect(screen.getByRole('banner')).toContainElement(jump)
+  })
+
+  it('is drawn once with two conversations side by side', async () => {
+    const user = userEvent.setup()
+    await openTwoWithHistory()
+
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+
+    expect(screen.getAllByRole('log')).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Jump to the first message' })).toHaveLength(1)
   })
 
   it('goes while a file is in front, when there is no log to scroll', async () => {
@@ -670,5 +698,246 @@ describe('the way from the viewer to the Changes pane', () => {
     await user.click(await screen.findByRole('button', { name: 'Show changes' }))
 
     expect(onShowChanges).toHaveBeenCalledExactlyOnceWith('src/a.ts')
+  })
+})
+
+describe('conversations side by side', () => {
+  async function splitSecond(
+    ids: readonly string[] = ['chat-1', 'chat-2'],
+    onSelect: (keyOrId: string) => void = vi.fn()
+  ): Promise<ReturnType<typeof userEvent.setup>> {
+    givenChats(ids.map((id) => chat({ id })))
+    const user = userEvent.setup()
+    render(<Pane onSelect={onSelect} />)
+    await screen.findByRole('button', { name: new RegExp(`^Claude ${String(ids.length)}:`) })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+    return user
+  }
+
+  function column(at: number): HTMLElement {
+    const found = screen.getAllByRole('log').at(at)
+    if (!found) throw new Error(`no column at ${String(at)}`)
+    return found
+  }
+
+  it('draws the conversation split off beside the one in front', async () => {
+    await splitSecond()
+
+    expect(screen.getAllByRole('log')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: /^Claude 2:/ })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  it('brings forward the column pressed in', async () => {
+    const user = await splitSecond()
+
+    await user.click(column(0))
+
+    expect(screen.getByRole('button', { name: /^Claude 1:/ })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  it('brings forward the column the focus lands in', async () => {
+    await splitSecond()
+
+    act(() => {
+      within(column(0).parentElement ?? column(0))
+        .getByRole('textbox')
+        .focus()
+    })
+
+    expect(screen.getByRole('button', { name: /^Claude 1:/ })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  it('asks for nothing when the column in front is pressed', async () => {
+    const onSelect = vi.fn()
+    const user = await splitSecond(['chat-1', 'chat-2'], onSelect)
+    onSelect.mockClear()
+
+    await user.click(column(-1))
+
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('draws only the column in front where the screen holds one', async () => {
+    const observers: ResizeObserverCallback[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          observers.push(callback)
+        }
+        observe = vi.fn()
+        unobserve = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
+
+    try {
+      await splitSecond()
+      act(() => {
+        for (const notify of observers) {
+          notify([{ contentRect: { width: 600 } } as ResizeObserverEntry], {} as ResizeObserver)
+        }
+      })
+
+      expect(screen.getAllByRole('log')).toHaveLength(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('raises a plan only in the column in front, offering it beside', async () => {
+    givenChats([
+      chat({ id: 'chat-1', planMode: true, sessionId: 'sess-1' }),
+      chat({ id: 'chat-2' })
+    ])
+    const user = userEvent.setup()
+    render(<Pane />)
+    await screen.findByRole('button', { name: /^Claude 2:/ })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+    await waitFor(() => {
+      expect(octopus().chats.history).toHaveBeenCalledTimes(2)
+    })
+
+    emitAgentEvent({
+      type: 'permission_request',
+      requestId: 'r-plan',
+      toolName: 'ExitPlanMode',
+      input: { plan: '# Plan' }
+    })
+
+    expect(
+      await screen.findByRole('region', { name: 'The plan is waiting for your answer' })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Fork in new chat' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Open the plan' }))
+    expect(await screen.findByRole('button', { name: 'Fork in new chat' })).toBeInTheDocument()
+  })
+
+  it('offers a note from the diff to the column in front only', async () => {
+    const note = {
+      path: 'src/core/diff.ts',
+      side: 'new' as const,
+      line: 42,
+      endLine: 42,
+      code: 'const b = 2',
+      text: 'This should be 3.'
+    }
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+    const user = userEvent.setup()
+    render(<Pane comments={commentController({ pending: [note] })} />)
+    await screen.findByRole('button', { name: /^Claude 2:/ })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+
+    expect(
+      within(column(-1).parentElement ?? column(-1)).getByRole('button', {
+        name: 'Remove this note'
+      })
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Remove this note' })).toHaveLength(1)
+  })
+
+  it('offers a remark from the pull request to the column in front only', async () => {
+    const quote = {
+      key: 'inline:PRRC_1',
+      reference: '#7',
+      author: 'olena',
+      place: 'src/core/git.ts:42',
+      quote: '@@ -1 +1 @@',
+      body: 'Why the second case?'
+    }
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+    const user = userEvent.setup()
+    render(<Pane quotes={quoteController({ pending: [quote] })} />)
+    await screen.findByRole('button', { name: /^Claude 2:/ })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+
+    expect(
+      within(column(-1).parentElement ?? column(-1)).getByRole('button', {
+        name: 'Remove this note'
+      })
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Remove this note' })).toHaveLength(1)
+  })
+
+  it('keeps the diff’s notes when a column beside the one in front sends', async () => {
+    const note = {
+      path: 'src/core/diff.ts',
+      side: 'new' as const,
+      line: 42,
+      endLine: 42,
+      code: 'const b = 2',
+      text: 'This should be 3.'
+    }
+    const comments = commentController({ pending: [note] })
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+    const user = userEvent.setup()
+    render(<Pane comments={comments} />)
+    await screen.findByRole('button', { name: /^Claude 2:/ })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+    const field = within(column(0).parentElement ?? column(0)).getByRole('textbox')
+
+    fireEvent.change(field, { target: { value: 'look' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith('chat-1', 'look')
+    })
+    expect(comments.clear).not.toHaveBeenCalled()
+  })
+
+  it('opens every step on ⌘O in the column in front only', async () => {
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: {
+        entries: [
+          { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'look' },
+          {
+            role: 'agent',
+            at: '2026-08-11T09:00:01.000Z',
+            event: { type: 'thinking', text: 'weighing it up' }
+          }
+        ],
+        seq: 0
+      }
+    })
+    await splitSecond()
+    await waitFor(() => {
+      expect(screen.getAllByText('look')).toHaveLength(2)
+    })
+
+    fireEvent.keyDown(window, { key: 'o', metaKey: true })
+
+    expect(await within(column(-1)).findByText('weighing it up')).toBeVisible()
+    expect(within(column(0)).queryByText('weighing it up')).not.toBeInTheDocument()
   })
 })

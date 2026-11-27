@@ -913,11 +913,11 @@ describe('following the conversation', () => {
 
   // Rows grow after they are laid out, so the scroll to the end lands short.
   it('keeps to the end as the content grows, until the reader leaves it', async () => {
-    const watchers: (() => void)[] = []
+    const watchers: ((entries: ResizeObserverEntry[]) => void)[] = []
     vi.stubGlobal(
       'ResizeObserver',
       class {
-        constructor(notify: () => void) {
+        constructor(notify: (entries: ResizeObserverEntry[]) => void) {
           watchers.push(notify)
         }
         observe = vi.fn()
@@ -932,14 +932,14 @@ describe('following the conversation', () => {
     Object.defineProperty(log, 'scrollHeight', { value: 1000, configurable: true })
     Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
     watchers.forEach((notify) => {
-      notify()
+      notify([])
     })
     expect(log.scrollTop).toBe(1000)
 
     log.scrollTop = 0
     fireEvent.scroll(log)
     watchers.forEach((notify) => {
-      notify()
+      notify([])
     })
     expect(log.scrollTop).toBe(0)
   })
@@ -1214,11 +1214,11 @@ describe("stepping between the user's messages", () => {
 
   // Opening a row, or resizing the window, moves the log without a scroll.
   it('reads the steps again when the log is resized', async () => {
-    const watchers: (() => void)[] = []
+    const watchers: ((entries: ResizeObserverEntry[]) => void)[] = []
     vi.stubGlobal(
       'ResizeObserver',
       class {
-        constructor(notify: () => void) {
+        constructor(notify: (entries: ResizeObserverEntry[]) => void) {
           watchers.push(notify)
         }
         observe = vi.fn()
@@ -1233,7 +1233,7 @@ describe("stepping between the user's messages", () => {
 
     act(() => {
       watchers.forEach((notify) => {
-        notify()
+        notify([])
       })
     })
 

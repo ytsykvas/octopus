@@ -248,7 +248,7 @@ start a `file:` link to a script in the clone. So `pullRequestShapes.ts` keeps
 it only when `isExternalUrl` passes it, and a check with any other link is drawn
 with no icon rather than dropped: its state is still true.
 
-**Add to chat** puts a remark from the review into the composer rather than
+**Add to chat** puts a remark from the review into the composer of the conversation in front rather than
 sending it. The reader has a question about it, and the question is the point.
 It rides the same strip as a note written on the diff, though the two are
 separate stores: the diff pane narrows a `DiffComment` on every row it draws,

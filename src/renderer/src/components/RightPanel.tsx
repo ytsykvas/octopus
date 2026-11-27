@@ -23,8 +23,8 @@ import { useErrorMessage } from '../hooks/useErrorMessage.js'
 import type { ServerControls } from '../hooks/useServerControls.js'
 import { useEnvProfiles } from '../hooks/useEnvProfiles.js'
 import { useServingPort } from '../hooks/useServingPort.js'
-import { useWindowEvent } from '../hooks/useWindowEvent.js'
 import type { WorkspaceView } from '@core/workspaces.js'
+import { RIGHT_PANE_MIN_WIDTH } from '@core/windowFit.js'
 
 import { Button } from './Button.js'
 import { DiffPanel, type DiffReveal } from './diff/DiffPanel.js'
@@ -85,12 +85,6 @@ const TABS: readonly {
 ]
 
 /**
- * Floor before the tabs are measured, and the lower bound the config schema
- * holds. The real floor is whatever the tab row needs — see `measureTabs`.
- */
-const MIN_WIDTH = 280
-
-/**
  * How narrow the pane can be before its tabs stop fitting.
  *
  * Measured rather than chosen: the labels change width with the language, and
@@ -114,13 +108,6 @@ function measureTabs(row: HTMLElement): number {
   return Math.ceil(side + buttons + gap * Math.max(0, row.children.length - 1))
 }
 
-/**
- * Enough centre pane to still be one. The pane can take everything else, so on
- * a wide display the terminal gets genuinely wide, while on a laptop the
- * working area survives.
- */
-const MIN_CENTRE_WIDTH = 360
-
 /** What the row above the two halves says while the sequence runs its course. */
 const STAGE_HINTS = {
   idle: 'scripts.runHint',
@@ -129,20 +116,6 @@ const STAGE_HINTS = {
   // Never read: a failed stage prints its own sentence, in the danger colour.
   failed: 'scripts.runHint'
 } as const
-
-/**
- * How much of the window the left column takes, passed in rather than assumed.
- *
- * It stood here as a constant 256 for a while, and the room it reserved was
- * fiction: the real column is the project strip plus a workspace list that is
- * resizable between 180 and 560 and folds away entirely — anything from 56 to
- * 616. At the window's own minimum of 940 the centre reached 320 rather than
- * the promised 360, and with the list dragged wide it reached nothing at all.
- * Only `App` knows both halves, so only `App` can say.
- */
-function maxWidthFor(windowWidth: number, leftWidth: number, minWidth: number): number {
-  return Math.max(minWidth, windowWidth - leftWidth - MIN_CENTRE_WIDTH)
-}
 
 interface RightPanelProps {
   readonly workspaces: readonly WorkspaceView[]
@@ -208,8 +181,9 @@ interface RightPanelProps {
   readonly open: boolean
   /** Asked for by a drag past the floor, which folds the pane, and back. */
   readonly onOpenChange: (open: boolean) => void
-  /** The project strip plus the workspace list, or just the strip when folded. */
-  readonly leftWidth: number
+  /** What the window leaves the pane; the floor its tabs need wins over it. */
+  readonly ceiling: number
+  readonly onFloor: (floor: number) => void
   /** How the reader asked for diffs to be laid out, across sessions. */
   readonly diffView: DiffView
   readonly onDiffView: (view: DiffView) => void
@@ -274,7 +248,8 @@ export function RightPanel({
   onWidthChange,
   open,
   onOpenChange,
-  leftWidth,
+  ceiling,
+  onFloor,
   diffView,
   onDiffView,
   tab,
@@ -298,8 +273,7 @@ export function RightPanel({
   // The pane follows the cursor from local state; the config only hears about
   // the width once the drag is over.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
-  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
-  const [minWidth, setMinWidth] = useState(MIN_WIDTH)
+  const [minWidth, setMinWidth] = useState(RIGHT_PANE_MIN_WIDTH)
   /*
    * Whether the build half is open. Folded to start with, every time.
    *
@@ -497,12 +471,6 @@ export function RightPanel({
    */
   const scriptable = workspaces
 
-  // The ceiling moves with the window: shrinking it must not leave the pane
-  // covering the centre, and growing it should make the extra room available.
-  useWindowEvent('resize', () => {
-    setWindowWidth(window.innerWidth)
-  })
-
   // Re-measured on a language change, which is when the labels get longer —
   // and on unfolding, since a pane that started folded measured its tabs while
   // they had no size at all and would otherwise keep a floor of nothing.
@@ -514,10 +482,12 @@ export function RightPanel({
 
     if (!open) return
 
-    setMinWidth(Math.max(MIN_WIDTH, measureTabs(row)))
-  }, [i18n.language, open])
+    const floor = Math.max(RIGHT_PANE_MIN_WIDTH, measureTabs(row))
+    setMinWidth(floor)
+    onFloor(floor)
+  }, [i18n.language, open, onFloor])
 
-  const maxWidth = maxWidthFor(windowWidth, leftWidth, minWidth)
+  const maxWidth = Math.max(minWidth, ceiling)
 
   /*
    * The pane keeps the width it was given, and the window's edge moves the

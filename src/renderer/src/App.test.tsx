@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { GitHubAccount } from '@core/accounts.js'
 import { DEFAULT_COLUMNS } from '@core/boardColumns.js'
@@ -493,16 +493,9 @@ describe('App', () => {
     expect(tab('LE')).toBeInTheDocument()
   })
 
-  /*
-   * The right pane may grow into whatever the window has left once the left
-   * column and a usable centre have theirs — and only this window knows what
-   * that column comes to, being the one place that holds both the list's stored
-   * width and whether it is folded. Asserted from here because the pane's own
-   * tests are handed the number: told the wrong one, every last of them passes.
-   *
-   * 1024 less the strip (60), the list at its default (240) and the centre's
-   * own 360 leaves 364; folding the list hands its 240 straight to the pane.
-   */
+  // Asserted here because the pane's own tests are handed their ceiling.
+  // 1024 less the strip (60), the list (240) and one conversation (440) leaves 284;
+  // folding the list hands its 240 to the pane.
   it('offers the pane the room the folded list gives up', async () => {
     givenTwoProjects()
     const user = await openApp()
@@ -515,11 +508,30 @@ describe('App', () => {
       return edge
     }
 
-    expect(paneEdge()).toHaveAttribute('aria-valuemax', '364')
+    expect(paneEdge()).toHaveAttribute('aria-valuemax', '284')
 
     await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
 
-    expect(paneEdge()).toHaveAttribute('aria-valuemax', '604')
+    expect(paneEdge()).toHaveAttribute('aria-valuemax', '524')
+  })
+
+  it('lowers the right pane’s ceiling as the window narrows', async () => {
+    const wide = window.innerWidth
+    window.innerWidth = 1400
+
+    try {
+      givenTwoProjects()
+      await openApp()
+
+      expect(edges().panel).toHaveAttribute('aria-valuemax', String(1400 - 60 - 240 - 440))
+
+      window.innerWidth = 1200
+      fireEvent.resize(window)
+
+      expect(edges().panel).toHaveAttribute('aria-valuemax', String(1200 - 60 - 240 - 440))
+    } finally {
+      window.innerWidth = wide
+    }
   })
 
   it('opens the settings dialog from the sidebar', async () => {
@@ -1445,12 +1457,251 @@ describe('App', () => {
   })
 
   it('remembers the width the workspace list was resized to', async () => {
+    // At 1024 the list's ceiling is 244, under the 256 this keypress expects.
+    const narrow = window.innerWidth
+    window.innerWidth = 1400
+
+    try {
+      const user = await openApp()
+      edges().list.focus()
+
+      await user.keyboard('{ArrowRight}')
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ sidebarWidth: 256 })
+    } finally {
+      window.innerWidth = narrow
+    }
+  })
+
+  // 1024 less the strip, the right pane's 280 and one conversation's 440 leaves the list 244.
+  it('narrows the list once the right pane is down to its floor', async () => {
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ sidebarWidth: 400 })
+    })
+    await openApp()
+
+    await waitFor(() => {
+      expect(edges().list).toHaveAttribute('aria-valuenow', '244')
+    })
+  })
+
+  it('holds the window wide enough for the panes on screen and the conversation', async () => {
+    givenTwoProjects()
     const user = await openApp()
-    edges().list.focus()
 
-    await user.keyboard('{ArrowRight}')
+    await waitFor(() => {
+      expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 280 + 440)
+    })
 
-    expect(window.octopus.config.update).toHaveBeenCalledWith({ sidebarWidth: 256 })
+    await user.click(await screen.findByRole('button', { name: 'Hide workspaces' }))
+
+    expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 280 + 440)
+  })
+
+  it('asks for no floor before the config says which panes are on screen', async () => {
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ rightPanelOpen: false })
+    })
+    givenTwoProjects()
+    await openApp()
+
+    await waitFor(() => {
+      expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 440)
+    })
+    expect(window.octopus.frame.fit).not.toHaveBeenCalledWith(60 + 180 + 280 + 440)
+  })
+
+  describe('conversations side by side', () => {
+    let width: number
+
+    beforeEach(() => {
+      width = window.innerWidth
+    })
+
+    afterEach(() => {
+      window.innerWidth = width
+    })
+
+    async function openAnna(ids: readonly string[]): Promise<ReturnType<typeof userEvent.setup>> {
+      vi.mocked(window.octopus.chats.list).mockResolvedValue({
+        ok: true,
+        value: ids.map((id) => chat({ id, workspaceId: 'planner/anna' }))
+      })
+      givenTwoProjects()
+      const user = await openApp()
+      await user.click(await findTab('PL'))
+      await user.click(screen.getByRole('button', { name: /anna/ }))
+      await screen.findByRole('button', { name: new RegExp(`^Claude ${String(ids.length)}: `) })
+      return user
+    }
+
+    async function split(user: ReturnType<typeof userEvent.setup>, number: number): Promise<void> {
+      await user.pointer({
+        keys: '[MouseRight]',
+        target: screen.getByRole('button', { name: new RegExp(`^Claude ${String(number)}: `) })
+      })
+      await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+    }
+
+    it('folds the right pane, and only that, when two conversations need its room', async () => {
+      window.innerWidth = 1300
+      const user = await openAnna(['chat-1', 'chat-2'])
+
+      await split(user, 2)
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+      expect(screen.getByRole('button', { name: 'Hide workspaces' })).toBeInTheDocument()
+      await waitFor(() => {
+        expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 880)
+      })
+    })
+
+    it('folds the list as well when the right pane’s room is not enough', async () => {
+      window.innerWidth = 1024
+      const user = await openAnna(['chat-1', 'chat-2'])
+
+      await split(user, 2)
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+      expect(screen.getByRole('button', { name: 'Show workspaces' })).toBeInTheDocument()
+    })
+
+    it('folds nothing on a window with room for every column', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+
+      await split(user, 2)
+
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
+      await waitFor(() => {
+        expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 280 + 880)
+      })
+    })
+
+    it('counts no right pane that is already folded', async () => {
+      vi.mocked(window.octopus.config.get).mockResolvedValue({
+        ok: true,
+        value: config({ rightPanelOpen: false })
+      })
+      window.innerWidth = 1200
+      const user = await openAnna(['chat-1', 'chat-2'])
+
+      await split(user, 2)
+
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
+      expect(screen.getByRole('button', { name: 'Hide workspaces' })).toBeInTheDocument()
+    })
+
+    it('makes room when ⌥1 brings the group back', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2', 'chat-3'])
+      await split(user, 2)
+      await user.click(screen.getByRole('button', { name: /^Claude 3: / }))
+      window.innerWidth = 1300
+      fireEvent.resize(window)
+
+      fireEvent.keyDown(document.body, { key: '¡', code: 'Digit1', altKey: true })
+
+      expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+    })
+
+    it('makes no room for a tab shown alone', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2', 'chat-3'])
+      await split(user, 2)
+      window.innerWidth = 1300
+      fireEvent.resize(window)
+
+      await user.click(screen.getByRole('button', { name: /^Claude 3: / }))
+
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
+    })
+
+    it('makes room when coming back to a workspace whose group is in front', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+      await user.click(screen.getByRole('button', { name: /bob/ }))
+      window.innerWidth = 1300
+      fireEvent.resize(window)
+
+      await user.click(screen.getByRole('button', { name: /anna/ }))
+
+      await waitFor(() => {
+        expect(window.octopus.config.update).toHaveBeenCalledWith({ rightPanelOpen: false })
+      })
+    })
+
+    it('folds nothing as the focus moves between the columns on screen', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+      window.innerWidth = 1300
+      fireEvent.resize(window)
+
+      const [first] = screen.getAllByRole('log')
+      if (!first) throw new Error('no first column')
+      await user.click(first)
+
+      expect(
+        within(screen.getByRole('navigation', { name: 'Conversations' })).getByRole('button', {
+          name: /^Claude 1: /
+        })
+      ).toHaveAttribute('aria-current', 'page')
+      expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
+    })
+
+    it('leaves a right pane reopened after a fold open when the language changes', async () => {
+      window.innerWidth = 1300
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+      await user.click(screen.getByRole('button', { name: 'Show panel' }))
+
+      await act(async () => {
+        await i18n.changeLanguage('uk')
+      })
+
+      const folds = vi
+        .mocked(window.octopus.config.update)
+        .mock.calls.filter(([patch]) => patch.rightPanelOpen === false)
+      expect(folds).toHaveLength(1)
+    })
+
+    it('holds the window for one conversation while a file is in front of the group', async () => {
+      vi.mocked(window.octopus.files.tree).mockResolvedValue({
+        ok: true,
+        value: {
+          entries: [{ path: 'README.md', kind: 'file', ignored: false }],
+          statuses: {},
+          untrackedFolders: [],
+          truncated: false
+        }
+      })
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+
+      await user.click(screen.getByRole('button', { name: 'Files' }))
+      await user.click(await screen.findByRole('treeitem', { name: /^README\.md/ }))
+
+      await waitFor(() => {
+        expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 280 + 440)
+      })
+    })
+
+    it('holds the window for one conversation on the board', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+
+      await user.click(screen.getByRole('button', { name: 'Board' }))
+
+      await waitFor(() => {
+        expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 440)
+      })
+    })
   })
 
   it('remembers the width the right pane was resized to', async () => {

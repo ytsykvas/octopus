@@ -106,6 +106,7 @@ interface Harness {
   usageBroadcasts: UsageWindows[]
   /** null once the window a call came from has closed, as Electron reports it. */
   window: unknown
+  fitted: { window: unknown; minWidth: number }[]
 }
 
 function harness(): Harness {
@@ -125,6 +126,7 @@ function harness(): Harness {
   const revealed: string[] = []
   const dialogOptions: OpenDialogOptions[] = []
   const usageBroadcasts: UsageWindows[] = []
+  const fitted: { window: unknown; minWidth: number }[] = []
 
   const state: Harness = {
     handlers,
@@ -143,6 +145,7 @@ function harness(): Harness {
     revealed,
     dialogOptions,
     usageBroadcasts,
+    fitted,
     picked: { canceled: true, filePaths: [] },
     prefersDark: false,
     openRefusal: '',
@@ -173,7 +176,8 @@ function harness(): Harness {
         opened.push(path)
         return Promise.resolve(state.openRefusal)
       },
-      showItemInFolder: (path) => revealed.push(path)
+      showItemInFolder: (path) => revealed.push(path),
+      setWindowFloor: (window, minWidth) => fitted.push({ window, minWidth })
     }
   }
 
@@ -383,6 +387,7 @@ describe('channel table', () => {
   // fails at runtime with nothing but "no handler", far from the cause.
   const EXPECTED = [
     'theme:get',
+    'frame:fit',
     'config:get',
     'config:update',
     'config:edit',
@@ -594,6 +599,27 @@ describe('theme', () => {
   it('broadcasts the resolved theme when the config changes', async () => {
     await invoke('config:update', { theme: 'dark' })
     expect(bench.broadcasts).toContain('dark')
+  })
+})
+
+describe('window floor', () => {
+  it('holds the window a call came from to the floor it asks for', async () => {
+    await expect(invoke('frame:fit', 1320)).resolves.toEqual({ ok: true, value: undefined })
+
+    expect(bench.fitted).toEqual([{ window: bench.window, minWidth: 1320 }])
+  })
+
+  it('refuses a floor that is not a whole number of pixels', async () => {
+    await expect(invoke('frame:fit', 1320.5)).resolves.toMatchObject({ ok: false })
+
+    expect(bench.fitted).toEqual([])
+  })
+
+  it('leaves a window that has gone alone', async () => {
+    bench.window = null
+
+    await expect(invoke('frame:fit', 1320)).resolves.toMatchObject({ ok: true })
+    expect(bench.fitted).toEqual([])
   })
 })
 

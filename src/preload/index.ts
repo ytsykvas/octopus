@@ -167,6 +167,11 @@ const api = {
     }
   },
 
+  frame: {
+    fit: (minWidth: number): Promise<Result<void>> =>
+      ipcRenderer.invoke('frame:fit', minWidth) as Promise<Result<void>>
+  },
+
   config: {
     get: (): Promise<Result<Config>> => ipcRenderer.invoke('config:get') as Promise<Result<Config>>,
 

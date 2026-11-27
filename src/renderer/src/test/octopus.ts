@@ -38,6 +38,9 @@ export function installOctopusStub(): Api {
       get: vi.fn(() => Promise.resolve('light' as const)),
       onChange: vi.fn(subscription)
     },
+    frame: {
+      fit: vi.fn(() => ok(undefined))
+    },
     config: {
       get: vi.fn(() => ok(defaultConfig())),
       update: vi.fn((patch) => ok({ ...defaultConfig(), ...patch })),

@@ -19,6 +19,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}): SidebarProps {
     onCreateWorkspace: vi.fn(),
     creating: false,
     width: 240,
+    maxWidth: 560,
     onWidthChange: vi.fn(),
     onRenameWorkspace: vi.fn(),
     onRemoveWorkspace: vi.fn(),
@@ -36,6 +37,16 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}): SidebarProps {
 }
 
 describe('Sidebar', () => {
+  it('stops a drag at the room the window leaves it', async () => {
+    const user = userEvent.setup()
+    const props = renderSidebar({ width: 240, maxWidth: 250 })
+
+    screen.getByRole('separator', { name: 'Resize panel' }).focus()
+    await user.keyboard('{ArrowRight}')
+
+    expect(props.onWidthChange).toHaveBeenCalledWith(250)
+  })
+
   it('names the project the list belongs to', () => {
     renderSidebar({ project: project({ name: 'planner' }) })
 

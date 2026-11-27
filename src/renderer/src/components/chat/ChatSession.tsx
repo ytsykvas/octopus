@@ -80,16 +80,13 @@ interface ChatSessionProps {
   readonly workspace: WorkspaceView
   /** Which of the workspace's conversations this is. */
   readonly tab: ChatTab
-  /**
-   * Whether this is the tab on screen.
-   *
-   * Passed rather than left to the parent's `hidden` class, because two things
-   * here have to know. A hidden element measures zero, so the log would pin
-   * itself to the top of a conversation it cannot see and stay there; and the
-   * plan dialog is a modal, which a background conversation has no business
-   * raising over the one being read.
-   */
+  /** On screen, in front or beside it. Not left to the parent's `hidden` class: a hidden
+   *  element measures zero, so the log would pin itself to the top and stay there. */
   readonly visible: boolean
+  /** The one in front: it takes ⌘O, raises its plan and draws into the header. */
+  readonly focused: boolean
+  readonly divided: boolean
+  readonly onFocusPane: () => void
   /** Tells the strip about the record this pane created on first use. */
   readonly onOpened: (chat: Chat) => void
   /** What was in the composer when this conversation was last left. */
@@ -154,17 +151,15 @@ interface ChatSessionProps {
 }
 
 /**
- * One conversation: its log, its composer and what it is waiting on.
- *
- * Up to three of these are mounted at once, one per tab, and only one is
- * showing — the same arrangement the right pane uses for its own tabs, and for
- * the same reason: a conversation that unmounted would lose its scroll position
- * and the answer half-streamed into it every time you looked at another.
- */
+ * Every tab stays mounted, shown or not: unmounting would lose the scroll position
+ * and the answer half-streamed into it. */
 export function ChatSession({
   workspace,
   tab,
   visible,
+  focused,
+  divided,
+  onFocusPane,
   onOpened,
   draft,
   onDraftLeave,
@@ -220,7 +215,7 @@ export function ChatSession({
       event.preventDefault()
       toggleExpansion()
     },
-    { active: visible }
+    { active: focused }
   )
 
   /*
@@ -684,7 +679,7 @@ export function ChatSession({
   return (
     <AgentsContext.Provider value={agentTasks}>
       <AgentLogContext.Provider value={chat.entries}>
-        {visible &&
+        {focused &&
           headerEnd !== null &&
           chat.entries.length > 0 &&
           createPortal(
@@ -695,7 +690,9 @@ export function ChatSession({
           )}
         <div
           aria-hidden={!visible}
-          className={`min-h-0 flex-1 flex-col ${visible ? 'flex' : 'hidden'}`}
+          onPointerDownCapture={onFocusPane}
+          onFocusCapture={onFocusPane}
+          className={`min-h-0 min-w-0 flex-1 basis-0 flex-col ${visible ? 'flex' : 'hidden'} ${divided ? 'border-line border-l' : ''}`}
         >
           <div
             ref={scroller}
@@ -839,13 +836,9 @@ export function ChatSession({
             )}
           </div>
 
-          {/* Only while showing. This is a modal, and a conversation nobody is
-          looking at raising one over the conversation being read is the worst
-          kind of interruption: it is about work the reader cannot see, and it
-          takes the keyboard from work they can. The tab's dot turns amber
-          instead, which is how the workspace list already announces a turn
-          waiting somewhere nobody is looking. */}
-          {visible && plan !== null && pending !== null && minimizedPlan !== pending.requestId && (
+          {/* Only in front: a modal raised by a conversation nobody is reading would take
+              the keyboard from the one they are. A column beside it shows `PlanWaiting`. */}
+          {focused && plan !== null && pending !== null && minimizedPlan !== pending.requestId && (
             <PlanDialog
               // Per request: a plan the agent replaces is a different plan, and the
               // editor's open-or-closed state belongs to the one it was opened on.
@@ -889,13 +882,16 @@ export function ChatSession({
           nobody is doing. The log still holds it. */}
           <TodoPanel todos={chat.busy ? todos : []} />
 
-          {visible && plan !== null && pending !== null && minimizedPlan === pending.requestId && (
-            <PlanWaiting
-              onOpen={() => {
-                setMinimizedPlan(null)
-              }}
-            />
-          )}
+          {visible &&
+            plan !== null &&
+            pending !== null &&
+            (!focused || minimizedPlan === pending.requestId) && (
+              <PlanWaiting
+                onOpen={() => {
+                  setMinimizedPlan(null)
+                }}
+              />
+            )}
 
           {tip !== null && (
             <HeadsUp
@@ -971,15 +967,23 @@ export function ChatSession({
            this is already the layer that adapts a controller to a prop, and the
            composer has no business knowing there are two places a note can come
            from. */
-              notes={mergeNotes(comments.pending, quotes.pending, codeNotes.pendingFor(tab.key))}
+              // The diff's notes and the review's are the window's, not a tab's: only the column
+              // in front offers them, or two composers beside each other would both send them.
+              notes={mergeNotes(
+                focused ? comments.pending : [],
+                focused ? quotes.pending : [],
+                codeNotes.pendingFor(tab.key)
+              )}
               onRemoveNote={(note: ChatNote) => {
                 if (note.kind === 'diff') comments.remove(note)
                 else if (note.kind === 'code') codeNotes.remove(tab.key, note)
                 else quotes.remove(note)
               }}
               onNotesSent={() => {
-                comments.clear()
-                quotes.clear()
+                if (focused) {
+                  comments.clear()
+                  quotes.clear()
+                }
                 codeNotes.clear(tab.key)
               }}
               files={attachments.files}

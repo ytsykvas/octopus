@@ -13,6 +13,7 @@ import { BranchPrefixSchema, DEFAULT_BRANCH_PREFIX } from './branches.js'
 import { withMember } from './lists.js'
 import { SkillKeySchema } from './skillNames.js'
 import { StandingPermissionSchema, withoutStanding } from './standingPermissions.js'
+import { RIGHT_PANE_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './windowFit.js'
 
 import {
   DEFAULT_EFFORT,
@@ -299,7 +300,7 @@ export const ConfigSchema = z.object({
    * once the centre is down to its floor — showing less than this number
    * rather than replacing it, so the room coming back brings the width back.
    */
-  rightPanelWidth: z.number().int().min(280).max(4000).default(360),
+  rightPanelWidth: z.number().int().min(RIGHT_PANE_MIN_WIDTH).max(4000).default(360),
 
   /**
    * Whether the right pane is showing.
@@ -368,7 +369,7 @@ export const ConfigSchema = z.object({
    * buttons in its header: below it the name is all ellipsis, and the row reads
    * as broken rather than as narrow.
    */
-  sidebarWidth: z.number().int().min(180).max(560).default(240),
+  sidebarWidth: z.number().int().min(SIDEBAR_MIN_WIDTH).max(SIDEBAR_MAX_WIDTH).default(240),
 
   /**
    * Stable device identifier, shown in Settings.

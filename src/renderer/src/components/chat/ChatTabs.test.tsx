@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -28,6 +28,10 @@ function controller(overrides: Partial<ChatTabsController> = {}): ChatTabsContro
     activeKey: 'chat-1',
     select: vi.fn(),
     selectIn: vi.fn(),
+    group: [],
+    shownKeys: ['chat-1'],
+    split: vi.fn(),
+    unsplit: vi.fn(),
     canCreate: true,
     create: vi.fn(() => Promise.resolve()),
     fork: vi.fn(() => Promise.resolve(true)),
@@ -453,5 +457,94 @@ describe('what the strip says once a transcript is copied', () => {
     await copy(false)
 
     expect(await screen.findByRole('status')).toHaveTextContent('Copy failed')
+  })
+})
+
+describe('side by side', () => {
+  const three = [tab(), tab({ key: 'chat-2', id: 'chat-2' }), tab({ key: 'chat-3', id: 'chat-3' })]
+
+  async function rightClick(number: number): Promise<void> {
+    await userEvent.setup().pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: new RegExp(`^Claude ${String(number)}:`) })
+    })
+  }
+
+  it('opens a tab’s menu on a right click', async () => {
+    render(<ChatTabs tabs={controller({ tabs: three })} />)
+
+    await rightClick(2)
+
+    expect(screen.getByRole('menuitem', { name: 'Rename…' })).toBeInTheDocument()
+  })
+
+  it('closes the menu when its tab is clicked', async () => {
+    const select = vi.fn()
+    render(<ChatTabs tabs={controller({ tabs: three, select })} />)
+    await rightClick(2)
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Claude 2:/ }))
+
+    expect(screen.queryByRole('menuitem', { name: 'Rename…' })).not.toBeInTheDocument()
+    expect(select).toHaveBeenCalledWith('chat-2')
+  })
+
+  it('offers to show another tab beside the one in front', async () => {
+    const split = vi.fn()
+    render(<ChatTabs tabs={controller({ tabs: three, split })} />)
+
+    await rightClick(2)
+    await userEvent.setup().click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+
+    expect(split).toHaveBeenCalledWith('chat-2')
+  })
+
+  it('offers no split on the tab in front while there is no group', async () => {
+    render(<ChatTabs tabs={controller({ tabs: three })} />)
+
+    await rightClick(1)
+
+    expect(screen.queryByRole('menuitem', { name: 'Show side by side' })).not.toBeInTheDocument()
+  })
+
+  it('offers the split on a tab shown alone while a group waits elsewhere', async () => {
+    render(
+      <ChatTabs
+        tabs={controller({ tabs: three, group: ['chat-1', 'chat-2'], activeKey: 'chat-3' })}
+      />
+    )
+
+    await rightClick(3)
+
+    expect(screen.getByRole('menuitem', { name: 'Show side by side' })).toBeInTheDocument()
+  })
+
+  it('offers to take a grouped tab out, and no split on it', async () => {
+    const unsplit = vi.fn()
+    render(<ChatTabs tabs={controller({ tabs: three, group: ['chat-1', 'chat-2'], unsplit })} />)
+
+    await rightClick(2)
+    expect(screen.queryByRole('menuitem', { name: 'Show side by side' })).not.toBeInTheDocument()
+    await userEvent
+      .setup()
+      .click(screen.getByRole('menuitem', { name: 'Stop showing side by side' }))
+
+    expect(unsplit).toHaveBeenCalledWith('chat-2')
+  })
+
+  it('frames the grouped tabs together', () => {
+    render(<ChatTabs tabs={controller({ tabs: three, group: ['chat-1', 'chat-2'] })} />)
+
+    const framed = within(screen.getByRole('group', { name: 'Side by side' }))
+    expect(framed.getAllByRole('button', { name: /^Claude \d:/ }).map((one) => one.title)).toEqual([
+      'Claude 1: finished',
+      'Claude 2: finished'
+    ])
+  })
+
+  it('frames grouped tabs apart when one between them is not in the group', () => {
+    render(<ChatTabs tabs={controller({ tabs: three, group: ['chat-1', 'chat-3'] })} />)
+
+    expect(screen.getAllByRole('group', { name: 'Side by side' })).toHaveLength(2)
   })
 })

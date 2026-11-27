@@ -14,6 +14,7 @@ import { DEFAULT_EFFORT } from '@core/chats.js'
 import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
 import type { WorkspaceView } from '@core/workspaces.js'
+import { RIGHT_PANE_MIN_WIDTH } from '@core/windowFit.js'
 
 import type { Result } from '../../preload/index.js'
 
@@ -43,6 +44,8 @@ import { Sidebar } from './components/Sidebar.js'
 import { SidebarFooter } from './components/SidebarFooter.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
+import { useLatest } from './hooks/useLatest.js'
+import { useWindowFloor } from './hooks/useWindowFloor.js'
 import { usePendingIn } from './hooks/usePendingIn.js'
 import { useShownWorkspace } from './hooks/useShownWorkspace.js'
 import { DEFAULT_ENV_FILE } from '@core/envBlock.js'
@@ -78,15 +81,7 @@ import { useWorkspaces } from './hooks/useWorkspaces.js'
 import { useAttention } from './hooks/useAttention.js'
 import { AttentionToasts } from './components/AttentionToasts.js'
 import { StatusBar, type StatusTarget } from './components/statusBar/StatusBar.js'
-
-/**
- * The project strip's width, `w-15` in `ProjectTabs`.
- *
- * Stated twice, which is once too many — but the right pane has to reserve the
- * left column's room and cannot read a Tailwind class. The strip is the one
- * part of that column whose width is not already a number here.
- */
-const TAB_STRIP_WIDTH = 60
+import { foldsFor, rightPaneCeiling, sidebarCeiling, windowFloor } from './layout.js'
 
 /** The schema's own default, for the render before the config has been read. */
 const DEFAULT_SIDEBAR_WIDTH = 240
@@ -183,9 +178,18 @@ export function App(): React.JSX.Element {
   // Not persisted, unlike the right pane: the workspace list's fold lasts for
   // the session.
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [rightFloor, setRightFloor] = useState(RIGHT_PANE_MIN_WIDTH)
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
+  useWindowEvent('resize', () => {
+    setWindowWidth(window.innerWidth)
+  })
   // Not persisted, like the list's fold: which screen is in front lasts for the session.
   const [screen, setScreen] = useState<Screen>('octopus')
   const onBoard = screen === 'board'
+  // The list belongs to the Octopus screen; on the board the strip stands alone.
+  const listShown = sidebarOpen && !onBoard
+  const rightShown = rightPanelOpen && !onBoard
+  const rightRoom = rightShown ? rightFloor : null
   // Filled by the board itself: core finds its folder by name regardless of case, so only the
   // board knows the path it actually reads.
   const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null)
@@ -323,6 +327,7 @@ export function App(): React.JSX.Element {
     return {
       ...conversations,
       select: forward(conversations.select),
+      split: forward(conversations.split),
       create: forward(conversations.create),
       fork: forward(conversations.fork),
       reopen: forward(conversations.reopen),
@@ -874,8 +879,28 @@ export function App(): React.JSX.Element {
   // disagreement would show up as a centre pane with nowhere to go.
   const sidebarWidth = config?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH
   const deviceId = config?.deviceId ?? ''
-  // The list belongs to the Octopus screen; on the board the strip stands alone.
-  const listShown = sidebarOpen && !onBoard
+  const columns = onBoard || fileTabs.active !== null ? 1 : chatTabs.shownKeys.length
+  const room = { listShown, rightFloor: rightRoom, columns }
+  // Measured against what was last made room for, so every way a group comes forward
+  // folds the panes it needs — and moving between columns already on screen folds none.
+  const [roomFor, setRoomFor] = useState(columns)
+  const [roomMade, setRoomMade] = useState(0)
+  if (columns !== roomFor) {
+    setRoomFor(columns)
+    const folds = foldsFor(windowWidth, room)
+    if (folds.right) {
+      setRightPanelOpen(false)
+      setRoomMade((made) => made + 1)
+    }
+    if (folds.list) setSidebarOpen(false)
+  }
+  const saveConfig = useLatest(updateConfig)
+  useEffect(() => {
+    if (roomMade > 0) void saveConfig.current({ rightPanelOpen: false })
+  }, [roomMade, saveConfig])
+  const listCeiling = sidebarCeiling(windowWidth, room)
+  const listWidth = Math.min(sidebarWidth, listCeiling)
+  useWindowFloor(config === null ? null : windowFloor(room), setError)
 
   // Read twice: the right pane hands it to the scripts, and the hint they
   // draw when there is none sends the user to edit that same project.
@@ -1232,7 +1257,8 @@ export function App(): React.JSX.Element {
                 editingWorkspaceId={workspaces.editingId}
                 onEditingWorkspaceChange={workspaces.setEditingId}
                 onReorderWorkspaces={(projectId, ids) => void workspaces.reorder(projectId, ids)}
-                width={sidebarWidth}
+                width={listWidth}
+                maxWidth={listCeiling}
                 onWidthChange={(next) => void updateConfig({ sidebarWidth: next })}
                 onHelp={startHelp}
                 canStartChat={chatTabs.canCreate}
@@ -1356,7 +1382,7 @@ export function App(): React.JSX.Element {
             and the servers running there belong to their workspaces, and
             unmounting the pane used to end every one of them. */}
         <RightPanel
-          open={rightPanelOpen && !onBoard}
+          open={rightShown}
           onOpenChange={(open) => {
             showRightPanel(open)
           }}
@@ -1439,11 +1465,10 @@ export function App(): React.JSX.Element {
           onAttachFile={attachFile}
           reveal={diffReveal}
           onError={setError}
-          // The room the pane must leave alone. Folded away, the list takes
-          // none of it — and the pane may have that room too. Not so on the
-          // board, where the pane is offstage: widening it there would resize
-          // every terminal in it.
-          leftWidth={TAB_STRIP_WIDTH + (sidebarOpen ? sidebarWidth : 0)}
+          // `sidebarOpen`, not `listShown`: on the board the pane is offstage, and
+          // widening it into the list's room there would resize every terminal in it.
+          ceiling={rightPaneCeiling(windowWidth, sidebarOpen ? listWidth : 0, columns)}
+          onFloor={setRightFloor}
         />
       </div>
 
