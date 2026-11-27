@@ -12,6 +12,7 @@ import type { ResolvedScript, ScriptsInWorkspace } from '@core/repoSource.js'
 import type { ScriptKind } from '@core/scripts.js'
 import { workspaceView } from '../test/workspaces.js'
 import { useServerControls } from '../hooks/useServerControls.js'
+import { SESSION_MIN_WIDTH } from '../layout.js'
 import { RightPanel } from './RightPanel.js'
 
 // Nothing here reads what the emulator draws, and the real one drawing its
@@ -1790,7 +1791,7 @@ describe('RightPanel', () => {
       toJSON: () => ({})
     })
 
-    renderPanel({ width: 280 })
+    const { props } = renderPanel({ width: 280 })
 
     await waitFor(() => {
       /*
@@ -1804,6 +1805,7 @@ describe('RightPanel', () => {
        */
       expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemin', '540')
     })
+    expect(props.onFloor).toHaveBeenLastCalledWith(540)
   })
 
   // Folded away, the pane is hidden rather than unmounted — its terminals and
@@ -1960,16 +1962,10 @@ describe('RightPanel', () => {
   })
 
   it('keeps the centre the room its conversations need', () => {
-    renderPanel({ leftWidth: 300, centreMin: 660 })
+    renderPanel({ leftWidth: 60, centreMin: 2 * SESSION_MIN_WIDTH })
 
-    // 1400 less the left column, less one and a half conversations' worth of centre.
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '440')
-  })
-
-  it('tells the window how narrow its tabs let it go', () => {
-    const { props } = renderPanel()
-
-    expect(props.onFloor).toHaveBeenCalledWith(280)
+    // 1400 less the strip alone, less two conversations.
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuemax', '460')
   })
 
   // Folded away, the list takes none of the window — and the pane may have the

@@ -88,7 +88,8 @@ the strip (two frames when a tab outside it sits between them), the columns run
 in the strip's order, and the underline still marks the one in front: it alone
 takes `⌘O`, raises its plan — a plan waiting in a column beside it shows the
 strip above that field instead — and draws the way back to the first message
-into the header. A press or the focus landing in a column brings it in front. A
+into the header; the diff's notes and the review's remarks go to its composer
+alone, and only its send clears them. A press or the focus landing in a column brings it in front. A
 tab outside the group is shown alone and leaves the group as it was; any of the
 group's tabs, by click or `⌥1–3`, brings the whole group back. "Stop showing side
 by side" takes a tab out and the rest stay on screen; a group of one is no group.
@@ -260,8 +261,8 @@ this is a place to point at code from, and "Open in editor" is there for the
 text.
 
 These notes are **per conversation** (`useCodeNotes`, keyed by the tab's key),
-where the diff's and the review's are per workspace and taken by whichever
-composer sends first. They have to be: a note sent to the second conversation
+where the diff's and the review's are per workspace, offered only to the
+conversation in front, and taken when it sends. They have to be: a note sent to the second conversation
 must not leave with the first one's message. Held by tab key like the drafts,
 under the rules of the paragraph on tab keys above: a conversation closed and
 reopened finds its notes where they were left, and none of them leaves with the

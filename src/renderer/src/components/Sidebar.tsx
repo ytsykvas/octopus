@@ -7,6 +7,7 @@ import type { Project } from '@core/store.js'
 import type { BranchRequest } from '@core/pullRequestShapes.js'
 import type { WorkspaceKind } from '@core/workspaceKinds.js'
 import type { WorkspaceView } from '@core/workspaces.js'
+import { SIDEBAR_MIN_WIDTH } from '@core/windowFit.js'
 
 import { useDragReorder } from '../hooks/useDragReorder.js'
 import { AddTile } from './AddTile.js'
@@ -17,7 +18,6 @@ import type { HelpKind } from './helpMessage.js'
 import { ResizeHandle } from './ResizeHandle.js'
 import { projectColorStyle } from './projectTint.js'
 import { WorkspaceRow } from './WorkspaceRow.js'
-import { SIDEBAR_MIN_WIDTH } from '../layout.js'
 
 interface SidebarProps {
   /** The project whose workspaces are listed; null when none is selected. */

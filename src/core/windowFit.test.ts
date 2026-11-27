@@ -53,8 +53,11 @@ describe('fitWindow', () => {
     )
   })
 
-  it('takes only a whole, positive number of pixels', () => {
+  it('takes only a whole number of pixels, from 0 to 20 000', () => {
     expect(WindowFloorSchema.safeParse(1100).success).toBe(true)
+    expect(WindowFloorSchema.safeParse(0).success).toBe(true)
+    expect(WindowFloorSchema.safeParse(20_000).success).toBe(true)
+    expect(WindowFloorSchema.safeParse(20_001).success).toBe(false)
     expect(WindowFloorSchema.safeParse(1100.5).success).toBe(false)
     expect(WindowFloorSchema.safeParse(-1).success).toBe(false)
     expect(WindowFloorSchema.safeParse('1100').success).toBe(false)

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -206,6 +206,20 @@ describe('the way back to the first message', () => {
 
     const jump = screen.getByRole('button', { name: 'Jump to the first message' })
     expect(screen.getByRole('banner')).toContainElement(jump)
+  })
+
+  it('is drawn once with two conversations side by side', async () => {
+    const user = userEvent.setup()
+    await openTwoWithHistory()
+
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+
+    expect(screen.getAllByRole('log')).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Jump to the first message' })).toHaveLength(1)
   })
 
   it('goes while a file is in front, when there is no log to scroll', async () => {
@@ -836,6 +850,11 @@ describe('conversations side by side', () => {
     })
     await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
 
+    expect(
+      within(column(-1).parentElement ?? column(-1)).getByRole('button', {
+        name: 'Remove this note'
+      })
+    ).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Remove this note' })).toHaveLength(1)
   })
 
@@ -858,6 +877,67 @@ describe('conversations side by side', () => {
     })
     await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
 
+    expect(
+      within(column(-1).parentElement ?? column(-1)).getByRole('button', {
+        name: 'Remove this note'
+      })
+    ).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Remove this note' })).toHaveLength(1)
+  })
+
+  it('keeps the diff’s notes when a column beside the one in front sends', async () => {
+    const note = {
+      path: 'src/core/diff.ts',
+      side: 'new' as const,
+      line: 42,
+      endLine: 42,
+      code: 'const b = 2',
+      text: 'This should be 3.'
+    }
+    const comments = commentController({ pending: [note] })
+    givenChats([chat({ id: 'chat-1' }), chat({ id: 'chat-2' })])
+    const user = userEvent.setup()
+    render(<Pane comments={comments} />)
+    await screen.findByRole('button', { name: /^Claude 2:/ })
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: screen.getByRole('button', { name: /^Claude 2:/ })
+    })
+    await user.click(screen.getByRole('menuitem', { name: 'Show side by side' }))
+    const field = within(column(0).parentElement ?? column(0)).getByRole('textbox')
+
+    fireEvent.change(field, { target: { value: 'look' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(octopus().chats.send).toHaveBeenCalledWith('chat-1', 'look')
+    })
+    expect(comments.clear).not.toHaveBeenCalled()
+  })
+
+  it('opens every step on ⌘O in the column in front only', async () => {
+    vi.mocked(octopus().chats.history).mockResolvedValue({
+      ok: true,
+      value: {
+        entries: [
+          { role: 'user', at: '2026-08-11T09:00:00.000Z', text: 'look' },
+          {
+            role: 'agent',
+            at: '2026-08-11T09:00:01.000Z',
+            event: { type: 'thinking', text: 'weighing it up' }
+          }
+        ],
+        seq: 0
+      }
+    })
+    await splitSecond()
+    await waitFor(() => {
+      expect(screen.getAllByText('look')).toHaveLength(2)
+    })
+
+    fireEvent.keyDown(window, { key: 'o', metaKey: true })
+
+    expect(await within(column(-1)).findByText('weighing it up')).toBeVisible()
+    expect(within(column(0)).queryByText('weighing it up')).not.toBeInTheDocument()
   })
 })

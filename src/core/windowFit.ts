@@ -3,6 +3,11 @@ import { z } from 'zod'
 export const WINDOW_MIN_WIDTH = 940
 export const WINDOW_MIN_HEIGHT = 620
 
+export const SIDEBAR_MIN_WIDTH = 180
+export const SIDEBAR_MAX_WIDTH = 560
+// The schema's floor on `rightPanelWidth`; the real one is the pane's measured tab row.
+export const RIGHT_PANE_MIN_WIDTH = 280
+
 export const WindowFloorSchema = z.number().int().min(0).max(20_000)
 
 export interface Rect {

@@ -80,13 +80,8 @@ interface ChatSessionProps {
   readonly workspace: WorkspaceView
   /** Which of the workspace's conversations this is. */
   readonly tab: ChatTab
-  /**
-   * Whether this conversation is on screen, in front or in a column beside it.
-   *
-   * Passed rather than left to the parent's `hidden` class: a hidden element
-   * measures zero, so the log would pin itself to the top of a conversation it
-   * cannot see and stay there.
-   */
+  /** On screen, in front or beside it. Not left to the parent's `hidden` class: a hidden
+   *  element measures zero, so the log would pin itself to the top and stay there. */
   readonly visible: boolean
   /** The one in front: it takes ⌘O, raises its plan and draws into the header. */
   readonly focused: boolean
@@ -156,13 +151,8 @@ interface ChatSessionProps {
 }
 
 /**
- * One conversation: its log, its composer and what it is waiting on.
- *
- * Up to three of these are mounted at once, one per tab, and one to three are
- * showing. They stay mounted for the reason the right pane keeps its own tabs:
- * a conversation that unmounted would lose its scroll position and the answer
- * half-streamed into it every time you looked at another.
- */
+ * Every tab stays mounted, shown or not: unmounting would lose the scroll position
+ * and the answer half-streamed into it. */
 export function ChatSession({
   workspace,
   tab,
@@ -846,12 +836,8 @@ export function ChatSession({
             )}
           </div>
 
-          {/* Only in front. This is a modal, and a conversation nobody is
-          looking at raising one over the conversation being read is the worst
-          kind of interruption: it is about work the reader cannot see, and it
-          takes the keyboard from work they can. The tab's dot turns amber
-          instead, which is how the workspace list already announces a turn
-          waiting somewhere nobody is looking. */}
+          {/* Only in front: a modal raised by a conversation nobody is reading would take
+              the keyboard from the one they are. A column beside it shows `PlanWaiting`. */}
           {focused && plan !== null && pending !== null && minimizedPlan !== pending.requestId && (
             <PlanDialog
               // Per request: a plan the agent replaces is a different plan, and the
@@ -994,8 +980,10 @@ export function ChatSession({
                 else quotes.remove(note)
               }}
               onNotesSent={() => {
-                comments.clear()
-                quotes.clear()
+                if (focused) {
+                  comments.clear()
+                  quotes.clear()
+                }
                 codeNotes.clear(tab.key)
               }}
               files={attachments.files}

@@ -14,6 +14,7 @@ import { DEFAULT_EFFORT } from '@core/chats.js'
 import type { Config, ConfigEdit, ConfigPatch } from '@core/config.js'
 import type { ThemeName } from '@core/types.js'
 import type { WorkspaceView } from '@core/workspaces.js'
+import { RIGHT_PANE_MIN_WIDTH } from '@core/windowFit.js'
 
 import type { Result } from '../../preload/index.js'
 
@@ -43,6 +44,7 @@ import { Sidebar } from './components/Sidebar.js'
 import { SidebarFooter } from './components/SidebarFooter.js'
 import { useConfirm } from './hooks/useConfirm.js'
 import { useErrorMessage } from './hooks/useErrorMessage.js'
+import { useLatest } from './hooks/useLatest.js'
 import { useWindowFloor } from './hooks/useWindowFloor.js'
 import { usePendingIn } from './hooks/usePendingIn.js'
 import { useShownWorkspace } from './hooks/useShownWorkspace.js'
@@ -81,7 +83,6 @@ import { AttentionToasts } from './components/AttentionToasts.js'
 import { StatusBar, type StatusTarget } from './components/statusBar/StatusBar.js'
 import {
   PROJECT_STRIP_WIDTH,
-  RIGHT_PANE_MIN_WIDTH,
   SESSION_MIN_WIDTH,
   foldsFor,
   sidebarCeiling,
@@ -885,26 +886,27 @@ export function App(): React.JSX.Element {
   const sidebarWidth = config?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH
   const deviceId = config?.deviceId ?? ''
   const columns = onBoard || fileTabs.active !== null ? 1 : chatTabs.shownKeys.length
+  const room = { listShown, rightFloor: rightRoom, columns }
   // Measured against what was last made room for, so every way a group comes forward
   // folds the panes it needs — and moving between columns already on screen folds none.
   const [roomFor, setRoomFor] = useState(columns)
   const [roomMade, setRoomMade] = useState(0)
   if (columns !== roomFor) {
     setRoomFor(columns)
-    const folds = foldsFor(windowWidth, { listShown, rightFloor: rightRoom, columns })
+    const folds = foldsFor(windowWidth, room)
     if (folds.right) {
       setRightPanelOpen(false)
       setRoomMade((made) => made + 1)
     }
     if (folds.list) setSidebarOpen(false)
   }
+  const saveConfig = useLatest(updateConfig)
   useEffect(() => {
-    if (roomMade > 0)
-      void window.octopus.config.update({ rightPanelOpen: false }).then(settleConfig)
-  }, [roomMade, settleConfig])
-  const listCeiling = sidebarCeiling(windowWidth, rightRoom, columns)
+    if (roomMade > 0) void saveConfig.current({ rightPanelOpen: false })
+  }, [roomMade, saveConfig])
+  const listCeiling = sidebarCeiling(windowWidth, room)
   const listWidth = Math.min(sidebarWidth, listCeiling)
-  useWindowFloor(windowFloor({ listShown, rightFloor: rightRoom, columns }), setError)
+  useWindowFloor(windowFloor(room), setError)
 
   // Read twice: the right pane hands it to the scripts, and the hint they
   // draw when there is none sends the user to edit that same project.

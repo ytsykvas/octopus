@@ -9,22 +9,24 @@ beforeEach(() => {
 })
 
 describe('useWindowFloor', () => {
-  it('holds the window to the floor, and again whenever it moves', async () => {
+  it('holds the window to the floor, and again only when it moves', async () => {
+    const onError = vi.fn()
     const { rerender } = renderHook(
       ({ floor }) => {
-        useWindowFloor(floor, vi.fn())
+        useWindowFloor(floor, onError)
       },
       {
         initialProps: { floor: 960 }
       }
     )
 
+    rerender({ floor: 960 })
     rerender({ floor: 1400 })
 
     await waitFor(() => {
       expect(octopus().frame.fit).toHaveBeenLastCalledWith(1400)
     })
-    expect(octopus().frame.fit).toHaveBeenCalledWith(960)
+    expect(vi.mocked(octopus().frame.fit).mock.calls).toEqual([[960], [1400]])
   })
 
   it('says so when the window could not be held', async () => {

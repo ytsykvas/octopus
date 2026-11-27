@@ -25,6 +25,7 @@ import { useEnvProfiles } from '../hooks/useEnvProfiles.js'
 import { useServingPort } from '../hooks/useServingPort.js'
 import { useWindowEvent } from '../hooks/useWindowEvent.js'
 import type { WorkspaceView } from '@core/workspaces.js'
+import { RIGHT_PANE_MIN_WIDTH } from '@core/windowFit.js'
 
 import { Button } from './Button.js'
 import { DiffPanel, type DiffReveal } from './diff/DiffPanel.js'
@@ -40,7 +41,6 @@ import { PullRequestPanel } from './pr/PullRequestPanel.js'
 import { WorkspaceEnv } from './WorkspaceEnv.js'
 import { WorkspaceScripts } from './WorkspaceScripts.js'
 import { WorkspaceTerminals } from './WorkspaceTerminals.js'
-import { RIGHT_PANE_MIN_WIDTH } from '../layout.js'
 
 /**
  * Right pane — changes and terminal in tabs (§10.8).
@@ -118,16 +118,6 @@ const STAGE_HINTS = {
   failed: 'scripts.runHint'
 } as const
 
-/**
- * How much of the window the left column takes, passed in rather than assumed.
- *
- * It stood here as a constant 256 for a while, and the room it reserved was
- * fiction: the real column is the project strip plus a workspace list that is
- * resizable between 180 and 560 and folds away entirely — anything from 56 to
- * 616. At the window's own minimum of 940 the centre reached 320 rather than
- * the promised 360, and with the list dragged wide it reached nothing at all.
- * Only `App` knows both halves, so only `App` can say.
- */
 function maxWidthFor(
   windowWidth: number,
   leftWidth: number,
@@ -203,7 +193,6 @@ interface RightPanelProps {
   readonly onOpenChange: (open: boolean) => void
   /** The project strip plus the workspace list, or just the strip when folded. */
   readonly leftWidth: number
-  /** What the centre keeps: each conversation on screen at its narrowest. */
   readonly centreMin: number
   readonly onFloor: (floor: number) => void
   /** How the reader asked for diffs to be laid out, across sessions. */

@@ -750,12 +750,8 @@ export function Composer({
           className="focus-ring font-prompt field-sizing-content max-h-80 min-h-[8rem] w-full resize-none bg-transparent px-3 py-2.5 text-[13px] outline-none"
         />
 
-        {/* Wraps rather than overflows. A conversation may be narrowed down to
-            `SESSION_MIN_WIDTH`, and near that width the row may not hold three
-            pickers and the send button side by side — it used to run past the
-            rounded border, taking the send button off the edge of the block.
-            Two lines keep every control named and reachable; widen the pane and
-            it unwraps on its own. */}
+        {/* Wraps rather than overflows: near `SESSION_MIN_WIDTH` the row cannot hold three
+            pickers and the send button, and unwrapped it pushes send past the border. */}
         <div className="border-line flex flex-wrap items-center gap-1 border-t px-2 py-1.5">
           <ModelPicker
             models={models}

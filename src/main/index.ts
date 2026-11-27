@@ -24,7 +24,7 @@ import {
 } from '../core/service.js'
 import { type BackupRecovery, openWithRecovery } from '../core/stateRecovery.js'
 import type { ThemeName } from '../core/types.js'
-import { fitWindow, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH } from '../core/windowFit.js'
+import { WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH } from '../core/windowFit.js'
 import {
   pushBoardChanged,
   pushBrainstormEntry,
@@ -253,7 +253,8 @@ async function start(): Promise<void> {
     ...electronIpcHost({
       ipcMain,
       dialog,
-      fromWebContents: (sender) => BrowserWindow.fromWebContents(sender)
+      fromWebContents: (sender) => BrowserWindow.fromWebContents(sender),
+      screen
     }),
     prefersDark: () => nativeTheme.shouldUseDarkColors,
     // Each one hands `broadcast.ts` the windows to reach. The channel names
@@ -297,13 +298,6 @@ async function start(): Promise<void> {
     openPath: (path) => shell.openPath(path),
     showItemInFolder: (path) => {
       shell.showItemInFolder(path)
-    },
-    setWindowFloor: (target, minWidth) => {
-      if (!(target instanceof BrowserWindow)) return
-      const bounds = target.getBounds()
-      const fitted = fitWindow(bounds, screen.getDisplayMatching(bounds).workArea, minWidth)
-      target.setMinimumSize(fitted.minWidth, WINDOW_MIN_HEIGHT)
-      if (fitted.bounds !== null) target.setBounds(fitted.bounds)
     }
   })
   watchSystemTheme(service)

@@ -106,7 +106,6 @@ interface Harness {
   usageBroadcasts: UsageWindows[]
   /** null once the window a call came from has closed, as Electron reports it. */
   window: unknown
-  /** Every floor a window was held to, oldest first. */
   fitted: { window: unknown; minWidth: number }[]
 }
 
@@ -611,7 +610,7 @@ describe('window floor', () => {
   })
 
   it('refuses a floor that is not a whole number of pixels', async () => {
-    await expect(invoke('frame:fit', '1320')).resolves.toMatchObject({ ok: false })
+    await expect(invoke('frame:fit', 1320.5)).resolves.toMatchObject({ ok: false })
 
     expect(bench.fitted).toEqual([])
   })

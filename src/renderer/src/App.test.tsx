@@ -493,16 +493,9 @@ describe('App', () => {
     expect(tab('LE')).toBeInTheDocument()
   })
 
-  /*
-   * The right pane may grow into whatever the window has left once the left
-   * column and a usable centre have theirs — and only this window knows what
-   * that column comes to, being the one place that holds both the list's stored
-   * width and whether it is folded. Asserted from here because the pane's own
-   * tests are handed the number: told the wrong one, every last of them passes.
-   *
-   * 1024 less the strip (60), the list at its default (240) and the centre's
-   * own 440 leaves 284; folding the list hands its 240 straight to the pane.
-   */
+  // Asserted here because the pane's own tests are handed the left column's width.
+  // 1024 less the strip (60), the list (240) and one conversation (440) leaves 284;
+  // folding the list hands its 240 to the pane.
   it('offers the pane the room the folded list gives up', async () => {
     givenTwoProjects()
     const user = await openApp()
@@ -1445,7 +1438,7 @@ describe('App', () => {
   })
 
   it('remembers the width the workspace list was resized to', async () => {
-    // Widened as the right pane's twin below is: at 1024 the list's ceiling is 244.
+    // At 1024 the list's ceiling is 244, under the 256 this keypress expects.
     const narrow = window.innerWidth
     window.innerWidth = 1400
 
@@ -1625,6 +1618,56 @@ describe('App', () => {
         })
       ).toHaveAttribute('aria-current', 'page')
       expect(window.octopus.config.update).not.toHaveBeenCalledWith({ rightPanelOpen: false })
+    })
+
+    it('leaves a right pane reopened after a fold open when the language changes', async () => {
+      window.innerWidth = 1300
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+      await user.click(screen.getByRole('button', { name: 'Show panel' }))
+
+      await act(async () => {
+        await i18n.changeLanguage('uk')
+      })
+
+      const folds = vi
+        .mocked(window.octopus.config.update)
+        .mock.calls.filter(([patch]) => patch.rightPanelOpen === false)
+      expect(folds).toHaveLength(1)
+    })
+
+    it('holds the window for one conversation while a file is in front of the group', async () => {
+      vi.mocked(window.octopus.files.tree).mockResolvedValue({
+        ok: true,
+        value: {
+          entries: [{ path: 'README.md', kind: 'file', ignored: false }],
+          statuses: {},
+          untrackedFolders: [],
+          truncated: false
+        }
+      })
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+
+      await user.click(screen.getByRole('button', { name: 'Files' }))
+      await user.click(await screen.findByRole('treeitem', { name: /^README\.md/ }))
+
+      await waitFor(() => {
+        expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 280 + 440)
+      })
+    })
+
+    it('holds the window for one conversation on the board', async () => {
+      window.innerWidth = 1600
+      const user = await openAnna(['chat-1', 'chat-2'])
+      await split(user, 2)
+
+      await user.click(screen.getByRole('button', { name: 'Board' }))
+
+      await waitFor(() => {
+        expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 440)
+      })
     })
   })
 

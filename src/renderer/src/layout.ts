@@ -1,12 +1,7 @@
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from '@core/windowFit.js'
+
 // `w-15` in `ProjectTabs`: a Tailwind class cannot be read, so it is stated twice.
 export const PROJECT_STRIP_WIDTH = 60
-
-// The bounds on `sidebarWidth` in the config schema; change them together.
-export const SIDEBAR_MIN_WIDTH = 180
-export const SIDEBAR_MAX_WIDTH = 560
-
-// The schema's floor on `rightPanelWidth`; the real one is the pane's measured tab row.
-export const RIGHT_PANE_MIN_WIDTH = 280
 
 // Where the composer's bottom row wraps onto a second line and no further.
 export const SESSION_MIN_WIDTH = 440
@@ -27,13 +22,9 @@ export function windowFloor({ listShown, rightFloor, columns }: PaneRoom): numbe
   )
 }
 
-export function sidebarCeiling(
-  windowWidth: number,
-  rightFloor: number | null,
-  columns: number
-): number {
-  const room = windowWidth - PROJECT_STRIP_WIDTH - (rightFloor ?? 0) - columns * SESSION_MIN_WIDTH
-  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, room))
+export function sidebarCeiling(windowWidth: number, room: PaneRoom): number {
+  const left = windowWidth - windowFloor({ ...room, listShown: false })
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, left))
 }
 
 export interface Folds {
