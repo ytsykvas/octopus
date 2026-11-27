@@ -900,7 +900,7 @@ export function App(): React.JSX.Element {
   }, [roomMade, saveConfig])
   const listCeiling = sidebarCeiling(windowWidth, room)
   const listWidth = Math.min(sidebarWidth, listCeiling)
-  useWindowFloor(windowFloor(room), setError)
+  useWindowFloor(config === null ? null : windowFloor(room), setError)
 
   // Read twice: the right pane hands it to the scripts, and the hint they
   // draw when there is none sends the user to edit that same project.

@@ -1499,6 +1499,20 @@ describe('App', () => {
     expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 280 + 440)
   })
 
+  it('asks for no floor before the config says which panes are on screen', async () => {
+    vi.mocked(window.octopus.config.get).mockResolvedValue({
+      ok: true,
+      value: config({ rightPanelOpen: false })
+    })
+    givenTwoProjects()
+    await openApp()
+
+    await waitFor(() => {
+      expect(window.octopus.frame.fit).toHaveBeenLastCalledWith(60 + 180 + 440)
+    })
+    expect(window.octopus.frame.fit).not.toHaveBeenCalledWith(60 + 180 + 280 + 440)
+  })
+
   describe('conversations side by side', () => {
     let width: number
 

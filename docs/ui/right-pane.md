@@ -143,7 +143,9 @@ Then the list gives way, down to its own 180. Past that the window stops: `App`
 sends `frame:fit` the strip, each pane on screen at its floor and the
 conversations, and main makes that the window's minimum width — never under
 940, never wider than the display — widening the window at once if it is
-narrower, moved left where its display ends.
+narrower, moved left where its display ends. Nothing is sent before the config
+is read: the pane starts open in the window's state, and a floor counting a pane
+the config keeps folded would widen a window for nothing.
 
 It was the other way round for a while: the pane absorbed every pixel the window
 gained or lost, on the grounds that the conversation stops widening at 72rem and
